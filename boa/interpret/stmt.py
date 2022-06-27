@@ -3,6 +3,8 @@ import vyper.utils as util
 from vyper import ast as vy_ast
 from vyper.address_space import MEMORY, STORAGE
 from vyper.builtin_functions import STMT_DISPATCH_TABLE
+from typing import List, Optional
+from boa.interpret.object import VyperObject
 from vyper.exceptions import CompilerPanic, StructureException, TypeCheckFailure
 
 class InterpreterContext:
@@ -44,18 +46,17 @@ class Stmt:
         rhs = Expr(stmt.value, self.context).interpret()
         self.vars[stmt.target.id] = rhs
 
-    def parse_If(self):
-        if self.stmt.orelse:
+    def parse_If(self, stmt):
+        ret = None
+        test = Expr(stmt.test, self.context).interpret()
+        if test:
             with self.context.block_scope():
-                add_on = [parse_body(self.stmt.orelse, self.context)]
-        else:
-            add_on = []
+                ret = interpret_block(self.stmt.body, self.context)
+        elif self.stmt.orelse:
+            with self.context.block_scope():
+                ret = interpret_block(self.stmt.orelse, self.context)
 
-        with self.context.block_scope():
-            test_expr = Expr.parse_value_expr(self.stmt.test, self.context)
-            body = ["if", test_expr, parse_body(self.stmt.body, self.context)] + add_on
-            ir_node = IRnode.from_list(body)
-        return ir_node
+        return ret
 
     def parse_Log(self):
         event = self.stmt._metadata["type"]
@@ -199,7 +200,7 @@ class Stmt:
         loop_body = ["seq"]
         # store the current value of i so it is accessible to userland
         loop_body.append(["mstore", iptr, i])
-        loop_body.append(parse_body(self.stmt.body, self.context))
+        loop_body.append(interpret_block(self.stmt.body, self.context))
 
         ir_node = IRnode.from_list(["repeat", i, start, rounds, rounds, loop_body])
         del self.context.forvars[varname]
@@ -301,3 +302,9 @@ class Stmt:
         if (target.location == STORAGE and self.context.is_constant()) or not target.mutable:
             raise TypeCheckFailure(f"Failed constancy check\n{_dbg_expr}")
         return target
+
+def interpret_block(stmt_nodes: List[vy_ast.VyperNode], ctx: InterpreterContext) -> Optional[VyperObject]:
+    for stmt in stmt_nodes:
+        t = Stmt(stmt, ctx).interpret()
+        if t is not None:  # handles fastpath returns
+            return t

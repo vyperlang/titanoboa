@@ -1,7 +1,7 @@
 from vyper.compiler.phases import CompilerData
 
 from boa.interpret.context import InterpreterContext
-from boa.interpret.stmt import Stmt
+from boa.interpret.stmt import interpret_block
 
 class VyperFunction:
     def __init__(self, fn_ast, global_ctx):
@@ -12,10 +12,7 @@ class VyperFunction:
         #self.ctx.set_args(self.*args)
         #self.ctx.set_kwargs(**kwargs)
 
-        for stmt in self.fn_ast.body:
-            t = Stmt(stmt, self.ctx).interpret()
-            if t is not None:
-                return t
+        return interpret_block(self.fn_ast.body, self.ctx)
 
 class VyperContract:
     def __init__(self, global_ctx):

@@ -1,8 +1,9 @@
+import contextlib
 
 class InterpreterContext:
     def __init__(self, global_ctx):
         self.global_ctx = global_ctx
-        self.local_variables = {}
+        self._local_variables = [{}]  # list of maps
         self.storage_variables = {}
         self.immutables = {}
 
@@ -10,8 +11,20 @@ class InterpreterContext:
         print(*args)
 
     def set_var(self, varname, val):
-        self.local_variables[varname] = val
+        for scope in self._local_variables:
+            if varname in scope:
+                scope[varname] = val
+                break
+        else:
+            self._local_variables[-1][varname] = val
 
     def get_var(self, varname):
-        if varname in self.local_variables:
-            return self.local_variables[varname]
+        for scope in self._local_variables:
+            if varname in scope:
+                return scope[varname]
+
+    @contextlib.contextmanager
+    def block_scope(self):
+        self._local_variables.append(dict())
+        yield
+        self._local_variables.pop()
