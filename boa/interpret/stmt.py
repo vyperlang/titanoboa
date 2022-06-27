@@ -4,11 +4,9 @@ from vyper import ast as vy_ast
 from vyper.address_space import MEMORY, STORAGE
 from vyper.builtin_functions import STMT_DISPATCH_TABLE
 from typing import List, Optional
-from boa.interpret.object import VyperObject
+from boa.interpret.object import VyperObject, LogItem
 from vyper.exceptions import CompilerPanic, StructureException, TypeCheckFailure
-
-class InterpreterContext:
-    pass
+from boa.interpret.context import InterpreterContext
 
 class Stmt:
     def __init__(self, node: vy_ast.VyperNode, context: InterpreterContext) -> None:
@@ -58,87 +56,35 @@ class Stmt:
 
         return ret
 
-    def parse_Log(self):
-        event = self.stmt._metadata["type"]
+    def parse_Log(self, stmt):
+        event = stmt._metadata["type"]
 
-        args = [Expr(arg, self.context).interpret() for arg in stmt.value.args]
-
-        topic_ir = []
-        data_ir = []
-        for arg, is_indexed in zip(args, event.indexed):
+        topics = []
+        data = []
+        for arg, is_indexed in zip(stmt.value.args, event.indexed):
+            val = Expr(arg, self.context).interpret()
             if is_indexed:
-                topic_ir.append(arg)
+                topics.append(val)
             else:
-                data_ir.append(arg)
+                data.append(val)
 
-        return events.ir_node_for_log(self.stmt, event, topic_ir, data_ir, self.context)
+        log_item = LogItem(topics, data)
 
-    def _assert_reason(self, test_expr, msg):
-        if isinstance(msg, vy_ast.Name) and msg.id == "UNREACHABLE":
-            return IRnode.from_list(["assert_unreachable", test_expr], error_msg="assert unreachable")
+        self.context.trace.events.append(log_item)
+        print(log_item)
 
-        # set constant so that revert reason str is well behaved
-        try:
-            tmp = self.context.constancy
-            self.context.constancy = Constancy.Constant
-            msg_ir = Expr(msg, self.context).ir_node
-        finally:
-            self.context.constancy = tmp
+    def parse_Assert(self, stmt):
+        test = Expr(stmt.test, self.context).interpret()
 
-        # TODO this is probably useful in codegen.core
-        # compare with eval_seq.
-        def _get_last(ir):
-            if len(ir.args) == 0:
-                return ir.value
-            return _get_last(ir.args[-1])
+        msg = ""
+        if stmt.msg:
+            msg = str(Expr(stmt.msg, self.context).interpret())
 
-        # TODO maybe use ensure_in_memory
-        if msg_ir.location != MEMORY:
-            buf = self.context.new_internal_variable(msg_ir.typ)
-            instantiate_msg = make_byte_array_copier(buf, msg_ir)
-        else:
-            buf = _get_last(msg_ir)
-            if not isinstance(buf, int):
-                raise CompilerPanic(f"invalid bytestring {buf}\n{self}")
-            instantiate_msg = msg_ir
+        assert test, msg  # TODO something better
 
-        # offset of bytes in (bytes,)
-        method_id = util.abi_method_id("Error(string)")
-
-        # abi encode method_id + bytestring
-        assert buf >= 36, "invalid buffer"
-        # we don't mind overwriting other memory because we are
-        # getting out of here anyway.
-        _runtime_length = ["mload", buf]
-        revert_seq = [
-            "seq",
-            instantiate_msg,
-            zero_pad(buf),
-            ["mstore", buf - 64, method_id],
-            ["mstore", buf - 32, 0x20],
-            ["revert", buf - 36, ["add", 4 + 32 + 32, ["ceil32", _runtime_length]]],
-        ]
-
-        if test_expr is not None:
-            ir_node = ["if", ["iszero", test_expr], revert_seq]
-        else:
-            ir_node = revert_seq
-
-        return IRnode.from_list(ir_node, error_msg="user revert with reason")
-
-    def parse_Assert(self):
-        test_expr = Expr.parse_value_expr(self.stmt.test, self.context)
-
-        if self.stmt.msg:
-            return self._assert_reason(test_expr, self.stmt.msg)
-        else:
-            return IRnode.from_list(["assert", test_expr], error_msg="user assert")
-
-    def parse_Raise(self):
-        if self.stmt.exc:
-            return self._assert_reason(None, self.stmt.exc)
-        else:
-            return IRnode.from_list(["revert", 0, 0], error_msg="user raise")
+    def parse_Raise(self, stmt):
+        msg = Expr(stmt.exc).interpret()
+        raise Exception(msg)
 
     def _check_valid_range_constant(self, arg_ast_node):
         with self.context.range_scope():
@@ -253,32 +199,22 @@ class Stmt:
         del self.context.forvars[varname]
         return IRnode.from_list(ret)
 
-    def parse_AugAssign(self):
-        target = self._get_target(self.stmt.target)
-        sub = Expr.parse_value_expr(self.stmt.value, self.context)
-        if not isinstance(target.typ, BaseType):
-            return
+    def parse_AugAssign(self, stmt):
+        varname = stmt.target.id
 
-        with target.cache_when_complex("_loc") as (b, target):
-            rhs = Expr.parse_value_expr(
-                vy_ast.BinOp(
-                    left=IRnode.from_list(LOAD(target), typ=target.typ),
-                    right=sub,
-                    op=self.stmt.op,
-                    lineno=self.stmt.lineno,
-                    col_offset=self.stmt.col_offset,
-                    end_lineno=self.stmt.end_lineno,
-                    end_col_offset=self.stmt.end_col_offset,
-                    node_source_code=self.stmt.get("node_source_code"),
-                ),
-                self.context,
-            )
-            return b.resolve(STORE(target, rhs))
+        lhs = self.context.get_var(varname)
+        val = Expr(stmt.value, self.context).interpret().value
+
+        val = Expr.binop(lhs.typ, stmt.op, lhs.value, val)
+
+        self.context.set_var(varname, val)
 
     def parse_Continue(self):
+        # TODO inline into parse_For
         return IRnode.from_list("continue")
 
     def parse_Break(self):
+        # TODO inline into parse_For
         return IRnode.from_list("break")
 
     def parse_Return(self, stmt):

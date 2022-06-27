@@ -1,4 +1,11 @@
 import contextlib
+from boa.interpret.object import LogItem
+from typing import List
+
+class Trace:
+    def __init__(self):
+        self.events: List[LogItem] = []
+
 
 class InterpreterContext:
     def __init__(self, global_ctx):
@@ -6,6 +13,7 @@ class InterpreterContext:
         self._local_variables = [{}]  # list of maps
         self.storage_variables = {}
         self.immutables = {}
+        self.trace = Trace()
 
     def set_args(*args):
         print(*args)

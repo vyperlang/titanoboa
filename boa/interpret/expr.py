@@ -285,7 +285,13 @@ class Expr:
     def parse_BinOp(self, expr):
         left = Expr(expr.left, self.context).interpret().value
         right = Expr(expr.right, self.context).interpret().value
+
         typ = new_type_to_old_type(expr._metadata["type"])
+
+        return self.binop(typ, expr.op, left, right)
+
+    @classmethod
+    def binop(cls, typ, op, left, right):
 
         lo, hi = typ._int_info.bounds
 
@@ -295,23 +301,23 @@ class Expr:
 
             return VyperObject(val, typ=typ)
 
-        if isinstance(expr.op, vy_ast.BitAnd):
+        if isinstance(op, vy_ast.BitAnd):
             return finalize(left & right)
-        if isinstance(expr.op, vy_ast.BitOr):
+        if isinstance(op, vy_ast.BitOr):
             return finalize(left | right)
-        if isinstance(expr.op, vy_ast.BitXor):
+        if isinstance(op, vy_ast.BitXor):
             return finalize(left ^ right)
-        if isinstance(expr.op, vy_ast.Add):
+        if isinstance(op, vy_ast.Add):
             return finalize(left + right)
-        if isinstance(expr.op, vy_ast.Sub):
+        if isinstance(op, vy_ast.Sub):
             return finalize(left - right)
-        if isinstance(expr.op, vy_ast.Mult):
+        if isinstance(op, vy_ast.Mult):
             return finalize(left * right)
-        if isinstance(expr.op, vy_ast.Div):
+        if isinstance(op, vy_ast.Div):
             return finalize(evm_div(left, right))
-        if isinstance(expr.op, vy_ast.Mod):
+        if isinstance(op, vy_ast.Mod):
             return finalize(evm_mod(left, right))
-        if isinstance(expr.op, vy_ast.Pow):
+        if isinstance(op, vy_ast.Pow):
             return finalize(left ** right)
 
     def build_in_comparator(self):
@@ -602,11 +608,6 @@ class Expr:
             ["multi"] + [member_subs[key] for key in member_subs.keys()],
             typ=StructType(member_typs, name, is_literal=True),
         )
-
-    # Parse an expression that results in a value
-    @classmethod
-    def parse_value_expr(cls, expr, context):
-        return unwrap_location(cls(expr, context).ir_node)
 
     # Parse an expression that represents a pointer to memory/calldata or storage.
     @classmethod
