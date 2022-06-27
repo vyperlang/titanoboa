@@ -17,7 +17,7 @@ def foo() -> uint256:
 ```
 
 ```python
->>> import boa.interpret as boa
+>>> import boa
 
 >>> simple = boa.load("simple.vy")
 >>> simple.foo()
