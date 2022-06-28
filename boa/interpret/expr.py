@@ -76,7 +76,7 @@ class Expr:
             # sanity check typechecker did its job
             assert len(hexstr) == 42 and is_checksum_encoded(hexstr)
             typ = BaseType("address")
-            return VyperObject(typ, expr.value)
+            return VyperObject(expr.value, typ)
 
         if is_bytes_m_type(typ):
             assert n_bytes == typ._bytes_info.m
@@ -114,9 +114,6 @@ class Expr:
 
         if expr.id == "self":
             raise Exception("unimplemented")
-
-        if self.context.get_var(expr.id) is not None:
-            return self.context.get_var(expr.id)
 
         elif self.expr._metadata["type"].is_immutable:
             var = self.context.globals[self.expr.id]
