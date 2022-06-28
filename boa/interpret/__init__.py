@@ -25,7 +25,8 @@ class VyperContract:
             setattr(self, fn.name, VyperFunction(fn, global_ctx, self))
 
         for k, v in global_ctx._globals.items():
-            setattr(self, k, VyperObject(None, v.typ))
+            setattr(self, k, VyperObject.empty(v.typ))
+
 
 def load(filename: str) -> VyperContract:
     with open(filename) as f:

@@ -201,14 +201,13 @@ class Stmt:
         return IRnode.from_list(ret)
 
     def parse_AugAssign(self, stmt):
-        varname = stmt.target.id
+        lhs = Expr(stmt.target, self.context).interpret()
 
-        lhs = self.context.get_var(varname)
-        val = Expr(stmt.value, self.context).interpret().value
+        rhs = Expr(stmt.value, self.context).interpret()
+        rhs = Expr.binop(lhs.typ, stmt.op, lhs.value, rhs.value)
 
-        val = Expr.binop(lhs.typ, stmt.op, lhs.value, val)
+        lhs.value = rhs.value
 
-        self.context.set_var(varname, val)
 
     def parse_Continue(self):
         # TODO inline into parse_For
