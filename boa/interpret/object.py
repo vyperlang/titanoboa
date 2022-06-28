@@ -2,10 +2,13 @@ from typing import Any, List
 from vyper.codegen.types.types import BaseType, is_integer_type, ByteArrayType, StringType, DArrayType, SArrayType, MappingType, is_base_type
 from dataclasses import dataclass
 
-@dataclass
 class VyperObject:
-    value: Any
-    typ: BaseType
+    def __init__(self, value, typ):
+        self.value = value
+
+        if isinstance(typ, str):
+            typ = BaseType(typ)
+        self.typ = typ
 
     @classmethod
     def empty(cls, typ):

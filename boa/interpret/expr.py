@@ -51,7 +51,10 @@ class Expr:
         if fn is None:
             raise TypeCheckFailure(f"Invalid statement node: {type(self.expr).__name__}")
 
-        return fn(self.expr)
+        ret = fn(self.expr)
+        if ret is None:
+            raise Exception(f"did not return a value, {self.expr}")
+        return ret
 
     def parse_Int(self, expr):
         typ = new_type_to_old_type(expr._metadata.get("type"))
@@ -111,16 +114,9 @@ class Expr:
 
         if expr.id == "self":
             raise Exception("unimplemented")
-        if self.expr.id in self.context.vars:
-            var = self.context.vars[self.expr.id]
-            return IRnode.from_list(
-                var.pos,
-                typ=var.typ,
-                location=var.location,  # either 'memory' or 'calldata' storage is handled above.
-                encoding=var.encoding,
-                annotation=self.expr.id,
-                mutable=var.mutable,
-            )
+
+        if self.context.get_var(expr.id) is not None:
+            return self.context.get_var(expr.id)
 
         elif self.expr._metadata["type"].is_immutable:
             var = self.context.globals[self.expr.id]
@@ -198,11 +194,11 @@ class Expr:
             return getattr(self.context.contract, expr.attr)
         # Reserved keywords
         elif (
-            isinstance(self.expr.value, vy_ast.Name) and self.expr.value.id in ENVIRONMENT_VARIABLES
+            isinstance(expr.value, vy_ast.Name) and expr.value.id in ENVIRONMENT_VARIABLES
         ):
             key = f"{self.expr.value.id}.{self.expr.attr}"
             if key == "msg.sender":
-                return IRnode.from_list(["caller"], typ="address")
+                return self.context.msg_ctx.msg["sender"]
             elif key == "msg.data":
                 # This adhoc node will be replaced with a valid node in `Slice/Len.build_IR`
                 return IRnode.from_list(["~calldata"], typ=ByteArrayType(0))
@@ -525,15 +521,17 @@ class Expr:
         return False, None
 
     # Function calls
-    def parse_Call(self):
+    def parse_Call(self, expr):
         # TODO check out this inline import
         from vyper.builtin_functions import DISPATCH_TABLE
+
+        args = [Expr(arg, self.context) for arg in expr.args]
 
         if isinstance(self.expr.func, vy_ast.Name):
             function_name = self.expr.func.id
 
             if function_name in DISPATCH_TABLE:
-                return DISPATCH_TABLE[function_name].build_IR(self.expr, self.context)
+                return DISPATCH_TABLE[function_name].eval(self.context, *args)
 
             # Struct constructors do not need `self` prefix.
             elif function_name in self.context.structs:
