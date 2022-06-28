@@ -85,14 +85,14 @@ class Expr:
             return VyperObject(val, typ=typ)
 
     # String literals
-    def parse_Str(self):
-        string = self.expr.s
+    def parse_Str(self, expr):
+        string = expr.s
         typ = StringType(len(string))
         return VyperObject(string, typ)
 
     # Byte literals
-    def parse_Bytes(self):
-        bytez = self.expr.s
+    def parse_Bytes(self, expr):
+        bytez = expr.s
         typ = ByteArrayType(len(bytez))
         return VyperObject(bytez, typ)
 
@@ -290,7 +290,7 @@ class Expr:
 
         def finalize(val):
             if not (lo <= val <= hi):
-                raise Exception("Out of bounds for {typ}: {val}")
+                raise Exception(f"Out of bounds for {typ}: {val}")
 
             return VyperObject(val, typ=typ)
 
