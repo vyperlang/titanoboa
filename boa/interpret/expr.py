@@ -500,7 +500,9 @@ class Expr:
         # TODO check out this inline import
         from vyper.builtin_functions import DISPATCH_TABLE
 
-        args = [Expr(arg, self.context) for arg in expr.args]
+        args = [Expr(arg, self.context).interpret() for arg in expr.args]
+
+        # TODO just use Expr(func, self.context).interpret().eval(args)
 
         if isinstance(self.expr.func, vy_ast.Name):
             function_name = self.expr.func.id
@@ -529,13 +531,14 @@ class Expr:
             return pop_dyn_array(darray, return_popped_item=True)
 
         elif (
-            # TODO use expr.func.type.is_internal once
-            # type annotations are consistently available
-            isinstance(self.expr.func, vy_ast.Attribute)
-            and isinstance(self.expr.func.value, vy_ast.Name)
-            and self.expr.func.value.id == "self"
+            isinstance(expr.func, vy_ast.Attribute)
+            and isinstance(expr.func.value, vy_ast.Name)
+            and expr.func.value.id == "self"
         ):
-            return self_call.ir_for_self_call(self.expr, self.context)
+            # self.foo()
+            funcname = expr.func.attr
+            args = [arg.value for arg in args]
+            return getattr(self.context.contract, funcname).__call__(*args)
         else:
             return external_call.ir_for_external_call(self.expr, self.context)
 
