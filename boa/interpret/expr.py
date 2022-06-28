@@ -64,22 +64,22 @@ class Expr:
         val = expr.n
         return VyperObject(val, typ=BaseType("decimal"))
 
-    def parse_Hex(self):
-        hexstr = self.expr.value
+    def parse_Hex(self, expr):
+        hexstr = expr.value
 
-        t = self.expr._metadata.get("type")
+        t = expr._metadata.get("type")
 
         n_bytes = (len(hexstr) - 2) // 2  # e.g. "0x1234" is 2 bytes
 
         typ = new_type_to_old_type(self.expr._metadata["type"])
-        if is_base_type(inferred_type, "address"):
+        if is_base_type(typ, "address"):
             # sanity check typechecker did its job
             assert len(hexstr) == 42 and is_checksum_encoded(hexstr)
             typ = BaseType("address")
-            return VyperObject(typ, self.expr.value)
+            return VyperObject(typ, expr.value)
 
-        if is_bytes_m_type(inferred_type):
-            assert n_bytes == inferred_type._bytes_info.m
+        if is_bytes_m_type(typ):
+            assert n_bytes == typ._bytes_info.m
 
             # bytes_m types are left padded with zeros
             val = int(hexstr, 16) << 8 * (32 - n_bytes)
@@ -239,37 +239,12 @@ class Expr:
             if isinstance(sub.typ, StructType) and self.expr.attr in sub.typ.members:
                 return get_element_ptr(sub, self.expr.attr)
 
-    def parse_Subscript(self):
-        sub = Expr(self.expr.value, self.context).ir_node
-        if sub.value == "multi":
-            # force literal to memory, e.g.
-            # MY_LIST: constant(decimal[6])
-            # ...
-            # return MY_LIST[ix]
-            sub = ensure_in_memory(sub, self.context)
+    def parse_Subscript(self, expr):
+        val = Expr(expr.value, self.context).interpret().value
 
-        if isinstance(sub.typ, MappingType):
-            # TODO sanity check we are in a self.my_map[i] situation
-            index = Expr.parse_value_expr(self.expr.slice.value, self.context)
-            if isinstance(index.typ, ByteArrayLike):
-                # we have to hash the key to get a storage location
-                assert len(index.args) == 1
-                index = keccak256_helper(self.expr.slice.value, index.args[0], self.context)
+        ix = Expr(expr.slice.value, self.context).interpret().value
 
-        elif isinstance(sub.typ, ArrayLike):
-            index = Expr.parse_value_expr(self.expr.slice.value, self.context)
-
-        elif isinstance(sub.typ, TupleType):
-            index = self.expr.slice.value.n
-            # note: this check should also happen in get_element_ptr
-            if not 0 <= index < len(sub.typ.members):
-                return
-        else:
-            return
-
-        ir_node = get_element_ptr(sub, index)
-        ir_node.mutable = sub.mutable
-        return ir_node
+        return val[ix]
 
     def parse_BinOp(self, expr):
         left = Expr(expr.left, self.context).interpret().value

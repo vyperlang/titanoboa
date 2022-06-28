@@ -10,6 +10,9 @@ class VyperObject:
             typ = BaseType(typ)
         self.typ = typ
 
+    def __repr__(self):
+        return f"[{self.typ}:{self.value}]"
+
     @classmethod
     def empty(cls, typ):
         if is_integer_type(typ):
