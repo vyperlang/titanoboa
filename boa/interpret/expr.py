@@ -76,7 +76,7 @@ class Expr:
             # sanity check typechecker did its job
             assert len(hexstr) == 42 and is_checksum_encoded(hexstr)
             typ = BaseType("address")
-            return VyperObject(expr.value, typ)
+            return VyperObject(hexstr, typ)
 
         if is_bytes_m_type(typ):
             assert n_bytes == typ._bytes_info.m

@@ -11,7 +11,7 @@ class VyperObject:
         self.typ = typ
 
     def __repr__(self):
-        return f"[{self.typ}:{self.value}]"
+        return f"{self.typ}:{self.value}"
 
     @classmethod
     def empty(cls, typ):
@@ -34,9 +34,9 @@ class VyperObject:
 
 class VyperHashMap(dict):
     def __init__(self, key_type, value_type, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self.key_type = key_type
         self.value_type = value_type
+        super().__init__(*args, **kwargs)
 
     def __getitem__(self, k):
         if k not in self:

@@ -1,18 +1,19 @@
 import contextlib
 from boa.interpret.object import LogItem, VyperObject
 from typing import List
+from dataclasses import dataclass, field
 
+@dataclass
 class Trace:
-    def __init__(self):
-        self.events: List[LogItem] = []
+    events: List[LogItem] = field(default_factory=list)
 
+@dataclass
 class MessageContext:
     # this will probably need to be refactored.
-    def __init__(self):
-        self.msg = {
+    msg: dict = field(default_factory=lambda: {
             "sender": VyperObject("0x" + "sender".rjust(40, "0"), typ="address"),
             "value": VyperObject(0, typ="uint256"),
-        }
+        })
 
 
 class InterpreterContext:

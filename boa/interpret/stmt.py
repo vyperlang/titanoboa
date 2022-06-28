@@ -239,8 +239,8 @@ class Stmt:
             raise TypeCheckFailure(f"Failed constancy check\n{_dbg_expr}")
         return target
 
-def interpret_block(stmt_nodes: List[vy_ast.VyperNode], ctx: InterpreterContext) -> Optional[VyperObject]:
+def interpret_block(stmt_nodes: List[vy_ast.VyperNode], context: InterpreterContext) -> Optional[VyperObject]:
     for stmt in stmt_nodes:
-        t = Stmt(stmt, ctx).interpret()
+        t = Stmt(stmt, context).interpret()
         if t is not None:  # handles fastpath returns
             return t
