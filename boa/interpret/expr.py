@@ -138,23 +138,23 @@ class Expr:
             )
 
     # x.y or x[5]
-    def parse_Attribute(self):
-        typ = self.expr._metadata.get("type")
+    def parse_Attribute(self, expr):
+        typ = expr._metadata.get("type")
         if typ is not None:
             typ = new_type_to_old_type(typ)
         if isinstance(typ, EnumType):
-            assert typ.name == self.expr.value.id
+            assert typ.name == expr.value.id
             # 0, 1, 2, .. 255
-            enum_id = typ.members[self.expr.attr]
+            enum_id = typ.members[expr.attr]
             value = 2 ** enum_id  # 0 => 0001, 1 => 0010, 2 => 0100, etc.
             return IRnode.from_list(value, typ=typ)
 
         # x.balance: balance of address x
-        if self.expr.attr == "balance":
-            addr = Expr.parse_value_expr(self.expr.value, self.context)
+        if expr.attr == "balance":
+            addr = Expr.parse_value_expr(expr.value, self.context)
             if is_base_type(addr.typ, "address"):
                 if (
-                    isinstance(self.expr.value, vy_ast.Name)
+                    isinstance(expr.value, vy_ast.Name)
                     and self.expr.value.id == "self"
                     and version_check(begin="istanbul")
                 ):
@@ -195,14 +195,7 @@ class Expr:
                 return IRnode.from_list(["~extcode", addr], typ=ByteArrayType(0))
         # self.x: global attribute
         elif isinstance(self.expr.value, vy_ast.Name) and self.expr.value.id == "self":
-            type_ = self.expr._metadata["type"]
-            var = self.context.globals[self.expr.attr]
-            return IRnode.from_list(
-                type_.position.position,
-                typ=var.typ,
-                location=STORAGE,
-                annotation="self." + self.expr.attr,
-            )
+            return getattr(self.context.contract, expr.attr)
         # Reserved keywords
         elif (
             isinstance(self.expr.value, vy_ast.Name) and self.expr.value.id in ENVIRONMENT_VARIABLES

@@ -8,11 +8,10 @@ class Trace:
 
 
 class InterpreterContext:
-    def __init__(self, global_ctx):
+    def __init__(self, global_ctx, contract):
         self.global_ctx = global_ctx
         self._local_variables = [{}]  # list of maps
-        self.storage_variables = {}
-        self.immutables = {}
+        self.contract = contract
         self.trace = Trace()
 
     def set_args(*args):

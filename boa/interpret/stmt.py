@@ -33,25 +33,26 @@ class Stmt:
         typ = self.context.global_ctx.parse_type(self.stmt.annotation)
         varname = self.stmt.target.id
 
-        if stmt.value is None:
-            raise Exception("bad AnnAssign")
+        lhs = VyperObject(None, typ=typ)
 
-        val = Expr(stmt.value, self.context).interpret()
+        self.context.set_var(varname, lhs)
 
-        self.context.set_var(varname, val)
+        val = Expr(stmt.value, self.context).interpret().value
+
+        lhs.value = val
 
     def parse_Assign(self, stmt):
         rhs = Expr(stmt.value, self.context).interpret()
-        self.vars[stmt.target.id] = rhs
+        lhs = Expr(stmt.target, self.context).interpret()
+        lhs.value = rhs.value
 
     def parse_If(self, stmt):
         ret = None
         test = Expr(stmt.test, self.context).interpret()
-        if test:
-            with self.context.block_scope():
+        with self.context.block_scope():
+            if test:
                 ret = interpret_block(self.stmt.body, self.context)
-        elif self.stmt.orelse:
-            with self.context.block_scope():
+            elif self.stmt.orelse:
                 ret = interpret_block(self.stmt.orelse, self.context)
 
         return ret
