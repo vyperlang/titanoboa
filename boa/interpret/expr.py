@@ -414,44 +414,30 @@ class Expr:
 
         return IRnode.from_list([op, left, right], typ="bool")
 
-    def parse_BoolOp(self):
-        for value in self.expr.values:
-            # Check for boolean operations with non-boolean inputs
-            _expr = Expr.parse_value_expr(value, self.context)
-            if not is_base_type(_expr.typ, "bool"):
-                return
+    def parse_BoolOp(self, expr):
+        # Create the initial `x and/or y` from the final two values
+        left = Expr(expr.values[-1], self.context).interpret().value
+        right = Expr(expr.values[-2], self.context).interpret().value
 
-        def _build_if_ir(condition, true, false):
-            # generate a basic if statement in IR
-            o = ["if", condition, true, false]
-            return o
+        res = self.boolop(expr.op, left, right)
 
-        if isinstance(self.expr.op, vy_ast.And):
-            # create the initial `x and y` from the final two values
-            ir_node = _build_if_ir(
-                Expr.parse_value_expr(self.expr.values[-2], self.context),
-                Expr.parse_value_expr(self.expr.values[-1], self.context),
-                [0],
-            )
-            # iterate backward through the remaining values
-            for node in self.expr.values[-3::-1]:
-                ir_node = _build_if_ir(Expr.parse_value_expr(node, self.context), ir_node, [0])
+        # Iterate backwards through the remaining values
+        for v in self.expr.values[-3::-1]:
+            val = Expr(v, self.context).interpret().value
+            res = self.boolop(res, val)
 
-        elif isinstance(self.expr.op, vy_ast.Or):
-            # create the initial `x or y` from the final two values
-            ir_node = _build_if_ir(
-                Expr.parse_value_expr(self.expr.values[-2], self.context),
-                [1],
-                Expr.parse_value_expr(self.expr.values[-1], self.context),
-            )
+        return res
 
-            # iterate backward through the remaining values
-            for node in self.expr.values[-3::-1]:
-                ir_node = _build_if_ir(Expr.parse_value_expr(node, self.context), 1, ir_node)
-        else:
-            raise TypeCheckFailure(f"Unexpected boolean operator: {type(self.expr.op).__name__}")
+    @classmethod
+    def boolop(cls, op, left, right):
 
-        return IRnode.from_list(ir_node, typ="bool")
+        def finalize(val):
+            return VyperObject(val, typ=BaseType("bool"))
+
+        if isinstance(op, vy_ast.And):
+            return finalize(left and right)
+        if isinstance(op, vy_ast.Or):
+            return finalize(left or right)
 
     # Unary operations (only "not" supported)
     def parse_UnaryOp(self):
