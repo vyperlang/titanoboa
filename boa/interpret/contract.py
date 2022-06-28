@@ -19,8 +19,16 @@ class VyperFunction:
         for arg_ast, argval in zip(self.fn_signature.base_args, args):
             val = VyperObject(argval, typ=arg_ast.typ)
             self.ctx.set_var(arg_ast.name, val)
-        #self.ctx.set_args(self.*args)
-        #self.ctx.set_kwargs(**kwargs)
+
+        sig_kwarg_types = {arg.name: arg.typ for arg in self.fn_signature.default_args}
+        sig_kwargs = self.fn_signature.default_values.copy()
+        for k, val in kwargs.items():
+            val = VyperObject(val, typ=sig_kwarg_types[k])
+            self.ctx.set_var(arg_ast.name, val)
+            sig_kwargs.pop(arg_ast.name)
+        for k, val in sig_kwargs:
+            val = VyperObject(val, typ=sig_kwarg_types[k])
+            self.ctx.set_var(arg_ast.name, val)
 
         return interpret_block(self.fn_ast.body, self.ctx)
 
