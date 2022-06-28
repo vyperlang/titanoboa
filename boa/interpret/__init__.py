@@ -6,4 +6,4 @@ def load(filename: str) -> VyperContract:
     with open(filename) as f:
         data = CompilerData(f.read())
 
-    return VyperContract(data.global_ctx)
+    return VyperContract(data)
