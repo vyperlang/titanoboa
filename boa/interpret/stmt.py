@@ -50,7 +50,7 @@ class Stmt:
         ret = None
         test = Expr(stmt.test, self.context).interpret()
         with self.context.block_scope():
-            if test:
+            if test.value:
                 ret = interpret_block(self.stmt.body, self.context)
             elif self.stmt.orelse:
                 ret = interpret_block(self.stmt.orelse, self.context)

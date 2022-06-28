@@ -372,46 +372,44 @@ class Expr:
 
             return IRnode.from_list(b1.resolve(b2.resolve(ret)), typ="bool")
 
-    @staticmethod
-    def _signed_to_unsigned_comparision_op(op):
-        translation_map = {"sgt": "gt", "sge": "ge", "sle": "le", "slt": "lt"}
-        if op in translation_map:
-            return translation_map[op]
-        else:
-            return op
 
-    def parse_Compare(self):
-        left = Expr.parse_value_expr(self.expr.left, self.context)
-        right = Expr.parse_value_expr(self.expr.right, self.context)
+    def parse_Compare(self, expr):
+        left = Expr(expr.left, self.context).interpret().value
+        right = Expr(expr.right, self.context).interpret().value
 
-        if right.value is None:
-            return
+        def finalize(val):
+            return VyperObject(bool(val), typ=BaseType("bool"))
 
-        if isinstance(self.expr.op, (vy_ast.In, vy_ast.NotIn)):
-            if isinstance(right.typ, ArrayLike):
-                return self.build_in_comparator()
-            else:
-                assert isinstance(right.typ, EnumType), right.typ
-                intersection = ["and", left, right]
-                if isinstance(self.expr.op, vy_ast.In):
-                    return IRnode.from_list(["iszero", ["iszero", intersection]], typ="bool")
-                elif isinstance(self.expr.op, vy_ast.NotIn):
-                    return IRnode.from_list(["iszero", intersection], typ="bool")
+        rtyp = new_type_to_old_type(expr.right._metadata["type"])
 
-        if isinstance(self.expr.op, vy_ast.Gt):
-            op = "sgt"
-        elif isinstance(self.expr.op, vy_ast.GtE):
-            op = "sge"
-        elif isinstance(self.expr.op, vy_ast.LtE):
-            op = "sle"
-        elif isinstance(self.expr.op, vy_ast.Lt):
-            op = "slt"
-        elif isinstance(self.expr.op, vy_ast.Eq):
-            op = "eq"
-        elif isinstance(self.expr.op, vy_ast.NotEq):
-            op = "ne"
-        else:
-            return  # pragma: notest
+        if isinstance(rtyp, ArrayLike):
+            if isinstance(expr.op, vy_ast.In):
+                return finalize(left in right)
+            if isinstance(expr.op, vy_ast.NotIn):
+                return finalize(left not in right)
+            raise Exception("unreachable")
+
+        if isinstance(rtyp, EnumType):
+            if isinstance(expr.op, vy_ast.In):
+                return finalize((left & right) == 0)
+            if isinstance(self.expr.op, vy_ast.NotIn):
+                return finalize((left & right) != 0)
+            raise Exception("unreachable")
+
+        if isinstance(expr.op, vy_ast.Gt):
+            return finalize(left > right)
+        if isinstance(expr.op, vy_ast.GtE):
+            return finalize(left >= right)
+        if isinstance(expr.op, vy_ast.LtE):
+            return finalize(left <= right)
+        if isinstance(expr.op, vy_ast.Lt):
+            return finalize(left < right)
+        if isinstance(expr.op, vy_ast.Eq):
+            return finalize(left == right)
+        if isinstance(self.expr.op, vy_ast.NotEq):
+            return finalize(left != right)
+
+        raise Exception("unreachable")
 
         # Compare (limited to 32) byte arrays.
         if isinstance(left.typ, ByteArrayLike) and isinstance(right.typ, ByteArrayLike):
