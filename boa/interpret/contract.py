@@ -1,5 +1,3 @@
-from boa.interpret.context import InterpreterContext
-from boa.interpret.stmt import interpret_block
 from boa.interpret.object import VyperObject
 from vyper.ast.signatures.function_signature import FunctionSignature
 from boa.vm import Env
