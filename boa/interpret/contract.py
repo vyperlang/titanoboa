@@ -10,7 +10,6 @@ import eth_abi as abi
 
 
 class VyperContract:
-
     def __init__(self, compiler_data, *args, env=None):
         self.compiler_data = compiler_data
         global_ctx = compiler_data.global_ctx
@@ -23,8 +22,10 @@ class VyperContract:
         class NoMeteringComputation(env.vm.state.computation_class):
             def consume_gas(self, amount, reason):
                 pass
+
             def refund_gas(self, amount):
                 pass
+
             def return_gas(self, amount):
                 pass
 
@@ -36,7 +37,9 @@ class VyperContract:
 
         encoded_args = b""
 
-        self.bytecode = self.env.deploy_code(bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address)
+        self.bytecode = self.env.deploy_code(
+            bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address
+        )
 
         functions = {fn.name: fn for fn in global_ctx._function_defs}
 
@@ -44,6 +47,7 @@ class VyperContract:
             setattr(self, fn.name, VyperFunction(fn, self))
 
     _address_counter = 100
+
     @classmethod
     def _generate_address(cls):
         # generate mock address; not same as actual create
@@ -58,7 +62,9 @@ class VyperFunction:
         self.env = contract.env
 
         # could be cached_property
-        self.fn_signature = FunctionSignature.from_definition(fn_ast, contract.global_ctx)
+        self.fn_signature = FunctionSignature.from_definition(
+            fn_ast, contract.global_ctx
+        )
 
     def __repr__(self):
         return repr(self.fn_ast)
@@ -73,8 +79,12 @@ class VyperFunction:
         # align the kwargs with the signature
         sig_kwargs = self.fn_signature.default_args[:num_kwargs]
         sig_args = self.fn_signature.base_args + sig_kwargs
-        args_abi_type = "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
-        method_id = keccak256(bytes(self.fn_signature.name + args_abi_type, "utf-8"))[:4]
+        args_abi_type = (
+            "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
+        )
+        method_id = keccak256(bytes(self.fn_signature.name + args_abi_type, "utf-8"))[
+            :4
+        ]
         self._signature_cache[num_kwargs] = (method_id, args_abi_type)
 
         return method_id, args_abi_type
@@ -90,14 +100,16 @@ class VyperFunction:
             raise Exception(f"bad args to {self}")
 
         # align the kwargs with the signature
-        sig_kwargs = self.fn_signature.default_args[:len(kwargs)]
+        sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
 
         method_id, args_abi_type = self.args_abi_type(len(kwargs))
 
         encoded_args = abi.encode_single(args_abi_type, args)
         calldata_bytes = method_id + encoded_args
 
-        computation = self.env.execute_code(bytecode=self.contract.bytecode, data=calldata_bytes)
+        computation = self.env.execute_code(
+            bytecode=self.contract.bytecode, data=calldata_bytes
+        )
 
         if computation.is_error:
             # TODO intercept and show source location
@@ -107,6 +119,6 @@ class VyperFunction:
 
         # unwrap the tuple if needed
         if not isinstance(self.fn_signature.return_type, TupleType):
-            ret, = ret
+            (ret,) = ret
 
         return VyperObject(ret, typ=self.fn_signature.return_type)

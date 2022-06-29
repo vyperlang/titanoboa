@@ -1,6 +1,16 @@
 from typing import Any, List
-from vyper.codegen.types.types import BaseType, is_integer_type, ByteArrayType, StringType, DArrayType, SArrayType, MappingType, is_base_type
+from vyper.codegen.types.types import (
+    BaseType,
+    is_integer_type,
+    ByteArrayType,
+    StringType,
+    DArrayType,
+    SArrayType,
+    MappingType,
+    is_base_type,
+)
 from dataclasses import dataclass
+
 
 class VyperObject:
     def __init__(self, value, typ):
@@ -28,9 +38,10 @@ class VyperObject:
         if isinstance(typ, MappingType):
             return cls(VyperHashMap(typ.keytype, typ.valuetype), typ)
         if is_base_type(typ, "address"):
-            return cls("0x" + "00"*20, typ)
+            return cls("0x" + "00" * 20, typ)
 
         raise Exception(f"unreachable {typ}")
+
 
 class VyperHashMap(dict):
     def __init__(self, key_type, value_type, *args, **kwargs):
@@ -42,6 +53,7 @@ class VyperHashMap(dict):
         if k not in self:
             return VyperObject.empty(self.value_type)
         return self[k]
+
 
 @dataclass
 class LogItem:

@@ -20,6 +20,7 @@ def _parse_cli_args():
 def _parse_args(argv):
     contract_path = argv[1]
 
+
 def exc_handler(contract_path: ContractPath, exception: Exception) -> None:
     print(f"Error compiling: {contract_path}")
     raise exception
@@ -37,11 +38,14 @@ def get_interface_codes(root_path: Path, contract_sources: ContractCodes) -> Dic
         for interface_name, interface_path in interface_codes.items():
 
             base_paths = [parent_path]
-            if not interface_path.startswith(".") and root_path.joinpath(file_path).exists():
+            if (
+                not interface_path.startswith(".")
+                and root_path.joinpath(file_path).exists()
+            ):
                 base_paths.append(root_path)
-            elif interface_path.startswith("../") and len(Path(file_path).parent.parts) < Path(
-                interface_path
-            ).parts.count(".."):
+            elif interface_path.startswith("../") and len(
+                Path(file_path).parent.parts
+            ) < Path(interface_path).parts.count(".."):
                 raise FileNotFoundError(
                     f"{file_path} - Cannot perform relative import outside of base folder"
                 )
@@ -72,13 +76,19 @@ def get_interface_codes(root_path: Path, contract_sources: ContractCodes) -> Dic
                     elif isinstance(contents, list) or (
                         "abi" in contents and isinstance(contents["abi"], list)
                     ):
-                        interfaces[file_path][interface_name] = {"type": "json", "code": contents}
+                        interfaces[file_path][interface_name] = {
+                            "type": "json",
+                            "code": contents,
+                        }
 
                     else:
                         raise ValueError(f"Corrupted file: '{valid_path}'")
 
                 else:
-                    interfaces[file_path][interface_name] = {"type": "vyper", "code": code}
+                    interfaces[file_path][interface_name] = {
+                        "type": "vyper",
+                        "code": code,
+                    }
 
     return interfaces
 
@@ -95,7 +105,9 @@ def interpret(
 
     root_path = Path(root_folder).resolve()
     if not root_path.exists():
-        raise FileNotFoundError(f"Invalid root path - '{root_path.as_posix()}' does not exist")
+        raise FileNotFoundError(
+            f"Invalid root path - '{root_path.as_posix()}' does not exist"
+        )
 
     contract_sources: ContractCodes = OrderedDict()
     for file_name in input_files:
@@ -111,7 +123,9 @@ def interpret(
 
     storage_layouts = OrderedDict()
     if storage_layout:
-        for storage_file_name, contract_name in zip(storage_layout, contract_sources.keys()):
+        for storage_file_name, contract_name in zip(
+            storage_layout, contract_sources.keys()
+        ):
             storage_file_path = Path(storage_file_name)
             with storage_file_path.open() as sfh:
                 storage_layouts[contract_name] = json.load(sfh)
@@ -119,11 +133,18 @@ def interpret(
     show_version = False
     if "combined_json" in output_formats:
         if len(output_formats) > 1:
-            raise ValueError("If using combined_json it must be the only output format requested")
+            raise ValueError(
+                "If using combined_json it must be the only output format requested"
+            )
         output_formats = combined_json_outputs
         show_version = True
 
-    translate_map = {"abi_python": "abi", "json": "abi", "ast": "ast_dict", "ir_json": "ir_dict"}
+    translate_map = {
+        "abi_python": "abi",
+        "json": "abi",
+        "ast": "ast_dict",
+        "ir_json": "ir_dict",
+    }
     final_formats = [translate_map.get(i, i) for i in output_formats]
 
     compiler_data = vyper.compile_codes(
