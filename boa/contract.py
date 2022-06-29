@@ -43,6 +43,8 @@ class VyperContract:
         for fn in global_ctx._function_defs:
             setattr(self, fn.name, VyperFunction(fn, self))
 
+        self._computation = None
+
     def _generate_address(self):
         # generates mock address; not same as actual create
         return self.env.generate_address()
@@ -103,10 +105,9 @@ class VyperFunction:
         computation = self.env.execute_code(
             bytecode=self.contract.bytecode, data=calldata_bytes
         )
+        self.contract._computation = computation  # for further inspection
 
-        if computation.is_error:
-            # TODO intercept and show source location
-            raise computation.error
+        computation.raise_if_error()  # TODO intercept and show source location
 
         ret = abi.decode_single(self.return_abi_type, computation.output)
 
