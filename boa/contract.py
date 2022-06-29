@@ -4,8 +4,8 @@ from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.types.types import TupleType
 from vyper.utils import cached_property, keccak256
 
+from boa.env import Env
 from boa.object import VyperObject
-from boa.vm import Env
 
 
 class VyperContract:
@@ -43,13 +43,9 @@ class VyperContract:
         for fn in global_ctx._function_defs:
             setattr(self, fn.name, VyperFunction(fn, self))
 
-    _address_counter = 100
-
-    @classmethod
-    def _generate_address(cls):
-        # generate mock address; not same as actual create
-        cls._address_counter += 1
-        return cls._address_counter.to_bytes(length=20, byteorder="big")
+    def _generate_address(self):
+        # generates mock address; not same as actual create
+        return self.env.generate_address()
 
 
 class VyperFunction:

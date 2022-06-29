@@ -1,5 +1,6 @@
 import sys
 
+from boa.env import Env
 from boa.interpret import load
 
 # turn off tracebacks if we are in repl
@@ -7,3 +8,5 @@ from boa.interpret import load
 if hasattr(sys, "ps1"):
     pass
     # sys.tracebacklimit = 0
+
+env = Env.get_singleton()

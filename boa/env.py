@@ -1,4 +1,5 @@
-from typing import Any
+import contextlib
+from typing import Any, Iterator
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -12,6 +13,7 @@ from eth_typing import Address
 # wrapper class around py-evm which provides a "contract-centric" API
 class Env:
     _singleton = None
+    _initial_address_counter = 100
 
     def __init__(self):
         self.chain = _make_chain()
@@ -19,11 +21,26 @@ class Env:
         self._sender = constants.ZERO_ADDRESS
         self._gas_price = 0
 
+        self._address_counter = self.__class__._initial_address_counter
+
+        self.eoa = self.generate_address()
+
+    @contextlib.contextmanager
+    def prank(self, address: bytes) -> Iterator[None]:
+        tmp = self.eoa
+        self.eoa = address
+        yield
+        self.eoa = tmp
+
     @classmethod
     def get_singleton(cls):
         if cls._singleton is None:
             cls._singleton = cls()
         return cls._singleton
+
+    def generate_address(self):
+        self._address_counter += 1
+        return self._address_counter.to_bytes(length=20, byteorder="big")
 
     def deploy_code(
         self,
