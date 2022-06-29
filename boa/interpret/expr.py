@@ -415,29 +415,14 @@ class Expr:
         return IRnode.from_list([op, left, right], typ="bool")
 
     def parse_BoolOp(self, expr):
-        # Create the initial `x and/or y` from the final two values
-        left = Expr(expr.values[-1], self.context).interpret().value
-        right = Expr(expr.values[-2], self.context).interpret().value
+        for arg in self.expr.values:
+            t = Expr(arg, self.context).interpret().value
+            if isinstance(expr.op, vy_ast.Or) and t is True:
+                break
+            if isinstance(expr.op, vy_ast.And) and t is False:
+                break
 
-        res = self.boolop(expr.op, left, right)
-
-        # Iterate backwards through the remaining values
-        for v in self.expr.values[-3::-1]:
-            val = Expr(v, self.context).interpret().value
-            res = self.boolop(res, val)
-
-        return res
-
-    @classmethod
-    def boolop(cls, op, left, right):
-
-        def finalize(val):
-            return VyperObject(val, typ=BaseType("bool"))
-
-        if isinstance(op, vy_ast.And):
-            return finalize(left and right)
-        if isinstance(op, vy_ast.Or):
-            return finalize(left or right)
+        return VyperObject(t, typ=BaseType("bool"))
 
     # Unary operations (only "not" supported)
     def parse_UnaryOp(self):
