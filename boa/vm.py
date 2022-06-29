@@ -1,10 +1,13 @@
+from typing import Any
+
+import eth.constants as constants
+import eth.tools.builder.chain as chain
 from eth.chains.mainnet import MainnetChain
 from eth.db.atomic import AtomicDB
-import eth.tools.builder.chain as chain
-import eth.constants as constants
 from eth.vm.message import Message
 from eth.vm.transaction_context import BaseTransactionContext
-from typing import Any
+from eth_typing import Address
+
 
 # wrapper class around py-evm which provides a "contract-centric" API
 class Env:
@@ -24,7 +27,7 @@ class Env:
 
     def deploy_code(
         self,
-        deploy_to=constants.ZERO_ADDRESS,
+        deploy_to: bytes = constants.ZERO_ADDRESS,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
@@ -32,16 +35,16 @@ class Env:
     ) -> bytes:
         if gas is None:
             gas = self.vm.state.gas_limit
+
         msg = Message(
             sender=self._sender,
-            to=deploy_to,
+            to=Address(deploy_to),
             gas=gas,
             value=value,
             code=bytecode,
             data=data,
         )
         tx_ctx = BaseTransactionContext(origin=self._sender, gas_price=self._gas_price)
-        # return self.vm.execute_bytecode(origin=self._sender, gas_price=self._gas_price, to= self._sender, value=0, data=data, sender=self._sender, gas=gas, code=bytecode)
         c = self.vm.state.computation_class.apply_create_message(
             self.vm.state, msg, tx_ctx
         )
@@ -60,20 +63,21 @@ class Env:
     ) -> Any:
         if gas is None:
             gas = self.vm.state.gas_limit
+
         msg = Message(
             sender=self._sender,
-            to=to_address,
+            to=Address(to_address),
             gas=gas,
             value=value,
             code=bytecode,
             data=data,
         )
         tx_ctx = BaseTransactionContext(origin=self._sender, gas_price=self._gas_price)
-        # return self.vm.execute_bytecode(origin=self._sender, gas_price=self._gas_price, to= self._sender, value=0, data=data, sender=self._sender, gas=gas, code=bytecode)
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY}
+
 
 # TODO make fork configurable - ex. "latest", "frontier", "berlin"
 # TODO make genesis params+state configurable

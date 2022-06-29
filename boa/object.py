@@ -1,15 +1,16 @@
-from typing import Any, List
+from dataclasses import dataclass
+from typing import List
+
 from vyper.codegen.types.types import (
     BaseType,
-    is_integer_type,
     ByteArrayType,
-    StringType,
     DArrayType,
-    SArrayType,
     MappingType,
+    SArrayType,
+    StringType,
     is_base_type,
+    is_integer_type,
 )
-from dataclasses import dataclass
 
 
 class VyperObject:

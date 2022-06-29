@@ -1,12 +1,11 @@
-from boa.interpret.object import VyperObject
+import eth_abi as abi
 from vyper.ast.signatures.function_signature import FunctionSignature
-from boa.vm import Env
-import eth.constants as constants
-from vyper.codegen.module import generate_ir_for_module
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.types.types import TupleType
 from vyper.utils import cached_property, keccak256
-import eth_abi as abi
+
+from boa.interpret.object import VyperObject
+from boa.vm import Env
 
 
 class VyperContract:
@@ -40,8 +39,6 @@ class VyperContract:
         self.bytecode = self.env.deploy_code(
             bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address
         )
-
-        functions = {fn.name: fn for fn in global_ctx._function_defs}
 
         for fn in global_ctx._function_defs:
             setattr(self, fn.name, VyperFunction(fn, self))
@@ -100,7 +97,7 @@ class VyperFunction:
             raise Exception(f"bad args to {self}")
 
         # align the kwargs with the signature
-        sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
+        # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
 
         method_id, args_abi_type = self.args_abi_type(len(kwargs))
 
