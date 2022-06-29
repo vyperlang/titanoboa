@@ -10,22 +10,46 @@ import eth_abi as abi
 
 
 class VyperContract:
-    def __init__(self, compiler_data):
+
+    def __init__(self, compiler_data, *args, env=None):
         self.compiler_data = compiler_data
         global_ctx = compiler_data.global_ctx
         self.global_ctx = global_ctx
-        self.env = Env()
-        # TODO actually mock an address (or just deploy)
-        self.address = constants.ZERO_ADDRESS
+
+        if env is None:
+            env = Env.get_singleton()
+
+        # honestly what the fuck
+        class NoMeteringComputation(env.vm.state.computation_class):
+            def consume_gas(self, amount, reason):
+                pass
+            def refund_gas(self, amount):
+                pass
+            def return_gas(self, amount):
+                pass
+
+        self.env = env
+
+        self.env.vm.state.computation_class = NoMeteringComputation
+
+        self.address = self._generate_address()
+
+        encoded_args = b""
+
+        self.bytecode = self.env.deploy_code(bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address)
 
         functions = {fn.name: fn for fn in global_ctx._function_defs}
 
         for fn in global_ctx._function_defs:
             setattr(self, fn.name, VyperFunction(fn, self))
 
-    @cached_property
-    def bytecode_runtime(self):
-        return self.compiler_data.bytecode_runtime
+    _address_counter = 100
+    @classmethod
+    def _generate_address(cls):
+        # generate mock address; not same as actual create
+        cls._address_counter += 1
+        return cls._address_counter.to_bytes(length=20, byteorder="big")
+
 
 class VyperFunction:
     def __init__(self, fn_ast, contract):
@@ -73,7 +97,7 @@ class VyperFunction:
         encoded_args = abi.encode_single(args_abi_type, args)
         calldata_bytes = method_id + encoded_args
 
-        computation = self.env.execute_code(bytecode=self.contract.bytecode_runtime, data=calldata_bytes)
+        computation = self.env.execute_code(bytecode=self.contract.bytecode, data=calldata_bytes)
 
         if computation.is_error:
             # TODO intercept and show source location
