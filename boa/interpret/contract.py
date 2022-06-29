@@ -20,7 +20,6 @@ class VyperContract:
 
         functions = {fn.name: fn for fn in global_ctx._function_defs}
 
-
         for fn in global_ctx._function_defs:
             setattr(self, fn.name, VyperFunction(fn, self))
 
