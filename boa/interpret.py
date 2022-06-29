@@ -1,6 +1,6 @@
 from vyper.compiler.phases import CompilerData
 
-from boa.interpret.contract import VyperContract
+from boa.contract import VyperContract
 
 
 def load(filename: str) -> VyperContract:

@@ -4,7 +4,7 @@ from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.types.types import TupleType
 from vyper.utils import cached_property, keccak256
 
-from boa.interpret.object import VyperObject
+from boa.object import VyperObject
 from boa.vm import Env
 
 
