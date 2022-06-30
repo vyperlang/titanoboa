@@ -26,9 +26,10 @@ class VyperContract:
 
         fns = {fn.name: fn for fn in global_ctx._function_defs}
 
-        ctor = VyperFunction(fns.pop("__init__"), self)
-        encoded_args = ctor._prepare_calldata(*args)
-        encoded_args = encoded_args[4:]  # strip method_id
+        if "__init__" in fns:
+            ctor = VyperFunction(fns.pop("__init__"), self)
+            encoded_args = ctor._prepare_calldata(*args)
+            encoded_args = encoded_args[4:]  # strip method_id
 
         self.bytecode = self.env.deploy_code(
             bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address
