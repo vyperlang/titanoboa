@@ -32,8 +32,8 @@ class TracingCodeStream(CodeStream):
         while self.program_counter < self._length_cache:
             opcode = self._raw_code_bytes[self.program_counter]
 
+            self._trace.append(self.program_counter)
             self.program_counter += 1
-            self._trace.append(opcode)
             yield opcode
 
         yield STOP
