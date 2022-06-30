@@ -69,6 +69,9 @@ class VyperFunction:
     # hotspot, cache the signature computation
     @cached_property
     def return_abi_type(self):
+        if self.fn_signature.return_type is None:
+            return None
+
         return_typ = calculate_type_for_external_return(self.fn_signature.return_type)
         return return_typ.abi_type.selector_name()
 
@@ -85,11 +88,16 @@ class VyperFunction:
         calldata_bytes = method_id + encoded_args
 
         computation = self.env.execute_code(
-            bytecode=self.contract.bytecode, data=calldata_bytes
+            to_address=self.contract.address,
+            bytecode=self.contract.bytecode,
+            data=calldata_bytes,
         )
         self.contract._computation = computation  # for further inspection
 
         computation.raise_if_error()  # TODO intercept and show source location
+
+        if self.return_abi_type is None:
+            return None
 
         ret = abi.decode_single(self.return_abi_type, computation.output)
 
