@@ -28,7 +28,7 @@ class VyperContract:
 
         ctor = VyperFunction(fns.pop("__init__"), self)
         encoded_args = ctor._prepare_calldata(*args)
-        encoded_args = encoded_args[4:] # strip method_id
+        encoded_args = encoded_args[4:]  # strip method_id
 
         self.bytecode = self.env.deploy_code(
             bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address
@@ -110,7 +110,6 @@ class VyperFunction:
 
         encoded_args = abi.encode_single(args_abi_type, args)
         return method_id + encoded_args
-
 
     def __call__(self, *args, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
