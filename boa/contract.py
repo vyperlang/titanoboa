@@ -24,11 +24,17 @@ class VyperContract:
 
         encoded_args = b""
 
+        fns = {fn.name: fn for fn in global_ctx._function_defs}
+
+        ctor = VyperFunction(fns.pop("__init__"), self)
+        encoded_args = ctor._prepare_calldata(*args)
+        encoded_args = encoded_args[4:] # strip method_id
+
         self.bytecode = self.env.deploy_code(
             bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address
         )
 
-        for fn in global_ctx._function_defs:
+        for fn in fns.values():
             setattr(self, fn.name, VyperFunction(fn, self))
 
         self._computation = None
@@ -93,7 +99,7 @@ class VyperFunction:
         return_typ = calculate_type_for_external_return(self.fn_signature.return_type)
         return return_typ.abi_type.selector_name()
 
-    def __call__(self, *args, **kwargs):
+    def _prepare_calldata(self, *args, **kwargs):
         if len(args) != len(self.fn_signature.base_args):
             raise Exception(f"bad args to {self}")
 
@@ -103,8 +109,11 @@ class VyperFunction:
         method_id, args_abi_type = self.args_abi_type(len(kwargs))
 
         encoded_args = abi.encode_single(args_abi_type, args)
-        calldata_bytes = method_id + encoded_args
+        return method_id + encoded_args
 
+
+    def __call__(self, *args, **kwargs):
+        calldata_bytes = self._prepare_calldata(*args, **kwargs)
         computation = self.env.execute_code(
             to_address=self.contract.address,
             bytecode=self.contract.bytecode,
