@@ -17,22 +17,8 @@ class VyperContract:
         if env is None:
             env = Env.get_singleton()
 
-        # honestly what the fuck
-        class NoMeteringComputation(env.vm.state.computation_class):
-            def consume_gas(self, amount, reason):
-                pass
-
-            def refund_gas(self, amount):
-                pass
-
-            def return_gas(self, amount):
-                pass
-
         self.env = env
-
-        self.env.vm.state.computation_class = NoMeteringComputation
-
-        self.address = self._generate_address()
+        self.address = self.env.generate_address()
 
         encoded_args = b""
 
@@ -44,10 +30,6 @@ class VyperContract:
             setattr(self, fn.name, VyperFunction(fn, self))
 
         self._computation = None
-
-    def _generate_address(self):
-        # generates mock address; not same as actual create
-        return self.env.generate_address()
 
 
 class VyperFunction:

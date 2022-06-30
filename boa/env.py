@@ -5,9 +5,38 @@ import eth.constants as constants
 import eth.tools.builder.chain as chain
 from eth.chains.mainnet import MainnetChain
 from eth.db.atomic import AtomicDB
+from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
+from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address
+
+
+# a code stream which keeps a trace of opcodes it has executed
+class TracingCodeStream(CodeStream):
+    __slots__ = [
+        "_length_cache",
+        "_raw_code_bytes",
+        "invalid_positions",
+        "valid_positions",
+        "program_counter",
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._trace = []
+
+    def __iter__(self) -> Iterator[int]:
+        # upstream says: "a very performance-sensitive method"
+        # note: not clear to me this len(raw_code_bytes) is a hotspot
+        while self.program_counter < self._length_cache:
+            opcode = self._raw_code_bytes[self.program_counter]
+
+            self.program_counter += 1
+            self._trace.append(opcode)
+            yield opcode
+
+        yield STOP
 
 
 # wrapper class around py-evm which provides a "contract-centric" API
@@ -24,6 +53,27 @@ class Env:
 
         # TODO differentiate between origin and sender
         self.eoa = self.generate_address()
+
+        # honestly what the fuck
+        class NoMeteringComputation(self.vm.state.computation_class):
+            def consume_gas(self, amount, reason):
+                pass
+
+            def refund_gas(self, amount):
+                pass
+
+            def return_gas(self, amount):
+                pass
+
+        class OpcodeTracingComputation(NoMeteringComputation):
+            def __init__(self, *args, **kwargs):
+                # super() hardcodes CodeStream into the ctor
+                # so we have to override it here
+                super().__init__(*args, **kwargs)
+                self.code = TracingCodeStream(self.code._raw_code_bytes)
+
+        # TODO make metering toggle-able
+        self.vm.state.computation_class = OpcodeTracingComputation
 
     # TODO is this a good name
     @contextlib.contextmanager
