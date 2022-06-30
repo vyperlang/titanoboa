@@ -1,6 +1,7 @@
 import eth_abi as abi
 from vyper.ast.signatures.function_signature import FunctionSignature
-from vyper.codegen.core import calculate_type_for_external_return
+import vyper.ast.nodes as vy_ast
+from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.types.types import TupleType
 from vyper.compiler.output import build_source_map_output
 from vyper.exceptions import VyperException  # for building source traces
@@ -10,8 +11,18 @@ from boa.env import Env
 from boa.object import VyperObject
 
 
+# build a reverse map from the format we have in pc_pos_map to AST nodes
+def ast_map_of(ast_node):
+    ast_map = {}
+    nodes = [ast_node] + ast_node.get_descendants(reverse=True)
+    for node in nodes:
+        ast_map[getpos(node)] = node
+    return ast_map
+
 class VyperContract:
+
     def __init__(self, compiler_data, *args, env=None):
+
         self.compiler_data = compiler_data
         global_ctx = compiler_data.global_ctx
         self.global_ctx = global_ctx
@@ -41,6 +52,10 @@ class VyperContract:
         self._computation = None
 
     @cached_property
+    def ast_map(self):
+        return ast_map_of(self.compiler_data.vyper_module)
+
+    @cached_property
     def source_map(self):
         return build_source_map_output(self.compiler_data)
 
@@ -48,7 +63,7 @@ class VyperContract:
         pc_map = self.source_map["pc_pos_map"]
         for pc in reversed(code_stream._trace):
             if pc in pc_map:
-                return pc_map[pc]
+                return self.ast_map[pc_map[pc]]
 
         raise Exception(f"Couldn't find source for {code_stream.program_counter}")
 
