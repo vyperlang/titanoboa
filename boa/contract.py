@@ -2,6 +2,8 @@ import eth_abi as abi
 from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.types.types import TupleType
+from vyper.compiler.output import build_source_map_output
+from vyper.exceptions import VyperException  # for building source traces
 from vyper.utils import cached_property, keccak256
 
 from boa.env import Env
@@ -30,6 +32,22 @@ class VyperContract:
             setattr(self, fn.name, VyperFunction(fn, self))
 
         self._computation = None
+
+    @cached_property
+    def source_map(self):
+        return build_source_map_output(self.compiler_data)
+
+    def find_source_of(self, code_stream):
+        pc_map = self.source_map["pc_pos_map"]
+        for pc in reversed(code_stream._trace):
+            if pc in pc_map:
+                return pc_map[pc]
+
+        raise Exception(f"Couldn't find source for {code_stream.program_counter}")
+
+
+class BoaError(VyperException):
+    pass
 
 
 class VyperFunction:
@@ -94,7 +112,10 @@ class VyperFunction:
         )
         self.contract._computation = computation  # for further inspection
 
-        computation.raise_if_error()  # TODO intercept and show source location
+        if computation.is_error:
+            raise BoaError(
+                repr(computation.error), self.contract.find_source_of(computation.code)
+            )
 
         if self.return_abi_type is None:
             return None
