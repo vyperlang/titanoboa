@@ -3,7 +3,7 @@ from vyper.compiler.phases import CompilerData
 from boa.contract import VyperContract
 
 
-def load(filename: str, *args, **kwargs) -> VyperContract:
+def load(filename: str, *args, **kwargs) -> VyperContract:  # type: ignore
     with open(filename) as f:
         data = CompilerData(f.read())
 

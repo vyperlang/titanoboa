@@ -12,6 +12,31 @@ from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address
 
 
+class VMPatcher:
+    _patchables = {
+        # env vars vyper supports
+        "block_number": "_block_number",
+        "timestamp": "_timestamp",
+        "coinbase": "_coinbase",
+        "difficulty": "_difficulty",
+        "prev_hashes": "_prev_hashes",
+        "chain_id": "_chain_id",
+    }
+
+    def __init__(self, vm):
+        # https://stackoverflow.com/a/12999019
+        object.__setattr__(self, "_patch", vm.state.execution_context)
+
+    def __getattr__(self, attr):
+        if attr in self._patchables:
+            return getattr(self._patch, self._patchables[attr])
+        raise AttributeError(attr)
+
+    def __setattr__(self, attr, value):
+        if attr in self._patchables:
+            setattr(self._patch, self._patchables[attr], value)
+
+
 # a code stream which keeps a trace of opcodes it has executed
 class TracingCodeStream(CodeStream):
     __slots__ = [
@@ -47,6 +72,7 @@ class Env:
     def __init__(self):
         self.chain = _make_chain()
         self.vm = self.chain.get_vm()
+        self.vm.patch = VMPatcher(self.vm)
         self._gas_price = 0
 
         self._address_counter = self.__class__._initial_address_counter

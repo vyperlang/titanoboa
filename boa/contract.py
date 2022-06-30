@@ -1,6 +1,5 @@
 import eth_abi as abi
 from vyper.ast.signatures.function_signature import FunctionSignature
-import vyper.ast.nodes as vy_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.types.types import TupleType
 from vyper.compiler.output import build_source_map_output
@@ -19,8 +18,8 @@ def ast_map_of(ast_node):
         ast_map[getpos(node)] = node
     return ast_map
 
-class VyperContract:
 
+class VyperContract:
     def __init__(self, compiler_data, *args, env=None):
 
         self.compiler_data = compiler_data
