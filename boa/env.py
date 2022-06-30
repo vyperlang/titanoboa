@@ -1,5 +1,5 @@
 import contextlib
-from typing import Any, Iterator
+from typing import Any, Iterator, Optional
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -18,13 +18,14 @@ class Env:
     def __init__(self):
         self.chain = _make_chain()
         self.vm = self.chain.get_vm()
-        self._sender = constants.ZERO_ADDRESS
         self._gas_price = 0
 
         self._address_counter = self.__class__._initial_address_counter
 
+        # TODO differentiate between origin and sender
         self.eoa = self.generate_address()
 
+    # TODO is this a good name
     @contextlib.contextmanager
     def prank(self, address: bytes) -> Iterator[None]:
         tmp = self.eoa
@@ -45,6 +46,7 @@ class Env:
     def deploy_code(
         self,
         deploy_to: bytes = constants.ZERO_ADDRESS,
+        sender: Optional[bytes] = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
@@ -52,16 +54,20 @@ class Env:
     ) -> bytes:
         if gas is None:
             gas = self.vm.state.gas_limit
+        if sender is None:
+            sender = self.eoa
 
         msg = Message(
-            sender=self._sender,
             to=Address(deploy_to),
+            sender=Address(sender),
             gas=gas,
             value=value,
             code=bytecode,
             data=data,
         )
-        tx_ctx = BaseTransactionContext(origin=self._sender, gas_price=self._gas_price)
+        tx_ctx = BaseTransactionContext(
+            origin=Address(sender), gas_price=self._gas_price
+        )
         c = self.vm.state.computation_class.apply_create_message(
             self.vm.state, msg, tx_ctx
         )
@@ -73,6 +79,7 @@ class Env:
     def execute_code(
         self,
         to_address: bytes = constants.ZERO_ADDRESS,
+        sender: bytes = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
@@ -80,16 +87,20 @@ class Env:
     ) -> Any:
         if gas is None:
             gas = self.vm.state.gas_limit
+        if sender is None:
+            sender = self.eoa
 
         msg = Message(
-            sender=self._sender,
+            sender=Address(sender),
             to=Address(to_address),
             gas=gas,
             value=value,
             code=bytecode,
             data=data,
         )
-        tx_ctx = BaseTransactionContext(origin=self._sender, gas_price=self._gas_price)
+        tx_ctx = BaseTransactionContext(
+            origin=Address(sender), gas_price=self._gas_price
+        )
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
 
