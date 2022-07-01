@@ -194,6 +194,7 @@ class Env:
 
         class FakeMessage(Message):  # Message object with settable attrs
             __dict__ = {}
+
         msg = FakeMessage(
             sender=Address(sender),
             to=Address(to_address),
@@ -202,7 +203,7 @@ class Env:
             code=bytecode,
             data=data,
         )
-        msg._fake_codesize = fake_codesize # type: ignore
+        msg._fake_codesize = fake_codesize  # type: ignore
         msg._start_pc = start_pc  # type: ignore
         tx_ctx = BaseTransactionContext(
             origin=Address(sender), gas_price=self._gas_price
