@@ -46,7 +46,7 @@ import vyper.semantics.validation as vld
 
 class VyperContract:
     _initialized = False
-    def __init__(self, compiler_data, *args, env=None):
+    def __init__(self, compiler_data, *args, env=None, override_address=None):
         global_ctx = compiler_data.global_ctx
         object.__setattr__(self, "global_ctx", global_ctx)
         self.compiler_data = compiler_data
@@ -55,7 +55,10 @@ class VyperContract:
             env = Env.get_singleton()
 
         self.env = env
-        self.address = self.env.generate_address()
+        if override_address is None:
+            self.address = self.env.generate_address()
+        else:
+            self.address = override_address
 
         encoded_args = b""
 
