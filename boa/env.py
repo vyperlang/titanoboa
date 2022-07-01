@@ -64,6 +64,21 @@ class TracingCodeStream(CodeStream):
         yield STOP
 
 
+class TrivialGasMeter:
+    def __init__(self, start_gas):
+        self.start_gas = start_gas
+        self.gas_remaining = start_gas
+
+    def consume_gas(self, amount, reason):
+        pass
+
+    def refund_gas(self, amount):
+        pass
+
+    def return_gas(self, amount):
+        pass
+
+
 # wrapper class around py-evm which provides a "contract-centric" API
 class Env:
     _singleton = None
@@ -80,26 +95,22 @@ class Env:
         # TODO differentiate between origin and sender
         self.eoa = self.generate_address()
 
-        # honestly what the fuck
-        class NoMeteringComputation(self.vm.state.computation_class):
-            def consume_gas(self, amount, reason):
-                pass
+        class OpcodeTracingComputation(self.vm.state.computation_class):
+            _gas_metering = True
 
-            def refund_gas(self, amount):
-                pass
-
-            def return_gas(self, amount):
-                pass
-
-        class OpcodeTracingComputation(NoMeteringComputation):
             def __init__(self, *args, **kwargs):
                 # super() hardcodes CodeStream into the ctor
                 # so we have to override it here
                 super().__init__(*args, **kwargs)
                 self.code = TracingCodeStream(self.code._raw_code_bytes)
+                if not self.__class__._gas_metering:
+                    self._gas_meter = TrivialGasMeter(self.msg.gas)
 
         # TODO make metering toggle-able
         self.vm.state.computation_class = OpcodeTracingComputation
+
+    def set_gas_metering(self, val: bool) -> None:
+        self.vm.state.computation_class._gas_metering = val
 
     # TODO is this a good name
     @contextlib.contextmanager
@@ -180,7 +191,7 @@ class Env:
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
 
-GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY}
+GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
 
 
 # TODO make fork configurable - ex. "latest", "frontier", "berlin"
