@@ -156,8 +156,13 @@ class VyperContract:
     @cached_property
     def _ast_module(self):
         from vyper.ast.expansion import remove_unused_statements
+        import vyper.ast as vy_ast
 
-        ret = copy.deepcopy(self.compiler_data.vyper_module_unfolded)
+        ret = copy.deepcopy(self.compiler_data.vyper_module)
+        vy_ast.folding.fold(ret)
+        vld.validate_semantics(ret, self.compiler_data.interface_codes)
+
+        # don't expand ast
         remove_unused_statements(ret)
         from vyper.semantics.validation.data_positions import set_data_positions
 
@@ -174,9 +179,7 @@ class VyperContract:
         from vyper.semantics.validation.utils import get_exact_type_from_node
 
         ast = parse_to_ast(source_code)
-        vy_ast.validation.validate_literal_nodes(ast)
-        vy_ast.folding.replace_builtin_constants(ast)
-        vy_ast.folding.replace_builtin_functions(ast)
+        vy_ast.folding.fold(ast)
         ast = ast.body[0]
 
         fake_module = self._ast_module
@@ -206,9 +209,7 @@ def __boa_debug__() {return_sig}:
         ast = parse_to_ast(wrapper_code, self.compiler_data.interface_codes)
         from vyper.semantics.validation import validate_semantics
 
-        vy_ast.validation.validate_literal_nodes(ast)
-        vy_ast.folding.replace_builtin_constants(ast)
-        vy_ast.folding.replace_builtin_functions(ast)
+        vy_ast.folding.fold(ast)
 
         from vyper.semantics.validation.data_positions import set_data_positions
 
