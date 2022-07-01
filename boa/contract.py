@@ -108,7 +108,7 @@ class VyperContract:
     def source_map(self):
         return build_source_map_output(self.compiler_data)
 
-    def find_source_of(self, code_stream):
+    def find_source_of(self, code_stream, is_initcode=False):
         pc_map = self.source_map["pc_pos_map"]
         for pc in reversed(code_stream._trace):
             if pc in pc_map:
@@ -329,13 +329,14 @@ class VyperFunction:
         return return_typ.abi_type.selector_name()
 
     def _prepare_calldata(self, *args, **kwargs):
-        if len(args) != len(self.fn_signature.base_args):
+        if not len(self.fn_signature.base_args) <= len(args) <= len(self.fn_signature.args):
             raise Exception(f"bad args to {self}")
 
         # align the kwargs with the signature
         # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
 
-        method_id, args_abi_type = self.args_abi_type(len(kwargs))
+        total_non_base_args = len(kwargs) + len(args) - len(self.fn_signature.base_args)
+        method_id, args_abi_type = self.args_abi_type(total_non_base_args)
 
         encoded_args = abi.encode_single(args_abi_type, args)
         return method_id + encoded_args
