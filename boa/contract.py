@@ -1,10 +1,14 @@
+from typing import Any, Optional
+import copy
+
 import eth_abi as abi
 from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.codegen.core import calculate_type_for_external_return, getpos
-from vyper.codegen.types.types import TupleType
+import vyper.codegen.types.types as vyper
 from vyper.compiler.output import build_source_map_output
 from vyper.exceptions import VyperException  # for building source traces
-from vyper.utils import cached_property, keccak256
+from vyper.utils import cached_property, keccak256, abi_method_id
+from dataclasses import dataclass
 
 from boa.env import Env
 from boa.object import VyperObject
@@ -19,9 +23,10 @@ def ast_map_of(ast_node):
     return ast_map
 
 
+import vyper.semantics.namespace as ns
+import vyper.semantics.validation as vld
 class VyperContract:
     def __init__(self, compiler_data, *args, env=None):
-
         self.compiler_data = compiler_data
         global_ctx = compiler_data.global_ctx
         self.global_ctx = global_ctx
@@ -48,6 +53,9 @@ class VyperContract:
         for fn in fns.values():
             setattr(self, fn.name, VyperFunction(fn, self))
 
+        for varname, varinfo in self.global_ctx._globals.items():
+            setattr(self, varname, VyperMapping(self, varname, varinfo.typ))
+
         self._computation = None
 
     @cached_property
@@ -64,7 +72,144 @@ class VyperContract:
             if pc in pc_map:
                 return self.ast_map[pc_map[pc]]
 
-        raise Exception(f"Couldn't find source for {code_stream.program_counter}")
+        return None
+
+    # run a bytecode fragment in the context of the contract,
+    # maintaining PCs and CODESIZE semantics
+    def _run_bytecode(self, fragment: bytes, calldata_bytes: bytes = b"") -> Any:
+        bytecode = self.bytecode + fragment
+        fake_codesize = len(self.bytecode)
+        method_id = bytes.fromhex("ffffffff")
+        computation = self.env.execute_code(
+            to_address=self.address,
+            bytecode=bytecode,
+            data=method_id + calldata_bytes,
+            fake_codesize=fake_codesize,
+            start_pc=fake_codesize,
+        )
+        return computation
+
+    def eval(self, stmt: str) -> Any:
+        bytecode, typ = self.compile_stmt(stmt)
+
+        c = self._run_bytecode(bytecode)
+
+        self._computation = c # for further inspection
+
+        if c.is_error:
+            raise BoaError(
+                repr(c.error), self.find_source_of(c.code)
+            )
+
+        if typ is None:
+            return None
+
+        return_typ = calculate_type_for_external_return(typ)
+        ret = abi.decode_single(return_typ.abi_type.selector_name(), c.output)
+
+        # unwrap the tuple if needed
+        if not isinstance(typ, vyper.TupleType):
+            (ret,) = ret
+
+        return ret
+
+
+    @cached_property
+    def _ast_module(self):
+        from vyper.ast.expansion import remove_unused_statements
+        ret = copy.deepcopy(self.compiler_data.vyper_module_unfolded)
+        remove_unused_statements(ret)
+        from vyper.semantics.validation.data_positions import set_data_positions
+        set_data_positions(ret, storage_layout_overrides=None)
+        return ret
+
+    def compile_stmt(self, source_code: str) -> Any:
+        from vyper.ast.utils import parse_to_ast
+        from vyper.semantics.validation.utils import get_exact_type_from_node
+
+        import vyper.ast as vy_ast
+
+        ast = parse_to_ast(source_code)
+        vy_ast.validation.validate_literal_nodes(ast)
+        vy_ast.folding.replace_builtin_constants(ast)
+        vy_ast.folding.replace_builtin_functions(ast)
+        ast = ast.body[0]
+
+        fake_module = self._ast_module
+        from vyper.exceptions import StructureException
+
+        if isinstance(ast, vy_ast.Expr):
+            with ns.get_namespace().enter_scope():
+                vld.add_module_namespace(fake_module, self.compiler_data.interface_codes)
+                typ = get_exact_type_from_node(ast.value)
+
+            return_sig = f"-> {typ}"
+            body = f"return {source_code}"
+        else:
+            typ = None
+            return_sig = ""
+            body = source_code
+
+        # wrap code in function so that 
+        wrapper_code = f"""
+@external
+@payable
+def __boa_debug__() {return_sig}:
+    {body}
+        """
+        ast = parse_to_ast(wrapper_code, self.compiler_data.interface_codes)
+        from vyper.semantics.validation import validate_semantics
+
+        vy_ast.validation.validate_literal_nodes(ast)
+        vy_ast.folding.replace_builtin_constants(ast)
+        vy_ast.folding.replace_builtin_functions(ast)
+
+        from vyper.semantics.validation.data_positions import set_data_positions
+        fake_module.body += ast.body
+
+        with ns.get_namespace().enter_scope():
+            vld.add_module_namespace(fake_module, self.compiler_data.interface_codes)
+            vld.validate_functions(ast)
+
+        set_data_positions(fake_module, storage_layout_overrides=None)
+
+        ast = fake_module.body.pop(-1)
+
+        sig = FunctionSignature.from_definition(ast, self.global_ctx)
+        ast._metadata["signature"] = sig
+        import vyper.codegen.function_definitions.common as vyper
+        ir = vyper.generate_ir_for_function(ast, self.compiler_data.function_signatures, self.global_ctx, skip_nonpayable_check=False)
+        from vyper.codegen.ir_node import IRnode
+        # force the selector check to always succeed
+        ir = IRnode.from_list(["with", "_calldata_method_id", abi_method_id(sig.base_signature), ir])
+        import vyper.ir.compile_ir as compile_ir
+        assembly = compile_ir.compile_to_assembly(ir)
+        bytecode, _ = compile_ir.assembly_to_evm(assembly)
+        return bytecode, typ
+
+
+class VyperMapping:
+    def __init__(self, contract, name, typ, key_prefix = None):
+        self.contract = contract
+        self.name = name
+        self.typ = typ
+        self.key_prefix = key_prefix or []
+
+    @property
+    def _is_leaf(self):
+        return not isinstance(self.typ.valuetype, vyper.MappingType)
+
+    def __getitem__(self, key):
+        if self._is_leaf:
+            keys = "".join(f"[{k}]" for k in (self.key_prefix + [key]))
+            return self.contract.eval(f"self.{self.name}{keys}")
+        else:
+            return VyperMapping(self.name, self.typ.valuetype, self.key_prefix + [key])
+
+    def __setitem__(self, key, val):
+        assert self._is_leaf
+        keys = "".join(f"[{k}]" for k in (self.key_prefix + [key]))
+        return self.contract.eval(f"self.{self.name}{keys} = {val}")
 
 
 class BoaError(VyperException):
@@ -146,7 +291,7 @@ class VyperFunction:
         ret = abi.decode_single(self.return_abi_type, computation.output)
 
         # unwrap the tuple if needed
-        if not isinstance(self.fn_signature.return_type, TupleType):
+        if not isinstance(self.fn_signature.return_type, vyper.TupleType):
             (ret,) = ret
 
         return VyperObject(ret, typ=self.fn_signature.return_type)

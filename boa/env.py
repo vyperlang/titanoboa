@@ -41,19 +41,22 @@ class VMPatcher:
 class TracingCodeStream(CodeStream):
     __slots__ = [
         "_length_cache",
+        "_fake_codesize",
         "_raw_code_bytes",
         "invalid_positions",
         "valid_positions",
         "program_counter",
     ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, start_pc=0, fake_codesize=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self._trace = []
+        self._trace = []  # trace of opcodes that were run
+        self.program_counter = start_pc  # configurable start PC
+        self._fake_codesize = fake_codesize  # what CODESIZE returns
 
     def __iter__(self) -> Iterator[int]:
         # upstream says: "a very performance-sensitive method"
-        # note: not clear to me this len(raw_code_bytes) is a hotspot
+        # note: not clear to me that len(raw_code_bytes) is a hotspot
         while self.program_counter < self._length_cache:
             opcode = self._raw_code_bytes[self.program_counter]
 
@@ -62,6 +65,11 @@ class TracingCodeStream(CodeStream):
             yield opcode
 
         yield STOP
+
+    def __len__(self):
+        if self._fake_codesize is not None:
+            return self._fake_codesize
+        return self._length_cache
 
 
 class TrivialGasMeter:
@@ -102,7 +110,11 @@ class Env:
                 # super() hardcodes CodeStream into the ctor
                 # so we have to override it here
                 super().__init__(*args, **kwargs)
-                self.code = TracingCodeStream(self.code._raw_code_bytes)
+                self.code = TracingCodeStream(
+                    self.code._raw_code_bytes,
+                    fake_codesize=getattr(self.msg, "_fake_codesize", None),
+                    start_pc=getattr(self.msg, "_start_pc", 0),
+                )
                 if not self.__class__._gas_metering:
                     self._gas_meter = TrivialGasMeter(self.msg.gas)
 
@@ -138,6 +150,7 @@ class Env:
         value: int = 0,
         bytecode: bytes = b"",
         data: bytes = b"",
+        start_pc: int = 0,
     ) -> bytes:
         if gas is None:
             gas = self.vm.state.gas_limit
@@ -171,13 +184,17 @@ class Env:
         value: int = 0,
         bytecode: bytes = b"",
         data: bytes = b"",
+        start_pc: int = 0,
+        fake_codesize: int = None,
     ) -> Any:
         if gas is None:
             gas = self.vm.state.gas_limit
         if sender is None:
             sender = self.eoa
 
-        msg = Message(
+        class FakeMessage(Message):  # Message object with settable attrs
+            __dict__ = {}
+        msg = FakeMessage(
             sender=Address(sender),
             to=Address(to_address),
             gas=gas,
@@ -185,6 +202,8 @@ class Env:
             code=bytecode,
             data=data,
         )
+        msg._fake_codesize = fake_codesize # type: ignore
+        msg._start_pc = start_pc  # type: ignore
         tx_ctx = BaseTransactionContext(
             origin=Address(sender), gas_price=self._gas_price
         )
