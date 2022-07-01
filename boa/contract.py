@@ -45,10 +45,11 @@ import vyper.semantics.validation as vld
 
 
 class VyperContract:
+    _initialized = False
     def __init__(self, compiler_data, *args, env=None):
-        self.compiler_data = compiler_data
         global_ctx = compiler_data.global_ctx
-        self.global_ctx = global_ctx
+        object.__setattr__(self, "global_ctx", global_ctx)
+        self.compiler_data = compiler_data
 
         if env is None:
             env = Env.get_singleton()
@@ -69,15 +70,32 @@ class VyperContract:
             bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address
         )
 
+        # add all functions from the interface to the contract
         for fn in fns.values():
-            setattr(self, fn.name, VyperFunction(fn, self))
+            # check if it collides with a storage variable (i.e. is a generated getter)
+            if fn.name not in self.global_ctx._globals:
+                setattr(self, fn.name, VyperFunction(fn, self))
 
         for varname, varinfo in self.global_ctx._globals.items():
-            setattr(self, varname, VyperMapping(self, varname, varinfo.typ))
+            if isinstance(varinfo.typ, vyper.MappingType):
+                setattr(self, varname, VyperMapping(self, varname, varinfo.typ))
 
         self._computation = None
 
         self._eval_cache = lrudict(0x1000)
+        self._initialized = True
+
+    def __getattr__(self, attr):
+        if self._initialized and attr in self.global_ctx._globals:
+            return self.eval(f"self.{attr}")
+        else:
+            return super().__getattribute__(attr)
+
+    def __setattr__(self, attr, val):
+        if self._initialized and attr in self.global_ctx._globals:
+            self.eval(f"self.{attr} = {val}")
+        else:
+            super().__setattr__(attr, val)
 
     @cached_property
     def ast_map(self):
