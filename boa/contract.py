@@ -75,30 +75,29 @@ class VyperContract:
 
         # add all functions from the interface to the contract
         for fn in fns.values():
-            # check if it collides with a storage variable (i.e. is a generated getter)
-            if fn.name not in self.global_ctx._globals:
-                setattr(self, fn.name, VyperFunction(fn, self))
+            setattr(self, fn.name, VyperFunction(fn, self))
 
         for varname, varinfo in self.global_ctx._globals.items():
             if isinstance(varinfo.typ, vyper.MappingType):
-                setattr(self, varname, VyperMapping(self, varname, varinfo.typ))
+                pass #setattr(self, varname, VyperMapping(self, varname, varinfo.typ))
 
         self._computation = None
 
         self._eval_cache = lrudict(0x1000)
         self._initialized = True
 
-    def __getattr__(self, attr):
-        if self._initialized and attr in self.global_ctx._globals:
-            return self.eval(f"self.{attr}")
-        else:
-            return super().__getattribute__(attr)
+    # these were probably a bad idea
+    #def __getattr__(self, attr):
+    #    if self._initialized and attr in self.global_ctx._globals:
+    #        return self.eval(f"self.{attr}")
+    #    else:
+    #        return super().__getattribute__(attr)
 
-    def __setattr__(self, attr, val):
-        if self._initialized and attr in self.global_ctx._globals:
-            self.eval(f"self.{attr} = {val}")
-        else:
-            super().__setattr__(attr, val)
+    #def __setattr__(self, attr, val):
+    #    if self._initialized and attr in self.global_ctx._globals:
+    #        self.eval(f"self.{attr} = {val}")
+    #    else:
+    #        super().__setattr__(attr, val)
 
     @cached_property
     def ast_map(self):
@@ -254,6 +253,7 @@ def __boa_debug__() {return_sig}:
         return ret
 
 
+# TODO probably remove me
 class VyperMapping:
     def __init__(self, contract, name, typ, key_prefix=None):
         self.contract = contract
