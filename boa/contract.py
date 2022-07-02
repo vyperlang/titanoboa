@@ -145,7 +145,7 @@ class VyperContract:
             return None
 
         return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi.decode_single(return_typ, computation.output)
+        ret = abi.decode_single(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
         if not isinstance(vyper_typ, TupleType):
@@ -315,7 +315,7 @@ class VyperFunction:
         )
 
         typ = self.fn_signature.return_type
-        return self.marshal_to_python(computation, typ)
+        return self.contract.marshal_to_python(computation, typ)
 
 
 _typ_cache = {}
