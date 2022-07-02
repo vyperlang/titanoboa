@@ -1,14 +1,21 @@
 import copy
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import eth_abi as abi
-import vyper.codegen.types.types as vyper
+import vyper.ast as vy_ast
+import vyper.codegen.function_definitions.common as vyper
+import vyper.ir.compile_ir as compile_ir
+import vyper.semantics.validation as validation
 from vyper.ast.signatures.function_signature import FunctionSignature
+from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
+from vyper.codegen.ir_node import IRnode
+from vyper.codegen.types.types import TupleType
 from vyper.compiler.output import build_source_map_output
 from vyper.exceptions import VyperException  # for building source traces
-from vyper.utils import abi_method_id, cached_property, keccak256
+from vyper.semantics.validation.data_positions import set_data_positions
+from vyper.semantics.validation.utils import get_exact_type_from_node
+from vyper.utils import abi_method_id, cached_property
 
 from boa.env import Env
 from boa.object import VyperObject
@@ -40,16 +47,14 @@ class lrudict(dict):
         super().__setitem__(k, val)
 
 
-import vyper.semantics.namespace as ns
-import vyper.semantics.validation as vld
-
-
 class VyperContract:
     _initialized = False
+
     def __init__(self, compiler_data, *args, env=None, override_address=None):
-        global_ctx = compiler_data.global_ctx
-        object.__setattr__(self, "global_ctx", global_ctx)
         self.compiler_data = compiler_data
+
+        global_ctx = compiler_data.global_ctx
+        self.global_ctx = global_ctx
 
         if env is None:
             env = Env.get_singleton()
@@ -77,27 +82,10 @@ class VyperContract:
         for fn in fns.values():
             setattr(self, fn.name, VyperFunction(fn, self))
 
-        for varname, varinfo in self.global_ctx._globals.items():
-            if isinstance(varinfo.typ, vyper.MappingType):
-                pass #setattr(self, varname, VyperMapping(self, varname, varinfo.typ))
-
         self._computation = None
 
         self._eval_cache = lrudict(0x1000)
         self._initialized = True
-
-    # these were probably a bad idea
-    #def __getattr__(self, attr):
-    #    if self._initialized and attr in self.global_ctx._globals:
-    #        return self.eval(f"self.{attr}")
-    #    else:
-    #        return super().__getattribute__(attr)
-
-    #def __setattr__(self, attr, val):
-    #    if self._initialized and attr in self.global_ctx._globals:
-    #        self.eval(f"self.{attr} = {val}")
-    #    else:
-    #        super().__setattr__(attr, val)
 
     @cached_property
     def ast_map(self):
@@ -120,7 +108,7 @@ class VyperContract:
     def _run_bytecode(self, fragment: bytes, calldata_bytes: bytes = b"") -> Any:
         bytecode = self.bytecode + fragment
         fake_codesize = len(self.bytecode)
-        method_id = bytes.fromhex("ffffffff")
+        method_id = b"dbug"  # note the value doesn't get validated
         computation = self.env.execute_code(
             to_address=self.address,
             bytecode=bytecode,
@@ -130,6 +118,7 @@ class VyperContract:
         )
         return computation
 
+    # eval vyper code in the context of this contract
     def eval(self, stmt: str) -> Any:
         bytecode, typ = self.compile_stmt(stmt)
 
@@ -147,142 +136,100 @@ class VyperContract:
         ret = abi.decode_single(return_typ.abi_type.selector_name(), c.output)
 
         # unwrap the tuple if needed
-        if not isinstance(typ, vyper.TupleType):
+        if not isinstance(typ, TupleType):
             (ret,) = ret
 
         return ret
 
     @cached_property
     def _ast_module(self):
-        from vyper.ast.expansion import remove_unused_statements
-        import vyper.ast as vy_ast
-
         ret = copy.deepcopy(self.compiler_data.vyper_module)
+
+        # do the same thing as vyper_module_folded but skip getter expansion
         vy_ast.folding.fold(ret)
-        vld.validate_semantics(ret, self.compiler_data.interface_codes)
-
-        # don't expand ast
-        remove_unused_statements(ret)
-        from vyper.semantics.validation.data_positions import set_data_positions
-
+        validation.validate_semantics(ret, self.compiler_data.interface_codes)
+        vy_ast.expansion.remove_unused_statements(ret)
         set_data_positions(ret, storage_layout_overrides=None)
+
         return ret
 
-    # to clean up.
+    # compile a fragment (single expr or statement) in the context
+    # of the contract, returning the ABI encoded value if it is an expr.
     def compile_stmt(self, source_code: str) -> Any:
         # this method is super slow so we cache compilation results
         if source_code in self._eval_cache:
             return self._eval_cache[source_code]
 
-        import vyper.ast as vy_ast
-        from vyper.ast.utils import parse_to_ast
-        from vyper.semantics.validation.utils import get_exact_type_from_node
-
-        ast = parse_to_ast(source_code)
+        ast = parse_to_ast(source_code).body[0]
         vy_ast.folding.fold(ast)
-        ast = ast.body[0]
 
         fake_module = self._ast_module
-        from vyper.exceptions import StructureException
+
+        typ = None
+        return_sig = ""
+        debug_body = source_code
+
+        ifaces = self.compiler_data.interface_codes
 
         if isinstance(ast, vy_ast.Expr):
-            with ns.get_namespace().enter_scope():
-                vld.add_module_namespace(
-                    fake_module, self.compiler_data.interface_codes
-                )
+            with validation.get_namespace().enter_scope():
+                validation.add_module_namespace(fake_module, ifaces)
                 typ = get_exact_type_from_node(ast.value)
 
             return_sig = f"-> {typ}"
-            body = f"return {source_code}"
-        else:
-            typ = None
-            return_sig = ""
-            body = source_code
+            debug_body = f"return {source_code}"
 
-        # wrap code in function so that
-        wrapper_code = f"""
-@external
-@payable
-def __boa_debug__() {return_sig}:
-    {body}
-        """
-        ast = parse_to_ast(wrapper_code, self.compiler_data.interface_codes)
-        from vyper.semantics.validation import validate_semantics
+        def dedent(n, string):
+            return "\n".join(map(lambda line: line[n:], string.splitlines()))
 
+        # wrap code in function so that we can easily generate code for it
+        wrapper_code = dedent(
+            12,
+            f"""
+            @external
+            @payable
+            def __boa_debug__() {return_sig}:
+                {debug_body}
+        """,
+        )
+
+        ast = parse_to_ast(wrapper_code, ifaces)
         vy_ast.folding.fold(ast)
 
-        from vyper.semantics.validation.data_positions import set_data_positions
-
+        # annotate ast
         fake_module.body += ast.body
-
-        with ns.get_namespace().enter_scope():
-            vld.add_module_namespace(fake_module, self.compiler_data.interface_codes)
-            vld.validate_functions(ast)
-
+        with validation.get_namespace().enter_scope():
+            validation.add_module_namespace(fake_module, ifaces)
+            validation.validate_functions(ast)
         set_data_positions(fake_module, storage_layout_overrides=None)
-
         ast = fake_module.body.pop(-1)
 
         sig = FunctionSignature.from_definition(ast, self.global_ctx)
         ast._metadata["signature"] = sig
-        import vyper.codegen.function_definitions.common as vyper
 
-        ir = vyper.generate_ir_for_function(
-            ast,
-            self.compiler_data.function_signatures,
-            self.global_ctx,
-            skip_nonpayable_check=False,
-        )
-        from vyper.codegen.ir_node import IRnode
+        sigs = self.compiler_data.function_signatures
+        ir = vyper.generate_ir_for_function(ast, sigs, self.global_ctx, False)
 
-        # force the selector check to always succeed
+        # generate bytecode where selector check always succeeds
         ir = IRnode.from_list(
             ["with", "_calldata_method_id", abi_method_id(sig.base_signature), ir]
         )
-        import vyper.ir.compile_ir as compile_ir
 
         assembly = compile_ir.compile_to_assembly(ir)
 
-        # add padding so that jumpdests assembly correctly in final bytecode
-        padding = len(self.bytecode)
-        assembly = ["POP"] * padding + assembly
+        # add padding so that jumpdests in the fragment
+        # assemble correctly in final bytecode
+        n_padding = len(self.bytecode)
+        assembly = ["POP"] * n_padding + assembly
         bytecode, _ = compile_ir.assembly_to_evm(assembly)
-        bytecode = bytecode[padding:]
+        bytecode = bytecode[n_padding:]
 
         ret = bytecode, typ
         self._eval_cache[source_code] = ret
         return ret
 
 
-# TODO probably remove me
-class VyperMapping:
-    def __init__(self, contract, name, typ, key_prefix=None):
-        self.contract = contract
-        self.name = name
-        self.typ = typ
-        self.key_prefix = key_prefix or []
-
-    @property
-    def _is_leaf(self):
-        return not isinstance(self.typ.valuetype, vyper.MappingType)
-
-    def _access(self, key):
-        assert self._is_leaf
-        # e.g. [a, b, c] => [a][b][c]
-        subscript = "".join(f"[{k}]" for k in (self.key_prefix + [key]))
-        return f"self.{self.name}{subscript}"
-
-    def __getitem__(self, key):
-        if self._is_leaf:
-            return self.contract.eval(self._access(key))
-        else:
-            ks = self.key_prefix + [key]
-            return VyperMapping(self.name, self.typ.valuetype, ks)
-
-    def __setitem__(self, key, val):
-        return self.contract.eval(f"{self._access(key)} = {val}")
-
-
+# inherit from VyperException for pretty tracebacks
 class BoaError(VyperException):
     pass
 
@@ -314,9 +261,9 @@ class VyperFunction:
         args_abi_type = (
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
-        method_id = keccak256(bytes(self.fn_signature.name + args_abi_type, "utf-8"))[
-            :4
-        ]
+        method_id = abi_method_id(self.fn_signature.name + args_abi_type).to_bytes(
+            4, "big"
+        )
         self._signature_cache[num_kwargs] = (method_id, args_abi_type)
 
         return method_id, args_abi_type
@@ -331,7 +278,11 @@ class VyperFunction:
         return return_typ.abi_type.selector_name()
 
     def _prepare_calldata(self, *args, **kwargs):
-        if not len(self.fn_signature.base_args) <= len(args) <= len(self.fn_signature.args):
+        if (
+            not len(self.fn_signature.base_args)
+            <= len(args)
+            <= len(self.fn_signature.args)
+        ):
             raise Exception(f"bad args to {self}")
 
         # align the kwargs with the signature

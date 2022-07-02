@@ -193,7 +193,7 @@ class Env:
             sender = self.eoa
 
         class FakeMessage(Message):  # Message object with settable attrs
-            __dict__ = {}
+            __dict__: dict = {}
 
         msg = FakeMessage(
             sender=Address(sender),
