@@ -1,5 +1,0 @@
-git+https://github.com/vyperlang/vyper@c27f2257cecdc5ba7d89ba7525f580073b84a921
-# IPython
-eth_abi
-py-evm
-eth-typing
