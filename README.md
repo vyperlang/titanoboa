@@ -21,5 +21,12 @@ def foo() -> uint256:
 
 >>> simple = boa.load("simple.vy")
 >>> simple.foo()
-VyperObject(value=8, typ=uint256)
+    8
+>>> simple.foo()._vyper_type
+    uint256
+```
+
+basic tests:
+```bash
+$ python -m tests.sim_veYFI
 ```
