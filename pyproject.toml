@@ -5,8 +5,8 @@ description = "Experimental Vyper interpreter"
 #authors = []
 license = { file = "LICENSE" }
 readme = "README.md"
-homepage = "https://github.com/vyperlang/titanoboa"
-repository = "https://github.com/vyperlang/titanoboa"
+#homepage = "https://github.com/vyperlang/titanoboa"
+#repository = "https://github.com/vyperlang/titanoboa"
 #documentation =
 
 keywords = ["ethereum", "evm", "smart contract", "development"]
