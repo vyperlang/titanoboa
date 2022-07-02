@@ -1,6 +1,6 @@
 [project]
 name = "titanoboa"
-version = "0.1.1"
+version = "0.1.2"
 description = "Experimental Vyper interpreter"
 #authors = []
 license = { file = "LICENSE" }
