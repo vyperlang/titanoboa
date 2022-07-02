@@ -12,7 +12,7 @@ from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.types.types import TupleType
-from vyper.exceptions import VyperException  # for building source traces
+from vyper.exceptions import InvalidType, VyperException
 from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
@@ -200,10 +200,12 @@ class VyperContract:
         if isinstance(ast, vy_ast.Expr):
             with validation.get_namespace().enter_scope():
                 validation.add_module_namespace(fake_module, ifaces)
-                typ = get_exact_type_from_node(ast.value)
-
-            return_sig = f"-> {typ}"
-            debug_body = f"return {source_code}"
+                try:
+                    typ = get_exact_type_from_node(ast.value)
+                    return_sig = f"-> {typ}"
+                    debug_body = f"return {source_code}"
+                except InvalidType:
+                    pass
 
         # wrap code in function so that we can easily generate code for it
         wrapper_code = textwrap.dedent(
@@ -229,7 +231,7 @@ class VyperContract:
         sig = FunctionSignature.from_definition(ast, self.global_ctx)
         ast._metadata["signature"] = sig
 
-        sigs = self.compiler_data.function_signatures
+        sigs = {"self": self.compiler_data.function_signatures}
         ir = vyper.generate_ir_for_function(ast, sigs, self.global_ctx, False)
 
         # generate bytecode where selector check always succeeds

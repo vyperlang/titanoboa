@@ -1,7 +1,7 @@
 import sys
 
 from boa.env import Env
-from boa.interpret import load, loads, contract
+from boa.interpret import contract, load, loads
 
 # turn off tracebacks if we are in repl
 # https://stackoverflow.com/a/64523765
