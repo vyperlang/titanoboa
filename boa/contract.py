@@ -1,4 +1,5 @@
 import copy
+import textwrap
 from typing import Any
 
 import eth_abi as abi
@@ -159,8 +160,9 @@ class VyperContract:
         if source_code in self._eval_cache:
             return self._eval_cache[source_code]
 
-        ast = parse_to_ast(source_code).body[0]
+        ast = parse_to_ast(source_code)
         vy_ast.folding.fold(ast)
+        ast = ast.body[0]
 
         fake_module = self._ast_module
 
@@ -178,18 +180,14 @@ class VyperContract:
             return_sig = f"-> {typ}"
             debug_body = f"return {source_code}"
 
-        def dedent(n, string):
-            return "\n".join(map(lambda line: line[n:], string.splitlines()))
-
         # wrap code in function so that we can easily generate code for it
-        wrapper_code = dedent(
-            12,
+        wrapper_code = textwrap.dedent(
             f"""
             @external
             @payable
             def __boa_debug__() {return_sig}:
                 {debug_body}
-        """,
+        """
         )
 
         ast = parse_to_ast(wrapper_code, ifaces)
@@ -318,7 +316,10 @@ class VyperFunction:
 
         return vyper_object(ret, self.fn_signature.return_type)
 
+
 _typ_cache = {}
+
+
 def vyper_object(val, vyper_type):
     # make a thin wrapper around whatever type val is,
     # and tag it with _vyper_type metadata
