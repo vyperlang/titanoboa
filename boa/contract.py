@@ -18,7 +18,6 @@ from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
 from boa.env import Env
-from boa.object import VyperObject
 
 
 # build a reverse map from the format we have in pc_pos_map to AST nodes
@@ -314,7 +313,28 @@ class VyperFunction:
         ret = abi.decode_single(self.return_abi_type, computation.output)
 
         # unwrap the tuple if needed
-        if not isinstance(self.fn_signature.return_type, vyper.TupleType):
+        if not isinstance(self.fn_signature.return_type, TupleType):
             (ret,) = ret
 
-        return VyperObject(ret, typ=self.fn_signature.return_type)
+        return vyper_object(ret, self.fn_signature.return_type)
+
+_typ_cache = {}
+def vyper_object(val, vyper_type):
+    # make a thin wrapper around whatever type val is,
+    # and tag it with _vyper_type metadata
+
+    vt = type(val)
+    if vt is bool:
+        # https://stackoverflow.com/q/2172189
+        # bool is not ambiguous wrt vyper type anyways.
+        return val
+
+    if vt not in _typ_cache:
+        # ex. class int_wrapper(int): pass
+        _typ_cache[vt] = type(f"{vt.__name__}_wrapper", (vt,), {})
+
+    t = _typ_cache[type(val)]
+
+    ret = t(val)
+    ret._vyper_type = vyper_type
+    return ret
