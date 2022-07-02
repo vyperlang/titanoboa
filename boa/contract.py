@@ -1,12 +1,14 @@
 import copy
 import textwrap
 from typing import Any
+import contextlib
 
 import eth_abi as abi
 import vyper.ast as vy_ast
 import vyper.codegen.function_definitions.common as vyper
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.validation as validation
+import vyper.semantics.namespace as vy_ns
 from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
@@ -168,15 +170,41 @@ class VyperContract:
 
     @cached_property
     def _ast_module(self):
-        ret = copy.deepcopy(self.compiler_data.vyper_module)
+        module = copy.deepcopy(self.compiler_data.vyper_module)
 
         # do the same thing as vyper_module_folded but skip getter expansion
-        vy_ast.folding.fold(ret)
-        validation.validate_semantics(ret, self.compiler_data.interface_codes)
-        vy_ast.expansion.remove_unused_statements(ret)
-        set_data_positions(ret, storage_layout_overrides=None)
+        vy_ast.folding.fold(module)
+        with vy_ns.get_namespace().enter_scope():
+            validation.add_module_namespace(module, self.compiler_data.interface_codes)
+            validation.validate_functions(module)
+            # we need to cache the namespace right here(!).
+            # set_data_positions will modify the type definitions in place.
+            self._cache_namespace(vy_ns.get_namespace())
 
-        return ret
+        vy_ast.expansion.remove_unused_statements(module)
+        # calculate slots for all storage variables, tagging
+        # the types in the namespace.
+        set_data_positions(module, storage_layout_overrides=None)
+
+        return module
+
+    # the global namespace is expensive to compute, so cache it
+    def _cache_namespace(self, namespace):
+        # copy.copy doesn't really work on Namespace objects, copy by hand
+        ret = vy_ns.Namespace()
+        ret._scopes = copy.deepcopy(namespace._scopes)
+        for s in namespace._scopes:
+            for n in s:
+                ret[n] = namespace[n]
+        self._vyper_namespace = ret
+
+    @contextlib.contextmanager
+    def override_vyper_namespace(self):
+        m = self._ast_module  # ensure self._vyper_namespace is computed
+        ns = self._vyper_namespace
+        with vy_ns.override_global_namespace(ns):
+            yield
+            vy_ns.get_namespace()["self"].members.pop("__boa_debug__", None)
 
     # compile a fragment (single expr or statement) in the context
     # of the contract, returning the ABI encoded value if it is an expr.
@@ -189,8 +217,6 @@ class VyperContract:
         vy_ast.folding.fold(ast)
         ast = ast.body[0]
 
-        fake_module = self._ast_module
-
         typ = None
         return_sig = ""
         debug_body = source_code
@@ -198,8 +224,7 @@ class VyperContract:
         ifaces = self.compiler_data.interface_codes
 
         if isinstance(ast, vy_ast.Expr):
-            with validation.get_namespace().enter_scope():
-                validation.add_module_namespace(fake_module, ifaces)
+            with self.override_vyper_namespace():
                 try:
                     typ = get_exact_type_from_node(ast.value)
                     return_sig = f"-> {typ}"
@@ -221,12 +246,11 @@ class VyperContract:
         vy_ast.folding.fold(ast)
 
         # annotate ast
-        fake_module.body += ast.body
-        with validation.get_namespace().enter_scope():
-            validation.add_module_namespace(fake_module, ifaces)
+        with self.override_vyper_namespace():
+            validation.add_module_namespace(ast, self.compiler_data.interface_codes)
             validation.validate_functions(ast)
-        set_data_positions(fake_module, storage_layout_overrides=None)
-        ast = fake_module.body.pop(-1)
+
+        ast = ast.body[0]
 
         sig = FunctionSignature.from_definition(ast, self.global_ctx)
         ast._metadata["signature"] = sig
