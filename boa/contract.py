@@ -12,7 +12,6 @@ from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.types.types import TupleType
-from vyper.compiler.output import build_source_map_output
 from vyper.exceptions import VyperException  # for building source traces
 from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
@@ -87,18 +86,31 @@ class VyperContract:
         self._eval_cache = lrudict(0x1000)
         self._initialized = True
 
+        self._source_map = None
+
     @cached_property
     def ast_map(self):
         return ast_map_of(self.compiler_data.vyper_module)
 
-    @cached_property
+    @property
     def source_map(self):
-        return build_source_map_output(self.compiler_data)
+        if self._source_map is None:
+            _, self._source_map = compile_ir.assembly_to_evm(
+                self.compiler_data.assembly_runtime
+            )
+        return self._source_map
+
+    def find_error_meta(self, code_stream):
+        error_map = self.source_map["error_map"]
+        for pc in reversed(code_stream._trace):
+            if pc in error_map:
+                return error_map[pc]
+        return None
 
     def find_source_of(self, code_stream, is_initcode=False):
         pc_map = self.source_map["pc_pos_map"]
         for pc in reversed(code_stream._trace):
-            if pc in pc_map:
+            if pc in pc_map and pc_map[pc] in self.ast_map:
                 return self.ast_map[pc_map[pc]]
 
         return None
@@ -118,28 +130,38 @@ class VyperContract:
         )
         return computation
 
+    def marshal_to_python(self, computation, vyper_typ):
+        self._computation = computation  # for further inspection
+
+        if computation.is_error:
+            error_msg = f"{repr(computation.error)}"
+            error_detail = self.find_error_meta(computation.code)
+            if error_detail is not None:
+                error_msg = f"{error_msg} <dev: {error_detail}>"
+            ast_source = self.find_source_of(computation.code)
+            raise BoaError(error_msg, ast_source)
+
+        if vyper_typ is None:
+            return None
+
+        return_typ = calculate_type_for_external_return(vyper_typ)
+        ret = abi.decode_single(return_typ, computation.output)
+
+        # unwrap the tuple if needed
+        if not isinstance(vyper_typ, TupleType):
+            (ret,) = ret
+
+        return vyper_object(ret, vyper_typ)
+
     # eval vyper code in the context of this contract
     def eval(self, stmt: str) -> Any:
-        bytecode, typ = self.compile_stmt(stmt)
+        bytecode, source_map, typ = self.compile_stmt(stmt)
+
+        self._source_map = source_map
 
         c = self._run_bytecode(bytecode)
 
-        self._computation = c  # for further inspection
-
-        if c.is_error:
-            raise BoaError(repr(c.error), self.find_source_of(c.code))
-
-        if typ is None:
-            return None
-
-        return_typ = calculate_type_for_external_return(typ)
-        ret = abi.decode_single(return_typ.abi_type.selector_name(), c.output)
-
-        # unwrap the tuple if needed
-        if not isinstance(typ, TupleType):
-            (ret,) = ret
-
-        return ret
+        return self.marshal_to_python(c, typ)
 
     @cached_property
     def _ast_module(self):
@@ -218,10 +240,12 @@ class VyperContract:
         # assemble correctly in final bytecode
         n_padding = len(self.bytecode)
         assembly = ["POP"] * n_padding + assembly
-        bytecode, _ = compile_ir.assembly_to_evm(assembly)
+        bytecode, source_map = compile_ir.assembly_to_evm(assembly)
         bytecode = bytecode[n_padding:]
 
-        ret = bytecode, typ
+        # return the source_map since the evaluator might want
+        # the error map for this stmt
+        ret = bytecode, source_map, typ
         self._eval_cache[source_code] = ret
         return ret
 
@@ -265,15 +289,6 @@ class VyperFunction:
 
         return method_id, args_abi_type
 
-    # hotspot, cache the signature computation
-    @cached_property
-    def return_abi_type(self):
-        if self.fn_signature.return_type is None:
-            return None
-
-        return_typ = calculate_type_for_external_return(self.fn_signature.return_type)
-        return return_typ.abi_type.selector_name()
-
     def _prepare_calldata(self, *args, **kwargs):
         if (
             not len(self.fn_signature.base_args)
@@ -298,23 +313,9 @@ class VyperFunction:
             bytecode=self.contract.bytecode,
             data=calldata_bytes,
         )
-        self.contract._computation = computation  # for further inspection
 
-        if computation.is_error:
-            raise BoaError(
-                repr(computation.error), self.contract.find_source_of(computation.code)
-            )
-
-        if self.return_abi_type is None:
-            return None
-
-        ret = abi.decode_single(self.return_abi_type, computation.output)
-
-        # unwrap the tuple if needed
-        if not isinstance(self.fn_signature.return_type, TupleType):
-            (ret,) = ret
-
-        return vyper_object(ret, self.fn_signature.return_type)
+        typ = self.fn_signature.return_type
+        return self.marshal_to_python(computation, typ)
 
 
 _typ_cache = {}
