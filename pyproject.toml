@@ -14,12 +14,14 @@ keywords = ["ethereum", "evm", "smart contract", "development"]
 classifiers = ["Topic :: Software Development"]
 
 [tool.setuptools]
-py-modules = ["boa"]
+packages = ["boa"]
 
 # Requirements
 [dependencies]
 vyper = "git+https://github.com/vyperlang/vyper@c27f2257cecdc5ba7d89ba7525f580073b84a921"
-# TODO add deps from requirements.txt
+eth_abi = {}
+py-evm = {}
+eth-typing = {}
 
 #[dev-dependencies]
 #black = { version = "^18.3-alpha.0", python = "^3.6" }
