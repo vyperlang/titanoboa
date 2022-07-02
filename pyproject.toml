@@ -1,0 +1,26 @@
+[project]
+name = "titanoboa"
+version = "0.1.0"
+description = "Experimental Vyper interpreter"
+#authors = []
+license = { file = "LICENSE" }
+readme = "README.md"
+homepage = "https://github.com/vyperlang/titanoboa"
+repository = "https://github.com/vyperlang/titanoboa"
+#documentation =
+
+keywords = ["ethereum", "evm", "smart contract", "development"]
+
+classifiers = ["Topic :: Software Development"]
+
+[tool.setuptools]
+py-modules = ["boa"]
+
+# Requirements
+[dependencies]
+vyper = "git+https://github.com/vyperlang/vyper@c27f2257cecdc5ba7d89ba7525f580073b84a921"
+# TODO add deps from requirements.txt
+
+#[dev-dependencies]
+#black = { version = "^18.3-alpha.0", python = "^3.6" }
+
