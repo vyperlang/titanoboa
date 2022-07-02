@@ -1,4 +1,3 @@
-# @version 0.3.4
 """
 @title YFI Reward Pool
 @author Curve Finance, Yearn Finance
