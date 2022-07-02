@@ -1,4 +1,5 @@
 import boa
+from vyper.utils import checksum_encode
 
 import time
 
@@ -45,11 +46,21 @@ timeit("load rewards pool")
 
 
 YFI.mint(BUNNY, 10 ** 21)
+
+# test eval
+YFI.eval(f"self.balanceOf[convert(0x{BUNNY.hex()}, address)] += 1")
+YFI.eval(f"self.balanceOf[convert(0x{BUNNY.hex()}, address)] -= 1")
+
 # YFI.mint('veyfi', 10 ** 21)
 YFI.mint(MILKY, 10 ** 21)
 YFI.transfer(DOGGIE, 10 ** 18)
 YFI.transfer(MILKY, 3 * 10 ** 18)
 YFI.transfer(POOLPI, 10 ** 18)
+
+for t in parties:
+    addr = checksum_encode(f"0x{t.hex()}")
+    # check external call == eval
+    assert YFI.balanceOf(t) == YFI.eval(f"self.balanceOf[{addr}]")
 
 timeit("set up balances")
 
@@ -100,4 +111,3 @@ timeit("simulation")
 
 print({t: veYFI.balanceOf(t) for t in parties})
 assert {t: veYFI.balanceOf(t) for t in parties} == {BUNNY: 693692922292074000, MILKY: 1891495433795992400, DOGGIE: 195062785364970000, POOLPI: 0}
-

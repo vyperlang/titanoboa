@@ -1,6 +1,11 @@
 # Titanoboa
 
-an experimental vyper interpreter
+An experimental [Vyper](https://github.com/vyperlang/vyper) interpreter
+
+## Installation
+```
+pip install git+https://github.com/vyperlang/titanoboa
+```
 
 ## Background
 
