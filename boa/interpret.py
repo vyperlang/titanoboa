@@ -5,6 +5,12 @@ from boa.contract import VyperContract
 
 def load(filename: str, *args, **kwargs) -> VyperContract:  # type: ignore
     with open(filename) as f:
-        data = CompilerData(f.read())
+        return loads(f.read())
 
+def loads(source_code: str, *args, **kwargs):
+    data = CompilerData(source_code)
     return VyperContract(data, *args, **kwargs)
+
+def contract():
+    # returns an empty contract
+    return loads("")
