@@ -201,10 +201,11 @@ class VyperContract:
     @contextlib.contextmanager
     def override_vyper_namespace(self):
         m = self._ast_module  # ensure self._vyper_namespace is computed
-        ns = self._vyper_namespace
-        with vy_ns.override_global_namespace(ns):
-            yield
-            vy_ns.get_namespace()["self"].members.pop("__boa_debug__", None)
+        try:
+            with vy_ns.override_global_namespace(self._vyper_namespace):
+                yield
+        finally:
+            self._vyper_namespace["self"].members.pop("__boa_debug__", None)
 
     # compile a fragment (single expr or statement) in the context
     # of the contract, returning the ABI encoded value if it is an expr.
