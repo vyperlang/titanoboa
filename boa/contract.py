@@ -88,6 +88,36 @@ class VyperContract:
 
         self._source_map = None
 
+        self._should_test_coverage = False
+        self._coverage = set()
+
+    @property
+    def coverage(self):
+        return self._coverage
+
+    def set_coverage_mode(self, mode: bool) -> None:
+        self._should_test_coverage = mode
+        if mode is False:
+            self._clear_coverage()
+
+    def _maybe_update_coverage(self, computation):
+        if not self._should_test_coverage:
+            return
+        pc_map = self.source_map["pc_pos_map"]
+        for pc in computation.code._trace:
+            t = pc_map[pc]
+            if t is None:
+                continue
+            (start_line, _, end_line, _) = t
+            if end_line is None:
+                end_line = start_line
+
+            for i in range(start_line, end_line + 1):
+                self._coverage.add(i)
+
+    def _clear_coverage(self):
+        self._coverage = set()
+
     @cached_property
     def ast_map(self):
         return ast_map_of(self.compiler_data.vyper_module)
@@ -314,7 +344,10 @@ class VyperFunction:
             data=calldata_bytes,
         )
 
+        self.contract._maybe_update_coverage(computation)
+
         typ = self.fn_signature.return_type
+
         return self.contract.marshal_to_python(computation, typ)
 
 
