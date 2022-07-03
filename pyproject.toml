@@ -15,7 +15,7 @@ classifiers = ["Topic :: Software Development"]
 
 # Requirements
 dependencies = [
-    "vyper @ git+https://github.com/vyperlang/vyper@e3e2f381245587c6bc5bc83fb67c0a6d6287e06c",
+    "vyper @ git+https://github.com/vyperlang/vyper@8042ed5a1f4dd2eebed3c95204d2e9771a5c1224",
     "eth-abi",
     "py-evm",
     "eth-typing",

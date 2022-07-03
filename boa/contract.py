@@ -103,10 +103,7 @@ class VyperContract:
         return self._source_map
 
     def find_error_meta(self, code_stream):
-        # remove this once vyper error maps are merged
-        if "error_map" not in self.source_map:
-            return None
-        error_map = self.source_map["error_map"]
+        error_map = self.source_map.get("error_map", {})
         for pc in reversed(code_stream._trace):
             if pc in error_map:
                 return error_map[pc]
