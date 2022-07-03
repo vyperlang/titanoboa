@@ -9,7 +9,7 @@ def load(filename: str, *args, **kwargs) -> VyperContract:  # type: ignore
 
 
 def loads(source_code: str, *args, **kwargs) -> VyperContract:  # type: ignore
-    data = CompilerData(source_code)
+    data = CompilerData(source_code, no_optimize=True)
     return VyperContract(data, *args, **kwargs)
 
 
