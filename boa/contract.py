@@ -1,14 +1,14 @@
+import contextlib
 import copy
 import textwrap
 from typing import Any
-import contextlib
 
 import eth_abi as abi
 import vyper.ast as vy_ast
 import vyper.codegen.function_definitions.common as vyper
 import vyper.ir.compile_ir as compile_ir
-import vyper.semantics.validation as validation
 import vyper.semantics.namespace as vy_ns
+import vyper.semantics.validation as validation
 from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
@@ -200,7 +200,8 @@ class VyperContract:
 
     @contextlib.contextmanager
     def override_vyper_namespace(self):
-        m = self._ast_module  # ensure self._vyper_namespace is computed
+        # ensure self._vyper_namespace is computed
+        m = self._ast_module  # noqa: F841
         try:
             with vy_ns.override_global_namespace(self._vyper_namespace):
                 yield
@@ -266,10 +267,17 @@ class VyperContract:
 
         assembly = compile_ir.compile_to_assembly(ir)
 
-        # add padding so that jumpdests in the fragment
+        # add original bytecode in so that jumpdests in the fragment
         # assemble correctly in final bytecode
+        # note this is kludgy, would be better to be able to pass around
+        # the assembly "symbol table"
+        vyper_signature_len = len("\xa1\x65vyper\x83\x00\x03\x04")
+        assembly = (
+            self.compiler_data.assembly_runtime
+            + ["POP"] * vyper_signature_len
+            + assembly
+        )
         n_padding = len(self.bytecode)
-        assembly = ["POP"] * n_padding + assembly
         bytecode, source_map = compile_ir.assembly_to_evm(assembly)
         bytecode = bytecode[n_padding:]
 
