@@ -36,6 +36,24 @@ class VMPatcher:
         if attr in self._patchables:
             setattr(self._patch, self._patchables[attr], value)
 
+    # to help auto-complete
+    def __dir__(self):
+        return dir(super()) + list(self.__class__._patchables.keys())
+
+    # save and restore patch values
+    @contextlib.contextmanager
+    def anchor(self):
+        snap = {}
+        for attr in self._patchables:
+            snap[attr] = getattr(self, attr)
+
+        try:
+            yield
+
+        finally:
+            for attr in self._patchables:
+                setattr(self, attr, snap[attr])
+
 
 # a code stream which keeps a trace of opcodes it has executed
 class TracingCodeStream(CodeStream):
@@ -124,13 +142,26 @@ class Env:
     def set_gas_metering(self, val: bool) -> None:
         self.vm.state.computation_class._gas_metering = val
 
+    # context manager which snapshots the state and reverts
+    # to the snapshot on exiting the with statement
+    @contextlib.contextmanager
+    def anchor(self):
+        snapshot_id = self.vm.state.snapshot()
+        try:
+            with self.vm.patch.anchor():
+                yield
+        finally:
+            self.vm.state.revert(snapshot_id)
+
     # TODO is this a good name
     @contextlib.contextmanager
     def prank(self, address: bytes) -> Iterator[None]:
         tmp = self.eoa
         self.eoa = address
-        yield
-        self.eoa = tmp
+        try:
+            yield
+        finally:
+            self.eoa = tmp
 
     @classmethod
     def get_singleton(cls):
