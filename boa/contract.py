@@ -49,8 +49,6 @@ class lrudict(dict):
 
 
 class VyperContract:
-    _initialized = False
-
     def __init__(self, compiler_data, *args, env=None, override_address=None):
         self.compiler_data = compiler_data
 
@@ -86,7 +84,6 @@ class VyperContract:
         self._computation = None
 
         self._eval_cache = lrudict(0x1000)
-        self._initialized = True
 
         self._source_map = None
 
