@@ -93,9 +93,6 @@ class VyperContract:
     def __init__(self, compiler_data, *args, env=None, override_address=None):
         self.compiler_data = compiler_data
 
-        global_ctx = compiler_data.global_ctx
-        self.global_ctx = global_ctx
-
         if env is None:
             env = Env.get_singleton()
 
