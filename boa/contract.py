@@ -1,3 +1,5 @@
+# TODO maybe move me to boa/vyper/
+
 import contextlib
 import copy
 import textwrap
@@ -340,7 +342,7 @@ class VyperFunction:
 
     @cached_property
     def fn_signature(self):
-        return FunctionSignature.from_definition(self.fn_ast, self.contract.global_ctx)
+        return self.contract.compiler_data.function_signatures[self.fn_ast.name]
 
     # hotspot, cache the signature computation
     def args_abi_type(self, num_kwargs):
