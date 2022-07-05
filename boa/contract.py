@@ -48,6 +48,9 @@ class lrudict(dict):
         super().__setitem__(k, val)
 
 
+# create a factory for use with `create_from_factory`.
+# uses a ERC5202 preamble, when calling `create_from_factory` will
+# need to use `code_offset=3`
 class VyperFactory:
     def __init__(
         self,
