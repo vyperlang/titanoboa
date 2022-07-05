@@ -48,6 +48,44 @@ class lrudict(dict):
         super().__setitem__(k, val)
 
 
+class VyperFactory:
+    def __init__(
+        self,
+        compiler_data,
+        env=None,
+        override_address=None,
+        factory_preamble=b"\xFE\x71\x00",
+    ):
+        # note slight code duplication with VyperContract ctor,
+        # maybe use common base class?
+        self.compiler_data = compiler_data
+
+        if env is None:
+            env = Env.get_singleton()
+
+        self.env = env
+
+        if override_address is None:
+            self.address = self.env.generate_address()
+        else:
+            self.address = override_address
+
+        if factory_preamble is None:
+            factory_preamble = b""
+
+        factory_bytecode = factory_preamble + compiler_data.bytecode
+
+        # the length of the deployed code in bytes
+        len_bytes = len(factory_bytecode).to_bytes(2, "big")
+        deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
+
+        deploy_bytecode += factory_bytecode
+
+        self.bytecode = self.env.deploy_code(
+            bytecode=deploy_bytecode, deploy_to=self.address
+        )
+
+
 class VyperContract:
     def __init__(self, compiler_data, *args, env=None, override_address=None):
         self.compiler_data = compiler_data
@@ -66,7 +104,7 @@ class VyperContract:
 
         encoded_args = b""
 
-        fns = {fn.name: fn for fn in global_ctx._function_defs}
+        fns = {fn.name: fn for fn in self.global_ctx._function_defs}
 
         if "__init__" in fns:
             ctor = VyperFunction(fns.pop("__init__"), self)
@@ -90,6 +128,10 @@ class VyperContract:
     @cached_property
     def ast_map(self):
         return ast_map_of(self.compiler_data.vyper_module)
+
+    @property
+    def global_ctx(self):
+        return self.compiler_data.global_ctx
 
     @property
     def source_map(self):
@@ -293,13 +335,12 @@ class VyperFunction:
         self.contract = contract
         self.env = contract.env
 
-        # could be cached_property
-        self.fn_signature = FunctionSignature.from_definition(
-            fn_ast, contract.global_ctx
-        )
-
     def __repr__(self):
         return repr(self.fn_ast)
+
+    @cached_property
+    def fn_signature(self):
+        return FunctionSignature.from_definition(self.fn_ast, self.contract.global_ctx)
 
     # hotspot, cache the signature computation
     def args_abi_type(self, num_kwargs):
