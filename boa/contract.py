@@ -22,6 +22,7 @@ from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
 from boa.env import Env
+from boa.vyper.decoder_utils import decode_vyper_object
 
 
 # build a reverse map from the format we have in pc_pos_map to AST nodes
@@ -121,15 +122,33 @@ class VyperContract:
         for fn in fns.values():
             setattr(self, fn.name, VyperFunction(fn, self))
 
-        self._computation = None
-
         self._eval_cache = lrudict(0x1000)
-
         self._source_map = None
+        self._computation = None
+        self._fn = None
 
     @cached_property
     def ast_map(self):
         return ast_map_of(self.compiler_data.vyper_module)
+
+    def debug_frame(self):
+        if self._fn is None:
+            return
+
+        frame_info = self._fn.fn_signature.frame_info
+
+        mem = self._computation._memory
+        decoded_frame = {}
+        for k, v in frame_info.frame_vars.items():
+            if v.location.name != "memory":
+                continue
+            ofst = v.pos
+            size = v.typ.memory_bytes_required
+            decoded_frame[k] = decode_vyper_object(mem.read(ofst, size), v.typ)
+
+        frame_detail = ", ".join(f"{k}={v}" for (k, v) in decoded_frame.items())
+        print(f"<{self._fn.fn_signature.name}: {frame_detail}>")
+
 
     @property
     def global_ctx(self):
@@ -203,6 +222,7 @@ class VyperContract:
         self._source_map = source_map
 
         c = self._run_bytecode(bytecode)
+        self._fn = None
 
         return self.marshal_to_python(c, typ)
 
@@ -390,6 +410,7 @@ class VyperFunction:
         )
 
         typ = self.fn_signature.return_type
+        self.contract._fn = self
         return self.contract.marshal_to_python(computation, typ)
 
 
