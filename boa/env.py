@@ -5,7 +5,9 @@ import eth.constants as constants
 import eth.tools.builder.chain as chain
 from eth.chains.mainnet import MainnetChain
 from eth.db.atomic import AtomicDB
+from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
+from eth.vm.logic.invalid import InvalidOpcode
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
@@ -53,6 +55,15 @@ class VMPatcher:
         finally:
             for attr in self._patchables:
                 setattr(self, attr, snap[attr])
+
+
+class Breakpoint(Exception):
+    def __init__(self, computation):
+        self.computation = computation
+
+
+def _breakpoint(computation):
+    raise Breakpoint(computation)
 
 
 # a code stream which keeps a trace of opcodes it has executed
@@ -135,6 +146,21 @@ class Env:
                 )
                 if not self.__class__._gas_metering:
                     self._gas_meter = TrivialGasMeter(self.msg.gas)
+
+            def resume(self):
+                opcodes_map = self.opcodes
+                for opcode in self.code:
+                    try:
+                        opcode_fn = opcodes_map[opcode]
+                    except KeyError:
+                        opcode_fn = InvalidOpcode(opcode)
+                    try:
+                        opcode_fn(computation=self)
+                    except Halt:
+                        break
+
+        BREAKPOINT = 0xA6
+        OpcodeTracingComputation.opcodes[BREAKPOINT] = _breakpoint
 
         # TODO make metering toggle-able
         self.vm.state.computation_class = OpcodeTracingComputation

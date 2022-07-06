@@ -21,7 +21,7 @@ from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
-from boa.env import Env
+from boa.env import Env, Breakpoint
 from boa.vyper.decoder_utils import decode_vyper_object
 
 
@@ -135,6 +135,7 @@ class VyperContract:
         self._eval_cache = lrudict(0x1000)
         self._source_map = None
         self._computation = None
+        self._debug_state = None
         self._fn = None
 
     @cached_property
@@ -142,13 +143,14 @@ class VyperContract:
         return ast_map_of(self.compiler_data.vyper_module)
 
     def debug_frame(self):
-        if self._fn is None:
-            raise Exception("No frame available")
-
-        frame_info = self._fn.fn_signature.frame_info
+        if self._debug_state is None:
+            raise Exception("Not in debug session")
+        fn = self._debug_state.fn
+        frame_info = fn.fn_signature.frame_info
 
         mem = self._computation._memory
-        frame_detail = FrameDetail(self._fn.fn_signature.name)
+        frame_detail = FrameDetail(fn.fn_signature.name)
+
         for k, v in frame_info.frame_vars.items():
             if v.location.name != "memory":
                 continue
@@ -157,6 +159,12 @@ class VyperContract:
             frame_detail[k] = decode_vyper_object(mem.read(ofst, size), v.typ)
 
         return frame_detail
+
+    def resume(self):
+        if self._debug_state is None:
+            raise Exception("Cannot resume - not in debug session")
+
+        return self._debug_state.fn._resume(self._computation)
 
     @property
     def global_ctx(self):
@@ -359,6 +367,12 @@ class BoaError(VyperException):
     pass
 
 
+class DebugState:
+    def __init__(self, computation, fn):
+        self.computation = computation
+        self.fn = fn
+
+
 class VyperFunction:
     def __init__(self, fn_ast, contract):
         self.fn_ast = fn_ast
@@ -393,11 +407,9 @@ class VyperFunction:
         return method_id, args_abi_type
 
     def _prepare_calldata(self, *args, **kwargs):
-        if (
-            not len(self.fn_signature.base_args)
-            <= len(args)
-            <= len(self.fn_signature.args)
-        ):
+        min_args = len(self.fn_signature.base_args)
+        max_args = len(self.fn_signature.args)
+        if not min_args <= len(args) <= max_args:
             raise Exception(f"bad args to {self}")
 
         # align the kwargs with the signature
@@ -409,17 +421,48 @@ class VyperFunction:
         encoded_args = abi.encode_single(args_abi_type, args)
         return method_id + encoded_args
 
-    def __call__(self, *args, **kwargs):
-        calldata_bytes = self._prepare_calldata(*args, **kwargs)
-        computation = self.env.execute_code(
-            to_address=self.contract.address,
-            bytecode=self.contract.bytecode,
-            data=calldata_bytes,
-        )
+    def _finalize(self, computation):
+        if computation.is_error:
+            self.env.vm.state.revert(self._snapshot)
+        else:
+            self.env.vm.state.commit(self._snapshot)
+
+        self.contract._debug_state = None
 
         typ = self.fn_signature.return_type
-        self.contract._fn = self
         return self.contract.marshal_to_python(computation, typ)
+
+    def __call__(self, *args, **kwargs):
+        if self.contract._debug_state is not None:
+            raise Exception("Already in debug session!")
+
+        calldata_bytes = self._prepare_calldata(*args, **kwargs)
+
+        self._snapshot = self.env.vm.state.snapshot()
+
+        try:
+            computation = self.env.execute_code(
+                to_address=self.contract.address,
+                bytecode=self.contract.bytecode,
+                data=calldata_bytes,
+            )
+
+        except Breakpoint as exc:
+            self.contract._computation = exc.computation
+            self.contract._debug_state = DebugState(exc.computation, self)
+            print(f"breakpoint: {self.contract.find_source_of(exc.computation.code)}")
+            return
+
+        return self._finalize(computation)
+
+    def _resume(self, computation):
+        try:
+            computation.resume()
+        except Breakpoint as exc:
+            print(f"breakpoint: {self.contract.find_source_of(exc.computation.code)}")
+            return
+
+        return self._finalize(computation)
 
 
 _typ_cache = {}
