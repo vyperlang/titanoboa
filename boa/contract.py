@@ -92,6 +92,16 @@ class VyperFactory:
         )
 
 
+class FrameDetail(dict):
+    def __init__(self, fn_name, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fn_name = fn_name
+
+    def __repr__(self):
+        detail = ", ".join(f"{k}={v}" for (k, v) in self.items())
+        return f"<{self.fn_name}: {detail}>"
+
+
 class VyperContract:
     def __init__(self, compiler_data, *args, env=None, override_address=None):
         self.compiler_data = compiler_data
@@ -133,22 +143,20 @@ class VyperContract:
 
     def debug_frame(self):
         if self._fn is None:
-            return
+            raise Exception("No frame available")
 
         frame_info = self._fn.fn_signature.frame_info
 
         mem = self._computation._memory
-        decoded_frame = {}
+        frame_detail = FrameDetail(self._fn.fn_signature.name)
         for k, v in frame_info.frame_vars.items():
             if v.location.name != "memory":
                 continue
             ofst = v.pos
             size = v.typ.memory_bytes_required
-            decoded_frame[k] = decode_vyper_object(mem.read(ofst, size), v.typ)
+            frame_detail[k] = decode_vyper_object(mem.read(ofst, size), v.typ)
 
-        frame_detail = ", ".join(f"{k}={v}" for (k, v) in decoded_frame.items())
-        print(f"<{self._fn.fn_signature.name}: {frame_detail}>")
-
+        return frame_detail
 
     @property
     def global_ctx(self):

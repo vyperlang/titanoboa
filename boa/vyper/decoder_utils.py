@@ -1,5 +1,4 @@
 from vyper.codegen.types.types import (
-    BaseType,
     ByteArrayType,
     DArrayType,
     SArrayType,
