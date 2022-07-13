@@ -22,9 +22,8 @@ dependencies = [
 ]
 
 
-[tool.setuptools]
-packages = ["boa"]
+[tool.setuptools.packages.find]
+include = ["boa*"]
 
 #[dev-dependencies]
 #black = { version = "^18.3-alpha.0", python = "^3.6" }
-
