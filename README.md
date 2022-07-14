@@ -20,6 +20,7 @@ Titanoboa (/tiˌtɑːnoʊˈboʊə/) is an extinct genus of very large snakes tha
 
 ## Usage
 
+### Basic
 ```vyper
 # simple.vy
 @external
@@ -31,11 +32,28 @@ def foo() -> uint256:
 ```python
 >>> import boa
 
->>> simple = boa.load("simple.vy")
+>>> simple = boa.load("examples/simple.vy")
 >>> simple.foo()
     8
 >>> simple.foo()._vyper_type
     uint256
+```
+
+
+### Passing `__init__`
+
+```python
+>>> import boa
+
+>>> erc20 = boa.load("examples/ERC20.vy", 'titanoboa', 'boa', 18, 1)
+>>> erc20.name()
+    titanoboa
+>>> erc20.symbol()
+    boa
+>>> erc20.balanceOf(erc20.address)
+    0
+>>> erc20.totalSupply()
+    1000000000000000000
 ```
 
 basic tests:
