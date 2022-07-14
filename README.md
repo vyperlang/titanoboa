@@ -56,6 +56,16 @@ def foo() -> uint256:
     1000000000000000000
 ```
 
+### As a factory
+
+```python
+>>> import boa
+
+>>> factory = boa.load("examples/ERC20.vy", as_factory=True)
+>>> deployer = boa.load("examples/deployer.vy", factory.address)
+```
+
+
 basic tests:
 ```bash
 $ python -m tests.sim_veYFI
