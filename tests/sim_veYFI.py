@@ -35,7 +35,7 @@ WEEK = 7 * DAY
 YEAR = 365 * DAY
 MAX_LOCK_DURATION = 4 * YEAR
 
-YFI = boa.load("tests/ERC20.vy", "yfi token", "YFI", 18, 0, override_address = format_addr("YFI"))
+YFI = boa.load("examples/ERC20.vy", "yfi token", "YFI", 18, 0, override_address = format_addr("YFI"))
 timeit("load YFI")
 _rewards_pool_address = format_addr("rewards_pool")
 
