@@ -4,6 +4,7 @@ from typing import Any, Iterator, Optional
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
+import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth.chains.mainnet import MainnetChain
 from eth.db.atomic import AtomicDB
 from eth.vm.code_stream import CodeStream
@@ -25,45 +26,48 @@ class VMPatcher:
         "chain_id": "_chain_id",
     }
 
-    _cmp_patchables = {
-        "code_size_limit": "EIP170_CODE_SIZE_LIMIT",
-    }
+    _cmp_patchables = {"code_size_limit": "EIP170_CODE_SIZE_LIMIT"}
 
     def __init__(self, vm):
+        patchables = [
+            (self._exc_patchables, vm.state.execution_context),
+            (self._cmp_patchables, spurious_dragon),
+        ]
         # https://stackoverflow.com/a/12999019
-        object.__setattr__(self, "_exc_patch", vm.state.execution_context)
-        object.__setattr__(self, "_cmp_patch", vm.state.computation_class)
+        object.__setattr__(self, "_patchables", patchables)
 
     def __getattr__(self, attr):
-        if attr in self._exc_patchables:
-            return getattr(self._exc_patch, self._exc_patchables[attr])
-        if attr in self._cmp_patchables:
-            return getattr(self._cmp_patch, self._cmp_patchables[attr])
+        for s, p in self._patchables:
+            if attr in s:
+                return getattr(p, s[attr])
         raise AttributeError(attr)
 
     def __setattr__(self, attr, value):
-        if attr in self._exc_patchables:
-            setattr(self._exc_patch, self._exc_patchables[attr], value)
-        if attr in self._cmp_patchables:
-            setattr(self._cmp_patch, self._cmp_patchables[attr], value)
+        for s, p in self._patchables:
+            if attr in s:
+                setattr(p, s[attr], value)
+                return
 
     # to help auto-complete
     def __dir__(self):
-        return dir(super()) + list(self.__class__._patchables.keys())
+        patchable_keys = [k for p, _ in self._patchables for k in p]
+        return dir(super()) + patchable_keys
 
     # save and restore patch values
     @contextlib.contextmanager
     def anchor(self):
         snap = {}
-        for attr in self._patchables:
-            snap[attr] = getattr(self, attr)
+        for s, _ in self._patchables:
+            for attr in s:
+                snap[attr] = getattr(self, attr)
 
         try:
             yield
 
         finally:
-            for attr in self._patchables:
-                setattr(self, attr, snap[attr])
+            for s, _ in self._patchables:
+                for attr in s:
+                    setattr(self, attr, snap[attr])
 
 
 def console_log(computation):
