@@ -1,6 +1,6 @@
 import contextlib
 import sys
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Union
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -13,6 +13,7 @@ from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_abi import decode_single
 from eth_typing import Address
+from eth_utils import to_canonical_address, to_checksum_address
 
 
 class VMPatcher:
@@ -79,6 +80,13 @@ def console_log(computation):
 
 
 CONSOLE_ADDRESS = bytes.fromhex("000000000000000000636F6E736F6C652E6C6F67")
+
+
+AddressT = Union[Address, bytes, str]  # make mypy happy
+
+
+def _addr(addr: AddressT) -> Address:
+    return Address(to_canonical_address(addr))
 
 
 # a code stream which keeps a trace of opcodes it has executed
@@ -184,9 +192,9 @@ class Env:
 
     # TODO is this a good name
     @contextlib.contextmanager
-    def prank(self, address: bytes) -> Iterator[None]:
+    def prank(self, address):
         tmp = self.eoa
-        self.eoa = address
+        self.eoa = to_checksum_address(address)
         try:
             yield
         finally:
@@ -198,14 +206,16 @@ class Env:
             cls._singleton = cls()
         return cls._singleton
 
-    def generate_address(self):
+    def generate_address(self) -> AddressT:
         self._address_counter += 1
-        return self._address_counter.to_bytes(length=20, byteorder="big")
+        t = self._address_counter.to_bytes(length=20, byteorder="big")
+        # checksum addr easier for humans to debug
+        return to_checksum_address(t)
 
     def deploy_code(
         self,
-        deploy_to: bytes = constants.ZERO_ADDRESS,
-        sender: Optional[bytes] = None,
+        deploy_to: AddressT = constants.ZERO_ADDRESS,
+        sender: Optional[AddressT] = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
@@ -218,16 +228,14 @@ class Env:
             sender = self.eoa
 
         msg = Message(
-            to=Address(deploy_to),
-            sender=Address(sender),
+            to=_addr(deploy_to),
+            sender=_addr(sender),
             gas=gas,
             value=value,
             code=bytecode,
             data=data,
         )
-        tx_ctx = BaseTransactionContext(
-            origin=Address(sender), gas_price=self._gas_price
-        )
+        tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
         c = self.vm.state.computation_class.apply_create_message(
             self.vm.state, msg, tx_ctx
         )
@@ -238,8 +246,8 @@ class Env:
 
     def execute_code(
         self,
-        to_address: bytes = constants.ZERO_ADDRESS,
-        sender: bytes = None,
+        to_address: AddressT = constants.ZERO_ADDRESS,
+        sender: AddressT = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
@@ -256,8 +264,8 @@ class Env:
             __dict__: dict = {}
 
         msg = FakeMessage(
-            sender=Address(sender),
-            to=Address(to_address),
+            sender=_addr(sender),
+            to=_addr(to_address),
             gas=gas,
             value=value,
             code=bytecode,
@@ -265,9 +273,7 @@ class Env:
         )
         msg._fake_codesize = fake_codesize  # type: ignore
         msg._start_pc = start_pc  # type: ignore
-        tx_ctx = BaseTransactionContext(
-            origin=Address(sender), gas_price=self._gas_price
-        )
+        tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
 
