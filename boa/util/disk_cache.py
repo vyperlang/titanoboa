@@ -8,9 +8,6 @@ from pathlib import Path
 _ONE_WEEK = 7 * 24 * 3600
 
 
-GC_INTERVAL = 60
-
-
 class DiskCache:
     def __init__(self, cache_dir, version_salt, ttl=_ONE_WEEK):
         self.cache_dir = Path(cache_dir).expanduser()
@@ -29,7 +26,7 @@ class DiskCache:
             for d in dirs:
                 # prune empty directories
                 try:
-                    Path(d).rmdir()
+                    Path(root).joinpath(Path(d)).rmdir()
                 except OSError:
                     pass
 
@@ -43,8 +40,9 @@ class DiskCache:
 
     # look up x in the cal; on a miss, write back to the cache
     def caching_lookup(self, string, func):
-        if time.time() - self.last_gc < GC_INTERVAL:
-            return
+        gc_interval = self.ttl // 10
+        if time.time() - self.last_gc >= gc_interval:
+            self.gc()
 
         p = self.cal(string)
         p.parent.mkdir(parents=True, exist_ok=True)
