@@ -69,6 +69,8 @@ def foo() -> uint256:
 
 ```python
 In [1]: %load_ext boa.ipython
+        import boa
+        boa.interpret.set_cache_dir()  # cache source compilations across sessions
 
 In [2]: %%vyper
    ...: 
