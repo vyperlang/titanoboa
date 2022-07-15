@@ -51,6 +51,32 @@ class lrudict(dict):
         super().__setitem__(k, val)
 
 
+class VyperDeployer:
+    def __init__(self, compiler_data):
+        self.compiler_data = compiler_data
+
+    def deploy(self, *args, **kwargs):
+        return VyperContract(self.compiler_data, *args, **kwargs)
+
+    def deploy_as_factory(self, *args, **kwargs):
+        return VyperFactory(self.compiler_data, *args, **kwargs)
+
+
+# a few lines of shared code between VyperFactory and VyperContract
+class _T:
+    def __init__(self, compiler_data, env=None, override_address=None):
+        self.compiler_data = compiler_data
+
+        if env is None:
+            env = Env.get_singleton()
+
+        self.env = env
+        if override_address is None:
+            self.address = self.env.generate_address()
+        else:
+            self.address = override_address
+
+
 # create a factory for use with `create_from_factory`.
 # uses a ERC5202 preamble, when calling `create_from_factory` will
 # need to use `code_offset=3`
@@ -64,17 +90,7 @@ class VyperFactory:
     ):
         # note slight code duplication with VyperContract ctor,
         # maybe use common base class?
-        self.compiler_data = compiler_data
-
-        if env is None:
-            env = Env.get_singleton()
-
-        self.env = env
-
-        if override_address is None:
-            self.address = self.env.generate_address()
-        else:
-            self.address = override_address
+        super().__init__(compiler_data, env, override_address)
 
         if factory_preamble is None:
             factory_preamble = b""
@@ -102,18 +118,9 @@ class FrameDetail(dict):
         return f"<{self.fn_name}: {detail}>"
 
 
-class VyperContract:
+class VyperContract(_T):
     def __init__(self, compiler_data, *args, env=None, override_address=None):
-        self.compiler_data = compiler_data
-
-        if env is None:
-            env = Env.get_singleton()
-
-        self.env = env
-        if override_address is None:
-            self.address = self.env.generate_address()
-        else:
-            self.address = override_address
+        super().__init__(compiler_data, env, override_address)
 
         encoded_args = b""
 
