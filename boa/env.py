@@ -1,4 +1,5 @@
 import contextlib
+import sys
 from typing import Any, Iterator, Optional
 
 import eth.constants as constants
@@ -9,6 +10,7 @@ from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
+from eth_abi import decode_single
 from eth_typing import Address
 
 
@@ -53,6 +55,17 @@ class VMPatcher:
         finally:
             for attr in self._patchables:
                 setattr(self, attr, snap[attr])
+
+
+def console_log(computation):
+    msgdata = computation.msg.data_as_bytes
+    schema, payload = decode_single("(string,bytes)", msgdata[4:])
+    data = decode_single(schema, payload)
+    print(*data, file=sys.stderr)
+    return computation
+
+
+CONSOLE_ADDRESS = bytes.fromhex("000000000000000000636F6E736F6C652E6C6F67")
 
 
 # a code stream which keeps a trace of opcodes it has executed
@@ -135,6 +148,8 @@ class Env:
                 )
                 if not self.__class__._gas_metering:
                     self._gas_meter = TrivialGasMeter(self.msg.gas)
+
+                self._precompiles[CONSOLE_ADDRESS] = console_log
 
         # TODO make metering toggle-able
         self.vm.state.computation_class = OpcodeTracingComputation
