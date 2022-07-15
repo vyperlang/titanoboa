@@ -92,6 +92,27 @@ In [5]: c.foo()
 Out[5]: 10
 ```
 
+### Evaluating arbitrary code
+
+```python
+>>> erc20 = boa.load("examples/ERC20.vy", 'titanoboa', 'boa', 18, 1)
+>>> erc20.balanceOf(erc20.address)
+    0
+>>> erc20.totalSupply()
+    1000000000000000000
+>>> erc20.eval("self.totalSupply += 10")  # manually mess with total supply
+>>> erc20.totalSupply()
+1000000000000000010
+>>> erc20.eval("self.totalSupply")  # same result when eval'ed
+1000000000000000010
+>>> erc20.eval("self.balanceOf[msg.sender] += 101")  # manually mess with balance
+>>> erc20.balanceOf(boa.env.eoa)
+1000000000000000101
+>>> erc20.eval("self.balanceOf[msg.sender]")  # same result when eval'ed
+1000000000000000101
+```
+
+Note that in `eval()` mode, titanoboa uses different optimization settings, so gas usage may not be the same as using the external interface.
 
 basic tests:
 ```bash
