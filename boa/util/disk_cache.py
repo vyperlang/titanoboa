@@ -16,12 +16,12 @@ class DiskCache:
 
         self.last_gc = 0
 
-    def gc(self):
+    def gc(self, force=False):
         for root, dirs, files in os.walk(self.cache_dir):
             # delete items older than ttl
             for f in files:
                 p = Path(root).joinpath(Path(f))
-                if time.time() - p.stat().st_atime > self.ttl:
+                if time.time() - p.stat().st_atime > self.ttl or force:
                     p.unlink()
             for d in dirs:
                 # prune empty directories
