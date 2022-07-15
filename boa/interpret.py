@@ -16,6 +16,7 @@ def set_cache_dir(cache_dir="~/.cache/titanoboa"):
     global _disk_cache
     if cache_dir is None:
         _disk_cache = None
+        return
     compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
     _disk_cache = DiskCache(cache_dir, compiler_version)
 

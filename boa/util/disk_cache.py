@@ -1,13 +1,39 @@
 import hashlib
+import os
 import pickle
 import tempfile
+import time
 from pathlib import Path
+
+_ONE_WEEK = 7 * 24 * 3600
+
+
+GC_INTERVAL = 60
 
 
 class DiskCache:
-    def __init__(self, cache_dir, version_salt):
+    def __init__(self, cache_dir, version_salt, ttl=_ONE_WEEK):
         self.cache_dir = Path(cache_dir).expanduser()
         self.version_salt = version_salt
+        self.ttl = ttl
+
+        self.last_gc = 0
+
+    def gc(self):
+        for root, dirs, files in os.walk(self.cache_dir):
+            # delete items older than ttl
+            for f in files:
+                p = Path(root).joinpath(Path(f))
+                if time.time() - p.stat().st_atime > self.ttl:
+                    p.unlink()
+            for d in dirs:
+                # prune empty directories
+                try:
+                    Path(d).rmdir()
+                except OSError:
+                    pass
+
+        self.last_gc = time.time()
 
     # content-addressable location
     def cal(self, string):
@@ -17,6 +43,9 @@ class DiskCache:
 
     # look up x in the cal; on a miss, write back to the cache
     def caching_lookup(self, string, func):
+        if time.time() - self.last_gc < GC_INTERVAL:
+            return
+
         p = self.cal(string)
         p.parent.mkdir(parents=True, exist_ok=True)
         try:
