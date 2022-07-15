@@ -8,6 +8,7 @@ from typing import Any
 import eth_abi as abi
 import vyper.ast as vy_ast
 import vyper.codegen.function_definitions.common as vyper
+import vyper.codegen.module as mod
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
@@ -195,8 +196,8 @@ class VyperContract(_T):
     # run a bytecode fragment in the context of the contract,
     # maintaining PCs and CODESIZE semantics
     def _run_bytecode(self, fragment: bytes, calldata_bytes: bytes = b"") -> Any:
-        bytecode = self.bytecode + fragment
-        fake_codesize = len(self.bytecode)
+        bytecode = self.unoptimized_bytecode + fragment
+        fake_codesize = len(self.unoptimized_bytecode)
         method_id = b"dbug"  # note the value doesn't get validated
         computation = self.env.execute_code(
             to_address=self.address,
@@ -281,6 +282,23 @@ class VyperContract(_T):
         finally:
             self._vyper_namespace["self"].members.pop("__boa_debug__", None)
 
+    @cached_property
+    def unoptimized_assembly(self):
+        _, runtime, _ = mod.generate_ir_for_module(self.global_ctx)
+        return compile_ir.compile_to_assembly(runtime, no_optimize=True)
+
+    @cached_property
+    def data_section(self):
+        # extract the data section from the bytecode
+        return self.bytecode[len(self.compiler_data.bytecode_runtime) :]
+
+    @cached_property
+    def unoptimized_bytecode(self):
+        s, _ = compile_ir.assembly_to_evm(
+            self.unoptimized_assembly, insert_vyper_signature=True
+        )
+        return s + self.data_section
+
     # compile a fragment (single expr or statement) in the context
     # of the contract, returning the ABI encoded value if it is an expr.
     def compile_stmt(self, source_code: str) -> Any:
@@ -342,15 +360,14 @@ class VyperContract(_T):
 
         # add original bytecode in so that jumpdests in the fragment
         # assemble correctly in final bytecode
-        # note this is kludgy, would be better to be able to pass around
-        # the assembly "symbol table"
+        # note this is somewhat kludgy, would be better to be able to
+        # pass around the assembly "symbol table"
         vyper_signature_len = len("\xa1\x65vyper\x83\x00\x03\x04")
-        assembly = (
-            self.compiler_data.assembly_runtime
-            + ["POP"] * vyper_signature_len
-            + assembly
-        )
-        n_padding = len(self.bytecode)
+        # we need to use unoptimized assembly of the contract because
+        # otherwise dead code eliminator can strip unused internal functions
+        assembly = self.unoptimized_assembly + ["POP"] * vyper_signature_len + assembly
+
+        n_padding = len(self.unoptimized_bytecode)
         bytecode, source_map = compile_ir.assembly_to_evm(assembly)
         bytecode = bytecode[n_padding:]
 

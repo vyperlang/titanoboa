@@ -13,7 +13,7 @@ def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
 
 
 def loads_partial(source_code: str) -> VyperDeployer:
-    data = CompilerData(source_code, no_optimize=True)
+    data = CompilerData(source_code)
 
     return VyperDeployer(data)
 
