@@ -1,10 +1,37 @@
 from typing import Union
 
+import vyper
 from vyper.compiler.phases import CompilerData
 
 from boa.contract import VyperContract, VyperDeployer, VyperFactory
+from boa.util.disk_cache import DiskCache
 
 _Contract = Union[VyperContract, VyperFactory]
+
+
+_disk_cache = None
+
+
+def set_cache_dir(cache_dir="~/.cache/titanoboa"):
+    global _disk_cache
+    if cache_dir is None:
+        _disk_cache = None
+    compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
+    _disk_cache = DiskCache(cache_dir, compiler_version)
+
+
+def compiler_data(source_code: str) -> CompilerData:
+    global _disk_cache
+
+    if _disk_cache is None:
+        return CompilerData(source_code)
+
+    def func():
+        ret = CompilerData(source_code)
+        ret.bytecode_runtime  # force compilation to happen
+        return ret
+
+    return _disk_cache.caching_lookup(source_code, func)
 
 
 def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
@@ -13,8 +40,7 @@ def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
 
 
 def loads_partial(source_code: str) -> VyperDeployer:
-    data = CompilerData(source_code)
-
+    data = compiler_data(source_code)
     return VyperDeployer(data)
 
 
