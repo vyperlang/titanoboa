@@ -15,7 +15,7 @@ from eth_typing import Address
 
 
 class VMPatcher:
-    _patchables = {
+    _exc_patchables = {
         # env vars vyper supports
         "block_number": "_block_number",
         "timestamp": "_timestamp",
@@ -25,18 +25,27 @@ class VMPatcher:
         "chain_id": "_chain_id",
     }
 
+    _cmp_patchables = {
+        "code_size_limit": "EIP170_CODE_SIZE_LIMIT",
+    }
+
     def __init__(self, vm):
         # https://stackoverflow.com/a/12999019
-        object.__setattr__(self, "_patch", vm.state.execution_context)
+        object.__setattr__(self, "_exc_patch", vm.state.execution_context)
+        object.__setattr__(self, "_cmp_patch", vm.state.computation_class)
 
     def __getattr__(self, attr):
-        if attr in self._patchables:
-            return getattr(self._patch, self._patchables[attr])
+        if attr in self._exc_patchables:
+            return getattr(self._exc_patch, self._exc_patchables[attr])
+        if attr in self._cmp_patchables:
+            return getattr(self._cmp_patch, self._cmp_patchables[attr])
         raise AttributeError(attr)
 
     def __setattr__(self, attr, value):
-        if attr in self._patchables:
-            setattr(self._patch, self._patchables[attr], value)
+        if attr in self._exc_patchables:
+            setattr(self._exc_patch, self._exc_patchables[attr], value)
+        if attr in self._cmp_patchables:
+            setattr(self._cmp_patch, self._cmp_patchables[attr], value)
 
     # to help auto-complete
     def __dir__(self):
@@ -126,7 +135,6 @@ class Env:
     def __init__(self):
         self.chain = _make_chain()
         self.vm = self.chain.get_vm()
-        self.vm.patch = VMPatcher(self.vm)
         self._gas_price = 0
 
         self._address_counter = self.__class__._initial_address_counter
@@ -153,6 +161,8 @@ class Env:
 
         # TODO make metering toggle-able
         self.vm.state.computation_class = OpcodeTracingComputation
+
+        self.vm.patch = VMPatcher(self.vm)
 
     def set_gas_metering(self, val: bool) -> None:
         self.vm.state.computation_class._gas_metering = val
