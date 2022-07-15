@@ -65,6 +65,23 @@ def foo() -> uint256:
 >>> deployer = boa.load("examples/deployer.vy", factory.address)
 ```
 
+### From within IPython
+
+```python
+In [1]: %load_ext boa.ipython
+
+In [2]: %%vyper
+   ...:
+   ...: @external
+   ...: def foo() -> uint256:
+   ...:     return 1
+   ...:
+Out[2]: <boa.contract.VyperContract at 0x7fb254392cb0>
+
+In [3]: _.foo()
+Out[3]: 1
+```
+
 
 basic tests:
 ```bash
