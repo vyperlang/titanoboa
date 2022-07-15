@@ -1,5 +1,3 @@
-import shlex
-
 import IPython.core.magic as ipython
 
 import boa
