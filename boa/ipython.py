@@ -12,8 +12,7 @@ class TitanoboaMagic(ipython.Magics):
     def vyper(self, line, cell):
         # note use of eval here is ok since everything is being
         # eval'ed anyway.
-        args = [eval(arg) for arg in shlex.split(line)]
-        c = boa.loads(cell, *args)
+        c = boa.loads_partial(cell)
         return c
 
 

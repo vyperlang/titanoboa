@@ -71,15 +71,25 @@ def foo() -> uint256:
 In [1]: %load_ext boa.ipython
 
 In [2]: %%vyper
-   ...:
+   ...: 
+   ...: MY_IMMUTABLE: immutable(uint256)
+   ...: 
+   ...: @external
+   ...: def __init__(some_number: uint256):
+   ...:     MY_IMMUTABLE = some_number * 2
+   ...: 
    ...: @external
    ...: def foo() -> uint256:
-   ...:     return 1
-   ...:
-Out[2]: <boa.contract.VyperContract at 0x7fb254392cb0>
+   ...:     return MY_IMMUTABLE
+   ...: 
+Out[2]: <boa.contract.VyperDeployer at 0x7f3496187190>
 
-In [3]: _.foo()
-Out[3]: 1
+In [3]: d = _
+
+In [4]: c = d.deploy(5)
+
+In [5]: c.foo()
+Out[5]: 10
 ```
 
 
