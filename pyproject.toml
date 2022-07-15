@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "wheel"]
 
 [tool.setuptools.packages.find]
 include = ["boa*"]
