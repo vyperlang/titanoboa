@@ -1,7 +1,6 @@
 import hashlib
 import os
 import pickle
-import tempfile
 import time
 from pathlib import Path
 
@@ -51,7 +50,7 @@ class DiskCache:
                 return pickle.loads(f.read())
         except OSError:
             res = func()
-            tmp_p = Path(tempfile.mkstemp()[1])
+            tmp_p = p.with_suffix(".unfinished")
             with tmp_p.open("wb") as f:
                 f.write(pickle.dumps(res))
             # rename is atomic, don't really need to care about fsync
