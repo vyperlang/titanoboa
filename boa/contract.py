@@ -212,7 +212,18 @@ class VyperContract(_T):
         self._computation = computation  # for further inspection
 
         if computation.is_error:
+            err = computation.error
+
+            # decode error msg if it's "Error(string)"
+            # b"\x08\xc3y\xa0" == method_id("Error(string)")
+            if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
+                err.args = (
+                    abi.decode_single("(string)", err.args[0][4:])[0],
+                    *err.args[1:],
+                )
+
             error_msg = f"{repr(computation.error)}"
+
             error_detail = self.find_error_meta(computation.code)
             if error_detail is not None:
                 error_msg = f"{error_msg} <dev: {error_detail}>"
