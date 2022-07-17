@@ -60,9 +60,12 @@ def foo() -> uint256:
 
 ```python
 >>> import boa
-
->>> factory = boa.load("examples/ERC20.vy", as_factory=True)
->>> deployer = boa.load("examples/deployer.vy", factory.address)
+>>> s = boa.load_partial("examples/ERC20.vy")
+>>> factory = s.deploy_as_factory()
+>>> deployer = boa.load("examples/deployer.vy", factory)
+>>> token = s.wrap(deployer.create_new_erc20("token", "TKN", 18, 10**18))
+>>> token.totalSupply()
+>>> 1000000000000000000000000000000000000
 ```
 
 ### From within IPython
