@@ -95,7 +95,7 @@ class _T:
 # create a factory for use with `create_from_factory`.
 # uses a ERC5202 preamble, when calling `create_from_factory` will
 # need to use `code_offset=3`
-class VyperFactory:
+class VyperFactory(_T):
     def __init__(
         self,
         compiler_data,
@@ -169,7 +169,7 @@ class VyperContract(_T):
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
-        if bytecode[: -self.data_section_size] != self.compiler_data.bytecode_runtime:
+        if bytecode[-self.data_section_size :] != self.compiler_data.bytecode_runtime:
             warnings.warn(f"casted bytecode does not match compiled bytecode at {self}")
         self.bytecode = bytecode
 
@@ -178,6 +178,14 @@ class VyperContract(_T):
             f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
         )
+
+    @cached_property
+    def deployer(self):
+        return VyperDeployer(self.compiler_data, env=self.env)
+
+    # is this actually useful?
+    def wrap(self, *args, **kwargs):
+        return self.deployer.wrap(*args, **kwargs)
 
     @cached_property
     def ast_map(self):
@@ -341,7 +349,7 @@ class VyperContract(_T):
     @cached_property
     def data_section(self):
         # extract the data section from the bytecode
-        return self.bytecode[-self.data_section_size :]
+        return self.bytecode[: -self.data_section_size]
 
     @cached_property
     def unoptimized_bytecode(self):
