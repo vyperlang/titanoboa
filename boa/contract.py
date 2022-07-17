@@ -217,7 +217,7 @@ class VyperContract(_T):
             if error_detail is not None:
                 error_msg = f"{error_msg} <dev: {error_detail}>"
             if self._fn is not None:
-                error_msg = f"{error_msg} {self.debug_frame()}"
+                error_msg = f"{error_msg}\n{self.debug_frame()}"
             ast_source = self.find_source_of(computation.code)
             raise BoaError(error_msg, ast_source)
 
