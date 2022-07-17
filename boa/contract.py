@@ -3,18 +3,21 @@
 import contextlib
 import copy
 import textwrap
+import warnings
 from typing import Any
 
 import eth_abi as abi
+import vyper
 import vyper.ast as vy_ast
-import vyper.codegen.function_definitions.common as vyper
 import vyper.codegen.module as mod
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
+from eth_utils import to_canonical_address, to_checksum_address
 from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
+from vyper.codegen.function_definitions.common import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.types.types import TupleType
 from vyper.exceptions import InvalidType, VyperException
@@ -22,7 +25,7 @@ from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
-from boa.env import Env
+from boa.env import AddressT, Env
 from boa.vyper.decoder_utils import decode_vyper_object
 
 
@@ -53,7 +56,7 @@ class lrudict(dict):
 
 
 class VyperDeployer:
-    def __init__(self, compiler_data):
+    def __init__(self, compiler_data, env=None):
         self.compiler_data = compiler_data
 
     def deploy(self, *args, **kwargs):
@@ -61,6 +64,17 @@ class VyperDeployer:
 
     def deploy_as_factory(self, *args, **kwargs):
         return VyperFactory(self.compiler_data, *args, **kwargs)
+
+    def wrap(self, address: AddressT) -> "VyperContract":
+        address = to_checksum_address(address)
+        ret = VyperContract(
+            self.compiler_data, override_address=address, skip_init=True
+        )
+        vm = ret.env.vm
+        bytecode = vm.state.get_code(to_canonical_address(address))
+
+        ret._set_bytecode(bytecode)
+        return ret
 
 
 # a few lines of shared code between VyperFactory and VyperContract
@@ -120,23 +134,18 @@ class FrameDetail(dict):
 
 
 class VyperContract(_T):
-    def __init__(self, compiler_data, *args, env=None, override_address=None):
+    def __init__(
+        self, compiler_data, *args, env=None, override_address=None, skip_init=False
+    ):
         super().__init__(compiler_data, env, override_address)
 
-        encoded_args = b""
-
         fns = {fn.name: fn for fn in self.global_ctx._function_defs}
-
-        if "__init__" in fns:
-            ctor = VyperFunction(fns.pop("__init__"), self)
-            encoded_args = ctor._prepare_calldata(*args)
-            encoded_args = encoded_args[4:]  # strip method_id
-
-        self.bytecode = self.env.deploy_code(
-            bytecode=self.compiler_data.bytecode + encoded_args, deploy_to=self.address
-        )
-
         # add all functions from the interface to the contract
+
+        self._ctor = None
+        if "__init__" in fns:
+            self._ctor = VyperFunction(fns.pop("__init__"), self)
+
         for fn in fns.values():
             setattr(self, fn.name, VyperFunction(fn, self))
 
@@ -144,6 +153,31 @@ class VyperContract(_T):
         self._source_map = None
         self._computation = None
         self._fn = None
+
+        if not skip_init:
+            self._run_init(*args)
+
+    def _run_init(self, *args):
+        encoded_args = b""
+
+        if self._ctor:
+            encoded_args = self._ctor._prepare_calldata(*args)
+            encoded_args = encoded_args[4:]  # strip method_id
+
+        initcode = self.compiler_data.bytecode + encoded_args
+        self.bytecode = self.env.deploy_code(bytecode=initcode, deploy_to=self.address)
+
+    # manually set the runtime bytecode, instead of using deploy
+    def _set_bytecode(self, bytecode: bytes) -> None:
+        if bytecode[: -self.data_section_size] != self.compiler_data.bytecode_runtime:
+            warnings.warn(f"casted bytecode does not match compiled bytecode at {self}")
+        self.bytecode = bytecode
+
+    def __str__(self):
+        return (
+            f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "
+            f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
+        )
 
     @cached_property
     def ast_map(self):
@@ -301,9 +335,13 @@ class VyperContract(_T):
         return compile_ir.compile_to_assembly(runtime, no_optimize=True)
 
     @cached_property
+    def data_section_size(self):
+        return self.global_ctx.immutable_section_bytes
+
+    @cached_property
     def data_section(self):
         # extract the data section from the bytecode
-        return self.bytecode[len(self.compiler_data.bytecode_runtime) :]
+        return self.bytecode[-self.data_section_size :]
 
     @cached_property
     def unoptimized_bytecode(self):
@@ -362,7 +400,7 @@ class VyperContract(_T):
         ast._metadata["signature"] = sig
 
         sigs = {"self": self.compiler_data.function_signatures}
-        ir = vyper.generate_ir_for_function(ast, sigs, self.global_ctx, False)
+        ir = generate_ir_for_function(ast, sigs, self.global_ctx, False)
 
         # generate bytecode where selector check always succeeds
         ir = IRnode.from_list(
