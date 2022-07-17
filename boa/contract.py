@@ -78,7 +78,7 @@ class VyperDeployer:
 
 
 # a few lines of shared code between VyperFactory and VyperContract
-class _T:
+class _BaseContract:
     def __init__(self, compiler_data, env=None, override_address=None):
         self.compiler_data = compiler_data
 
@@ -95,7 +95,7 @@ class _T:
 # create a factory for use with `create_from_factory`.
 # uses a ERC5202 preamble, when calling `create_from_factory` will
 # need to use `code_offset=3`
-class VyperFactory(_T):
+class VyperFactory(_BaseContract):
     def __init__(
         self,
         compiler_data,
@@ -133,7 +133,7 @@ class FrameDetail(dict):
         return f"<{self.fn_name}: {detail}>"
 
 
-class VyperContract(_T):
+class VyperContract(_BaseContract):
     def __init__(
         self, compiler_data, *args, env=None, override_address=None, skip_init=False
     ):
@@ -488,6 +488,9 @@ class VyperFunction:
 
         total_non_base_args = len(kwargs) + len(args) - len(self.fn_signature.base_args)
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
+
+        # allow things with `.address` to be encode-able
+        args = [getattr(arg, "address", arg) for arg in args]
 
         encoded_args = abi.encode_single(args_abi_type, args)
         return method_id + encoded_args
