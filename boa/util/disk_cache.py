@@ -26,7 +26,8 @@ class DiskCache:
                 # prune empty directories
                 try:
                     Path(root).joinpath(Path(d)).rmdir()
-                except (OSError, FileNotFoundError):
+                # pypy throws FileNotFoundError
+                except (OSError, FileNotFoundError):  # noqa: B014
                     pass
 
         self.last_gc = time.time()
