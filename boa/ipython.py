@@ -13,6 +13,15 @@ class TitanoboaMagic(ipython.Magics):
         c = boa.loads_partial(cell)
         return c
 
+    @ipython.cell_magic
+    def orgvyper(self, line, cell):
+        # note use of eval here is ok since everything is being
+        # eval'ed anyway.
+        c = boa.loads_partial(cell)
+        if line:
+            boa.env.contracts[line] = c
+        boa.env._ = c
+        return line
 
 def load_ipython_extension(ipy_module):
     ipy_module.register_magics(TitanoboaMagic())
