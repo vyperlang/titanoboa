@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Optional, Union
 
 import vyper
 from vyper.compiler.phases import CompilerData
@@ -21,14 +21,14 @@ def set_cache_dir(cache_dir="~/.cache/titanoboa"):
     _disk_cache = DiskCache(cache_dir, compiler_version)
 
 
-def compiler_data(source_code: str) -> CompilerData:
+def compiler_data(source_code: str, contract_name: str) -> CompilerData:
     global _disk_cache
 
     if _disk_cache is None:
-        return CompilerData(source_code)
+        return CompilerData(source_code, contract_name)
 
     def func():
-        ret = CompilerData(source_code)
+        ret = CompilerData(source_code, contract_name)
         ret.bytecode_runtime  # force compilation to happen
         return ret
 
@@ -37,25 +37,27 @@ def compiler_data(source_code: str) -> CompilerData:
 
 def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
     with open(filename) as f:
-        return loads(f.read(), *args, **kwargs)
+        return loads(f.read(), *args, name=filename, **kwargs)
 
 
-def loads_partial(source_code: str) -> VyperDeployer:
-    data = compiler_data(source_code)
-    return VyperDeployer(data)
-
-
-def load_partial(filename: str, *args, **kwargs) -> VyperDeployer:  # type: ignore
-    with open(filename) as f:
-        return loads_partial(f.read(), *args, **kwargs)
-
-
-def loads(source_code: str, *args, as_factory=False, **kwargs) -> _Contract:  # type: ignore
-    d = loads_partial(source_code)
+def loads(source_code, *args, as_factory=False, name=None, **kwargs):
+    d = loads_partial(source_code, name)
     if as_factory:
         return d.deploy_as_factory(**kwargs)
     else:
         return d.deploy(*args, **kwargs)
+
+
+def loads_partial(source_code: str, name: Optional[str] = None) -> VyperDeployer:
+    if name is None:
+        name = "VyperContract"  # TODO handle this upstream in CompilerData
+    data = compiler_data(source_code, name)
+    return VyperDeployer(data)
+
+
+def load_partial(filename: str) -> VyperDeployer:  # type: ignore
+    with open(filename) as f:
+        return loads_partial(f.read(), name=filename)
 
 
 def contract() -> _Contract:
