@@ -63,7 +63,7 @@ def foo() -> uint256:
 >>> s = boa.load_partial("examples/ERC20.vy")
 >>> factory = s.deploy_as_factory()
 >>> deployer = boa.load("examples/deployer.vy", factory)
->>> token = s.wrap(deployer.create_new_erc20("token", "TKN", 18, 10**18))
+>>> token = s.at(deployer.create_new_erc20("token", "TKN", 18, 10**18))
 >>> token.totalSupply()
 >>> 1000000000000000000000000000000000000
 ```

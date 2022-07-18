@@ -69,7 +69,7 @@ class VyperDeployer:
     def deploy_as_factory(self, *args, **kwargs):
         return VyperFactory(self.compiler_data, *args, **kwargs)
 
-    def wrap(self, address: AddressT) -> "VyperContract":
+    def at(self, address: AddressT) -> "VyperContract":
         address = to_checksum_address(address)
         ret = VyperContract(
             self.compiler_data, override_address=address, skip_init=True
@@ -194,7 +194,7 @@ class VyperContract(_BaseContract):
         return VyperDeployer(self.compiler_data, env=self.env)
 
     # is this actually useful?
-    def wrap(self, *args, **kwargs):
+    def at(self, *args, **kwargs):
         return self.deployer.wrap(*args, **kwargs)
 
     @cached_property
