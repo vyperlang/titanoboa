@@ -38,6 +38,10 @@ def ast_map_of(ast_node):
     return ast_map
 
 
+# error messages for external calls
+EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
+
+
 class lrudict(dict):
     def __init__(self, n, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -133,11 +137,18 @@ class FrameDetail(dict):
         return f"<{self.fn_name}: {detail}>"
 
 
+class StackTrace(list):
+    def __repr__(self):
+        return "\n".join(repr(x) for x in self)
+
+
 class VyperContract(_BaseContract):
     def __init__(
         self, compiler_data, *args, env=None, override_address=None, skip_init=False
     ):
         super().__init__(compiler_data, env, override_address)
+
+        self.env.register_contract(self.address, self)
 
         fns = {fn.name: fn for fn in self.global_ctx._function_defs}
         # add all functions from the interface to the contract
@@ -152,7 +163,6 @@ class VyperContract(_BaseContract):
         self._eval_cache = lrudict(0x1000)
         self._source_map = None
         self._computation = None
-        self._fn = None
 
         if not skip_init:
             self._run_init(*args)
@@ -191,14 +201,20 @@ class VyperContract(_BaseContract):
     def ast_map(self):
         return ast_map_of(self.compiler_data.vyper_module)
 
-    def debug_frame(self):
-        if self._fn is None:
+    def debug_frame(self, computation=None):
+        if computation is None:
+            computation = self._computation
+
+        node = self.find_source_of(computation.code)
+        if node is None:
             raise Exception("No frame available")
 
-        frame_info = self._fn.fn_signature.frame_info
+        fn = node.get_ancestor(vy_ast.FunctionDef)
 
-        mem = self._computation._memory
-        frame_detail = FrameDetail(self._fn.fn_signature.name)
+        frame_info = self.compiler_data.function_signatures[fn.name].frame_info
+
+        mem = computation._memory
+        frame_detail = FrameDetail(fn.name)
         for k, v in frame_info.frame_vars.items():
             if v.location.name != "memory":
                 continue
@@ -254,25 +270,7 @@ class VyperContract(_BaseContract):
         self._computation = computation  # for further inspection
 
         if computation.is_error:
-            err = computation.error
-
-            # decode error msg if it's "Error(string)"
-            # b"\x08\xc3y\xa0" == method_id("Error(string)")
-            if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-                err.args = (
-                    abi.decode_single("(string)", err.args[0][4:])[0],
-                    *err.args[1:],
-                )
-
-            error_msg = f"{repr(computation.error)}"
-
-            error_detail = self.find_error_meta(computation.code)
-            if error_detail is not None:
-                error_msg = f"{error_msg} <dev: {error_detail}>"
-            if self._fn is not None:
-                error_msg = f"{error_msg}\n{self.debug_frame()}"
-            ast_source = self.find_source_of(computation.code)
-            raise BoaError(error_msg, ast_source)
+            self.handle_error(computation)
 
         if vyper_typ is None:
             return None
@@ -286,6 +284,54 @@ class VyperContract(_BaseContract):
 
         return vyper_object(ret, vyper_typ)
 
+    def handle_error(self, computation):
+        err = computation.error
+
+        # decode error msg if it's "Error(string)"
+        # b"\x08\xc3y\xa0" == method_id("Error(string)")
+        if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
+            err.args = (
+                abi.decode_single("(string)", err.args[0][4:])[0],
+                *err.args[1:],
+            )
+
+        error_msg = f"{repr(computation.error)} "
+
+        stack_trace = self.vyper_stack_trace(computation)
+
+        for (c, computation) in stack_trace:
+            error_msg += "\n\n"
+
+            error_detail = self.find_error_meta(computation.code)
+            if error_detail is not None:
+                error_msg += f" <dev: {error_detail}>"
+
+            ast_source = c.find_source_of(computation.code)
+            if ast_source is not None:
+                # VyperException.__str__ does a lot of formatting for us
+                error_msg = str(VyperException(error_msg, ast_source))
+
+            frame_detail = c.debug_frame(computation)
+            frame_detail.fn_name = "locals"  # override the displayed name
+            if len(frame_detail) > 0:
+                error_msg += f" {frame_detail}"
+
+        raise BoaError(error_msg)
+
+    def vyper_stack_trace(self, computation):
+        ret = [(self, computation)]
+        error_detail = self.find_error_meta(computation.code)
+        if error_detail not in EXTERNAL_CALL_ERRORS:
+            return ret
+        if len(computation.children) < 1:
+            return ret
+        if not computation.children[-1].is_error:
+            return ret
+        child = computation.children[-1]
+        child_obj = self.env.lookup_contract(child.msg.code_address)
+        child_trace = child_obj.vyper_stack_trace(child)
+        return child_trace + ret
+
     # eval vyper code in the context of this contract
     def eval(self, stmt: str) -> Any:
         bytecode, source_map, typ = self.compile_stmt(stmt)
@@ -293,7 +339,6 @@ class VyperContract(_BaseContract):
         self._source_map = source_map
 
         c = self._run_bytecode(bytecode)
-        self._fn = None
 
         return self.marshal_to_python(c, typ)
 
@@ -504,7 +549,6 @@ class VyperFunction:
         )
 
         typ = self.fn_signature.return_type
-        self.contract._fn = self
         return self.contract.marshal_to_python(computation, typ)
 
 
