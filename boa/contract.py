@@ -300,7 +300,7 @@ class VyperContract(_BaseContract):
         stack_trace = self.vyper_stack_trace(computation)
 
         for (c, computation) in stack_trace:
-            error_msg += "\n\n"
+            error_msg += f"\n\n{c}\n"
 
             error_detail = self.find_error_meta(computation.code)
             if error_detail is not None:
