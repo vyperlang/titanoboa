@@ -12,9 +12,9 @@ class TitanoboaMagic(ipython.Magics):
         line = line or None
         c = boa.loads_partial(cell, name=line)
         if line:
-            self.shell.user_ns[line] = c
-            _contracts[line] = c
-        _ = c
+            self.shell.user_ns[line] = c  # ret available in user ipython locals
+            _contracts[line] = c  # ret available at boa.ipython._contracts["..."]
+        _ = c  # ret available at `boa.ipython._`
         return c
 
 def load_ipython_extension(ipy_module):
