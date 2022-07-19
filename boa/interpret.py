@@ -49,8 +49,7 @@ def loads(source_code, *args, as_factory=False, name=None, **kwargs):
 
 
 def loads_partial(source_code: str, name: Optional[str] = None) -> VyperDeployer:
-    if name is None:
-        name = "VyperContract"  # TODO handle this upstream in CompilerData
+    name = name or "VyperContract"  # TODO handle this upstream in CompilerData
     data = compiler_data(source_code, name)
     return VyperDeployer(data)
 
