@@ -30,15 +30,16 @@ def decode_vyper_object(mem, typ):
         length = typ.count
         n = typ.subtype.memory_bytes_required
         return [
-            decode_vyper_object(mem[i * n : i * n + n], typ.subtyp)
+            decode_vyper_object(mem[i * n : i * n + n], typ.subtype)
             for i in range(length)
         ]
     if isinstance(typ, DArrayType):
         length = int.from_bytes(mem[:32], "big")
         n = typ.subtype.memory_bytes_required
         ofst = 32
+        ret = []
         for _ in range(length):
-            ret.append(decode_vyper_object(mem[ofst : ofst + n], typ.subtyp))
+            ret.append(decode_vyper_object(mem[ofst : ofst + n], typ.subtype))
             ofst += n
         return ret
 
