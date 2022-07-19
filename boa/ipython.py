@@ -20,7 +20,6 @@ class TitanoboaMagic(ipython.Magics):
         c = boa.loads_partial(cell)
         if line:
             boa.env.contracts[line] = c
-        boa.env._ = c
         return c
 
 def load_ipython_extension(ipy_module):
