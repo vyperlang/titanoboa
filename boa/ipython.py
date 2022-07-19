@@ -1,7 +1,6 @@
 import IPython.core.magic as ipython
 
 import boa
-import sys
 
 _ = None
 _contracts = {}
