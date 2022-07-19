@@ -3,14 +3,12 @@ import IPython.core.magic as ipython
 import boa
 
 
-# The class MUST call this class decorator at creation time
 @ipython.magics_class
 class TitanoboaMagic(ipython.Magics):
     @ipython.cell_magic
     def vyper(self, line, cell):
-        # note use of eval here is ok since everything is being
-        # eval'ed anyway.
-        c = boa.loads_partial(cell)
+        line = line or None
+        c = boa.loads_partial(cell, name=line)
         return c
 
 
