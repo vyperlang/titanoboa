@@ -21,7 +21,7 @@ class TitanoboaMagic(ipython.Magics):
         if line:
             boa.env.contracts[line] = c
         boa.env._ = c
-        return line
+        return c
 
 def load_ipython_extension(ipy_module):
     ipy_module.register_magics(TitanoboaMagic())
