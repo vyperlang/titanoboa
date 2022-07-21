@@ -12,6 +12,7 @@ from vyper.utils import unsigned_to_signed
 
 def decode_vyper_object(mem, typ):
     if is_bytes_m_type(typ):
+        # TODO tag return value like `vyper_object` does
         return mem[: typ._bytes_info.m].tobytes()
     if is_base_type(typ, "address"):
         return mem[12:32].tobytes()
@@ -43,5 +44,4 @@ def decode_vyper_object(mem, typ):
             ofst += n
         return ret
 
-    # TODO more cases
-    raise Exception("Unreachable")
+    return "unimplemented decoder for `{typ}`"
