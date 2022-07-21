@@ -40,10 +40,10 @@ def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
         return loads(f.read(), *args, name=filename, **kwargs)
 
 
-def loads(source_code, *args, as_factory=False, name=None, **kwargs):
+def loads(source_code, *args, as_blueprint=False, name=None, **kwargs):
     d = loads_partial(source_code, name)
-    if as_factory:
-        return d.deploy_as_factory(**kwargs)
+    if as_blueprint:
+        return d.deploy_as_blueprint(**kwargs)
     else:
         return d.deploy(*args, **kwargs)
 

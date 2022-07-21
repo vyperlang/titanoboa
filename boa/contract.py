@@ -66,8 +66,8 @@ class VyperDeployer:
     def deploy(self, *args, **kwargs):
         return VyperContract(self.compiler_data, *args, **kwargs)
 
-    def deploy_as_factory(self, *args, **kwargs):
-        return VyperFactory(self.compiler_data, *args, **kwargs)
+    def deploy_as_blueprint(self, *args, **kwargs):
+        return VyperBlueprint(self.compiler_data, *args, **kwargs)
 
     def at(self, address: AddressT) -> "VyperContract":
         address = to_checksum_address(address)
@@ -81,7 +81,7 @@ class VyperDeployer:
         return ret
 
 
-# a few lines of shared code between VyperFactory and VyperContract
+# a few lines of shared code between VyperBlueprint and VyperContract
 class _BaseContract:
     def __init__(self, compiler_data, env=None, override_address=None):
         self.compiler_data = compiler_data
@@ -96,31 +96,31 @@ class _BaseContract:
             self.address = override_address
 
 
-# create a factory for use with `create_from_factory`.
-# uses a ERC5202 preamble, when calling `create_from_factory` will
+# create a blueprint for use with `create_from_blueprint`.
+# uses a ERC5202 preamble, when calling `create_from_blueprint` will
 # need to use `code_offset=3`
-class VyperFactory(_BaseContract):
+class VyperBlueprint(_BaseContract):
     def __init__(
         self,
         compiler_data,
         env=None,
         override_address=None,
-        factory_preamble=b"\xFE\x71\x00",
+        blueprint_preamble=b"\xFE\x71\x00",
     ):
         # note slight code duplication with VyperContract ctor,
         # maybe use common base class?
         super().__init__(compiler_data, env, override_address)
 
-        if factory_preamble is None:
-            factory_preamble = b""
+        if blueprint_preamble is None:
+            blueprint_preamble = b""
 
-        factory_bytecode = factory_preamble + compiler_data.bytecode
+        blueprint_bytecode = blueprint_preamble + compiler_data.bytecode
 
         # the length of the deployed code in bytes
-        len_bytes = len(factory_bytecode).to_bytes(2, "big")
+        len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
         deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
 
-        deploy_bytecode += factory_bytecode
+        deploy_bytecode += bluepring_bytecode
 
         self.bytecode = self.env.deploy_code(
             bytecode=deploy_bytecode, deploy_to=self.address
