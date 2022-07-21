@@ -16,6 +16,8 @@ def decode_vyper_object(mem, typ):
         return mem[: typ._bytes_info.m].tobytes()
     if is_base_type(typ, "address"):
         return mem[12:32].tobytes()
+    if is_base_type(typ, "bool"):
+        return bool.from_bytes(mem[31:32], "big")
     if is_integer_type(typ):
         ret = int.from_bytes(mem[:32], "big")
         if typ._int_info.is_signed:
