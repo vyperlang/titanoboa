@@ -120,7 +120,7 @@ class VyperBlueprint(_BaseContract):
         len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
         deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
 
-        deploy_bytecode += bluepring_bytecode
+        deploy_bytecode += blueprint_bytecode
 
         self.bytecode = self.env.deploy_code(
             bytecode=deploy_bytecode, deploy_to=self.address
@@ -394,7 +394,7 @@ class VyperContract(_BaseContract):
     @cached_property
     def data_section(self):
         # extract the data section from the bytecode
-        return self.bytecode[: -self.data_section_size]
+        return self.bytecode[-self.data_section_size :]
 
     @cached_property
     def unoptimized_bytecode(self):
