@@ -255,6 +255,12 @@ class VyperContract(_BaseContract):
     # maintaining PCs and CODESIZE semantics
     def _run_bytecode(self, fragment: bytes, calldata_bytes: bytes = b"") -> Any:
         bytecode = self.unoptimized_bytecode + fragment
+
+        # tack on the data section (note that the data section is in the code
+        # twice - this is because `fragment` and `unoptimized_bytecode` have
+        # different pointers to data section start.
+        bytecode += self.data_section
+
         fake_codesize = len(self.unoptimized_bytecode)
         method_id = b"dbug"  # note the value doesn't get validated
         computation = self.env.execute_code(
@@ -467,9 +473,11 @@ class VyperContract(_BaseContract):
         # note this is somewhat kludgy, would be better to be able to
         # pass around the assembly "symbol table"
         vyper_signature_len = len("\xa1\x65vyper\x83\x00\x03\x04")
+        # add padding to mimic the runtime code exactly
+        padding = vyper_signature_len + self.data_section_size
         # we need to use unoptimized assembly of the contract because
         # otherwise dead code eliminator can strip unused internal functions
-        assembly = self.unoptimized_assembly + ["POP"] * vyper_signature_len + assembly
+        assembly = self.unoptimized_assembly + ["POP"] * padding + assembly
 
         n_padding = len(self.unoptimized_bytecode)
         bytecode, source_map = compile_ir.assembly_to_evm(assembly)
