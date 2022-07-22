@@ -18,9 +18,9 @@ event Approval:
     spender: indexed(address)
     value: uint256
 
-name: public(String[32])
-symbol: public(String[32])
-decimals: public(uint8)
+NAME: immutable(String[33])  # trigger different codegen
+SYMBOL: immutable(String[32])
+DECIMALS: immutable(uint8)
 
 # NOTE: By declaring `balanceOf` as public, vyper automatically generates a 'balanceOf()' getter
 #       method to allow access to account balances.
@@ -35,16 +35,15 @@ minter: address
 
 
 @external
-def __init__(_name: String[32], _symbol: String[32], _decimals: uint8, _supply: uint256):
-    init_supply: uint256 = _supply * 10 ** convert(_decimals, uint256)
-    self.name = _name
-    self.symbol = _symbol
-    self.decimals = _decimals
+def __init__(name: String[32], symbol: String[32], decimals: uint8, supply: uint256):
+    init_supply: uint256 = supply * 10 ** convert(decimals, uint256)
+    NAME = name
+    SYMBOL = symbol
+    DECIMALS = decimals
     self.balanceOf[msg.sender] = init_supply
     self.totalSupply = init_supply
     self.minter = msg.sender
     log Transfer(ZERO_ADDRESS, msg.sender, init_supply)
-
 
 
 @external
@@ -147,3 +146,19 @@ def burnFrom(_to: address, _value: uint256):
     """
     self.allowance[_to][msg.sender] -= _value
     self._burn(_to, _value)
+
+
+# manually write getters for now; cf. vyper#2903
+@external
+def name() -> String[33]:
+    return NAME
+
+
+@external
+def symbol() -> String[32]:
+    return SYMBOL
+
+
+@external
+def decimals() -> uint8:
+    return DECIMALS

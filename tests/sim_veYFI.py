@@ -3,6 +3,9 @@ from vyper.utils import checksum_encode
 
 import time
 
+# uncomment to cache build artifacts
+# boa.interpret.set_cache_dir()
+
 _t = time.time()
 
 def timeit(msg):
@@ -61,6 +64,9 @@ for t in parties:
     addr = checksum_encode(f"0x{t.hex()}")
     # check external call == eval
     assert YFI.balanceOf(t) == YFI.eval(f"self.balanceOf[{addr}]")
+
+# check external call == eval for immutable
+assert YFI.name() == YFI.eval("NAME"), (YFI.name(), YFI.eval("NAME"))
 
 timeit("set up balances")
 
