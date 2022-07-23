@@ -207,7 +207,7 @@ class VyperContract(_BaseContract):
 
         node = self.find_source_of(computation.code)
         if node is None:
-            raise Exception("No frame available")
+            return None
 
         fn = node.get_ancestor(vy_ast.FunctionDef)
 
@@ -318,9 +318,10 @@ class VyperContract(_BaseContract):
                 error_msg = str(VyperException(error_msg, ast_source))
 
             frame_detail = c.debug_frame(computation)
-            frame_detail.fn_name = "locals"  # override the displayed name
-            if len(frame_detail) > 0:
-                error_msg += f" {frame_detail}"
+            if frame_detail is not None:
+                frame_detail.fn_name = "locals"  # override the displayed name
+                if len(frame_detail) > 0:
+                    error_msg += f" {frame_detail}"
 
         raise BoaError(error_msg)
 
