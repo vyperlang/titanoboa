@@ -341,13 +341,18 @@ class VyperContract(_BaseContract):
 
     # eval vyper code in the context of this contract
     def eval(self, stmt: str) -> Any:
-        bytecode, source_map, typ = self.compile_stmt(stmt)
+        tmp = self._source_map
 
+        bytecode, source_map, typ = self.compile_stmt(stmt)
         self._source_map = source_map
 
         c = self._run_bytecode(bytecode)
 
-        return self.marshal_to_python(c, typ)
+        ret = self.marshal_to_python(c, typ)
+
+        self._source_map = tmp  # restore
+
+        return ret
 
     @cached_property
     def _ast_module(self):
