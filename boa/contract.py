@@ -400,7 +400,10 @@ class VyperContract(_BaseContract):
     @cached_property
     def data_section(self):
         # extract the data section from the bytecode
-        return self.bytecode[-self.data_section_size :]
+        if self.data_section_size:
+            return self.bytecode[-self.data_section_size :]
+        else:
+            return b""
 
     @cached_property
     def unoptimized_bytecode(self):
