@@ -251,27 +251,6 @@ class VyperContract(_BaseContract):
 
         return None
 
-    # run a bytecode fragment in the context of the contract,
-    # maintaining PCs and CODESIZE semantics
-    def _run_bytecode(self, fragment: bytes, calldata_bytes: bytes = b"") -> Any:
-        bytecode = self.unoptimized_bytecode + fragment
-
-        # tack on the data section (note that the data section is in the code
-        # twice - this is because `fragment` and `unoptimized_bytecode` have
-        # different pointers to data section start.
-        bytecode += self.data_section
-
-        fake_codesize = len(self.unoptimized_bytecode)
-        method_id = b"dbug"  # note the value doesn't get validated
-        computation = self.env.execute_code(
-            to_address=self.address,
-            bytecode=bytecode,
-            data=method_id + calldata_bytes,
-            fake_codesize=fake_codesize,
-            start_pc=fake_codesize,
-        )
-        return computation
-
     def marshal_to_python(self, computation, vyper_typ):
         self._computation = computation  # for further inspection
 
@@ -346,7 +325,8 @@ class VyperContract(_BaseContract):
         bytecode, source_map, typ = self.compile_stmt(stmt)
         self._source_map = source_map
 
-        c = self._run_bytecode(bytecode)
+        method_id = b"dbug"  # note dummy method id, doesn't get validated
+        c = self.env.execute_code(to_address=self.address, bytecode=bytecode, data=method_id)
 
         ret = self.marshal_to_python(c, typ)
 
@@ -394,9 +374,11 @@ class VyperContract(_BaseContract):
         finally:
             self._vyper_namespace["self"].members.pop("__boa_debug__", None)
 
+    # for eval(), we need unoptimized assembly, since the dead code
+    # eliminator might prune a dead function (which we want to eval)
     @cached_property
     def unoptimized_assembly(self):
-        _, runtime, _ = mod.generate_ir_for_module(self.global_ctx)
+        runtime = self.compiler_data.ir_runtime
         return compile_ir.compile_to_assembly(runtime, no_optimize=True)
 
     @cached_property
@@ -469,31 +451,29 @@ class VyperContract(_BaseContract):
 
         sigs = {"self": self.compiler_data.function_signatures}
         ir = generate_ir_for_function(ast, sigs, self.global_ctx, False)
-
         # generate bytecode where selector check always succeeds
         ir = IRnode.from_list(
             ["with", "_calldata_method_id", abi_method_id(sig.base_signature), ir]
         )
 
-        assembly = compile_ir.compile_to_assembly(ir)
+        # skip optimizing; we will optimize a couple lines down anyway
+        assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
 
-        # add original bytecode in so that jumpdests in the fragment
+        # add original assembly in so that jumpdests in the fragment
         # assemble correctly in final bytecode
-        # note this is somewhat kludgy, would be better to be able to
-        # pass around the assembly "symbol table"
-        vyper_signature_len = len("\xa1\x65vyper\x83\x00\x03\x04")
-        # add padding to mimic the runtime code exactly
-        padding = vyper_signature_len + self.data_section_size
-        # we need to use unoptimized assembly of the contract because
-        # otherwise dead code eliminator can strip unused internal functions
-        assembly = self.unoptimized_assembly + ["POP"] * padding + assembly
+        # note this is somewhat kludgy
+        assembly.extend(self.unoptimized_assembly)
 
-        n_padding = len(self.unoptimized_bytecode)
+        # note: optimize_assembly optimizes in place.
+        compile_ir._optimize_assembly(assembly)
+
         bytecode, source_map = compile_ir.assembly_to_evm(assembly)
-        bytecode = bytecode[n_padding:]
 
-        # return the source_map since the evaluator might want
-        # the error map for this stmt
+        # tack on the data section
+        bytecode += self.data_section
+
+        # return the bytecode and other artifacts associated with
+        # this build
         ret = bytecode, source_map, typ
         self._eval_cache[source_code] = ret
         return ret
