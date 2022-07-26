@@ -9,7 +9,6 @@ from typing import Any
 import eth_abi as abi
 import vyper
 import vyper.ast as vy_ast
-import vyper.codegen.module as mod
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
@@ -326,7 +325,9 @@ class VyperContract(_BaseContract):
         self._source_map = source_map
 
         method_id = b"dbug"  # note dummy method id, doesn't get validated
-        c = self.env.execute_code(to_address=self.address, bytecode=bytecode, data=method_id)
+        c = self.env.execute_code(
+            to_address=self.address, bytecode=bytecode, data=method_id
+        )
 
         ret = self.marshal_to_python(c, typ)
 
