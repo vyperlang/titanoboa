@@ -1,6 +1,6 @@
 [project]
 name = "titanoboa"
-version = "0.1.2"
+version = "0.1.3"
 description = "Experimental Vyper interpreter"
 #authors = []
 license = { file = "LICENSE" }
@@ -15,7 +15,7 @@ classifiers = ["Topic :: Software Development"]
 
 # Requirements
 dependencies = [
-    "vyper @ git+https://github.com/vyperlang/vyper@5713bd4aba408654cb5e5537442f1b7a88ba68e0",
+    "vyper >= 0.3.4",
     "eth-abi",
     "py-evm",
     "eth-typing",
