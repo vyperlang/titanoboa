@@ -18,14 +18,14 @@ from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.function_definitions.common import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
-from vyper.codegen.types.types import TupleType
+from vyper.codegen.types.types import MappingType, TupleType
 from vyper.exceptions import InvalidType, VyperException
 from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
-from boa.env import AddressT, Env
-from boa.vyper.decoder_utils import decode_vyper_object
+from boa.env import AddressT, Env, to_int
+from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
 
 # build a reverse map from the format we have in pc_pos_map to AST nodes
@@ -141,6 +141,80 @@ class StackTrace(list):
         return "\n".join(repr(x) for x in self)
 
 
+def unwrap_storage_key(sha3_db, k):
+    path = []
+
+    def unwrap(k):
+        if k in sha3_db:
+            preimage = sha3_db[k]
+            slot, k = preimage[:32], preimage[32:]
+
+            path.append(slot)
+            unwrap(k)
+
+        else:
+            path.append(k)
+
+    unwrap(k)
+    return path
+
+
+def setpath(lens, path, val):
+    for i, k in enumerate(path):
+        if i == len(path) - 1:
+            lens[k] = val
+        else:
+            lens = lens.setdefault(k, {})
+
+
+class VarModel:
+    def __init__(self, contract, slot, typ):
+        self.contract = contract
+        self.addr = to_canonical_address(self.contract.address)
+        self.accountdb = contract.env.vm.state._account_db
+        self.slot = slot
+        self.typ = typ
+
+    def _decode(self, slot, typ):
+        fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
+        return decode_vyper_object(fakemem, typ)
+
+    def get(self):
+        if isinstance(self.typ, MappingType):
+            ret = {}
+            for k in self.contract.env.sstore_trace.get(self.contract.address, {}):
+                path = unwrap_storage_key(self.contract.env.sha3_trace, k)
+                if to_int(path[0]) != self.slot:
+                    continue
+
+                path = path[1:]
+
+                ty = self.typ
+                for i, p in enumerate(path):
+                    path[i] = decode_vyper_object(memoryview(p), ty.keytype)
+                    ty = ty.valuetype
+
+                val = self._decode(to_int(k), ty)
+
+                if val:
+                    setpath(ret, path, val)
+            return ret
+
+        else:
+            return self._decode(self.slot, self.typ)
+
+
+# data structure to represent the storage variables in a contract
+class StorageModel:
+    def __init__(self, contract):
+        compiler_data = contract.compiler_data
+        for k, v in compiler_data.global_ctx._globals.items():
+            is_storage = not v.is_immutable
+            if is_storage:  # check that v
+                slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
+                setattr(self, k, VarModel(contract, slot, v.typ))
+
+
 class VyperContract(_BaseContract):
     def __init__(
         self, compiler_data, *args, env=None, override_address=None, skip_init=False
@@ -158,6 +232,8 @@ class VyperContract(_BaseContract):
 
         for fn in fns.values():
             setattr(self, fn.name, VyperFunction(fn, self))
+
+        self._storage = StorageModel(self)
 
         self._eval_cache = lrudict(0x1000)
         self._source_map = None

@@ -1,3 +1,4 @@
+from eth_utils import to_checksum_address
 from vyper.codegen.types.types import (
     ByteArrayType,
     DArrayType,
@@ -10,12 +11,38 @@ from vyper.codegen.types.types import (
 from vyper.utils import unsigned_to_signed
 
 
+def ceil32(n):
+    return (n + 31) & ~31
+
+
+# wrap storage in something which looks like memory
+class ByteAddressableStorage:
+    def __init__(self, db, address, key):
+        self.db = db
+        self.address = address
+        self.key = key
+
+    def __getitem__(self, subscript):
+        if isinstance(subscript, slice):
+            ret = b""
+            start = subscript.start or 0
+            stop = subscript.stop
+            i = self.key + start // 32
+            while i < self.key + ceil32(stop) // 32:
+                ret += self.db.get_storage(self.address, i).to_bytes(32, "big")
+                i += 1
+
+            return ret[start:stop]
+        else:
+            raise Exception("Must slice {self}")
+
+
 def decode_vyper_object(mem, typ):
     if is_bytes_m_type(typ):
         # TODO tag return value like `vyper_object` does
         return mem[: typ._bytes_info.m].tobytes()
     if is_base_type(typ, "address"):
-        return mem[12:32].tobytes()
+        return to_checksum_address(mem[12:32].tobytes())
     if is_base_type(typ, "bool"):
         return bool.from_bytes(mem[31:32], "big")
     if is_integer_type(typ):
