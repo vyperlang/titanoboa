@@ -20,6 +20,13 @@ Titanoboa (/tiˌtɑːnoʊˈboʊə/) is an extinct genus of very large snakes tha
 
 ## Usage
 
+### Hello, world
+
+```python
+import boa
+boa.eval("empty(uint256)")
+```
+
 ### Basic
 ```vyper
 # simple.vy
@@ -117,7 +124,7 @@ Out[5]: 10
 1000000000000000101
 ```
 
-Note that in `eval()` mode, titanoboa uses different optimization settings, so gas usage may not be the same as using the external interface.
+Note that in `eval()` mode, titanoboa uses slightly different optimization settings, so gas usage may not be the same as using the external interface.
 
 basic tests:
 ```bash

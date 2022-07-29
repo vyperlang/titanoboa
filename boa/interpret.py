@@ -57,8 +57,3 @@ def loads_partial(source_code: str, name: Optional[str] = None) -> VyperDeployer
 def load_partial(filename: str) -> VyperDeployer:  # type: ignore
     with open(filename) as f:
         return loads_partial(f.read(), name=filename)
-
-
-def contract() -> _Contract:
-    # returns an empty contract
-    return loads("")
