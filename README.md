@@ -82,7 +82,10 @@ In [1]: %load_ext boa.ipython
         import boa
         boa.interpret.set_cache_dir()  # cache source compilations across sessions
 
-In [2]: %%vyper
+In [2]: %vyper msg.sender  # evaluate a vyper expression directly
+Out[2]: '0x0000000000000000000000000000000000000065'
+
+In [3]: %%vyper
    ...: 
    ...: MY_IMMUTABLE: immutable(uint256)
    ...: 
@@ -94,9 +97,9 @@ In [2]: %%vyper
    ...: def foo() -> uint256:
    ...:     return MY_IMMUTABLE
    ...: 
-Out[2]: <boa.contract.VyperDeployer at 0x7f3496187190>
+Out[3]: <boa.contract.VyperDeployer at 0x7f3496187190>
 
-In [3]: d = _
+In [4]: d = _
 
 In [4]: c = d.deploy(5)
 
