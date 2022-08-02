@@ -17,7 +17,10 @@ from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.function_definitions.common import generate_ir_for_function
+import vyper.compiler.output as compiler_output
+from vyper.ir.optimizer import optimize
 from vyper.codegen.ir_node import IRnode
+from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType
 from vyper.exceptions import InvalidType, VyperException
 from vyper.semantics.validation.data_positions import set_data_positions
@@ -39,6 +42,10 @@ def ast_map_of(ast_node):
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
+
+
+# id used internally for method id name
+_METHOD_ID_VAR = "_calldata_method_id"
 
 
 class lrudict(dict):
@@ -530,7 +537,7 @@ class VyperContract(_BaseContract):
         ir = generate_ir_for_function(ast, sigs, self.global_ctx, False)
         # generate bytecode where selector check always succeeds
         ir = IRnode.from_list(
-            ["with", "_calldata_method_id", abi_method_id(sig.base_signature), ir]
+            ["with", _METHOD_ID_VAR, abi_method_id(sig.base_signature), ir]
         )
 
         # skip optimizing; we will optimize a couple lines down anyway
@@ -555,6 +562,15 @@ class VyperContract(_BaseContract):
         self._eval_cache[source_code] = ret
         return ret
 
+    @cached_property
+    def _sigs(self):
+        sigs = {}
+        global_ctx = self.compiler_data.global_ctx
+        if global_ctx._contracts or global_ctx._interfaces:
+            sigs = parse_external_interfaces(sigs, global_ctx)
+        sigs["self"] = self.compiler_data.function_signatures
+        return sigs
+
 
 # inherit from VyperException for pretty tracebacks
 class BoaError(VyperException):
@@ -573,6 +589,29 @@ class VyperFunction:
     @cached_property
     def fn_signature(self):
         return self.contract.compiler_data.function_signatures[self.fn_ast.name]
+
+    @cached_property
+    def ir(self):
+        # patch compiler_data to have IR for every function
+        sigs = self.contract._sigs
+        global_ctx = self.contract.global_ctx
+
+        ir = generate_ir_for_function(self.fn_ast, sigs, global_ctx, False)
+        return optimize(ir)
+
+    @cached_property
+    def assembly(self):
+        ir = IRnode.from_list(["with", _METHOD_ID_VAR, ["shr", 224, ["calldataload", 0]], self.ir])
+        return compile_ir.compile_to_assembly(ir)
+
+    @cached_property
+    def opcodes(self):
+        return compiler_output._build_opcodes(self.bytecode)
+
+    @cached_property
+    def bytecode(self):
+        bytecode, _ = compile_ir.assembly_to_evm(self.assembly)
+        return bytecode
 
     # hotspot, cache the signature computation
     def args_abi_type(self, num_kwargs):
