@@ -3,7 +3,7 @@ from typing import Optional, Union
 import vyper
 from vyper.compiler.phases import CompilerData
 
-from boa.contract import VyperBlueprint, VyperContract, VyperDeployer
+from boa.contract import BoaError, VyperBlueprint, VyperContract, VyperDeployer
 from boa.util.disk_cache import DiskCache
 
 _Contract = Union[VyperContract, VyperBlueprint]
@@ -57,3 +57,6 @@ def loads_partial(source_code: str, name: Optional[str] = None) -> VyperDeployer
 def load_partial(filename: str) -> VyperDeployer:  # type: ignore
     with open(filename) as f:
         return loads_partial(f.read(), name=filename)
+
+
+__all__ = ["BoaError"]
