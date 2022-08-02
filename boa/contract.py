@@ -17,7 +17,10 @@ from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.function_definitions.common import generate_ir_for_function
+import vyper.compiler.output as compiler_output
+from vyper.ir.optimizer import optimize
 from vyper.codegen.ir_node import IRnode
+from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType
 from vyper.exceptions import InvalidType, VyperException
 from vyper.semantics.validation.data_positions import set_data_positions
@@ -555,6 +558,15 @@ class VyperContract(_BaseContract):
         self._eval_cache[source_code] = ret
         return ret
 
+    @cached_property
+    def _sigs(self):
+        sigs = {}
+        global_ctx = self.compiler_data.global_ctx
+        if global_ctx._contracts or global_ctx._interfaces:
+            sigs = parse_external_interfaces(sigs, global_ctx)
+        sigs["self"] = self.compiler_data.function_signatures
+        return sigs
+
 
 # inherit from VyperException for pretty tracebacks
 class BoaError(VyperException):
@@ -573,6 +585,27 @@ class VyperFunction:
     @cached_property
     def fn_signature(self):
         return self.contract.compiler_data.function_signatures[self.fn_ast.name]
+
+    @cached_property
+    def ir(self):
+        # patch compiler_data to have IR for every function
+        sigs = self.contract._sigs
+        global_ctx = self.contract.global_ctx
+
+        ir = generate_ir_for_function(self.fn_ast, sigs, global_ctx, False)
+        return optimize(ir)
+
+    @cached_property
+    def assembly(self):
+        return compile_ir.compile_to_assembly(self.ir)
+
+    @cached_property
+    def opcodes(self):
+        return compiler_output._build_opcodes(self.bytecode)
+
+    @cached_property
+    def bytecode(self):
+        return compile_ir.assembly_to_evm(self.assembly)
 
     # hotspot, cache the signature computation
     def args_abi_type(self, num_kwargs):
