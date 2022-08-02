@@ -75,6 +75,16 @@ def foo() -> uint256:
 >>> 1000000000000000000000000000000000000
 ```
 
+### Expecting BoaErrors
+```python
+>>> import boa
+>>> erc20 = boa.load("examples/ERC20.vy", "titanoboa", "boa", 18, 0)
+>>> with boa.env.prank(boa.env.generate_address()):
+...     with boa.reverts():
+...         erc20.mint(boa.env.eoa, 100)  # non-minter cannot mint
+...
+```
+
 ### From within IPython
 
 ```python
