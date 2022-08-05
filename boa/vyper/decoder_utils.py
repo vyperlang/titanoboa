@@ -12,7 +12,11 @@ from vyper.utils import unsigned_to_signed
 
 
 def ceil32(n):
-    return (n + 31) & ~31
+    return floor32(n + 31)
+
+
+def floor32(n):
+    return n & ~31
 
 
 # wrap storage in something which looks like memory
@@ -32,7 +36,9 @@ class ByteAddressableStorage:
                 ret += self.db.get_storage(self.address, i).to_bytes(32, "big")
                 i += 1
 
-            return ret[start:stop]
+            start -= floor32(start)
+            stop -= floor32(start)
+            return memoryview(ret[start:stop])
         else:
             raise Exception("Must slice {self}")
 
