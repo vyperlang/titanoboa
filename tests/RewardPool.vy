@@ -319,14 +319,14 @@ def claim(user: address = msg.sender, relock: bool = False) -> uint256:
 
 
 @external
-def burn(amount: uint256 = MAX_UINT256) -> bool:
+def burn(amount: uint256 = max_value(uint256)) -> bool:
     """
     @notice Receive YFI into the contract and trigger a token checkpoint
     @param amount Amount of tokens to pull [default: allowance]
     @return bool success
     """
     _amount: uint256 = amount
-    if _amount == MAX_UINT256:
+    if _amount == max_value(uint256):
         _amount = YFI.allowance(msg.sender, self)
     if _amount > 0:
         YFI.transferFrom(msg.sender, self, _amount)

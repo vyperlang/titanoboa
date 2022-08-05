@@ -213,14 +213,14 @@ def _checkpoint(user: address, old_lock: LockedBalance, new_lock: LockedBalance)
     """
     user_points: Point[2] = empty(Point[2])
 
-    if user != ZERO_ADDRESS:
+    if user != empty(address):
         user_points = self._checkpoint_user(user, old_lock, new_lock)
 
     # fill point_history until t=now
     last_point: Point = self._checkpoint_global()
     
     # only affects the last checkpoint at t=now
-    if user != ZERO_ADDRESS:
+    if user != empty(address):
         # If last point was in this block, the slope change has been applied already
         # But in such case we have 0 slope(s)
         last_point.slope += (user_points[1].slope - user_points[0].slope)
@@ -238,7 +238,7 @@ def checkpoint():
     """
     @notice Record global data to checkpoint
     """
-    self._checkpoint(ZERO_ADDRESS, empty(LockedBalance), empty(LockedBalance))
+    self._checkpoint(empty(address), empty(LockedBalance), empty(LockedBalance))
 
 
 @external
