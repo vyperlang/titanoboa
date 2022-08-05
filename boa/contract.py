@@ -184,6 +184,12 @@ class VarModel:
         fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
         return decode_vyper_object(fakemem, typ)
 
+    def _dealias(self, maybe_address):
+        try:
+            return self.contract.env.lookup_alias(maybe_address)
+        except:  # not found, return the input
+            return maybe_address
+
     def get(self):
         if isinstance(self.typ, MappingType):
             ret = {}
@@ -202,6 +208,8 @@ class VarModel:
                 val = self._decode(to_int(k), ty)
 
                 if val:
+                    # decode aliases
+                    path = [self._dealias(p) for p in path]
                     setpath(ret, path, val)
             return ret
 

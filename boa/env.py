@@ -265,16 +265,23 @@ class Env:
 
         self.vm.patch = VMPatcher(self.vm)
 
-        self.contracts = {}
+        self._contracts = {}
+        self._aliases = {}
 
     def set_gas_metering(self, val: bool) -> None:
         self.vm.state.computation_class._gas_metering = val
 
     def register_contract(self, address, obj):
-        self.contracts[to_checksum_address(address)] = obj
+        self._contracts[to_checksum_address(address)] = obj
 
     def lookup_contract(self, address):
-        return self.contracts.get(to_checksum_address(address))
+        return self._contracts.get(to_checksum_address(address))
+
+    def alias(self, address, name):
+        self._aliases[to_checksum_address(address)] = name
+
+    def lookup_alias(self, address):
+        return self._aliases[to_checksum_address(address)]
 
     # context manager which snapshots the state and reverts
     # to the snapshot on exiting the with statement
