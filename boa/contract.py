@@ -156,11 +156,9 @@ def unwrap_storage_key(sha3_db, k):
             preimage = sha3_db[k]
             slot, k = preimage[:32], preimage[32:]
 
-            path.append(slot)
-            unwrap(k)
+            unwrap(slot)
 
-        else:
-            path.append(k)
+        path.append(k)
 
     unwrap(k)
     return path
