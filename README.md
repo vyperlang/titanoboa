@@ -7,7 +7,7 @@ An experimental [Vyper](https://github.com/vyperlang/vyper) interpreter
 pip install git+https://github.com/vyperlang/titanoboa
 ```
 
-If you are installing titanoboa alongside brownie, you must manually install titanoboa *after* installing brownie
+If you are installing titanoboa from git alongside brownie, you may have to manually install titanoboa *after* installing brownie
 
 ```
 pip install brownie
