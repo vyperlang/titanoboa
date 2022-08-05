@@ -1,7 +1,7 @@
 import contextlib
 import sys
 
-from boa.env import Env
+from boa.env import Env, enable_pyevm_verbose_logging
 from boa.interpret import BoaError, load, load_partial, loads, loads_partial
 
 # turn off tracebacks if we are in repl

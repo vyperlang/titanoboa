@@ -9,6 +9,7 @@ from typing import Any
 import eth_abi as abi
 import vyper
 import vyper.ast as vy_ast
+import vyper.compiler.output as compiler_output
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
@@ -17,12 +18,11 @@ from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.function_definitions.common import generate_ir_for_function
-import vyper.compiler.output as compiler_output
-from vyper.ir.optimizer import optimize
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType
 from vyper.exceptions import InvalidType, VyperException
+from vyper.ir.optimizer import optimize
 from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
@@ -601,7 +601,9 @@ class VyperFunction:
 
     @cached_property
     def assembly(self):
-        ir = IRnode.from_list(["with", _METHOD_ID_VAR, ["shr", 224, ["calldataload", 0]], self.ir])
+        ir = IRnode.from_list(
+            ["with", _METHOD_ID_VAR, ["shr", 224, ["calldataload", 0]], self.ir]
+        )
         return compile_ir.compile_to_assembly(ir)
 
     @cached_property

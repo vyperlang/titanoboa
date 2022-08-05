@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import sys
 from typing import Any, Iterator, Optional, Union
 
@@ -13,7 +14,14 @@ from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_abi import decode_single
 from eth_typing import Address
-from eth_utils import to_canonical_address, to_checksum_address
+from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
+
+
+def enable_pyevm_verbose_logging():
+    logging.basicConfig()
+    logger = logging.getLogger("eth.vm.computation.Computation")
+    setup_DEBUG2_logging()
+    logger.setLevel("DEBUG2")
 
 
 class VMPatcher:
@@ -149,6 +157,8 @@ def to_bytes(value):
 
 
 class Sha3PreimageTracer:
+    mnemonic = "SHA3"
+
     # trace preimages of sha3
 
     def __init__(self, sha3_op, preimage_map):
@@ -172,6 +182,8 @@ class Sha3PreimageTracer:
 
 
 class SstoreTracer:
+    mnemonic = "SSTORE"
+
     def __init__(self, sstore_op, trace_db):
         self.trace_db = trace_db
         self.sstore = sstore_op
