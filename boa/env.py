@@ -233,7 +233,7 @@ class Env:
         self._address_counter = self.__class__._initial_address_counter
 
         # TODO differentiate between origin and sender
-        self.eoa = self.generate_address()
+        self.eoa = self.generate_address("root")
 
         class OpcodeTracingComputation(self.vm.state.computation_class):
             _gas_metering = True
@@ -310,11 +310,16 @@ class Env:
             cls._singleton = cls()
         return cls._singleton
 
-    def generate_address(self) -> AddressT:
+    def generate_address(self, alias: Optional[str] = None) -> AddressT:
         self._address_counter += 1
         t = self._address_counter.to_bytes(length=20, byteorder="big")
         # checksum addr easier for humans to debug
-        return to_checksum_address(t)
+        ret = to_checksum_address(t)
+        if alias is not None:
+            self.alias(ret, alias)
+
+        return ret
+
 
     def deploy_code(
         self,
