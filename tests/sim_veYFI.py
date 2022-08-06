@@ -20,10 +20,10 @@ def format_addr(t):
         t = t.encode("utf-8")
     return t.rjust(20, b"\x00")
 
-BUNNY = format_addr("bunny")
-MILKY = format_addr("milky")
-DOGGIE = format_addr("doggie")
-POOLPI = format_addr("poolpi")
+BUNNY = boa.env.generate_address("bunny")
+MILKY = boa.env.generate_address("milky")
+DOGGIE = boa.env.generate_address("doggie")
+POOLPI = boa.env.generate_address("poolpi")
 
 parties = [BUNNY, MILKY, DOGGIE, POOLPI]
 
@@ -51,8 +51,8 @@ timeit("load rewards pool")
 YFI.mint(BUNNY, 10 ** 21)
 
 # test eval
-YFI.eval(f"self.balanceOf[convert(0x{BUNNY.hex()}, address)] += 1")
-YFI.eval(f"self.balanceOf[convert(0x{BUNNY.hex()}, address)] -= 1")
+YFI.eval(f"self.balanceOf[{BUNNY}] += 1")
+YFI.eval(f"self.balanceOf[{BUNNY}] -= 1")
 
 # YFI.mint('veyfi', 10 ** 21)
 YFI.mint(MILKY, 10 ** 21)
@@ -61,9 +61,8 @@ YFI.transfer(MILKY, 3 * 10 ** 18)
 YFI.transfer(POOLPI, 10 ** 18)
 
 for t in parties:
-    addr = checksum_encode(f"0x{t.hex()}")
     # check external call == eval
-    assert YFI.balanceOf(t) == YFI.eval(f"self.balanceOf[{addr}]")
+    assert YFI.balanceOf(t) == YFI.eval(f"self.balanceOf[{t}]")
 
 # check external call == eval for immutable
 assert YFI.name() == YFI.eval("NAME"), (YFI.name(), YFI.eval("NAME"))

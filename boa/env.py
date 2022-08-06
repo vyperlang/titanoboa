@@ -232,6 +232,8 @@ class Env:
 
         self._address_counter = self.__class__._initial_address_counter
 
+        self._aliases = {}
+
         # TODO differentiate between origin and sender
         self.eoa = self.generate_address("root")
 
@@ -266,7 +268,6 @@ class Env:
         self.vm.patch = VMPatcher(self.vm)
 
         self._contracts = {}
-        self._aliases = {}
 
     def set_gas_metering(self, val: bool) -> None:
         self.vm.state.computation_class._gas_metering = val
