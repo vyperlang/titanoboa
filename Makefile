@@ -6,6 +6,6 @@ lint:
 	mypy --install-types --non-interactive --follow-imports=silent --ignore-missing-imports --disallow-incomplete-defs -p boa
 
 # note: for pypi upload,
-# clean titanoboa.egg-info/, dist/
+# rm -r titanoboa.egg-info/ dist/
 # python -m build
 # twine upload dist/*
