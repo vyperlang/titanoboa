@@ -28,6 +28,7 @@ from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
 from boa.env import AddressT, Env, to_int
+from boa.util.exceptions import strip_internal_frames
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
 
@@ -187,7 +188,7 @@ class VarModel:
     def _dealias(self, maybe_address):
         try:
             return self.contract.env.lookup_alias(maybe_address)
-        except:  # not found, return the input
+        except KeyError:  # not found, return the input
             return maybe_address
 
     def get(self):
@@ -393,7 +394,10 @@ class VyperContract(_BaseContract):
                 if len(frame_detail) > 0:
                     error_msg += f" {frame_detail}"
 
-        raise BoaError(error_msg)
+        try:
+            raise BoaError(error_msg)
+        except BoaError as b:
+            raise strip_internal_frames(b) from None
 
     def vyper_stack_trace(self, computation):
         ret = [(self, computation)]
