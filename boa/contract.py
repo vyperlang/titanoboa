@@ -267,7 +267,10 @@ class VyperContract(_BaseContract):
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
-        if bytecode[-self.data_section_size :] != self.compiler_data.bytecode_runtime:
+        to_check = bytecode
+        if self.data_section_size != 0:
+            to_check = bytecode[-self.data_section_size :]
+        if to_check != self.compiler_data.bytecode_runtime:
             warnings.warn(f"casted bytecode does not match compiled bytecode at {self}")
         self.bytecode = bytecode
 
