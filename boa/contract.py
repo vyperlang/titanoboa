@@ -252,18 +252,24 @@ def check_boa_error_matches(error, *args, **kwargs):
             or err == frame.dev_reason.reason_str,
             "does not match {args}",
         )
+        return
 
     # try to match a specific kwarg
     assert len(kwargs) == 1 and len(args) == 0
 
     # don't accept magic
-    assert frame.dev_reason.reason_type not in ("vm_error", "compiler")
+    if frame.dev_reason:
+        assert frame.dev_reason.reason_type not in ("vm_error", "compiler")
 
     k, v = next(iter(kwargs.items()))
     if k == "compiler":
         _check(v == frame.error_detail, f"{frame.error_detail} != {v}")
     elif k == "vm_error":
-        _check(v == frame.pretty_vm_reason, f"{frame.vm_error} != {v}")
+        _check(
+            frame.error_detail == "user revert with reason"
+            and v == frame.pretty_vm_reason,
+            f"{frame.vm_error} != {v}",
+        )
     # assume it is a dev reason string
     else:
         _check(
@@ -271,7 +277,9 @@ def check_boa_error_matches(error, *args, **kwargs):
             f"expected <{k}: {v}> but got <compiler: {frame.error_detail}>",
         )
         _check(
-            k == frame.dev_reason.reason_type and v == frame.dev_reason.reason_str,
+            frame.dev_reason is not None
+            and k == frame.dev_reason.reason_type
+            and v == frame.dev_reason.reason_str,
             f"expected <{k}: {v}> but got {frame.dev_reason}",
         )
 

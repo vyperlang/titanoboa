@@ -18,7 +18,7 @@ env = Env.get_singleton()
 def reverts(*args, **kwargs):
     try:
         yield
-        raise Exception("Did not revert")
+        raise ValueError("Did not revert")
     except BoaError as b:
         if args or kwargs:
             check_boa_error_matches(b, *args, **kwargs)

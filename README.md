@@ -83,6 +83,10 @@ def foo() -> uint256:
 ...     with boa.reverts():
 ...         erc20.mint(boa.env.eoa, 100)  # non-minter cannot mint
 ...
+>>> with boa.env.prank(boa.env.generate_address()):
+...     # you can be more specific about the failure reason
+...     with boa.reverts(rekt="non-minter tried to mint"):
+...         erc20.mint(boa.env.eoa, 100)
 ```
 
 ### From within IPython
