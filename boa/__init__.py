@@ -1,6 +1,7 @@
 import contextlib
 import sys
 
+from boa.contract import check_boa_error_matches
 from boa.env import Env, enable_pyevm_verbose_logging
 from boa.interpret import BoaError, load, load_partial, loads, loads_partial
 
@@ -14,12 +15,13 @@ env = Env.get_singleton()
 
 
 @contextlib.contextmanager
-def reverts():
+def reverts(*args, **kwargs):
     try:
         yield
         raise Exception("Did not revert")
-    except BoaError:
-        pass
+    except BoaError as b:
+        if args or kwargs:
+            check_boa_error_matches(b, *args, **kwargs)
 
 
 def eval(code):

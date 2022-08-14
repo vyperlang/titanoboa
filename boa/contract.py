@@ -50,7 +50,7 @@ EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
 
 
 # error detail where user possibly provided dev revert reason
-USER_NO_REASON = ("user raise", "user assert")
+DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
 # id used internally for method id name
@@ -165,6 +165,9 @@ class DevReason:
         reason_type, reason_str = s
         return cls(reason_type, reason_str)
 
+    def __str__(self):
+        return f"<{self.reason_type}: {self.reason_str}>"
+
 
 @dataclass
 class ErrorDetail:
@@ -176,7 +179,7 @@ class ErrorDetail:
     ast_source: vy_ast.VyperNode
 
     @classmethod
-    def from_trace(cls, contract, computation):
+    def from_computation(cls, contract, computation):
         error_detail = contract.find_error_meta(computation.code)
         ast_source = contract.find_source_of(computation.code)
         reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
@@ -190,6 +193,16 @@ class ErrorDetail:
             frame_detail=frame_detail,
             ast_source=ast_source,
         )
+
+    @property
+    def pretty_vm_reason(self):
+        err = self.vm_error
+        # decode error msg if it's "Error(string)"
+        # b"\x08\xc3y\xa0" == method_id("Error(string)")
+        if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
+            return abi.decode_single("(string)", err.args[0][4:])[0]
+
+        return repr(err)
 
     def __str__(self):
         msg = f"{self.contract}\n"
@@ -216,6 +229,51 @@ class StackTrace(list):
     @property
     def last_frame(self):
         return self[-1]
+
+
+# "pattern match" a BoaError. tries to match fields of the error
+# to the args/kwargs provided. raises if no match
+def check_boa_error_matches(error, *args, **kwargs):
+    assert isinstance(error, BoaError)
+
+    def _check(cond, msg=""):
+        if not cond:
+            raise ValueError(msg)
+
+    frame = error.stack_trace.last_frame
+    if len(args) > 0:
+        assert len(args) == 1, "multiple args!"
+        assert len(kwargs) == 0, "can't mix args and kwargs!"
+        err = args[0]
+        # try to match anything
+        _check(
+            err == frame.pretty_vm_reason
+            or err == frame.error_detail
+            or err == frame.dev_reason.reason_str,
+            "does not match {args}",
+        )
+
+    # try to match a specific kwarg
+    assert len(kwargs) == 1 and len(args) == 0
+
+    # don't accept magic
+    assert frame.dev_reason.reason_type not in ("vm_error", "compiler")
+
+    k, v = next(iter(kwargs.items()))
+    if k == "compiler":
+        _check(v == frame.error_detail, f"{frame.error_detail} != {v}")
+    elif k == "vm_error":
+        _check(v == frame.pretty_vm_reason, f"{frame.vm_error} != {v}")
+    # assume it is a dev reason string
+    else:
+        _check(
+            frame.error_detail in DEV_REASON_ALLOWED,
+            f"expected <{k}: {v}> but got <compiler: {frame.error_detail}>",
+        )
+        _check(
+            k == frame.dev_reason.reason_type and v == frame.dev_reason.reason_str,
+            f"expected <{k}: {v}> but got {frame.dev_reason}",
+        )
 
 
 def unwrap_storage_key(sha3_db, k):
@@ -439,7 +497,7 @@ class VyperContract(_BaseContract):
             raise strip_internal_frames(b) from None
 
     def vyper_stack_trace(self, computation):
-        ret = StackTrace([ErrorDetail.from_trace(self, computation)])
+        ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation.code)
         if error_detail not in EXTERNAL_CALL_ERRORS:
             return ret
@@ -629,20 +687,10 @@ class VyperContract(_BaseContract):
 class BoaError(Exception):
     stack_trace: StackTrace
 
-    @property
-    def vm_reason(self):
-        err = self.stack_trace.last_frame.vm_error
-
-        # decode error msg if it's "Error(string)"
-        # b"\x08\xc3y\xa0" == method_id("Error(string)")
-        if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-            abi.decode_single("(string)", err.args[0][4:])[0],
-
-        return repr(err)
-
     def __str__(self):
-        err = self.stack_trace.last_frame.vm_error
-        err.args = (self.vm_reason, *err.args[1:])
+        frame = self.stack_trace.last_frame
+        err = frame.vm_error
+        err.args = (frame.pretty_vm_reason, *err.args[1:])
         return f"{err}\n\n{self.stack_trace}"
 
 

@@ -15,6 +15,6 @@ def strip_internal_frames(exc, module_name=None):
         frame = frame.f_back
 
     # kwargs incompatible with pypy here
-    #tb_next=None, tb_frame=frame, tb_lasti=frame.f_lasti, tb_lineno=frame.f_lineno
+    # tb_next=None, tb_frame=frame, tb_lasti=frame.f_lasti, tb_lineno=frame.f_lineno
     tb = types.TracebackType(None, frame, frame.f_lasti, frame.f_lineno)
     return ei[1].with_traceback(tb)
