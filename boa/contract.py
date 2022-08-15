@@ -517,7 +517,7 @@ class VyperContract(_BaseContract):
         child = computation.children[-1]
         child_obj = self.env.lookup_contract(child.msg.code_address)
         child_trace = child_obj.vyper_stack_trace(child)
-        return child_trace + ret
+        return StackTrace(child_trace + ret)
 
     # eval vyper code in the context of this contract
     def eval(self, stmt: str) -> Any:
