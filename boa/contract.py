@@ -272,10 +272,15 @@ def check_boa_error_matches(error, *args, **kwargs):
         )
     # assume it is a dev reason string
     else:
-        _check(
-            frame.error_detail in DEV_REASON_ALLOWED,
-            f"expected <{k}: {v}> but got <compiler: {frame.error_detail}>",
-        )
+        assert_ast_types = (vy_ast.Assert, vy_ast.Raise)
+        if frame.ast_source.get_ancestor(assert_ast_types) is not None:
+            # if it's a dev reason on an assert statement, check that
+            # we are actually handling the user assertion and not some other
+            # error_detail.
+            _check(
+                frame.error_detail in DEV_REASON_ALLOWED,
+                f"expected <{k}: {v}> but got <compiler: {frame.error_detail}>",
+            )
         _check(
             frame.dev_reason is not None
             and k == frame.dev_reason.reason_type

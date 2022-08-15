@@ -15,6 +15,10 @@ def foo(x: uint256):
 def bar(x: uint256):
     # test the other syntax
     assert x + 1 == 6  # @rekt x is not 5
+
+@external
+def baz(x: uint256) -> uint256:
+    return x + 1  # rekt: overflow!
 """
 
 @contextlib.contextmanager
@@ -62,6 +66,10 @@ with check_raises():
     # check that reason cannot stomp compiler reason
     with boa.reverts(rekt="x is not 5"):
         c.bar(2**256 - 1)
+
+# but only in assert statements. in other cases, stomp!
+with boa.reverts(rekt="overflow!"):
+    c.baz(2**256 - 1)
 
 with check_raises():
     # check that compiler reason does not stomp dev reason
