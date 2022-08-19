@@ -19,6 +19,8 @@ dependencies = [
     "eth-abi",
     "py-evm",
     "eth-typing",
+    "requests",
+    "plyvel; extra == 'leveldb'",
 ]
 
 [build-system]

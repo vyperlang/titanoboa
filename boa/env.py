@@ -16,6 +16,7 @@ from eth_abi import decode_single
 from eth_typing import Address
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
+from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 
 
@@ -306,11 +307,16 @@ class Env:
 
         self._contracts = {}
 
+    def fork(self, **kwargs):
+        AccountDBFork._rpc_init_kwargs = kwargs
+        self.vm.__class__._state_class.account_db_class = AccountDBFork
+        self.vm = self.chain.get_vm()
+
     def set_gas_meter_class(self, cls: type) -> None:
         self.vm.state.computation_class._gas_meter_class = cls
 
     @contextlib.contextmanager
-    def gas_meter_class(self, cls: type) -> None:
+    def gas_meter_class(self, cls):
         tmp = self.vm.state.computation_class._gas_meter_class
         try:
             self.set_gas_meter_class(cls)

@@ -32,6 +32,7 @@ from vyper.utils import abi_method_id, cached_property
 from boa.env import AddressT, Env, to_int
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
+from boa.util.lrudict import lrudict
 from boa.vyper.ast_utils import reason_at
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
@@ -56,23 +57,6 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 # id used internally for method id name
 _METHOD_ID_VAR = "_calldata_method_id"
-
-
-class lrudict(dict):
-    def __init__(self, n, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.n = n
-
-    def __getitem__(self, k):
-        val = super().__getitem__(k)
-        del self[k]
-        super().__setitem__(k, val)
-        return val
-
-    def __setitem__(self, k, val):
-        if len(self) == self.n:
-            del self[next(iter(self))]
-        super().__setitem__(k, val)
 
 
 class VyperDeployer:
