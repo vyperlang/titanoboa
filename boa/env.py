@@ -190,7 +190,7 @@ class SstoreTracer:
 
     def __call__(self, computation):
         value, slot = [to_bytes(t) for t in computation._stack.values[-2:]]
-        account = to_checksum_address(computation.msg.to)
+        account = to_checksum_address(computation.msg.storage_address)
 
         self.trace_db.setdefault(account, set())
         # we don't want to deal with snapshots/commits/reverts, so just
