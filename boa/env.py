@@ -79,6 +79,36 @@ class VMPatcher:
                     setattr(self, attr, snap[attr])
 
 
+AddressT = Union[Address, bytes, str]  # make mypy happy
+
+
+def _addr(addr: AddressT) -> Address:
+    return Address(to_canonical_address(addr))
+
+
+# _precompiles is a global which is loaded to the env computation
+# every time one is created. the reasoning is that it would seem
+# confusing to have registered precompiles not persist across envs -
+# if somebody registers a precompile, presumably they want it to work
+# on all envs.
+_precompiles = {}
+
+
+def register_precompile(address, fn, force=False):
+    global _precompiles
+    address = _addr(address)
+    if address in _precompiles and not force:
+        raise ValueError(f"Already registered: {address}")
+    _precompiles[address] = fn
+
+
+def deregister_precompile(address, force=True):
+    address = _addr(address)
+    if address not in _precompiles and not force:
+        raise ValueError("Not registered: {address}")
+    _precompiles.pop(address, None)
+
+
 def console_log(computation):
     msgdata = computation.msg.data_as_bytes
     schema, payload = decode_single("(string,bytes)", msgdata[4:])
@@ -90,11 +120,7 @@ def console_log(computation):
 CONSOLE_ADDRESS = bytes.fromhex("000000000000000000636F6E736F6C652E6C6F67")
 
 
-AddressT = Union[Address, bytes, str]  # make mypy happy
-
-
-def _addr(addr: AddressT) -> Address:
-    return Address(to_canonical_address(addr))
+register_precompile(CONSOLE_ADDRESS, console_log)
 
 
 # a code stream which keeps a trace of opcodes it has executed
@@ -252,7 +278,10 @@ class Env:
                 if not self.__class__._gas_metering:
                     self._gas_meter = TrivialGasMeter(self.msg.gas)
 
-                self._precompiles[CONSOLE_ADDRESS] = console_log
+                global _precompiles
+                # copy so as not to mess with class state
+                self._precompiles = self._precompiles.copy()
+                self._precompiles.update(_precompiles)
 
         # TODO make metering toggle-able
         c = OpcodeTracingComputation

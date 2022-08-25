@@ -2,7 +2,7 @@ import contextlib
 import sys
 
 from boa.contract import check_boa_error_matches
-from boa.env import Env, enable_pyevm_verbose_logging
+from boa.env import Env, deregister_precompile, enable_pyevm_verbose_logging, register_precompile
 from boa.interpret import BoaError, load, load_partial, loads, loads_partial
 
 # turn off tracebacks if we are in repl
