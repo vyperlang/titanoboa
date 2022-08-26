@@ -58,6 +58,13 @@ class _SingleComputation:
         for pc, child in zip(self.computation._child_pcs, self.computation.children):
             ret[pc].adjust_child(child)
 
+        for pc in self.computation.code._trace:
+            # in py-evm, STOP, RETURN and REVERT do not call consume_gas.
+            # so, we need to zero them manually.
+            op = self.computation.code[pc]
+            if not getattr(self.computation.opcodes[op], "gas_cost", 0):
+                ret[pc] = Datum()
+
         return ret
 
     @cached_property
@@ -72,10 +79,7 @@ class _SingleComputation:
 
             if current_line is not None and pc not in seen:
                 ret.setdefault(current_line, Datum())
-                # in py-evm, STOP does not consume gas. skip it, it's not
-                # in by_pc.
-                if self.computation.code[pc] != 0x00:
-                    ret[current_line].merge(self.by_pc[pc])
+                ret[current_line].merge(self.by_pc[pc])
                 seen.add(pc)
 
         return ret
