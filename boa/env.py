@@ -9,7 +9,6 @@ import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth.chains.mainnet import MainnetChain
 from eth.db.atomic import AtomicDB
 from eth.vm.code_stream import CodeStream
-from eth.vm.gas_meter import GasMeter
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
@@ -17,7 +16,7 @@ from eth_abi import decode_single
 from eth_typing import Address
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
-from boa.vm.gas_meters import NoGasMeter, ProfilingGasMeter
+from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 
 
 def enable_pyevm_verbose_logging():
@@ -309,7 +308,8 @@ class Env:
     def disable_gas_metering(self) -> None:
         self.set_gas_meter_class(NoGasMeter)
 
-    def reset_gas_metering(self) -> None:
+    def reset_gas_metering_behavior(self) -> None:
+        # Reset gas metering to the default behavior
         self.set_gas_meter_class(GasMeter)
 
     def register_contract(self, address, obj):
