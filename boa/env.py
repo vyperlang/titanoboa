@@ -10,6 +10,7 @@ from eth.chains.mainnet import MainnetChain
 from eth.db.atomic import AtomicDB
 from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
+from eth.vm.gas_meter import GasMeter
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_abi import decode_single
@@ -239,21 +240,6 @@ class SstoreTracer:
 # ### End section: sha3 tracing
 
 
-class TrivialGasMeter:
-    def __init__(self, start_gas):
-        self.start_gas = start_gas
-        self.gas_remaining = start_gas
-
-    def consume_gas(self, amount, reason):
-        pass
-
-    def refund_gas(self, amount):
-        pass
-
-    def return_gas(self, amount):
-        pass
-
-
 # wrapper class around py-evm which provides a "contract-centric" API
 class Env:
     _singleton = None
@@ -272,8 +258,7 @@ class Env:
         self.eoa = self.generate_address("root")
 
         class OpcodeTracingComputation(self.vm.state.computation_class):
-            _gas_metering = True
-
+            _gas_meter_class = GasMeter
             def __init__(self, *args, **kwargs):
                 # super() hardcodes CodeStream into the ctor
                 # so we have to override it here
@@ -283,9 +268,6 @@ class Env:
                     fake_codesize=getattr(self.msg, "_fake_codesize", None),
                     start_pc=getattr(self.msg, "_start_pc", 0),
                 )
-                if not self.__class__._gas_metering:
-                    self._gas_meter = TrivialGasMeter(self.msg.gas)
-
                 global _precompiles
                 # copy so as not to mess with class state
                 self._precompiles = self._precompiles.copy()
@@ -295,6 +277,10 @@ class Env:
                 # copy so as not to mess with class state
                 self.opcodes = self.opcodes.copy()
                 self.opcodes.update(_opcode_overrides)
+
+                self._gas_meter = self._gas_meter_class(self.msg.gas)
+                if hasattr(self._gas_meter, "_set_code"):
+                    self._gas_meter._set_code(self.code)
 
         # TODO make metering toggle-able
         c = OpcodeTracingComputation
@@ -311,8 +297,8 @@ class Env:
 
         self._contracts = {}
 
-    def set_gas_metering(self, val: bool) -> None:
-        self.vm.state.computation_class._gas_metering = val
+    def set_gas_meter_class(self, cls: type) -> None:
+        self.vm.state.computation_class._gas_meter_class = cls
 
     def register_contract(self, address, obj):
         self._contracts[to_checksum_address(address)] = obj
