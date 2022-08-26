@@ -86,6 +86,14 @@ def _addr(addr: AddressT) -> Address:
     return Address(to_canonical_address(addr))
 
 
+_opcode_overrides = {}
+
+
+def patch_opcode(opcode_value, fn):
+    global _opcode_overrides
+    _opcode_overrides[opcode_value] = fn
+
+
 # _precompiles is a global which is loaded to the env computation
 # every time one is created. the reasoning is that it would seem
 # confusing to have registered precompiles not persist across envs -
@@ -293,6 +301,9 @@ class Env:
         self.sstore_trace = {}
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.sha3_trace)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.sstore_trace)
+
+        global _opcode_overrides
+        c.opcodes.update(_opcode_overrides)
 
         self.vm.patch = VMPatcher(self.vm)
 
