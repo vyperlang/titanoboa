@@ -8,15 +8,16 @@ class NoGasMeter:
     Useful if you don't care about gas usage but want a
     performance boost.
     """
-    def __init__(self, start_gas):                                              
+
+    def __init__(self, start_gas):
         pass
- 
+
     def consume_gas(self, amount, reason):
         pass
- 
+
     def refund_gas(self, amount):
         pass
- 
+
     def return_gas(self, amount):
         pass
 
@@ -27,10 +28,11 @@ class ProfilingGasMeter(GasMeter):
     Used for profiling (users can back out opcode, line or function
     gas usage).
     """
+
     def __init__(self, start_gas, *args, **kwargs):
         super().__init__(start_gas, *args, **kwargs)
         self._gas_used_of = {}  # mapping from PCs to gas used
-        self._gas_refunded_of = {}  # mapping from PCs to 
+        self._gas_refunded_of = {}  # mapping from PCs to gas refunded
 
     def _set_code(self, code):
         self._code = code
