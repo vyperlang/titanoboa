@@ -100,15 +100,15 @@ class LineProfile:
         for line, datum in single.by_line.items():
             self.profile.setdefault((single.contract, line), Datum()).merge(datum)
 
-    def raw_summary(self, sortkey="net_tot_gas", limit=10):
-        ret = list(self.profile.items())
+    def raw_summary(self):
+        return list(self.profile.items())
 
-        ret.sort(reverse=True, key=lambda x: getattr(x[1], sortkey))
+    def summary(self, display_columns=("net_tot_gas",), sortkey="net_tot_gas", limit=10):
+        s = self.raw_summary()
 
-        return ret
-
-    def summary(self, display_columns=("net_tot_gas",), **kwargs):
-        s = self.raw_summary(**kwargs)
+        s.sort(reverse=True, key=lambda x: getattr(x[1], sortkey))
+        if limit is not None and limit > 0:
+            s = s[:limit]
 
         tmp = []
         for (contract, line), datum in s:
