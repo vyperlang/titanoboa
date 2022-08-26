@@ -291,6 +291,11 @@ class Env:
                 self._precompiles = self._precompiles.copy()
                 self._precompiles.update(_precompiles)
 
+                global _opcode_overrides
+                # copy so as not to mess with class state
+                self.opcodes = self.opcodes.copy()
+                self.opcodes.update(_opcode_overrides)
+
         # TODO make metering toggle-able
         c = OpcodeTracingComputation
 
@@ -301,9 +306,6 @@ class Env:
         self.sstore_trace = {}
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.sha3_trace)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.sstore_trace)
-
-        global _opcode_overrides
-        c.opcodes.update(_opcode_overrides)
 
         self.vm.patch = VMPatcher(self.vm)
 
