@@ -104,7 +104,8 @@ class LineProfile:
     def summary(self, display_columns=("net_tot_gas",), sortkey="net_tot_gas", limit=10):
         s = self.raw_summary()
 
-        s.sort(reverse=True, key=lambda x: getattr(x[1], sortkey))
+        if sortkey is not None:
+            s.sort(reverse=True, key=lambda x: getattr(x[1], sortkey))
         if limit is not None and limit > 0:
             s = s[:limit]
 
