@@ -61,9 +61,7 @@ class _SingleComputation:
         for pc in self.computation.code._trace:
             # in py-evm, STOP, RETURN and REVERT do not call consume_gas.
             # so, we need to zero them manually.
-            op = self.computation.code[pc]
-            if not getattr(self.computation.opcodes[op], "gas_cost", 0):
-                ret[pc] = Datum()
+            ret.setdefault(pc, Datum())
 
         return ret
 
