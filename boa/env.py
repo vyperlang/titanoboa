@@ -284,6 +284,13 @@ class Env:
                 if hasattr(self._gas_meter, "_set_code"):
                     self._gas_meter._set_code(self.code)
 
+                self._child_pcs = []
+
+            def add_child_computation(self, child_computation):
+                super().add_child_computation(child_computation)
+                # track PCs of child calls for profiling purposes
+                self._child_pcs.append(self.code.program_counter)
+
         # TODO make metering toggle-able
         c = OpcodeTracingComputation
 

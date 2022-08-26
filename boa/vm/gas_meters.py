@@ -37,17 +37,23 @@ class ProfilingGasMeter(GasMeter):
     def _set_code(self, code):
         self._code = code
 
+    @property
+    def _pc(self):
+        # at the time that gas is refunded, pc is = to real pc + 1
+        # (due to implementation detail of py-evm CodeStream.)
+        return self._code.program_counter - 1
+
     def consume_gas(self, amount: int, reason: str) -> None:
         super().consume_gas(amount, reason)
-        self._gas_used_of.setdefault(self._code.program_counter, 0)
-        self._gas_used_of[self._code.program_counter] += amount
+        self._gas_used_of.setdefault(self._pc, 0)
+        self._gas_used_of[self._pc] += amount
 
     def return_gas(self, amount: int) -> None:
         super().return_gas(amount)
-        self._gas_used_of.setdefault(self._code.program_counter, 0)
-        self._gas_used_of[self._code.program_counter] -= amount
+        self._gas_used_of.setdefault(self._pc, 0)
+        self._gas_used_of[self._pc] -= amount
 
     def refund_gas(self, amount: int) -> None:
         super().refund_gas(amount)
-        self._gas_refunded_of.setdefault(self._code.program_counter, 0)
-        self._gas_refunded_of[self._code.program_counter] += amount
+        self._gas_refunded_of.setdefault(self._pc, 0)
+        self._gas_refunded_of[self._pc] += amount

@@ -30,6 +30,7 @@ from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
 from boa.env import AddressT, Env, to_int
+from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.vyper.ast_utils import reason_at
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
@@ -415,7 +416,7 @@ class VyperContract(_BaseContract):
             warnings.warn(f"casted bytecode does not match compiled bytecode at {self}")
         self.bytecode = bytecode
 
-    def __str__(self):
+    def __repr__(self):
         return (
             f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
@@ -523,6 +524,16 @@ class VyperContract(_BaseContract):
         child_obj = self.env.lookup_contract(child.msg.code_address)
         child_trace = child_obj.vyper_stack_trace(child)
         return StackTrace(child_trace + ret)
+
+    def line_profile(self, computation=None):
+        computation = computation or self._computation
+        ret = LineProfile.from_single(self, computation)
+        for child in computation.children:
+            child_obj = self.env.lookup_contract(child.msg.code_address)
+            if child_obj is not None:
+                ret.merge(child_obj.line_profile(computation))
+
+        return ret
 
     # eval vyper code in the context of this contract
     def eval(self, stmt: str) -> Any:
