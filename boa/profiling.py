@@ -113,7 +113,7 @@ class LineProfile:
         for (contract, line), datum in s:
             data = ", ".join(f"{c}: {getattr(datum, c)}" for c in display_columns)
             line_src = get_line(contract.compiler_data.source_code, line)
-            x = f"{contract.address}/{contract.compiler_data.contract_name} {data}"
+            x = f"{contract.address}:{contract.compiler_data.contract_name}:{line} {data}"
             tmp.append((x, line_src))
 
         just = max(len(t[0]) for t in tmp)
