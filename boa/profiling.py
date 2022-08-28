@@ -105,7 +105,9 @@ class LineProfile:
     def raw_summary(self):
         return list(self.profile.items())
 
-    def summary(self, display_columns=("net_tot_gas",), sortkey="net_tot_gas", limit=10):
+    def summary(
+        self, display_columns=("net_tot_gas",), sortkey="net_tot_gas", limit=10
+    ):
         s = self.raw_summary()
 
         if sortkey is not None:
