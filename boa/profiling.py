@@ -98,6 +98,10 @@ class LineProfile:
         for line, datum in single.by_line.items():
             self.profile.setdefault((single.contract, line), Datum()).merge(datum)
 
+    def merge(self, other: "LineProfile") -> None:
+        for (contract, line), datum in other.profile.items():
+            self.profile.setdefault((contract, line), Datum()).merge(datum)
+
     def raw_summary(self):
         return list(self.profile.items())
 
