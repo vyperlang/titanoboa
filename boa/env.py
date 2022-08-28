@@ -309,6 +309,15 @@ class Env:
     def set_gas_meter_class(self, cls: type) -> None:
         self.vm.state.computation_class._gas_meter_class = cls
 
+    @contextlib.contextmanager
+    def gas_meter_class(self, cls: type) -> None:
+        tmp = self.vm.state.computation_class._gas_meter_class
+        try:
+            self.set_gas_meter_class(cls)
+            yield
+        finally:
+            self.set_gas_meter_class(tmp)
+
     def enable_gas_profiling(self) -> None:
         self.set_gas_meter_class(ProfilingGasMeter)
 
