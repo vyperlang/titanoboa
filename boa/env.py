@@ -265,6 +265,7 @@ class Env:
 
     def _init_vm(self):
         self.vm = self.chain.get_vm()
+
         class OpcodeTracingComputation(self.vm.state.computation_class):
             _gas_meter_class = GasMeter
 
