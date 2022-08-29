@@ -25,9 +25,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-recommended = [
+forking-recommended = [
     "plyvel",
-    "orjson",
+    "ujson",
 ]
 
 [build-system]

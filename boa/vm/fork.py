@@ -3,14 +3,9 @@ from typing import Any
 import requests
 
 try:
-    import orjson as json
-    jencode = json.dumps
-    jdecode = json.loads
+    import ujson as json
 except ImportError:
     import json
-    # shims for compat with orjson api
-    jencode = lambda x: json.dumps(x).encode("utf-8")
-    jdecode = lambda s: json.loads(s.decode("utf-8"))
 
 import eth.rlp.accounts as rlp
 from eth.db.account import AccountDB, keccak
@@ -69,13 +64,13 @@ class CachingRPC:
 
     # caching fetch
     def fetch(self, method, params):
-        k = jencode(self._mk_key(method, params))
+        k = json.dumps(self._mk_key(method, params)).encode("utf-8")
 
         try:
-            return jdecode(self._db[k])
+            return json.loads(self._db[k])
         except KeyError:
             ret = self._raw_fetch(method, params)
-            self._db[k] = jencode(ret)
+            self._db[k] = json.dumps(ret).encode("utf-8")
             return ret
 
     # a stupid key for the kv store

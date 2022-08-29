@@ -14,7 +14,7 @@ pip install brownie
 pip install git+https://github.com/vyperlang/titanoboa
 ```
 
-To get a performance boost for mainnet forking, install with extras (`pip install "git+https://github.com/vyperlang/titanoboa#egg=titanoboa[recommended]"`, or `pip install titanoboa[recommended]`). This installs `plyvel` to cache RPC results between sessions, and `orjson` which improves json performance.
+To get a performance boost for mainnet forking, install with the `forking-recommended` extra (`pip install "git+https://github.com/vyperlang/titanoboa#egg=titanoboa[forking-recommended]"`, or `pip install titanoboa[forking-recommended]`). This installs `plyvel` to cache RPC results between sessions, and `ujson` which improves json performance.
 
 If you are running titanoboa on a local [Vyper](https://github.com/vyperlang/vyper) project folder, you might need to run `python setup.py install` on your [Vyper](https://github.com/vyperlang/vyper) project if you encounter errors such as `ModuleNotFoundError: No module named 'vyper.version'`
 ## Background
