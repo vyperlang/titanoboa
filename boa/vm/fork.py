@@ -1,5 +1,6 @@
-import json
 from typing import Any
+import os
+import orjson as json
 
 import requests
 from eth.db.account import AccountDB
@@ -9,6 +10,9 @@ from eth.db.cache import CacheDB
 from eth_utils import int_to_big_endian, to_checksum_address
 
 TIMEOUT = 60  # default timeout for http requests in seconds
+
+
+DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork.db"
 
 
 _EMPTY = b""  # empty rlp stuff
@@ -28,13 +32,13 @@ def _to_bytes(hex_str: str) -> bytes:
 
 class CachingRPC:
     def __init__(self, url: str, block_identifier="latest", cache_file=None):
-        if cache_file is not None:
-            # use CacheDB as an additional layer over disk
-            # ideally would use leveldb lru cache but it's not configurable
-            # via eth.db.backends.level.LevelDB.
-            self._db = CacheDB(LevelDB(cache_file), cache_size = 1024*1024)
-        else:
-            self._db = MemoryDB()
+        cache_file = cache_file or DEFAULT_CACHE_DIR
+
+        cache_file = os.path.expanduser(cache_file)
+        # use CacheDB as an additional layer over disk
+        # ideally would use leveldb lru cache but it's not configurable
+        # via eth.db.backends.level.LevelDB.
+        self._db = CacheDB(LevelDB(cache_file), cache_size = 1024*1024)
 
         self._rpc_url = url
 
@@ -50,20 +54,21 @@ class CachingRPC:
         return _to_hex(self._block_number)
 
     # caching fetch
-    def fetch(self, *args):
-        k = self._mk_key(*args)
+    def fetch(self, method, params):
+        k = self._mk_key(method, params)
 
         try:
-            return self._db[k]
+            return json.loads(self._db[k])
         except KeyError:
-            ret = self._raw_fetch(*args)
-            self._db[k] = ret
+            print(f"MISS {k}")
+            ret = self._raw_fetch(method, params)
+            self._db[k] = json.dumps(ret)
             return ret
 
     # a stupid key for the kv store
     def _mk_key(self, method: str, params: Any) -> bytes:
         t = {"block": self._block_id, "method": method, "params": params}
-        return json.dumps(t).encode("utf-8")
+        return json.dumps(t)
 
     # raw fetch - dispatch the args via http request
     # TODO: maybe use async for all of this

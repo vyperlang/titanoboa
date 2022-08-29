@@ -19,8 +19,11 @@ dependencies = [
     "eth-abi",
     "py-evm",
     "eth-typing",
+
+# required for forking:
     "requests",
-    "plyvel; extra == 'leveldb'",
+    "orjson",
+    "plyvel",
 ]
 
 [build-system]
