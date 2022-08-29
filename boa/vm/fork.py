@@ -7,8 +7,8 @@ import requests
 from eth.db.account import AccountDB, keccak
 from eth.db.backends.level import LevelDB
 from eth.db.cache import CacheDB
-from eth.vm.interrupt import EVMMissingData
-from eth_utils import to_checksum_address
+from eth.vm.interrupt import EVMMissingData, MissingBytecode
+from eth_utils import int_to_big_endian, to_checksum_address
 
 TIMEOUT = 60  # default timeout for http requests in seconds
 
@@ -126,39 +126,41 @@ class AccountDBFork(AccountDB):
         return account
 
     def _get_account_rpc(self, address):
-        address = to_checksum_address(address)
-        balance = _to_int(self._rpc.fetch("eth_getBalance", [address]))
-        nonce = _to_int(self._rpc.fetch("eth_getTransactionCount", [address]))
-        code = _to_bytes(self._rpc.fetch("eth_getCode", [address]))
+        addr = to_checksum_address(address)
+        balance = _to_int(self._rpc.fetch("eth_getBalance", [addr]))
+        nonce = _to_int(self._rpc.fetch("eth_getTransactionCount", [addr]))
+        code = self._get_code_rpc(address)
         code_hash = keccak(code)
 
-        return rlp.Account(
-            nonce=nonce,
-            balance=balance,
-            code_hash=code_hash,
-            storage_root=_SENTINEL_ROOT,
-        )
+        return rlp.Account(nonce=nonce, balance=balance, code_hash=code_hash)
+        # storage_root=_SENTINEL_ROOT,
         # return rlp.Account(nonce=nonce, balance=balance, code_hash=code_hash)
 
-    def get_code(self, address):
-        # call super for gas/touched semantics
-        if self._get_storage_root(address) == _SENTINEL_ROOT:
-            # get_code_hash(address) != keccak(_EMPTY) and not super().get_code(address):
-            address = to_checksum_address(address)
-            code = _to_bytes(self._rpc.fetch("eth_getCode", [address]))
-            return code
+    def _get_code_rpc(self, address):
+        return _to_bytes(self._rpc.fetch("eth_getCode", [to_checksum_address(address)]))
 
-        return super().get_code(address)
+    def get_code(self, address):
+        try:
+            super().get_code(address)
+        except MissingBytecode:  # will get thrown if code_hash != hash(empty)
+            return self._get_code_rpc(address)
 
     def get_storage(self, address, slot, from_journal=True):
+        s = super().get_storage(address, slot, from_journal)
+
+        # cf. AccountStorageDB.get()
+        store = super()._get_address_store(address)
+        key = int_to_big_endian(slot)
+        db = store._journal_storage if from_journal else store._locked_changes
         try:
-            return super().get_storage(address, slot, from_journal)
-        # this happens because the storage_root does not match the empty trie,
-        # causing MissingTrieNode to be thrown
-        except EVMMissingData:
-            # fallback to rpc
-            addr = to_checksum_address(address)
-            return _to_int(self._rpc.fetch("eth_getStorageAt", [addr, _to_hex(slot)]))
+            if db[key] != _EMPTY:
+                return s
+        except KeyError:
+            # (it was deleted in the journal.)
+            return s
+
+        addr = to_checksum_address(address)
+        return _to_int(self._rpc.fetch("eth_getStorageAt", [addr, _to_hex(slot)]))
 
     def account_exists(self, address):
         if super().account_exists(address):
