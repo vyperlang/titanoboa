@@ -520,7 +520,7 @@ class VyperContract(_BaseContract):
         return ret
 
     # eval vyper code in the context of this contract
-    def eval(self, stmt: str) -> Any:
+    def eval(self, stmt: str, value: int = 0, gas: int = None) -> Any:
         tmp = self._source_map
 
         bytecode, source_map, typ = self.compile_stmt(stmt)
@@ -528,7 +528,11 @@ class VyperContract(_BaseContract):
 
         method_id = b"dbug"  # note dummy method id, doesn't get validated
         c = self.env.execute_code(
-            to_address=self.address, bytecode=bytecode, data=method_id
+            to_address=self.address,
+            bytecode=bytecode,
+            data=method_id,
+            value=value,
+            gas=gas,
         )
 
         ret = self.marshal_to_python(c, typ)
@@ -780,12 +784,14 @@ class VyperFunction:
         encoded_args = abi.encode_single(args_abi_type, args)
         return method_id + encoded_args
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, value=0, gas=None, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
         computation = self.env.execute_code(
             to_address=self.contract.address,
             bytecode=self.contract.bytecode,
             data=calldata_bytes,
+            value=value,
+            gas=gas,
         )
 
         typ = self.fn_signature.return_type
