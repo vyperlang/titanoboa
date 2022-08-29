@@ -249,7 +249,7 @@ class Env:
 
     def __init__(self):
         self.chain = _make_chain()
-        self.vm = self.chain.get_vm()
+
         self._gas_price = 0
 
         self._address_counter = self.__class__._initial_address_counter
@@ -259,6 +259,12 @@ class Env:
         # TODO differentiate between origin and sender
         self.eoa = self.generate_address("root")
 
+        self._init_vm()
+
+        self._contracts = {}
+
+    def _init_vm(self):
+        self.vm = self.chain.get_vm()
         class OpcodeTracingComputation(self.vm.state.computation_class):
             _gas_meter_class = GasMeter
 
@@ -305,12 +311,10 @@ class Env:
 
         self.vm.patch = VMPatcher(self.vm)
 
-        self._contracts = {}
-
     def fork(self, **kwargs):
         AccountDBFork._rpc_init_kwargs = kwargs
         self.vm.__class__._state_class.account_db_class = AccountDBFork
-        self.vm = self.chain.get_vm()
+        self._init_vm()
 
     def set_gas_meter_class(self, cls: type) -> None:
         self.vm.state.computation_class._gas_meter_class = cls
