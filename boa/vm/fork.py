@@ -60,7 +60,6 @@ class CachingRPC:
         try:
             return json.loads(self._db[k])
         except KeyError:
-            print(f"MISS {k}")
             ret = self._raw_fetch(method, params)
             self._db[k] = json.dumps(ret)
             return ret
