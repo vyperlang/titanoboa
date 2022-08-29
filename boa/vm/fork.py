@@ -146,6 +146,7 @@ class AccountDBFork(AccountDB):
             return self._get_code_rpc(address)
 
     def get_storage(self, address, slot, from_journal=True):
+        # call super to get address warming semantics
         s = super().get_storage(address, slot, from_journal)
 
         # cf. AccountStorageDB.get()
