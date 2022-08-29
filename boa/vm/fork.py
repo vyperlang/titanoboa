@@ -7,7 +7,7 @@ import requests
 from eth.db.account import AccountDB, keccak
 from eth.db.backends.level import LevelDB
 from eth.db.cache import CacheDB
-from eth.vm.interrupt import EVMMissingData, MissingBytecode
+from eth.vm.interrupt import MissingBytecode
 from eth_utils import int_to_big_endian, to_checksum_address
 
 TIMEOUT = 60  # default timeout for http requests in seconds
@@ -17,12 +17,6 @@ DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork.db"
 
 
 _EMPTY = b""  # empty rlp stuff
-
-
-# a storage root which indicates that we need to fall back to RPC.
-# it also cleanly makes storage lookups fail if we do not have the key
-# in the VM already.
-_SENTINEL_ROOT = b"titanoboa".rjust(32, b"\x00")
 
 
 def _to_hex(s: int) -> str:
@@ -133,8 +127,6 @@ class AccountDBFork(AccountDB):
         code_hash = keccak(code)
 
         return rlp.Account(nonce=nonce, balance=balance, code_hash=code_hash)
-        # storage_root=_SENTINEL_ROOT,
-        # return rlp.Account(nonce=nonce, balance=balance, code_hash=code_hash)
 
     def _get_code_rpc(self, address):
         return _to_bytes(self._rpc.fetch("eth_getCode", [to_checksum_address(address)]))
