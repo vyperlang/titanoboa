@@ -1,4 +1,7 @@
 # TODO maybe move me to boa/vyper/
+# the main "entry point" of vyper-related functionality like
+# AST handling, traceback construction and ABI (marshaling
+# and unmarshaling vyper objects)
 
 import contextlib
 import copy
@@ -29,7 +32,7 @@ from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
-from boa.env import AddressT, Env, to_int
+from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict

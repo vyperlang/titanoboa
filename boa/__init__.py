@@ -2,7 +2,7 @@ import contextlib
 import sys
 
 from boa.contract import check_boa_error_matches
-from boa.env import (
+from boa.environment import (
     Env,
     deregister_precompile,
     enable_pyevm_verbose_logging,

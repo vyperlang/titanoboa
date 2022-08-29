@@ -1,3 +1,6 @@
+# the main "entry point" for patching py-evm.
+# handles low level details around state and py-evm tracing.
+
 import contextlib
 import logging
 import sys
