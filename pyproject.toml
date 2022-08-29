@@ -22,8 +22,12 @@ dependencies = [
 
 # required for forking:
     "requests",
-    "orjson",
+]
+
+[project.optional-dependencies]
+recommended = [
     "plyvel",
+    "orjson",
 ]
 
 [build-system]

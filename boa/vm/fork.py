@@ -1,10 +1,20 @@
 import os
 from typing import Any
+import requests
+
+try:
+    import orjson as json
+    jencode = json.dumps
+    jdecode = json.loads
+except ImportError:
+    import json
+    # shims for compat with orjson api
+    jencode = lambda x: json.dumps(x).encode("utf-8")
+    jdecode = lambda s: json.loads(s.decode("utf-8"))
 
 import eth.rlp.accounts as rlp
-import orjson as json
-import requests
 from eth.db.account import AccountDB, keccak
+from eth.db.backends.memory import MemoryDB
 from eth.db.backends.level import LevelDB
 from eth.db.cache import CacheDB
 from eth.vm.interrupt import MissingBytecode
@@ -33,13 +43,16 @@ def _to_bytes(hex_str: str) -> bytes:
 
 class CachingRPC:
     def __init__(self, url: str, block_identifier="latest", cache_file=None):
-        cache_file = cache_file or DEFAULT_CACHE_DIR
-
-        cache_file = os.path.expanduser(cache_file)
-        # use CacheDB as an additional layer over disk
-        # ideally would use leveldb lru cache but it's not configurable
-        # via eth.db.backends.level.LevelDB.
-        self._db = CacheDB(LevelDB(cache_file), cache_size=1024 * 1024)
+        try:
+            cache_file = cache_file or DEFAULT_CACHE_DIR
+            cache_file = os.path.expanduser(cache_file)
+            # use CacheDB as an additional layer over disk
+            # (ideally would use leveldb lru cache but it's not configurable
+            # via LevelDB API).
+            self._db = CacheDB(LevelDB(cache_file), cache_size=1024 * 1024)
+        except ImportError:
+            # we don't have plyvel, fallback to memory db
+            self._db = MemoryDB()
 
         self._rpc_url = url
 
@@ -56,19 +69,18 @@ class CachingRPC:
 
     # caching fetch
     def fetch(self, method, params):
-        k = self._mk_key(method, params)
+        k = jencode(self._mk_key(method, params))
 
         try:
-            return json.loads(self._db[k])
+            return jdecode(self._db[k])
         except KeyError:
             ret = self._raw_fetch(method, params)
-            self._db[k] = json.dumps(ret)
+            self._db[k] = jencode(ret)
             return ret
 
     # a stupid key for the kv store
-    def _mk_key(self, method: str, params: Any) -> bytes:
-        t = {"block": self._block_id, "method": method, "params": params}
-        return json.dumps(t)
+    def _mk_key(self, method: str, params: Any) -> Any:
+        return {"block": self._block_id, "method": method, "params": params}
 
     # raw fetch - dispatch the args via http request
     # TODO: maybe use async for all of this
