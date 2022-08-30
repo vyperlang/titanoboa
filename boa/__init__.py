@@ -20,6 +20,13 @@ if hasattr(sys, "ps1"):
 env = Env.get_singleton()
 
 
+def set_env(new_env):
+    global env
+    env = new_env
+
+    Env._singleton = new_env
+
+
 @contextlib.contextmanager
 def reverts(*args, **kwargs):
     try:

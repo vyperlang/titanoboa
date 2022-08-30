@@ -36,7 +36,6 @@ class TitanoboaMagic(ipython.Magics):
         _ = c  # ret available at `boa.ipython._`
         return c
 
-
     # unsure about "vyper" vs "eval" line magic; keep both until decided
     @ipython.line_magic
     def eval(self, line):

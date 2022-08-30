@@ -1,5 +1,6 @@
 import os
 from typing import Any
+
 import requests
 
 try:
@@ -9,8 +10,8 @@ except ImportError:
 
 import eth.rlp.accounts as rlp
 from eth.db.account import AccountDB, keccak
-from eth.db.backends.memory import MemoryDB
 from eth.db.backends.level import LevelDB
+from eth.db.backends.memory import MemoryDB
 from eth.db.cache import CacheDB
 from eth.vm.interrupt import MissingBytecode
 from eth_utils import int_to_big_endian, to_checksum_address
