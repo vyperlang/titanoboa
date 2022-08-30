@@ -27,6 +27,10 @@ def set_env(new_env):
     Env._singleton = new_env
 
 
+def reset_env():
+    set_env(Env())
+
+
 @contextlib.contextmanager
 def reverts(*args, **kwargs):
     try:
