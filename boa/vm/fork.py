@@ -38,19 +38,24 @@ def _to_bytes(hex_str: str) -> bytes:
 
 
 class CachingRPC:
-    def __init__(self, url: str, block_identifier="latest", cache_file=None):
-        try:
-            cache_file = cache_file or DEFAULT_CACHE_DIR
-            cache_file = os.path.expanduser(cache_file)
-            # use CacheDB as an additional layer over disk
-            # (ideally would use leveldb lru cache but it's not configurable
-            # via LevelDB API).
-            self._db = CacheDB(LevelDB(cache_file), cache_size=1024 * 1024)
-        except ImportError:
-            # we don't have plyvel, fallback to memory db
-            self._db = MemoryDB()
+    def __init__(
+        self, url: str, block_identifier="latest", cache_file=DEFAULT_CACHE_DIR
+    ):
+        # (default to memory db plyvel not found or cache_file is None)
+        self._db = MemoryDB()
+        if cache_file is not None:
+            try:
+                cache_file = os.path.expanduser(cache_file)
+                # use CacheDB as an additional layer over disk
+                # (ideally would use leveldb lru cache but it's not configurable
+                # via LevelDB API).
+                self._db = CacheDB(LevelDB(cache_file), cache_size=1024 * 1024)
+            except ImportError:
+                # plyvel not found
+                pass
 
         self._rpc_url = url
+        self._session = requests.Session()
 
         if block_identifier == "latest":
             blknum = self._raw_fetch("eth_blockNumber", [], add_blk_id=False)
@@ -86,7 +91,7 @@ class CachingRPC:
 
         # TODO: batch requests
         req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 1}
-        res = requests.post(self._rpc_url, json=req, timeout=TIMEOUT)
+        res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
         res.raise_for_status()
         res = res.json()
         if "error" in res:
