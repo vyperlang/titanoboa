@@ -167,6 +167,15 @@ In [4]: c = Test.deploy()
 In [5]: c.get_name_of("0xD533a949740bb3306d119CC777fa900bA034cd52")
 Out[5]: 'Curve DAO Token'
 ```
+
+Cast current deployed addresses to vyper contract
+```python
+>>> import boa; boa.env.fork(url="<rpc server address>")
+>>> c = boa.load_partial("examples/ERC20.vy").at("0xD533a949740bb3306d119CC777fa900bA034cd52")
+>>> c.name()
+    'Curve DAO Token'
+```
+
 basic tests:
 ```bash
 $ python -m tests.sim_veYFI
