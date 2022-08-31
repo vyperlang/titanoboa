@@ -146,6 +146,36 @@ Out[5]: 10
 
 Note that in `eval()` mode, titanoboa uses slightly different optimization settings, so gas usage may not be the same as using the external interface.
 
+### Forking
+Create a fork of mainnet given rpc.
+```python
+In [1]: import boa; boa.env.fork(url="<rpc server address>")
+
+In [2]: %load_ext boa.ipython
+
+In [3]: %%vyper Test
+   ...: interface HasName:
+   ...:     def name() -> String[32]: view
+   ...: 
+   ...: @external
+   ...: def get_name_of(addr: HasName) -> String[32]:
+   ...:     return addr.name()
+Out[3]: <boa.contract.VyperDeployer at 0x7f3496187190>
+
+In [4]: c = Test.deploy()
+
+In [5]: c.get_name_of("0xD533a949740bb3306d119CC777fa900bA034cd52")
+Out[5]: 'Curve DAO Token'
+```
+
+Cast current deployed addresses to vyper contract
+```python
+>>> import boa; boa.env.fork(url="<rpc server address>")
+>>> c = boa.load_partial("examples/ERC20.vy").at("0xD533a949740bb3306d119CC777fa900bA034cd52")
+>>> c.name()
+    'Curve DAO Token'
+```
+
 basic tests:
 ```bash
 $ python -m tests.sim_veYFI
