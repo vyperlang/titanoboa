@@ -146,7 +146,7 @@ class AccountDBFork(AccountDB):
 
     def get_code(self, address):
         try:
-            super().get_code(address)
+            return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
             return self._get_code_rpc(address)
 
