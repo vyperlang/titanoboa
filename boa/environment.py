@@ -315,7 +315,8 @@ class Env:
 
         self.vm.patch = VMPatcher(self.vm)
 
-    def fork(self, **kwargs):
+    def fork(self, url, **kwargs):
+        kwargs["url"] = url
         AccountDBFork._rpc_init_kwargs = kwargs
         self.vm.__class__._state_class.account_db_class = AccountDBFork
         self._init_vm()
