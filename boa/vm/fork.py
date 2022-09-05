@@ -40,11 +40,13 @@ def _to_bytes(hex_str: str) -> bytes:
 
 
 class CachingRPC:
+
     def __init__(
         self, url: str, block_identifier="latest", cache_file=DEFAULT_CACHE_DIR
     ):
         # (default to memory db plyvel not found or cache_file is None)
         self._db = MemoryDB(lrudict(1024*1024))
+        self._session = requests.Session()
         if cache_file is not None:
             try:
                 cache_file = os.path.expanduser(cache_file)
@@ -57,10 +59,9 @@ class CachingRPC:
                 pass
 
         self._rpc_url = url
-        self._session = requests.Session()
 
         if block_identifier == "latest":
-            blknum = self._raw_fetch("eth_blockNumber", [], add_blk_id=False)
+            ((_, blknum),) = self._raw_fetch_multi([(1, "eth_blockNumber", [])]).items()
             # fork 15 blocks back to avoid reorg shenanigans
             self._block_number = _to_int(blknum) - 15
         else:
@@ -71,35 +72,54 @@ class CachingRPC:
         return _to_hex(self._block_number)
 
     # caching fetch
-    def fetch(self, method, params):
-        k = json.dumps(self._mk_key(method, params)).encode("utf-8")
+    def fetch_single(self, method, params):
+        return self.fetch([(method, params)])[0]
 
-        try:
-            return json.loads(self._db[k])
-        except KeyError:
-            ret = self._raw_fetch(method, params)
-            self._db[k] = json.dumps(ret).encode("utf-8")
-            return ret
+    # caching fetch of multiple payloads
+    def fetch(self, payload):
+        ret = {}
+        ks = []
+        batch = []
+        for i, (method, params) in enumerate(payload):
+            k = self._mk_key(method, params)
+            try:
+                ret[i] = json.loads(self._db[k])
+            except KeyError:
+                ks.append(k)
+                batch.append((i, method, params))
+
+        if len(batch) > 0:
+            res = self._raw_fetch_multi(batch)
+            for (i, s) in res.items():
+                k = ks[i]
+                ret[i] = s
+                self._db[k] = json.dumps(s).encode("utf-8")
+
+        return [ret[i] for i in range(len(ret))]
 
     # a stupid key for the kv store
     def _mk_key(self, method: str, params: Any) -> Any:
-        return {"block": self._block_id, "method": method, "params": params}
+        return json.dumps({"method": method, "params": params}).encode("utf-8")
 
     # raw fetch - dispatch the args via http request
     # TODO: maybe use async for all of this
-    def _raw_fetch(self, method, params, add_blk_id=True):
-        if add_blk_id:
-            params = params + [self._block_id]
-
+    def _raw_fetch_multi(self, payloads):
         # TODO: batch requests
-        req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 1}
+        req = []
+        for (i, method, params) in payloads:
+            req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
         res.raise_for_status()
         res = res.json()
-        if "error" in res:
-            raise ValueError(res)
 
-        return res["result"]
+        ret = {}
+        for t in res:
+            if "error" in t:
+                raise ValueError(res)
+            i = t["id"]
+            ret[i] = t["result"]
+
+        return ret
 
 
 # AccountDB which dispatches to an RPC when we don't have the
@@ -136,15 +156,25 @@ class AccountDBFork(AccountDB):
 
     def _get_account_rpc(self, address):
         addr = to_checksum_address(address)
-        balance = _to_int(self._rpc.fetch("eth_getBalance", [addr]))
-        nonce = _to_int(self._rpc.fetch("eth_getTransactionCount", [addr]))
-        code = self._get_code_rpc(address)
+        reqs = [
+            ("eth_getBalance", [addr, self._rpc._block_id]),
+            ("eth_getTransactionCount", [addr, self._rpc._block_id]),
+            ("eth_getCode", [addr, self._rpc._block_id]),
+        ]
+        res = self._rpc.fetch(reqs)
+        balance = _to_int(res[0])
+        nonce = _to_int(res[1])
+        code = _to_bytes(res[2])
         code_hash = keccak(code)
 
         return rlp.Account(nonce=nonce, balance=balance, code_hash=code_hash)
 
     def _get_code_rpc(self, address):
-        return _to_bytes(self._rpc.fetch("eth_getCode", [to_checksum_address(address)]))
+        return _to_bytes(
+            self._rpc.fetch_single(
+                "eth_getCode", [to_checksum_address(address), self._rpc._block_id]
+            )
+        )
 
     def get_code(self, address):
         try:
@@ -168,7 +198,11 @@ class AccountDBFork(AccountDB):
             return s
 
         addr = to_checksum_address(address)
-        return _to_int(self._rpc.fetch("eth_getStorageAt", [addr, _to_hex(slot)]))
+        return _to_int(
+            self._rpc.fetch_single(
+                "eth_getStorageAt", [addr, _to_hex(slot), self._rpc._block_id]
+            )
+        )
 
     def account_exists(self, address):
         if super().account_exists(address):
