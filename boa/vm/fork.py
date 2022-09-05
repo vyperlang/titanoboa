@@ -40,9 +40,7 @@ def _to_bytes(hex_str: str) -> bytes:
 
 
 class CachingRPC:
-    def __init__(
-        self, url: str, block_identifier="latest", cache_file=DEFAULT_CACHE_DIR
-    ):
+    def __init__(self, url: str, cache_file=DEFAULT_CACHE_DIR):
         # (default to memory db plyvel not found or cache_file is None)
         self._db = MemoryDB(lrudict(1024 * 1024))
         self._session = requests.Session()
@@ -59,18 +57,24 @@ class CachingRPC:
 
         self._rpc_url = url
 
-        if block_identifier == "latest":
-            ((_, blknum),) = self._raw_fetch_multi([(1, "eth_blockNumber", [])]).items()
-            # fork 15 blocks back to avoid reorg shenanigans
-            self._block_number = _to_int(blknum) - 15
-        else:
-            self._block_number = block_identifier
+    # _loaded is a cache for the constructor.
+    # reduces fork time after the first fork.
+    _loaded = {}
+    _pid = os.getpid()  # so we can detect if our fds are bad
 
-        self._block_info = self.fetch_single("eth_getBlockByNumber", [self._block_id, False])
+    @classmethod
+    def get_rpc(cls, url, cache_file):
+        if os.getpid() != cls._pid:
+            # we are in a fork. reload everything so that fds are not corrupted
+            cls._loaded = {}
+            cls._pid = os.getpid()
 
-    @property
-    def _block_id(self):
-        return _to_hex(self._block_number)
+        if (url, cache_file) in cls._loaded:
+            return cls._loaded[(url, cache_file)]
+
+        ret = cls(url, cache_file)
+        cls._loaded[(url, cache_file)] = ret
+        return ret
 
     # caching fetch
     def fetch_single(self, method, params):
@@ -131,7 +135,24 @@ class AccountDBFork(AccountDB):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._rpc = CachingRPC(**self._rpc_init_kwargs)
+
+        rpc_kwargs = self._rpc_init_kwargs.copy()
+        block_identifier = rpc_kwargs.pop("block_identifier", "latest")
+        self._rpc = CachingRPC.get_rpc(**rpc_kwargs)
+
+        if block_identifier == "latest":
+            ((_, blknum),) = self._rpc._raw_fetch_multi([(1, "eth_blockNumber", [])]).items()
+            # fork 15 blocks back to avoid reorg shenanigans
+            self._block_number = _to_int(blknum) - 15
+        else:
+            self._block_number = block_identifier
+
+        self._block_info = self._rpc.fetch_single("eth_getBlockByNumber", [self._block_id, False])
+
+    @property
+    def _block_id(self):
+        return _to_hex(self._block_number)
+
 
     def _has_account(self, address, from_journal=True):
         return super()._get_encoded_account(address, from_journal) != _EMPTY
@@ -158,9 +179,9 @@ class AccountDBFork(AccountDB):
     def _get_account_rpc(self, address):
         addr = to_checksum_address(address)
         reqs = [
-            ("eth_getBalance", [addr, self._rpc._block_id]),
-            ("eth_getTransactionCount", [addr, self._rpc._block_id]),
-            ("eth_getCode", [addr, self._rpc._block_id]),
+            ("eth_getBalance", [addr, self._block_id]),
+            ("eth_getTransactionCount", [addr, self._block_id]),
+            ("eth_getCode", [addr, self._block_id]),
         ]
         res = self._rpc.fetch(reqs)
         balance = _to_int(res[0])
@@ -175,7 +196,7 @@ class AccountDBFork(AccountDB):
             return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
             ret = self._rpc.fetch_single(
-                "eth_getCode", [to_checksum_address(address), self._rpc._block_id]
+                "eth_getCode", [to_checksum_address(address), self._block_id]
             )
             return _to_bytes(ret)
 
@@ -196,7 +217,7 @@ class AccountDBFork(AccountDB):
 
         addr = to_checksum_address(address)
         ret = self._rpc.fetch_single(
-            "eth_getStorageAt", [addr, _to_hex(slot), self._rpc._block_id]
+            "eth_getStorageAt", [addr, _to_hex(slot), self._block_id]
         )
         return _to_int(ret)
 

@@ -320,7 +320,7 @@ class Env:
         AccountDBFork._rpc_init_kwargs = kwargs
         self.vm.__class__._state_class.account_db_class = AccountDBFork
         self._init_vm()
-        block_info = self.vm.state._account_db._rpc._block_info
+        block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
         self.vm.patch.block_number = int(block_info["number"], 16)
