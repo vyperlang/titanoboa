@@ -16,6 +16,8 @@ from eth.db.cache import CacheDB
 from eth.vm.interrupt import MissingBytecode
 from eth_utils import int_to_big_endian, to_checksum_address
 
+from boa.util.lrudict import lrudict
+
 TIMEOUT = 60  # default timeout for http requests in seconds
 
 
@@ -42,7 +44,7 @@ class CachingRPC:
         self, url: str, block_identifier="latest", cache_file=DEFAULT_CACHE_DIR
     ):
         # (default to memory db plyvel not found or cache_file is None)
-        self._db = MemoryDB()
+        self._db = MemoryDB(lrudict(1024*1024))
         if cache_file is not None:
             try:
                 cache_file = os.path.expanduser(cache_file)
