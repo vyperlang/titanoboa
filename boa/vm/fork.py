@@ -66,6 +66,12 @@ class CachingRPC:
         else:
             self._block_number = block_identifier
 
+        self._block_info = self.fetch_single("eth_getBlockByNumber", [self._block_id, False])
+
+    @property
+    def _block_id(self):
+        return _to_hex(self._block_number)
+
     # caching fetch
     def fetch_single(self, method, params):
         (res,) = self.fetch([(method, params)])
@@ -148,10 +154,6 @@ class AccountDBFork(AccountDB):
             self._account_cache[address] = account
 
         return account
-
-    @property
-    def _block_id(self):
-        return self._rpc.block_id
 
     def _get_account_rpc(self, address):
         addr = to_checksum_address(address)
