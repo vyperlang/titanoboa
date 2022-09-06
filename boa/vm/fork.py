@@ -8,7 +8,8 @@ try:
 except ImportError:
     import json
 
-import eth.rlp.accounts as rlp
+import rlp
+from eth.rlp.accounts import Account
 from eth.db.account import AccountDB, keccak
 from eth.db.backends.level import LevelDB
 from eth.db.backends.memory import MemoryDB
@@ -168,7 +169,7 @@ class AccountDBFork(AccountDB):
         rlp_account = self._get_encoded_account(address, from_journal)
 
         if rlp_account:
-            account = rlp.decode(rlp_account, sedes=rlp.Account)
+            account = rlp.decode(rlp_account, sedes=Account)
         else:
             account = self._get_account_rpc(address)
         if from_journal:
@@ -189,7 +190,7 @@ class AccountDBFork(AccountDB):
         code = _to_bytes(res[2])
         code_hash = keccak(code)
 
-        return rlp.Account(nonce=nonce, balance=balance, code_hash=code_hash)
+        return Account(nonce=nonce, balance=balance, code_hash=code_hash)
 
     def get_code(self, address):
         try:
