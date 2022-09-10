@@ -64,7 +64,7 @@ class CachingRPC:
     _pid = os.getpid()  # so we can detect if our fds are bad
 
     @classmethod
-    def get_rpc(cls, url, cache_file):
+    def get_rpc(cls, url, cache_file=DEFAULT_CACHE_DIR):
         if os.getpid() != cls._pid:
             # we are in a fork. reload everything so that fds are not corrupted
             cls._loaded = {}
