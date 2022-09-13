@@ -647,7 +647,14 @@ class VyperContract(_BaseContract):
         )
 
         ast = parse_to_ast(wrapper_code, ifaces)
+
+        # splice in constant definitions so that eval("MY_CONSTANT") works
+        for constant_def in self.compiler_data.vyper_module.get_children(
+            vy_ast.VariableDecl, {"is_constant": True}
+        ):
+            ast.add_to_body(constant_def)
         vy_ast.folding.fold(ast)
+        ast.body = [ast.body[0]]
 
         # annotate ast
         with self.override_vyper_namespace():
