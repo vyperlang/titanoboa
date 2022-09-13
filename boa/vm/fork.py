@@ -9,11 +9,11 @@ except ImportError:
     import json
 
 import rlp
-from eth.rlp.accounts import Account
 from eth.db.account import AccountDB, keccak
 from eth.db.backends.level import LevelDB
 from eth.db.backends.memory import MemoryDB
 from eth.db.cache import CacheDB
+from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth_utils import int_to_big_endian, to_checksum_address
 
@@ -136,24 +136,26 @@ class AccountDBFork(AccountDB):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
         rpc_kwargs = self._rpc_init_kwargs.copy()
         block_identifier = rpc_kwargs.pop("block_identifier", "latest")
         self._rpc = CachingRPC.get_rpc(**rpc_kwargs)
 
         if block_identifier == "latest":
-            ((_, blknum),) = self._rpc._raw_fetch_multi([(1, "eth_blockNumber", [])]).items()
+            ((_, blknum),) = self._rpc._raw_fetch_multi(
+                [(1, "eth_blockNumber", [])]
+            ).items()
             # fork 15 blocks back to avoid reorg shenanigans
             self._block_number = _to_int(blknum) - 15
         else:
             self._block_number = block_identifier
 
-        self._block_info = self._rpc.fetch_single("eth_getBlockByNumber", [self._block_id, False])
+        self._block_info = self._rpc.fetch_single(
+            "eth_getBlockByNumber", [self._block_id, False]
+        )
 
     @property
     def _block_id(self):
         return _to_hex(self._block_number)
-
 
     def _has_account(self, address, from_journal=True):
         return super()._get_encoded_account(address, from_journal) != _EMPTY
