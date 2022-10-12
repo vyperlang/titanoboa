@@ -164,6 +164,7 @@ class ErrorDetail:
     error_detail: str  # compiler provided error detail
     dev_reason: DevReason
     frame_detail: FrameDetail
+    storage_detail: Optional[FrameDetail]
     ast_source: vy_ast.VyperNode
 
     @classmethod
@@ -172,6 +173,10 @@ class ErrorDetail:
         ast_source = contract.find_source_of(computation.code)
         reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
         frame_detail = contract.debug_frame(computation)
+        storage_detail = FrameDetail("storage")
+        storage_detail.update(
+            {k: v.get() for (k, v) in vars(contract._storage).items()}
+        )
 
         return cls(
             vm_error=computation.error,
@@ -179,6 +184,7 @@ class ErrorDetail:
             error_detail=error_detail,
             dev_reason=reason,
             frame_detail=frame_detail,
+            storage_detail=storage_detail,
             ast_source=ast_source,
         )
 
@@ -206,6 +212,11 @@ class ErrorDetail:
             self.frame_detail.fn_name = "locals"  # override the displayed name
             if len(self.frame_detail) > 0:
                 msg += f" {self.frame_detail}"
+
+        if self.storage_detail is not None:
+            self.storage_detail.fn_name = "storage"  # override displayed name
+            if len(self.storage_detail) > 0:
+                msg += f"\n {self.storage_detail}"
 
         return msg
 
