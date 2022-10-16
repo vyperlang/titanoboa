@@ -19,6 +19,7 @@ dependencies = [
     "eth-abi",
     "py-evm",
     "eth-typing",
+    "eth-stdlib",
 
 # required for forking:
     "requests",
