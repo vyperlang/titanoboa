@@ -25,7 +25,7 @@ from vyper.codegen.core import calculate_type_for_external_return, getpos
 from vyper.codegen.function_definitions.common import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import parse_external_interfaces
-from vyper.codegen.types.types import MappingType, TupleType
+from vyper.codegen.types.types import MappingType, TupleType, is_base_type
 from vyper.exceptions import InvalidType, VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.validation.data_positions import set_data_positions
@@ -164,6 +164,7 @@ class ErrorDetail:
     error_detail: str  # compiler provided error detail
     dev_reason: DevReason
     frame_detail: FrameDetail
+    storage_detail: Optional[FrameDetail]
     ast_source: vy_ast.VyperNode
 
     @classmethod
@@ -172,6 +173,10 @@ class ErrorDetail:
         ast_source = contract.find_source_of(computation.code)
         reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
         frame_detail = contract.debug_frame(computation)
+        storage_detail = FrameDetail("storage")
+        storage_detail.update(
+            {k: v.get() for (k, v) in vars(contract._storage).items()}
+        )
 
         return cls(
             vm_error=computation.error,
@@ -179,6 +184,7 @@ class ErrorDetail:
             error_detail=error_detail,
             dev_reason=reason,
             frame_detail=frame_detail,
+            storage_detail=storage_detail,
             ast_source=ast_source,
         )
 
@@ -206,6 +212,11 @@ class ErrorDetail:
             self.frame_detail.fn_name = "locals"  # override the displayed name
             if len(self.frame_detail) > 0:
                 msg += f" {self.frame_detail}"
+
+        if self.storage_detail is not None:
+            self.storage_detail.fn_name = "storage"  # override displayed name
+            if len(self.storage_detail) > 0:
+                msg += f"\n {self.storage_detail}"
 
         return msg
 
@@ -487,6 +498,12 @@ class VyperContract(_BaseContract):
         if not isinstance(vyper_typ, TupleType):
             (ret,) = ret
 
+        # eth_abi does not checksum addresses. patch this in a limited
+        # way here, but for complex return types, we need an upstream
+        # fix.
+        if is_base_type(vyper_typ, "address"):
+            ret = to_checksum_address(ret)
+
         return vyper_object(ret, vyper_typ)
 
     def handle_error(self, computation):
@@ -630,8 +647,8 @@ class VyperContract(_BaseContract):
         if isinstance(ast, vy_ast.Expr):
             with self.override_vyper_namespace():
                 try:
-                    typ = get_exact_type_from_node(ast.value)
-                    return_sig = f"-> {typ}"
+                    ast_typ = get_exact_type_from_node(ast.value)
+                    return_sig = f"-> {ast_typ}"
                     debug_body = f"return {source_code}"
                 except InvalidType:
                     pass
@@ -691,6 +708,7 @@ class VyperContract(_BaseContract):
 
         # return the bytecode and other artifacts associated with
         # this build
+        typ = sig.return_type
         ret = bytecode, source_map, typ
         self._eval_cache[source_code] = ret
         return ret
