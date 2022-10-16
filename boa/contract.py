@@ -10,13 +10,13 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Optional
 
-import eth_abi as abi
 import vyper
 import vyper.ast as vy_ast
 import vyper.compiler.output as compiler_output
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
+from eth.codecs.abi import decode, encode
 from eth.exceptions import VMError
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.ast.signatures.function_signature import FunctionSignature
@@ -188,7 +188,7 @@ class ErrorDetail:
         # decode error msg if it's "Error(string)"
         # b"\x08\xc3y\xa0" == method_id("Error(string)")
         if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-            return abi.decode_single("(string)", err.args[0][4:])[0]
+            return decode("(string)", err.args[0][4:])[0]
 
         return repr(err)
 
@@ -481,7 +481,7 @@ class VyperContract(_BaseContract):
             return None
 
         return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi.decode_single(return_typ.abi_type.selector_name(), computation.output)
+        ret = decode(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
         if not isinstance(vyper_typ, TupleType):
@@ -788,10 +788,13 @@ class VyperFunction:
         total_non_base_args = len(kwargs) + len(args) - len(self.fn_signature.base_args)
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
 
-        # allow things with `.address` to be encode-able
-        args = [getattr(arg, "address", arg) for arg in args]
+        if len(args) == 0:
+            encoded_args = b""
+        else:
+            # allow things with `.address` to be encode-able
+            args = [getattr(arg, "address", arg) for arg in args]
+            encoded_args = encode(args_abi_type, tuple(args))
 
-        encoded_args = abi.encode_single(args_abi_type, args)
         return method_id + encoded_args
 
     def __call__(self, *args, value=0, gas=None, **kwargs):
