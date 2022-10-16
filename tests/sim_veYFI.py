@@ -1,4 +1,5 @@
 import boa
+from eth_utils import to_checksum_address
 from vyper.utils import checksum_encode
 
 import time
@@ -18,7 +19,7 @@ def timeit(msg):
 def format_addr(t):
     if isinstance(t, str):
         t = t.encode("utf-8")
-    return t.rjust(20, b"\x00")
+    return to_checksum_address(t.rjust(20, b"\x00"))
 
 BUNNY = boa.env.generate_address("bunny")
 MILKY = boa.env.generate_address("milky")
