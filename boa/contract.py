@@ -16,7 +16,6 @@ import vyper.compiler.output as compiler_output
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
-from eth.codecs.abi import decode, encode
 from eth.exceptions import VMError
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.ast.signatures.function_signature import FunctionSignature
@@ -39,6 +38,13 @@ from boa.util.lrudict import lrudict
 from boa.vyper.ast_utils import reason_at
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
+
+try:
+    # `eth-stdlib` requires python 3.10 and above
+    from eth.codecs.abi import decode, encode
+
+except ImportError:
+    from eth_abi import decode_single as decode, encode_single as encode
 
 # build a reverse map from the format we have in pc_pos_map to AST nodes
 # TODO move to ast_utils
@@ -806,12 +812,9 @@ class VyperFunction:
         total_non_base_args = len(kwargs) + len(args) - len(self.fn_signature.base_args)
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
 
-        if len(args) == 0:
-            encoded_args = b""
-        else:
-            # allow things with `.address` to be encode-able
-            args = [getattr(arg, "address", arg) for arg in args]
-            encoded_args = encode(args_abi_type, tuple(args))
+        # allow things with `.address` to be encode-able
+        args = [getattr(arg, "address", arg) for arg in args]
+        encoded_args = encode(args_abi_type, tuple(args))
 
         return method_id + encoded_args
 
