@@ -46,6 +46,7 @@ try:
 except ImportError:
     from eth_abi import decode_single as decode, encode_single as encode
 
+
 # build a reverse map from the format we have in pc_pos_map to AST nodes
 # TODO move to ast_utils
 def ast_map_of(ast_node):
