@@ -288,6 +288,8 @@ def check_boa_error_matches(error, *args, **kwargs):
         )
 
 
+# using sha3 preimages, take a storage key and undo
+# hashes to get the sequence of hashes ("path") that gave us this image.
 def unwrap_storage_key(sha3_db, k):
     path = []
 
@@ -338,19 +340,27 @@ class VarModel:
                 if to_int(path[0]) != self.slot:
                     continue
 
-                path = path[1:]
+                path = path[1:]  # drop the slot
+                path_t = []
 
                 ty = self.typ
                 for i, p in enumerate(path):
                     path[i] = decode_vyper_object(memoryview(p), ty.keytype)
+                    path_t.append(ty.keytype)
                     ty = ty.valuetype
 
                 val = self._decode(to_int(k), ty)
 
+                # set val only if value is nonzero
                 if val:
-                    # decode aliases
-                    path = [self._dealias(p) for p in path]
-                    setpath(ret, path, val)
+                    # decode aliases as needed/possible
+                    dealiased_path = []
+                    for p, t in zip(path, path_t):
+                        if is_base_type(t, "address"):
+                            p = self._dealias(p)
+                        dealiased_path.append(p)
+                    setpath(ret, dealiased_path, val)
+
             return ret
 
         else:
