@@ -348,6 +348,14 @@ class Env:
         # Reset gas metering to the default behavior
         self.set_gas_meter_class(GasMeter)
 
+    # set balance of address in py-evm
+    def set_balance(self, addr, value):
+        self.vm.state.set_balance(to_canonical_address(addr), value)
+
+    # get balance of address in py-evm
+    def get_balance(self, addr):
+        return self.vm.state.get_balance(to_canonical_address(addr))
+
     def register_contract(self, address, obj):
         self._contracts[to_checksum_address(address)] = obj
 
