@@ -403,15 +403,19 @@ class VyperContract(_BaseContract):
         if "__init__" in external_fns:
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
-        for fn in external_fns.values():
-            setattr(self, fn.name, VyperFunction(fn, self))
+        for fn_name, fn in external_fns.items():
+            setattr(self, fn_name, VyperFunction(fn, self))
 
-        # [TBD] handle internal methods
+        # handle internal methods:
         internal_fns = {
             fn.name: fn for fn in self.global_ctx._function_defs if
             fn._metadata["type"].is_internal
         }
 
+        # set internal methods as class.internal attributes:
+        self.internal = lambda: None
+        for fn_name, fn in internal_fns.items():
+            setattr(self.internal, fn_name, VyperFunction(fn, self))
 
         self._storage = StorageModel(self)
 
