@@ -31,6 +31,7 @@ from vyper.ir.optimizer import optimize
 from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
+from vyper.codegen.module import _is_internal
 
 from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
@@ -386,15 +387,31 @@ class VyperContract(_BaseContract):
 
         self.env.register_contract(self.address, self)
 
-        fns = {fn.name: fn for fn in self.global_ctx._function_defs}
-        # add all functions from the interface to the contract
+        # add all exposed functions from the interface to the contract
+        # exclude internal functions since
+        # 1. they cannot be called with self._internal_method since internal
+        #    methods are not exposed in the runtime bytecode (but are included
+        #    in the deployed bytecode).
+        # 2. [TBD] Internal methods are namespaced into self.internal_methods.
+        external_fns = {
+            fn.name: fn for fn in self.global_ctx._function_defs if
+            not fn._metadata["type"].is_internal
+        }
 
+        # set external methods as class attributes:
         self._ctor = None
-        if "__init__" in fns:
-            self._ctor = VyperFunction(fns.pop("__init__"), self)
+        if "__init__" in external_fns:
+            self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
-        for fn in fns.values():
+        for fn in external_fns.values():
             setattr(self, fn.name, VyperFunction(fn, self))
+
+        # [TBD] handle internal methods
+        internal_fns = {
+            fn.name: fn for fn in self.global_ctx._function_defs if
+            fn._metadata["type"].is_internal
+        }
+
 
         self._storage = StorageModel(self)
 
