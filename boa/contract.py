@@ -33,7 +33,7 @@ from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
 
 from boa.environment import AddressT, Env, to_int
-from boa.event import Event
+from boa.event import Event, RawEvent
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
@@ -495,16 +495,13 @@ class VyperContract(_BaseContract):
 
     # ## handling events
     def _get_logs(self, computation, include_child_logs):
-
-        entries = computation._log_entries
+        if computation is None:
+            return []
 
         if include_child_logs:
-            for child in computation.children:
-                o = self.env.lookup_contract(child.msg.code_address)
-                if o is not None:
-                    entries.extend(o._get_logs(child, True))
+            return list(computation.get_raw_log_entries())
 
-        return entries
+        return computation._log_entries
 
     def get_logs(self, computation=None, include_child_logs=True):
         if computation is None:
@@ -518,7 +515,12 @@ class VyperContract(_BaseContract):
 
         ret = []
         for e in entries:
-            ret.append(self.decode_log(e))
+            logger_address = e[1]
+            c = self.env.lookup_contract(logger_address)
+            if c is not None:
+                ret.append(c.decode_log(e))
+            else:
+                ret.append(RawEvent(e))
 
         return ret
 
@@ -553,7 +555,7 @@ class VyperContract(_BaseContract):
 
         args = abi.decode_single(tuple_typ.abi_type.selector_name(), data)
 
-        return Event(self.address, event_t, decoded_topics, args)
+        return Event(log_id, self.address, event_t, decoded_topics, args)
 
     def marshal_to_python(self, computation, vyper_typ):
         self._computation = computation  # for further inspection

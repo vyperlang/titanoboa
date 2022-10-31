@@ -4,6 +4,7 @@ from typing import Any, List
 
 @dataclass
 class Event:
+    log_id: int  # internal py-evm log id, for ordering purposes
     address: str  # checksum address
     event_type: Any  # vyper.semantics.types.user.Event
     topics: List[Any]  # list of decoded topics
@@ -27,3 +28,7 @@ class Event:
 
         args = ", ".join(f"{k}={v}" for k, v in b)
         return f"{self.event_type.name}({args})"
+
+
+class RawEvent:
+    event_data: Any
