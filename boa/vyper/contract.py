@@ -565,28 +565,6 @@ class VyperContract(_BaseContract):
 
         return ret
 
-    # eval vyper code in the context of this contract
-    def eval(self, stmt: str, value: int = 0, gas: int = None) -> Any:
-        tmp = self._source_map
-
-        bytecode, source_map, typ = self.compile_stmt(stmt)
-        self._source_map = source_map
-
-        method_id = b"dbug"  # note dummy method id, doesn't get validated
-        c = self.env.execute_code(
-            to_address=self.address,
-            bytecode=bytecode,
-            data=method_id,
-            value=value,
-            gas=gas,
-        )
-
-        ret = self.marshal_to_python(c, typ)
-
-        self._source_map = tmp  # restore
-
-        return ret
-
     @cached_property
     def _ast_module(self):
         module = copy.deepcopy(self.compiler_data.vyper_module)
@@ -627,10 +605,11 @@ class VyperContract(_BaseContract):
         finally:
             self._vyper_namespace["self"].members.pop("__boa_debug__", None)
 
-    # for eval(), we need unoptimized assembly, since the dead code
-    # eliminator might prune a dead function (which we want to eval)
     @cached_property
     def unoptimized_assembly(self):
+        """for eval(), we need unoptimized assembly, since the dead code
+        eliminator might prune a dead function (which we want to eval)
+        """
         runtime = self.compiler_data.ir_runtime
         return compile_ir.compile_to_assembly(runtime, no_optimize=True)
 
@@ -653,9 +632,33 @@ class VyperContract(_BaseContract):
         )
         return s + self.data_section
 
-    # compile a fragment (single expr or statement) in the context
-    # of the contract, returning the ABI encoded value if it is an expr.
+    def eval(self, stmt: str, value: int = 0, gas: int = None) -> Any:
+        """eval vyper code in the context of this contract"""
+        tmp = self._source_map
+
+        bytecode, source_map, typ = self.compile_stmt(stmt)
+        self._source_map = source_map
+
+        method_id = b"dbug"  # note dummy method id, doesn't get validated
+        c = self.env.execute_code(
+            to_address=self.address,
+            bytecode=bytecode,
+            data=method_id,
+            value=value,
+            gas=gas,
+        )
+
+        ret = self.marshal_to_python(c, typ)
+
+        self._source_map = tmp  # restore
+
+        return ret
+
     def compile_stmt(self, source_code: str) -> Any:
+        """Compile a fragment (single expr or statement) in the context
+        of the contract, returning the ABI encoded value if it is an expr.
+        """
+
         # this method is super slow so we cache compilation results
         if source_code in self._eval_cache:
             return self._eval_cache[source_code]
