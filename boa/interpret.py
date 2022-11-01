@@ -3,7 +3,7 @@ from typing import Optional, Union
 import vyper
 from vyper.compiler.phases import CompilerData
 
-from boa.contract import BoaError, VyperBlueprint, VyperContract, VyperDeployer
+from boa.vyper.contract import BoaError, VyperBlueprint, VyperContract, VyperDeployer
 from boa.util.disk_cache import DiskCache
 
 _Contract = Union[VyperContract, VyperBlueprint]

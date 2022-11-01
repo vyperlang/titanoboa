@@ -1,4 +1,3 @@
-# TODO maybe move me to boa/vyper/
 # the main "entry point" of vyper-related functionality like
 # AST handling, traceback construction and ABI (marshaling
 # and unmarshaling vyper objects)
@@ -31,7 +30,6 @@ from vyper.ir.optimizer import optimize
 from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id, cached_property
-from vyper.codegen.module import _is_internal
 
 from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
@@ -415,7 +413,7 @@ class VyperContract(_BaseContract):
         # set internal methods as class.internal attributes:
         self.internal = lambda: None
         for fn_name, fn in internal_fns.items():
-            setattr(self.internal, fn_name, VyperFunction(fn, self))
+            setattr(self.internal, fn_name, VyperInternalFunction(fn, self))
 
         self._storage = StorageModel(self)
 
@@ -669,7 +667,6 @@ class VyperContract(_BaseContract):
         vy_ast.folding.fold(ast)
         ast = ast.body[0]
 
-        typ = None
         return_sig = ""
         debug_body = source_code
 
@@ -842,6 +839,22 @@ class VyperFunction:
 
         encoded_args = abi.encode_single(args_abi_type, args)
         return method_id + encoded_args
+
+    def __call__(self, *args, value=0, gas=None, **kwargs):
+        calldata_bytes = self._prepare_calldata(*args, **kwargs)
+        computation = self.env.execute_code(
+            to_address=self.contract.address,
+            bytecode=self.contract.bytecode,
+            data=calldata_bytes,
+            value=value,
+            gas=gas,
+        )
+
+        typ = self.fn_signature.return_type
+        return self.contract.marshal_to_python(computation, typ)
+
+
+class VyperInternalFunction(VyperFunction):
 
     def __call__(self, *args, value=0, gas=None, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
