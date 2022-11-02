@@ -25,6 +25,7 @@ from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.utils import cached_property
 
 from boa.environment import AddressT, Env, to_int
+from boa.event import Event, RawEvent
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
@@ -505,6 +506,70 @@ class VyperContract(_BaseContract):
                 return self.ast_map[pc_map[pc]]
 
         return None
+
+    # ## handling events
+    def _get_logs(self, computation, include_child_logs):
+        if computation is None:
+            return []
+
+        if include_child_logs:
+            return list(computation.get_raw_log_entries())
+
+        return computation._log_entries
+
+    def get_logs(self, computation=None, include_child_logs=True):
+        if computation is None:
+            computation = self._computation
+
+        entries = self._get_logs(computation, include_child_logs)
+
+        # py-evm log format is (log_id, topics, data)
+        # sort on log_id
+        entries = sorted(entries)
+
+        ret = []
+        for e in entries:
+            logger_address = e[1]
+            c = self.env.lookup_contract(logger_address)
+            if c is not None:
+                ret.append(c.decode_log(e))
+            else:
+                ret.append(RawEvent(e))
+
+        return ret
+
+    @cached_property
+    def event_for(self):
+        m = self.compiler_data.vyper_module_folded._metadata["type"]
+        return {e.event_id: e for e in m.events.values()}
+
+    def decode_log(self, e):
+        log_id, address, topics, data = e
+        assert to_canonical_address(self.address) == address
+        event_hash = topics[0]
+        event_t = self.event_for[event_hash]
+
+        topic_typs = []
+        arg_typs = []
+        for is_topic, typ in zip(event_t.indexed, event_t.arguments.values()):
+            if not is_topic:
+                arg_typs.append(typ)
+            else:
+                topic_typs.append(typ)
+
+        decoded_topics = []
+        for typ, t in zip(topic_typs, topics[1:]):
+            # convert to bytes for abi decoder
+            encoded_topic = t.to_bytes(32, "big")
+            decoded_topics.append(
+                abi.decode_single(typ.abi_type.selector_name(), encoded_topic)
+            )
+
+        tuple_typ = TupleType(arg_typs)
+
+        args = abi.decode_single(tuple_typ.abi_type.selector_name(), data)
+
+        return Event(log_id, self.address, event_t, decoded_topics, args)
 
     def marshal_to_python(self, computation, vyper_typ):
         self._computation = computation  # for further inspection
