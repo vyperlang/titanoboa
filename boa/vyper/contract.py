@@ -17,7 +17,6 @@ import vyper.semantics.validation as validation
 from eth.exceptions import VMError
 from eth_utils import to_canonical_address, to_checksum_address
 
-from titanoboa.boa.vyper.ast_utils import ast_map_of
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType, is_base_type
@@ -29,7 +28,7 @@ from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
-from boa.vyper.ast_utils import reason_at
+from boa.vyper.ast_utils import reason_at, ast_map_of
 from boa.vyper.compiler_utils import generate_bytecode_for_arbitrary_stmt
 from boa.vyper.event import Event, RawEvent
 from boa.vyper.function import VyperFunction, VyperInternalFunction
