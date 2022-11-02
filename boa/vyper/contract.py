@@ -25,13 +25,13 @@ from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.utils import cached_property
 
 from boa.environment import AddressT, Env, to_int
-from boa.event import Event, RawEvent
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
-from boa.vyper.compiler_utils import generate_bytecode_for_arbitrary_stmt
-from boa.vyper.function import VyperFunction, VyperInternalFunction
 from boa.vyper.ast_utils import reason_at
+from boa.vyper.compiler_utils import generate_bytecode_for_arbitrary_stmt
+from boa.vyper.event import Event, RawEvent
+from boa.vyper.function import VyperFunction, VyperInternalFunction
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
 
