@@ -4,7 +4,6 @@
 
 import contextlib
 import copy
-import textwrap
 import warnings
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -18,24 +17,19 @@ import vyper.semantics.validation as validation
 from eth.exceptions import VMError
 from eth_utils import to_canonical_address, to_checksum_address
 
-from vyper.ast.signatures.function_signature import FunctionSignature
-from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return, getpos
-from vyper.codegen.function_definitions.common import generate_ir_for_function
-from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType, is_base_type
-from vyper.exceptions import InvalidType, VyperException
+from vyper.exceptions import VyperException
 from vyper.semantics.validation.data_positions import set_data_positions
-from vyper.semantics.validation.utils import get_exact_type_from_node
-from vyper.utils import abi_method_id, cached_property
+from vyper.utils import cached_property
 
 from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
+from boa.vyper.compiler_utils import generate_bytecode_for_arbitrary_stmt
 from boa.vyper.function import VyperFunction, VyperInternalFunction
-from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import reason_at
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
@@ -95,10 +89,11 @@ class _BaseContract:
             self.address = override_address
 
 
-# create a blueprint for use with `create_from_blueprint`.
-# uses a ERC5202 preamble, when calling `create_from_blueprint` will
-# need to use `code_offset=3`
 class VyperBlueprint(_BaseContract):
+    """Create a blueprint for use with `create_from_blueprint`.
+    Uses a ERC5202 preamble, when calling `create_from_blueprint` will
+    need to use `code_offset=3`.
+    """
     def __init__(
         self,
         compiler_data,
@@ -226,9 +221,11 @@ class StackTrace(list):
         return self[-1]
 
 
-# "pattern match" a BoaError. tries to match fields of the error
-# to the args/kwargs provided. raises if no match
 def check_boa_error_matches(error, *args, **kwargs):
+    """Pattern match a BoaError.
+    Tries to match fields of the error to the args/kwargs provided. raises if
+    no match.
+    """
     assert isinstance(error, BoaError)
 
     def _check(cond, msg=""):
@@ -284,9 +281,10 @@ def check_boa_error_matches(error, *args, **kwargs):
         )
 
 
-# using sha3 preimages, take a storage key and undo
-# hashes to get the sequence of hashes ("path") that gave us this image.
 def unwrap_storage_key(sha3_db, k):
+    """Using sha3 preimages, take a storage key and undo hashes to get the
+    sequence of hashes ("path") that gave us this image.
+    """
     path = []
 
     def unwrap(k):
@@ -363,8 +361,8 @@ class VarModel:
             return self._decode(self.slot, self.typ)
 
 
-# data structure to represent the storage variables in a contract
 class StorageModel:
+    """Data structure to represent the storage variables in a contract"""
     def __init__(self, contract):
         compiler_data = contract.compiler_data
         for k, v in compiler_data.global_ctx._globals.items():
@@ -636,7 +634,13 @@ class VyperContract(_BaseContract):
         """eval vyper code in the context of this contract"""
         tmp = self._source_map
 
-        bytecode, source_map, typ = self.compile_stmt(stmt)
+        # this method is super slow so we cache compilation results
+        if stmt in self._eval_cache:
+            bytecode, source_map, typ = self._eval_cache[stmt]
+        else:
+            bytecode, source_map, typ = generate_bytecode_for_arbitrary_stmt(stmt, self)
+            self._eval_cache[stmt] = (bytecode, source_map, typ)
+
         self._source_map = source_map
 
         method_id = b"dbug"  # note dummy method id, doesn't get validated
@@ -652,93 +656,6 @@ class VyperContract(_BaseContract):
 
         self._source_map = tmp  # restore
 
-        return ret
-
-    def compile_stmt(self, source_code: str) -> Any:
-        """Compile a fragment (single expr or statement) in the context
-        of the contract, returning the ABI encoded value if it is an expr.
-        """
-
-        # this method is super slow so we cache compilation results
-        if source_code in self._eval_cache:
-            return self._eval_cache[source_code]
-
-        ast = parse_to_ast(source_code)
-        vy_ast.folding.fold(ast)
-        ast = ast.body[0]
-
-        return_sig = ""
-        debug_body = source_code
-
-        ifaces = self.compiler_data.interface_codes
-
-        if isinstance(ast, vy_ast.Expr):
-            with self.override_vyper_namespace():
-                try:
-                    ast_typ = get_exact_type_from_node(ast.value)
-                    return_sig = f"-> {ast_typ}"
-                    debug_body = f"return {source_code}"
-                except InvalidType:
-                    pass
-
-        # wrap code in function so that we can easily generate code for it
-        wrapper_code = textwrap.dedent(
-            f"""
-            @external
-            @payable
-            def __boa_debug__() {return_sig}:
-                {debug_body}
-        """
-        )
-
-        ast = parse_to_ast(wrapper_code, ifaces)
-
-        # splice in constant definitions so that eval("MY_CONSTANT") works
-        for constant_def in self.compiler_data.vyper_module.get_children(
-            vy_ast.VariableDecl, {"is_constant": True}
-        ):
-            ast.add_to_body(constant_def)
-        vy_ast.folding.fold(ast)
-        ast.body = [ast.body[0]]
-
-        # annotate ast
-        with self.override_vyper_namespace():
-            validation.add_module_namespace(ast, self.compiler_data.interface_codes)
-            validation.validate_functions(ast)
-
-        ast = ast.body[0]
-
-        sig = FunctionSignature.from_definition(ast, self.global_ctx)
-        ast._metadata["signature"] = sig
-
-        sigs = {"self": self.compiler_data.function_signatures}
-        ir = generate_ir_for_function(ast, sigs, self.global_ctx, False)
-        # generate bytecode where selector check always succeeds
-        ir = IRnode.from_list(
-            ["with", _METHOD_ID_VAR, abi_method_id(sig.base_signature), ir]
-        )
-
-        # skip optimizing; we will optimize a couple lines down anyway
-        assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
-
-        # add original assembly in so that jumpdests in the fragment
-        # assemble correctly in final bytecode
-        # note this is somewhat kludgy
-        assembly.extend(self.unoptimized_assembly)
-
-        # note: optimize_assembly optimizes in place.
-        compile_ir._optimize_assembly(assembly)
-
-        bytecode, source_map = compile_ir.assembly_to_evm(assembly)
-
-        # tack on the data section
-        bytecode += self.data_section
-
-        # return the bytecode and other artifacts associated with
-        # this build
-        typ = sig.return_type
-        ret = bytecode, source_map, typ
-        self._eval_cache[source_code] = ret
         return ret
 
     @cached_property
