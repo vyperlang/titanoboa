@@ -17,7 +17,8 @@ import vyper.semantics.validation as validation
 from eth.exceptions import VMError
 from eth_utils import to_canonical_address, to_checksum_address
 
-from vyper.codegen.core import calculate_type_for_external_return, getpos
+from titanoboa.boa.vyper.ast_utils import ast_map_of
+from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType, is_base_type
 from vyper.exceptions import VyperException
@@ -34,20 +35,8 @@ from boa.vyper.event import Event, RawEvent
 from boa.vyper.function import VyperFunction, VyperInternalFunction
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
-
-# build a reverse map from the format we have in pc_pos_map to AST nodes
-# TODO move to ast_utils
-def ast_map_of(ast_node):
-    ast_map = {}
-    nodes = [ast_node] + ast_node.get_descendants(reverse=True)
-    for node in nodes:
-        ast_map[getpos(node)] = node
-    return ast_map
-
-
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
-
 
 # error detail where user possibly provided dev revert reason
 DEV_REASON_ALLOWED = ("user raise", "user assert")
