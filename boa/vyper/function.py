@@ -1,5 +1,3 @@
-import textwrap
-
 import eth_abi as abi
 from cached_property import cached_property
 
