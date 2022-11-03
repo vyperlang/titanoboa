@@ -41,7 +41,7 @@ from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
 try:
     # `eth-stdlib` requires python 3.10 and above
-    from eth.codecs.abi import abi_decode, abi_encode
+    from eth.codecs.abi import decode as abi_decode, encode as abi_encode
 
 except ImportError:
     from eth_abi import decode_single as abi_decode, encode_single as abi_encode
