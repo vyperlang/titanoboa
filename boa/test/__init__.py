@@ -29,19 +29,8 @@ def given(*given_args, **given_kwargs):
     """
 
     def outer_wrapper(test):
-        first_run = True
-
+        @env.anchor()
         def isolation_wrapper(*args, **kwargs):
-            nonlocal first_run
-            if first_run:
-                # prior to the first test run, take a snapshot to ensure
-                # consistent chain state for each run
-                snapshot_id = env.vm.state.snapshot()
-                first_run = False
-            else:
-                # revert at the start of subsequent tests runs so the chain is
-                # not reverted prior to launching the interactive debugger
-                env.vm.state.revert(snapshot_id)
             test(*args, **kwargs)
 
         # hypothesis.given must wrap the target test to correctly

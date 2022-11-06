@@ -8,6 +8,8 @@ from hypothesis.strategies import SearchStrategy
 from hypothesis.strategies._internal.deferred import DeferredStrategy
 from boa import env
 
+from boa.test.datatypes import Fixed, Wei
+
 
 TYPE_STR_TRANSLATIONS = {"byte": "bytes1", "decimal": "fixed168x10"}
 
@@ -53,11 +55,11 @@ def _exclude_filter(fn: Callable) -> Callable:
 
 
 def _check_numeric_bounds(
-    type_str: str, min_value: NumberType, max_value: NumberType
+    type_str: str, min_value: NumberType, max_value: NumberType, num_class: type
 ) -> Tuple:
     lower, upper = get_int_bounds(type_str)
-    min_final = lower if min_value is None else min_value
-    max_final = upper if max_value is None else max_value
+    min_final = lower if min_value is None else num_class(min_value)
+    max_final = upper if max_value is None else num_class(max_value)
     if min_final < lower:
         raise ValueError(f"min_value '{min_value}' is outside allowable range for {type_str}")
     if max_final > upper:
@@ -71,7 +73,7 @@ def _check_numeric_bounds(
 def _integer_strategy(
     type_str: str, min_value: Optional[int] = None, max_value: Optional[int] = None
 ) -> SearchStrategy:
-    min_value, max_value = _check_numeric_bounds(type_str, min_value, max_value)
+    min_value, max_value = _check_numeric_bounds(type_str, min_value, max_value, Wei)
     return st.integers(min_value=min_value, max_value=max_value)
 
 
@@ -79,12 +81,12 @@ def _integer_strategy(
 def _decimal_strategy(
     min_value: NumberType = None, max_value: NumberType = None, places: int = 10
 ) -> SearchStrategy:
-    min_value, max_value = _check_numeric_bounds("int128", min_value, max_value)
+    min_value, max_value = _check_numeric_bounds("int128", min_value, max_value, Fixed)
     return st.decimals(min_value=min_value, max_value=max_value, places=places)
 
 
 @_exclude_filter
-def _address_strategy(length: Optional[int] = None) -> SearchStrategy:
+def _address_strategy(length: Optional[int] = 100) -> SearchStrategy:
     accounts = [env.generate_address() for i in range(length)]
     return _DeferredStrategyRepr(
         lambda: st.sampled_from(list(accounts)[:length]), "accounts"
