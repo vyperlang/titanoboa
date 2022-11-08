@@ -555,12 +555,12 @@ class VyperContract(_BaseContract):
             # convert to bytes for abi decoder
             encoded_topic = t.to_bytes(32, "big")
             decoded_topics.append(
-                abi.decode_single(typ.abi_type.selector_name(), encoded_topic)
+                abi_decode(typ.abi_type.selector_name(), encoded_topic)
             )
 
         tuple_typ = TupleType(arg_typs)
 
-        args = abi.decode_single(tuple_typ.abi_type.selector_name(), data)
+        args = abi_decode(tuple_typ.abi_type.selector_name(), data)
 
         return Event(log_id, self.address, event_t, decoded_topics, args)
 
