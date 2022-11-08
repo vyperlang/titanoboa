@@ -10,7 +10,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Optional
 
-import eth_abi as abi
 import vyper
 import vyper.ast as vy_ast
 import vyper.compiler.output as compiler_output
@@ -39,6 +38,14 @@ from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vyper.ast_utils import reason_at
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
+
+
+try:
+    # `eth-stdlib` requires python 3.10 and above
+    from eth.codecs.abi import decode as abi_decode, encode as abi_encode
+
+except ImportError:
+    from eth_abi import decode_single as abi_decode, encode_single as abi_encode
 
 
 # build a reverse map from the format we have in pc_pos_map to AST nodes
@@ -195,7 +202,7 @@ class ErrorDetail:
         # decode error msg if it's "Error(string)"
         # b"\x08\xc3y\xa0" == method_id("Error(string)")
         if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-            return abi.decode_single("(string)", err.args[0][4:])[0]
+            return abi_decode("(string)", err.args[0][4:])[0]
 
         return repr(err)
 
@@ -567,7 +574,7 @@ class VyperContract(_BaseContract):
             return None
 
         return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi.decode_single(return_typ.abi_type.selector_name(), computation.output)
+        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
         if not isinstance(vyper_typ, TupleType):
@@ -883,8 +890,8 @@ class VyperFunction:
 
         # allow things with `.address` to be encode-able
         args = [getattr(arg, "address", arg) for arg in args]
+        encoded_args = abi_encode(args_abi_type, tuple(args))
 
-        encoded_args = abi.encode_single(args_abi_type, args)
         return method_id + encoded_args
 
     def __call__(self, *args, value=0, gas=None, **kwargs):
