@@ -1,7 +1,12 @@
 import boa
-import pytest
 
 source_code = """
+@internal
+@pure
+def _test_void_func():
+    pass
+
+
 @internal
 @pure
 def _test_bool(a: uint256, b: bool = False) -> bool:
@@ -39,3 +44,4 @@ c = boa.loads(source_code)
 assert c.internal._test_bool(10, True)
 assert c.internal._sort([1, 2, 3]) == c.sort([1, 2, 3])
 assert c.internal._test_bool(10)
+assert c.internal._test_void_func() is None

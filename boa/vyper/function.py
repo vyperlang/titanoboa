@@ -108,14 +108,10 @@ class VyperInternalFunction(VyperFunction):
     """Internal contract functions are exposed by wrapping it with a dummy
     external contract function, which involves changing the contract's
     bytecode.
-
-    TBD: add VyperContract.eval and VyperContract.compile_stmt inspired
-    methods here to wrap internal function with external function.
     """
 
     @cached_property
-    def bytecode(self):
-        """We overwrite some bytecode here"""
+    def _bytecode(self):
         bytecode, _, _ = generate_bytecode_for_internal_fn(self)
         return bytecode
 
@@ -124,7 +120,7 @@ class VyperInternalFunction(VyperFunction):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
         computation = self.env.execute_code(
             to_address=self.contract.address,
-            bytecode=self.bytecode,  # <- overwritten bytecode used here
+            bytecode=self._bytecode,
             data=calldata_bytes,
             value=value,
             gas=gas,

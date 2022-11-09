@@ -370,14 +370,9 @@ class VyperContract(_BaseContract):
         self.env.register_contract(self.address, self)
 
         # add all exposed functions from the interface to the contract
-        # exclude internal functions since
-        # 1. they cannot be called with self._internal_method since internal
-        #    methods are not exposed in the runtime bytecode (but are included
-        #    in the deployed bytecode).
-        # 2. [TBD] Internal methods are namespaced into self.internal_methods.
         external_fns = {
-            fn.name: fn for fn in self.global_ctx._function_defs if
-            not fn._metadata["type"].is_internal
+            fn.name: fn for fn in self.global_ctx._function_defs
+            if fn._metadata["type"].is_external
         }
 
         # set external methods as class attributes:
@@ -388,16 +383,12 @@ class VyperContract(_BaseContract):
         for fn_name, fn in external_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))
 
-        # handle internal methods:
-        internal_fns = {
-            fn.name: fn for fn in self.global_ctx._function_defs if
-            fn._metadata["type"].is_internal
-        }
-
         # set internal methods as class.internal attributes:
         self.internal = lambda: None
-        for fn_name, fn in internal_fns.items():
-            setattr(self.internal, fn_name, VyperInternalFunction(fn, self))
+        for fn in self.global_ctx._function_defs:
+            if not fn._metadata["type"].is_internal:
+                continue
+            setattr(self.internal, fn.name, VyperInternalFunction(fn, self))
 
         self._storage = StorageModel(self)
 
