@@ -106,8 +106,9 @@ class VyperFunction:
 
 class VyperInternalFunction(VyperFunction):
     """Internal contract functions are exposed by wrapping it with a dummy
-    external contract function, which involves changing the contract's
-    bytecode.
+    external contract function, appending the wrapper's ast at the top of
+    the contract and then generating bytecode to run internal methods
+    (as external methods).
     """
 
     @cached_property

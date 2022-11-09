@@ -78,11 +78,11 @@ class _BaseContract:
             self.address = override_address
 
 
+# create a blueprint for use with `create_from_blueprint`.
+# uses a ERC5202 preamble, when calling `create_from_blueprint` will
+# need to use `code_offset=3`
 class VyperBlueprint(_BaseContract):
-    """Create a blueprint for use with `create_from_blueprint`.
-    Uses a ERC5202 preamble, when calling `create_from_blueprint` will
-    need to use `code_offset=3`.
-    """
+
     def __init__(
         self,
         compiler_data,
@@ -210,10 +210,10 @@ class StackTrace(list):
         return self[-1]
 
 
+# "pattern match" a BoaError. tries to match fields of the error
+# to the args/kwargs provided. raises if no match
 def check_boa_error_matches(error, *args, **kwargs):
-    """Pattern match a BoaError.
-    Tries to match fields of the error to the args/kwargs provided. raises if
-    no match.
+    """
     """
     assert isinstance(error, BoaError)
 
@@ -270,10 +270,9 @@ def check_boa_error_matches(error, *args, **kwargs):
         )
 
 
+# using sha3 preimages, take a storage key and undo
+# hashes to get the sequence of hashes ("path") that gave us this image.
 def unwrap_storage_key(sha3_db, k):
-    """Using sha3 preimages, take a storage key and undo hashes to get the
-    sequence of hashes ("path") that gave us this image.
-    """
     path = []
 
     def unwrap(k):
@@ -350,8 +349,8 @@ class VarModel:
             return self._decode(self.slot, self.typ)
 
 
+# data structure to represent the storage variables in a contract
 class StorageModel:
-    """Data structure to represent the storage variables in a contract"""
     def __init__(self, contract):
         compiler_data = contract.compiler_data
         for k, v in compiler_data.global_ctx._globals.items():
@@ -647,11 +646,10 @@ class VyperContract(_BaseContract):
         finally:
             self._vyper_namespace["self"].members.pop("__boa_debug__", None)
 
+    # for eval(), we need unoptimized assembly, since the dead code
+    # eliminator might prune a dead function (which we want to eval)
     @cached_property
     def unoptimized_assembly(self):
-        """for eval(), we need unoptimized assembly, since the dead code
-        eliminator might prune a dead function (which we want to eval)
-        """
         runtime = self.compiler_data.ir_runtime
         return compile_ir.compile_to_assembly(runtime, no_optimize=True)
 

@@ -37,8 +37,8 @@ def reason_at(source_code: str, lineno: int) -> Optional[Tuple[str, str]]:
     return None
 
 
+# build a reverse map from the format we have in pc_pos_map to AST nodes
 def ast_map_of(ast_node):
-    """build a reverse map from the format we have in pc_pos_map to AST nodes"""
     ast_map = {}
     nodes = [ast_node] + ast_node.get_descendants(reverse=True)
     for node in nodes:
