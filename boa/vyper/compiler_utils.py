@@ -14,8 +14,8 @@ from vyper.utils import abi_method_id
 from boa.vyper import _METHOD_ID_VAR
 
 
-def compile_stmt(wrapper_code, contract):
-    """Compiles a wrapper code and appends it to the top of the IR of a
+def _compile_vyper_function(vyper_function, contract):
+    """Compiles a vyper function and appends it to the top of the IR of a
     contract. This is useful for vyper `eval` and internal functions, where
     the runtime bytecode must be changed to add more runtime functionality
     (such as eval, and calling internal functions)
@@ -24,7 +24,7 @@ def compile_stmt(wrapper_code, contract):
     compiler_data = contract.compiler_data
     global_ctx = contract.global_ctx
     ifaces = compiler_data.interface_codes
-    ast = parse_to_ast(wrapper_code, ifaces)
+    ast = parse_to_ast(vyper_function, ifaces)
 
     # override namespace and add wrapper code at the top
     with contract.override_vyper_namespace():
@@ -59,7 +59,6 @@ def generate_bytecode_for_internal_fn(fn):
     contract = fn.contract
     fn_args = fn.fn_signature.args
     fn_name = fn.fn_signature.name
-    fn_arg_defaults = fn.fn_ast.args.defaults
     return_sig = fn.fn_signature.return_type
 
     fn_args_parsed = ", ".join(
@@ -70,8 +69,12 @@ def generate_bytecode_for_internal_fn(fn):
     fn_sig_parsed = []
     for i, arg in enumerate(fn_args):
         parsed_arg_sig = f"{arg.name}: {arg.typ}"
-        if fn_arg_defaults:
-            parsed_arg_sig += f" = {fn_arg_defaults[i].value}"
+
+        # check if arg has a default value:
+        if arg.name in fn.fn_signature.default_values.keys():
+            default_value = fn.fn_signature.default_values[arg.name].value
+            parsed_arg_sig += f" = {default_value}"
+
         fn_sig_parsed.append(parsed_arg_sig)
     fn_sig_parsed = ", ".join(fn_sig_parsed)
 
@@ -83,7 +86,7 @@ def generate_bytecode_for_internal_fn(fn):
             return self.{fn_name}({fn_args_parsed})
     """
     )
-    return compile_stmt(wrapper_code, contract)
+    return _compile_vyper_function(wrapper_code, contract)
 
 
 def generate_bytecode_for_arbitrary_stmt(source_code, contract):
@@ -114,4 +117,4 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
             {debug_body}
     """
     )
-    return compile_stmt(wrapper_code, contract)
+    return _compile_vyper_function(wrapper_code, contract)
