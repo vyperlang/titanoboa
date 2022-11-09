@@ -8,7 +8,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Optional
 
-import eth_abi as abi
 import vyper
 import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
@@ -33,6 +32,13 @@ from boa.vyper.compiler_utils import generate_bytecode_for_arbitrary_stmt
 from boa.vyper.event import Event, RawEvent
 from boa.vyper.function import VyperFunction, VyperInternalFunction
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
+
+try:
+    # `eth-stdlib` requires python 3.10 and above
+    from eth.codecs.abi import decode as abi_decode, encode as abi_encode
+
+except ImportError:
+    from eth_abi import decode_single as abi_decode, encode_single as abi_encode
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -174,7 +180,7 @@ class ErrorDetail:
         # decode error msg if it's "Error(string)"
         # b"\x08\xc3y\xa0" == method_id("Error(string)")
         if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-            return abi.decode_single("(string)", err.args[0][4:])[0]
+            return abi_decode("(string)", err.args[0][4:])[0]
 
         return repr(err)
 
@@ -540,12 +546,12 @@ class VyperContract(_BaseContract):
             # convert to bytes for abi decoder
             encoded_topic = t.to_bytes(32, "big")
             decoded_topics.append(
-                abi.decode_single(typ.abi_type.selector_name(), encoded_topic)
+                abi_decode(typ.abi_type.selector_name(), encoded_topic)
             )
 
         tuple_typ = TupleType(arg_typs)
 
-        args = abi.decode_single(tuple_typ.abi_type.selector_name(), data)
+        args = abi_decode(tuple_typ.abi_type.selector_name(), data)
 
         return Event(log_id, self.address, event_t, decoded_topics, args)
 
@@ -559,7 +565,7 @@ class VyperContract(_BaseContract):
             return None
 
         return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi.decode_single(return_typ.abi_type.selector_name(), computation.output)
+        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
         if not isinstance(vyper_typ, TupleType):
