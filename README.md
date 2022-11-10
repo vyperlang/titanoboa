@@ -114,7 +114,7 @@ In [3]: %%vyper
    ...: def foo() -> uint256:
    ...:     return MY_IMMUTABLE
    ...: 
-Out[3]: <boa.contract.VyperDeployer at 0x7f3496187190>
+Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
 
 In [4]: d = _
 
@@ -160,7 +160,7 @@ In [3]: %%vyper Test
    ...: @external
    ...: def get_name_of(addr: HasName) -> String[32]:
    ...:     return addr.name()
-Out[3]: <boa.contract.VyperDeployer at 0x7f3496187190>
+Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
 
 In [4]: c = Test.deploy()
 

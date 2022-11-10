@@ -1,7 +1,7 @@
 import contextlib
 import sys
 
-from boa.contract import check_boa_error_matches
+from boa.vyper.contract import check_boa_error_matches
 from boa.environment import (
     Env,
     deregister_precompile,

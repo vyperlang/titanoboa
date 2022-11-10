@@ -1,44 +1,37 @@
-# TODO maybe move me to boa/vyper/
 # the main "entry point" of vyper-related functionality like
 # AST handling, traceback construction and ABI (marshaling
 # and unmarshaling vyper objects)
 
 import contextlib
 import copy
-import textwrap
 import warnings
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import vyper
 import vyper.ast as vy_ast
-import vyper.compiler.output as compiler_output
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
 from eth.exceptions import VMError
 from eth_utils import to_canonical_address, to_checksum_address
-from vyper.ast.signatures.function_signature import FunctionSignature
-from vyper.ast.utils import parse_to_ast
-from vyper.codegen.core import calculate_type_for_external_return, getpos
-from vyper.codegen.function_definitions.common import generate_ir_for_function
-from vyper.codegen.ir_node import IRnode
+
+from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType, is_base_type
-from vyper.exceptions import InvalidType, VyperException
-from vyper.ir.optimizer import optimize
+from vyper.exceptions import VyperException
 from vyper.semantics.validation.data_positions import set_data_positions
-from vyper.semantics.validation.utils import get_exact_type_from_node
-from vyper.utils import abi_method_id, cached_property
+from vyper.utils import cached_property
 
 from boa.environment import AddressT, Env, to_int
-from boa.event import Event, RawEvent
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
-from boa.vyper.ast_utils import reason_at
+from boa.vyper.ast_utils import reason_at, ast_map_of
+from boa.vyper.compiler_utils import generate_bytecode_for_arbitrary_stmt
+from boa.vyper.event import Event, RawEvent
+from boa.vyper.function import VyperFunction, VyperInternalFunction
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
-
 
 try:
     # `eth-stdlib` requires python 3.10 and above
@@ -47,27 +40,11 @@ try:
 except ImportError:
     from eth_abi import decode_single as abi_decode, encode_single as abi_encode
 
-
-# build a reverse map from the format we have in pc_pos_map to AST nodes
-# TODO move to ast_utils
-def ast_map_of(ast_node):
-    ast_map = {}
-    nodes = [ast_node] + ast_node.get_descendants(reverse=True)
-    for node in nodes:
-        ast_map[getpos(node)] = node
-    return ast_map
-
-
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
 
-
 # error detail where user possibly provided dev revert reason
 DEV_REASON_ALLOWED = ("user raise", "user assert")
-
-
-# id used internally for method id name
-_METHOD_ID_VAR = "_calldata_method_id"
 
 
 class VyperDeployer:
@@ -111,6 +88,7 @@ class _BaseContract:
 # uses a ERC5202 preamble, when calling `create_from_blueprint` will
 # need to use `code_offset=3`
 class VyperBlueprint(_BaseContract):
+
     def __init__(
         self,
         compiler_data,
@@ -394,15 +372,26 @@ class VyperContract(_BaseContract):
 
         self.env.register_contract(self.address, self)
 
-        fns = {fn.name: fn for fn in self.global_ctx._function_defs}
-        # add all functions from the interface to the contract
+        # add all exposed functions from the interface to the contract
+        external_fns = {
+            fn.name: fn for fn in self.global_ctx._function_defs
+            if fn._metadata["type"].is_external
+        }
 
+        # set external methods as class attributes:
         self._ctor = None
-        if "__init__" in fns:
-            self._ctor = VyperFunction(fns.pop("__init__"), self)
+        if "__init__" in external_fns:
+            self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
-        for fn in fns.values():
-            setattr(self, fn.name, VyperFunction(fn, self))
+        for fn_name, fn in external_fns.items():
+            setattr(self, fn_name, VyperFunction(fn, self))
+
+        # set internal methods as class.internal attributes:
+        self.internal = lambda: None
+        for fn in self.global_ctx._function_defs:
+            if not fn._metadata["type"].is_internal:
+                continue
+            setattr(self.internal, fn.name, VyperInternalFunction(fn, self))
 
         self._storage = StorageModel(self)
 
@@ -621,28 +610,6 @@ class VyperContract(_BaseContract):
 
         return ret
 
-    # eval vyper code in the context of this contract
-    def eval(self, stmt: str, value: int = 0, gas: int = None) -> Any:
-        tmp = self._source_map
-
-        bytecode, source_map, typ = self.compile_stmt(stmt)
-        self._source_map = source_map
-
-        method_id = b"dbug"  # note dummy method id, doesn't get validated
-        c = self.env.execute_code(
-            to_address=self.address,
-            bytecode=bytecode,
-            data=method_id,
-            value=value,
-            gas=gas,
-        )
-
-        ret = self.marshal_to_python(c, typ)
-
-        self._source_map = tmp  # restore
-
-        return ret
-
     @cached_property
     def _ast_module(self):
         module = copy.deepcopy(self.compiler_data.vyper_module)
@@ -709,90 +676,32 @@ class VyperContract(_BaseContract):
         )
         return s + self.data_section
 
-    # compile a fragment (single expr or statement) in the context
-    # of the contract, returning the ABI encoded value if it is an expr.
-    def compile_stmt(self, source_code: str) -> Any:
+    def eval(self, stmt: str, value: int = 0, gas: int = None) -> Any:
+        """eval vyper code in the context of this contract"""
+        tmp = self._source_map
+
         # this method is super slow so we cache compilation results
-        if source_code in self._eval_cache:
-            return self._eval_cache[source_code]
+        if stmt in self._eval_cache:
+            bytecode, source_map, typ = self._eval_cache[stmt]
+        else:
+            bytecode, source_map, typ = generate_bytecode_for_arbitrary_stmt(stmt, self)
+            self._eval_cache[stmt] = (bytecode, source_map, typ)
 
-        ast = parse_to_ast(source_code)
-        vy_ast.folding.fold(ast)
-        ast = ast.body[0]
+        self._source_map = source_map
 
-        typ = None
-        return_sig = ""
-        debug_body = source_code
-
-        ifaces = self.compiler_data.interface_codes
-
-        if isinstance(ast, vy_ast.Expr):
-            with self.override_vyper_namespace():
-                try:
-                    ast_typ = get_exact_type_from_node(ast.value)
-                    return_sig = f"-> {ast_typ}"
-                    debug_body = f"return {source_code}"
-                except InvalidType:
-                    pass
-
-        # wrap code in function so that we can easily generate code for it
-        wrapper_code = textwrap.dedent(
-            f"""
-            @external
-            @payable
-            def __boa_debug__() {return_sig}:
-                {debug_body}
-        """
+        method_id = b"dbug"  # note dummy method id, doesn't get validated
+        c = self.env.execute_code(
+            to_address=self.address,
+            bytecode=bytecode,
+            data=method_id,
+            value=value,
+            gas=gas,
         )
 
-        ast = parse_to_ast(wrapper_code, ifaces)
+        ret = self.marshal_to_python(c, typ)
 
-        # splice in constant definitions so that eval("MY_CONSTANT") works
-        for constant_def in self.compiler_data.vyper_module.get_children(
-            vy_ast.VariableDecl, {"is_constant": True}
-        ):
-            ast.add_to_body(constant_def)
-        vy_ast.folding.fold(ast)
-        ast.body = [ast.body[0]]
+        self._source_map = tmp  # restore
 
-        # annotate ast
-        with self.override_vyper_namespace():
-            validation.add_module_namespace(ast, self.compiler_data.interface_codes)
-            validation.validate_functions(ast)
-
-        ast = ast.body[0]
-
-        sig = FunctionSignature.from_definition(ast, self.global_ctx)
-        ast._metadata["signature"] = sig
-
-        sigs = {"self": self.compiler_data.function_signatures}
-        ir = generate_ir_for_function(ast, sigs, self.global_ctx, False)
-        # generate bytecode where selector check always succeeds
-        ir = IRnode.from_list(
-            ["with", _METHOD_ID_VAR, abi_method_id(sig.base_signature), ir]
-        )
-
-        # skip optimizing; we will optimize a couple lines down anyway
-        assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
-
-        # add original assembly in so that jumpdests in the fragment
-        # assemble correctly in final bytecode
-        # note this is somewhat kludgy
-        assembly.extend(self.unoptimized_assembly)
-
-        # note: optimize_assembly optimizes in place.
-        compile_ir._optimize_assembly(assembly)
-
-        bytecode, source_map = compile_ir.assembly_to_evm(assembly)
-
-        # tack on the data section
-        bytecode += self.data_section
-
-        # return the bytecode and other artifacts associated with
-        # this build
-        typ = sig.return_type
-        ret = bytecode, source_map, typ
-        self._eval_cache[source_code] = ret
         return ret
 
     @cached_property
@@ -814,98 +723,6 @@ class BoaError(Exception):
         err = frame.vm_error
         err.args = (frame.pretty_vm_reason, *err.args[1:])
         return f"{err}\n\n{self.stack_trace}"
-
-
-class VyperFunction:
-    def __init__(self, fn_ast, contract):
-        self.fn_ast = fn_ast
-        self.contract = contract
-        self.env = contract.env
-
-    def __repr__(self):
-        return repr(self.fn_ast)
-
-    @cached_property
-    def fn_signature(self):
-        return self.contract.compiler_data.function_signatures[self.fn_ast.name]
-
-    @cached_property
-    def ir(self):
-        # patch compiler_data to have IR for every function
-        sigs = self.contract._sigs
-        global_ctx = self.contract.global_ctx
-
-        ir = generate_ir_for_function(self.fn_ast, sigs, global_ctx, False)
-        return optimize(ir)
-
-    @cached_property
-    def assembly(self):
-        ir = IRnode.from_list(
-            ["with", _METHOD_ID_VAR, ["shr", 224, ["calldataload", 0]], self.ir]
-        )
-        return compile_ir.compile_to_assembly(ir)
-
-    @cached_property
-    def opcodes(self):
-        return compiler_output._build_opcodes(self.bytecode)
-
-    @cached_property
-    def bytecode(self):
-        bytecode, _ = compile_ir.assembly_to_evm(self.assembly)
-        return bytecode
-
-    # hotspot, cache the signature computation
-    def args_abi_type(self, num_kwargs):
-        if not hasattr(self, "_signature_cache"):
-            self._signature_cache = {}
-        if num_kwargs in self._signature_cache:
-            return self._signature_cache[num_kwargs]
-
-        # align the kwargs with the signature
-        sig_kwargs = self.fn_signature.default_args[:num_kwargs]
-        sig_args = self.fn_signature.base_args + sig_kwargs
-        args_abi_type = (
-            "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
-        )
-        method_id = abi_method_id(self.fn_signature.name + args_abi_type).to_bytes(
-            4, "big"
-        )
-        self._signature_cache[num_kwargs] = (method_id, args_abi_type)
-
-        return method_id, args_abi_type
-
-    def _prepare_calldata(self, *args, **kwargs):
-        if (
-            not len(self.fn_signature.base_args)
-            <= len(args)
-            <= len(self.fn_signature.args)
-        ):
-            raise Exception(f"bad args to {self}")
-
-        # align the kwargs with the signature
-        # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
-
-        total_non_base_args = len(kwargs) + len(args) - len(self.fn_signature.base_args)
-        method_id, args_abi_type = self.args_abi_type(total_non_base_args)
-
-        # allow things with `.address` to be encode-able
-        args = [getattr(arg, "address", arg) for arg in args]
-        encoded_args = abi_encode(args_abi_type, tuple(args))
-
-        return method_id + encoded_args
-
-    def __call__(self, *args, value=0, gas=None, **kwargs):
-        calldata_bytes = self._prepare_calldata(*args, **kwargs)
-        computation = self.env.execute_code(
-            to_address=self.contract.address,
-            bytecode=self.contract.bytecode,
-            data=calldata_bytes,
-            value=value,
-            gas=gas,
-        )
-
-        typ = self.fn_signature.return_type
-        return self.contract.marshal_to_python(computation, typ)
 
 
 _typ_cache = {}
