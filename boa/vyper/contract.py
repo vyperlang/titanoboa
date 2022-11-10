@@ -219,8 +219,6 @@ class StackTrace(list):
 # "pattern match" a BoaError. tries to match fields of the error
 # to the args/kwargs provided. raises if no match
 def check_boa_error_matches(error, *args, **kwargs):
-    """
-    """
     assert isinstance(error, BoaError)
 
     def _check(cond, msg=""):

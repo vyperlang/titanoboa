@@ -59,7 +59,7 @@ def generate_bytecode_for_internal_fn(fn):
     contract = fn.contract
     fn_name = fn.fn_signature.name
     fn_args = ", ".join(
-        [f"{arg.name}" for arg in fn.fn_signature.args]
+        [arg.name for arg in fn.fn_signature.args]
     )
 
     return_sig = ""
@@ -75,7 +75,7 @@ def generate_bytecode_for_internal_fn(fn):
         sig_arg_text = f"{arg.name}: {arg.typ}"
 
         # check if arg has a default value:
-        if arg.name in fn.fn_signature.default_values.keys():
+        if arg.name in fn.fn_signature.default_values:
             default_value = fn.fn_signature.default_values[arg.name].value
             sig_arg_text += f" = {default_value}"
 
