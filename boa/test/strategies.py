@@ -1,15 +1,16 @@
 #!/usr/bin/python3
 
+import random
+import string
 from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
 from eth_abi.grammar import BasicType, TupleType, parse
+from eth_utils import to_checksum_address
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
 from hypothesis.strategies._internal.deferred import DeferredStrategy
-from boa import env
 
 from boa.test.datatypes import Fixed, Wei
-
 
 TYPE_STR_TRANSLATIONS = {"byte": "bytes1", "decimal": "fixed168x10"}
 
@@ -37,7 +38,9 @@ class _DeferredStrategyRepr(DeferredStrategy):
 
 
 def _exclude_filter(fn: Callable) -> Callable:
-    def wrapper(*args: Tuple, exclude: Any = None, **kwargs: int) -> SearchStrategy:
+    def wrapper(
+        *args: Tuple, exclude: Any = None, **kwargs: int
+    ) -> SearchStrategy:
         strat = fn(*args, **kwargs)
         if exclude is None:
             return strat
@@ -55,39 +58,69 @@ def _exclude_filter(fn: Callable) -> Callable:
 
 
 def _check_numeric_bounds(
-    type_str: str, min_value: NumberType, max_value: NumberType, num_class: type
+    type_str: str,
+    min_value: NumberType,
+    max_value: NumberType,
+    num_class: type,
 ) -> Tuple:
     lower, upper = get_int_bounds(type_str)
     min_final = lower if min_value is None else num_class(min_value)
     max_final = upper if max_value is None else num_class(max_value)
     if min_final < lower:
-        raise ValueError(f"min_value '{min_value}' is outside allowable range for {type_str}")
+        raise ValueError(
+            f"min_value '{min_value}' is outside allowable range for {type_str}"
+        )
     if max_final > upper:
-        raise ValueError(f"max_value '{max_value}' is outside allowable range for {type_str}")
+        raise ValueError(
+            f"max_value '{max_value}' is outside allowable range for {type_str}"
+        )
     if min_final > max_final:
-        raise ValueError(f"min_value '{min_final}' is greater than max_value '{max_final}'")
+        raise ValueError(
+            f"min_value '{min_final}' is greater than max_value '{max_final}'"
+        )
     return min_final, max_final
 
 
 @_exclude_filter
 def _integer_strategy(
-    type_str: str, min_value: Optional[int] = None, max_value: Optional[int] = None
+    type_str: str,
+    min_value: Optional[int] = None,
+    max_value: Optional[int] = None,
 ) -> SearchStrategy:
-    min_value, max_value = _check_numeric_bounds(type_str, min_value, max_value, Wei)
+    min_value, max_value = _check_numeric_bounds(
+        type_str, min_value, max_value, Wei
+    )
     return st.integers(min_value=min_value, max_value=max_value)
 
 
 @_exclude_filter
 def _decimal_strategy(
-    min_value: NumberType = None, max_value: NumberType = None, places: int = 10
+    min_value: NumberType = None,
+    max_value: NumberType = None,
+    places: int = 10,
 ) -> SearchStrategy:
-    min_value, max_value = _check_numeric_bounds("int128", min_value, max_value, Fixed)
+    min_value, max_value = _check_numeric_bounds(
+        "int128", min_value, max_value, Fixed
+    )
     return st.decimals(min_value=min_value, max_value=max_value, places=places)
+
+
+def format_addr(t):
+    if isinstance(t, str):
+        t = t.encode("utf-8")
+    return to_checksum_address(t.rjust(20, b"\x00"))
+
+
+def generate_random_string(n):
+    return [
+        "".join(random.choices(string.ascii_lowercase, k=5)) for i in range(n)
+    ]
 
 
 @_exclude_filter
 def _address_strategy(length: Optional[int] = 100) -> SearchStrategy:
-    accounts = [env.generate_address() for i in range(length)]
+    random_strings = generate_random_string(length)
+    accounts = [format_addr(i) for i in random_strings]
     return _DeferredStrategyRepr(
         lambda: st.sampled_from(list(accounts)[:length]), "accounts"
     )
@@ -95,7 +128,9 @@ def _address_strategy(length: Optional[int] = 100) -> SearchStrategy:
 
 @_exclude_filter
 def _bytes_strategy(
-    abi_type: BasicType, min_size: Optional[int] = None, max_size: Optional[int] = None
+    abi_type: BasicType,
+    min_size: Optional[int] = None,
+    max_size: Optional[int] = None,
 ) -> SearchStrategy:
     size = abi_type.sub
     if not size:
@@ -112,9 +147,13 @@ def _string_strategy(min_size: int = 0, max_size: int = 64) -> SearchStrategy:
     return st.text(min_size=min_size, max_size=max_size)
 
 
-def _get_array_length(var_str: str, length: ArrayLengthType, dynamic_len: int) -> int:
+def _get_array_length(
+    var_str: str, length: ArrayLengthType, dynamic_len: int
+) -> int:
     if not isinstance(length, (list, int)):
-        raise TypeError(f"{var_str} must be of type int or list, not '{type(length).__name__}''")
+        raise TypeError(
+            f"{var_str} must be of type int or list, not '{type(length).__name__}''"
+        )
     if not isinstance(length, list):
         return length
     if len(length) != dynamic_len:
@@ -139,9 +178,13 @@ def _array_strategy(
         min_len = _get_array_length("min_length", min_length, dynamic_len)
         max_len = _get_array_length("max_length", max_length, dynamic_len)
     if abi_type.item_type.is_array:
-        kwargs.update(min_length=min_length, max_length=max_length, unique=unique)
+        kwargs.update(
+            min_length=min_length, max_length=max_length, unique=unique
+        )
     base_strategy = strategy(abi_type.item_type.to_type_str(), **kwargs)
-    strat = st.lists(base_strategy, min_size=min_len, max_size=max_len, unique=unique)
+    strat = st.lists(
+        base_strategy, min_size=min_len, max_size=max_len, unique=unique
+    )
     # swap 'size' for 'length' in the repr
     repr_ = "length".join(strat.__repr__().rsplit("size", maxsplit=2))
     strat._LazyStrategy__representation = repr_  # type: ignore

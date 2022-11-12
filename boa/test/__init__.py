@@ -16,6 +16,8 @@ from boa import env
 # but in brownie this is a documented and useful behaviour
 warnings.filterwarnings("ignore", category=HypothesisDeprecationWarning)
 
+_hypothesis_given = hypothesis.given
+
 
 class BoaTestWarning(Warning):
     pass
@@ -27,7 +29,6 @@ def given(*given_args, **given_kwargs):
 
     This is the main entry point to Hypothesis when using Boa.
     """
-
     def outer_wrapper(test):
         @env.anchor()
         def isolation_wrapper(*args, **kwargs):
@@ -46,19 +47,3 @@ def given(*given_args, **given_kwargs):
         return hy_wrapped
 
     return outer_wrapper
-
-
-def _given_warning_wrapper(*args, **kwargs):
-    warnings.warn(
-        "Directly importing `hypothesis.given` may result in improper isolation"
-        " between test runs. You should import `boa.test.given` instead.",
-        BoaTestWarning,
-    )
-    return _hypothesis_given(*args, **kwargs)
-
-
-def _apply_given_wrapper():
-    hypothesis.given = _given_warning_wrapper
-
-
-_hypothesis_given = hypothesis.given
