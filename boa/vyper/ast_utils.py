@@ -3,6 +3,8 @@ import re
 import tokenize
 from typing import Any, Optional, Tuple
 
+from vyper.codegen.core import getpos
+
 
 def get_line(source_code: str, lineno: int) -> str:
     source_lines = source_code.splitlines(keepends=True)
@@ -33,3 +35,12 @@ def reason_at(source_code: str, lineno: int) -> Optional[Tuple[str, str]]:
     if c is not None:
         return _extract_reason(c)
     return None
+
+
+# build a reverse map from the format we have in pc_pos_map to AST nodes
+def ast_map_of(ast_node):
+    ast_map = {}
+    nodes = [ast_node] + ast_node.get_descendants(reverse=True)
+    for node in nodes:
+        ast_map[getpos(node)] = node
+    return ast_map
