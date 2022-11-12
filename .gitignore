@@ -7,3 +7,4 @@ dist/
 .idea/
 .hypothesis/
 .idea/
+.pytest_cache
