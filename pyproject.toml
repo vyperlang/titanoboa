@@ -39,5 +39,8 @@ requires = ["setuptools", "wheel"]
 [tool.setuptools.packages.find]
 include = ["boa*"]
 
+[tool.pytest.ini_options]
+markers = ["ignore_isolation: Do not preserve state during tests"]
+
 #[dev-dependencies]
 #black = { version = "^18.3-alpha.0", python = "^3.6" }
