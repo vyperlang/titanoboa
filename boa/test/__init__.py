@@ -9,11 +9,13 @@ import warnings
 import hypothesis
 from hypothesis.errors import HypothesisDeprecationWarning
 
+from .stateful import state_machine  # NOQA: F401
 from .strategies import strategy  # NOQA: F401
-from boa import env
+import boa
 
 # hypothesis warns against combining function-scoped fixtures with @given
-# but in brownie this is a documented and useful behaviour
+# but in brownie this is a documented and useful behaviour. In boa.test we
+# will follow the same logic:
 warnings.filterwarnings("ignore", category=HypothesisDeprecationWarning)
 
 _hypothesis_given = hypothesis.given
@@ -30,7 +32,7 @@ def given(*given_args, **given_kwargs):
     This is the main entry point to Hypothesis when using Boa.
     """
     def outer_wrapper(test):
-        @env.anchor()
+        @boa.env.anchor()
         def isolation_wrapper(*args, **kwargs):
             test(*args, **kwargs)
 

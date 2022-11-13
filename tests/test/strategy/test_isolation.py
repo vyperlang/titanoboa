@@ -47,6 +47,5 @@ def test_ignore_isolation_init():
 
 @pytest.mark.ignore_isolation
 def test_check_ignore_isolation():
-    print(boa_contract.a())
     assert boa_contract.a() == 42069
     assert boa_contract.b() == addr_const
