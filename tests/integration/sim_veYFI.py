@@ -1,13 +1,12 @@
 import boa
 from eth_utils import to_checksum_address
-from vyper.utils import checksum_encode
-
 import time
 
 # uncomment to cache build artifacts
 # boa.interpret.set_cache_dir()
 
 _t = time.time()
+
 
 def timeit(msg):
     global _t
@@ -20,6 +19,7 @@ def format_addr(t):
     if isinstance(t, str):
         t = t.encode("utf-8")
     return to_checksum_address(t.rjust(20, b"\x00"))
+
 
 BUNNY = boa.env.generate_address("bunny")
 MILKY = boa.env.generate_address("milky")
@@ -94,9 +94,11 @@ with boa.env.prank(DOGGIE):
 
 timeit("lock veYFI")
 
+
 def warp_week(n=1):
     boa.env.vm.patch.timestamp += WEEK * n
     boa.env.vm.patch.block_number += 40_000 * n
+
 
 for i in range(START_TIME, int(START_TIME + YEAR * 1.2), WEEK):
     warp_week()
@@ -116,4 +118,10 @@ for i in range(START_TIME, int(START_TIME + YEAR * 1.2), WEEK):
 timeit("simulation")
 
 print({t: veYFI.balanceOf(t) for t in parties})
-assert {t: veYFI.balanceOf(t) for t in parties} == {BUNNY: 693692922292074000, MILKY: 1891495433795992400, DOGGIE: 195062785364970000, POOLPI: 0}
+balances = {
+    BUNNY: 693692922292074000,
+    MILKY: 1891495433795992400,
+    DOGGIE: 195062785364970000,
+    POOLPI: 0
+}
+assert {t: veYFI.balanceOf(t) for t in parties} == balances
