@@ -75,7 +75,6 @@ def _generate_state_machine(rules_object: type) -> type:
     return machine
 
 
-@boa.env.anchor()
 def state_machine(
     rules_object: type, *args: Any, settings: Optional[dict] = None, **kwargs: Any
 ) -> None:
@@ -86,7 +85,10 @@ def state_machine(
         rules_object.__init__(machine, *args, **kwargs)  # type: ignore
 
     try:
-        sf.run_state_machine_as_test(lambda: machine(), settings=hp_settings(**settings or {}))
+        with boa.env.anchor():
+            sf.run_state_machine_as_test(
+                lambda: machine(), settings=hp_settings(**settings or {})
+            )
     finally:
         if hasattr(machine, "teardown_final"):
             # teardown_final is also a class method
