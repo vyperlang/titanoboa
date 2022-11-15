@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from boa.test import given, strategy
+from boa.test import given, strategy, state_machine
 
 A_INIT = 10
 B_INIT = boa.env.generate_address()
@@ -48,7 +48,7 @@ def test_ignore_isolation_init(boa_contract):
     boa_contract.set_vars(42069, addr_constn)
 
 
-# @pytest.mark.ignore_isolation
+@pytest.mark.ignore_isolation
 def test_check_ignore_isolation(boa_contract):
     assert boa_contract.a() == 42069
     assert boa_contract.b() == addr_constn
