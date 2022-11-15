@@ -25,6 +25,7 @@ class BoaTestWarning(Warning):
     pass
 
 
+
 def given(*given_args, **given_kwargs):
     """Wrapper around hypothesis.given, a decorator for turning a test function
     that accepts arguments into a randomized test.
@@ -49,3 +50,5 @@ def given(*given_args, **given_kwargs):
         return hy_wrapped
 
     return outer_wrapper
+
+hypothesis.given = given

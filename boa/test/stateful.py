@@ -17,8 +17,9 @@ class _BoaStateMachine:
     _failed = False
 
     def __init__(self) -> None:
-
         sf.RuleBasedStateMachine.__init__(self)
+
+        self.snapshot_id = boa.env.vm.state.snapshot()
 
         if hasattr(self, "setup"):
             self.setup()  # type: ignore
@@ -36,6 +37,10 @@ class _BoaStateMachine:
         except Exception:
             type(self)._failed = True
             raise
+
+    def teardown(self):
+        pass
+        #boa.env.vm.state.revert(self.snapshot_id)
 
 
 def _member_filter(member: tuple) -> bool:
@@ -85,11 +90,12 @@ def state_machine(
         rules_object.__init__(machine, *args, **kwargs)  # type: ignore
 
     try:
-        with boa.env.anchor():
-            sf.run_state_machine_as_test(
-                lambda: machine(), settings=hp_settings(**settings or {})
-            )
+        sf.run_state_machine_as_test(
+            machine, settings=hp_settings(**settings or {})
+        )
+        print("EXIT 2")
     finally:
+        print("TEARDOWN")
         if hasattr(machine, "teardown_final"):
             # teardown_final is also a class method
             machine.teardown_final(machine)  # type: ignore

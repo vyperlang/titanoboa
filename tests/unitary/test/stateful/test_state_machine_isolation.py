@@ -1,5 +1,6 @@
 import boa
-from boa.test import given, strategy, state_machine
+from boa.test import strategy, state_machine
+from hypothesis import given
 import pytest
 
 
@@ -22,6 +23,7 @@ class TestStateMachine:
         self.add_val = val
 
     def setup(self):
+        print("SETUP")
         self.contract.add_to_a(self.add_val)
 
     # empty rule just so hypothesis does not complain
@@ -33,6 +35,7 @@ class TestStateMachine:
 
 
 @given(val=strategy("uint256"))
+#@pytest.mark.parametrize("val", [1,2,3])
 def test_state_machine_isolation(boa_contract, val):
     from hypothesis._settings import HealthCheck
 

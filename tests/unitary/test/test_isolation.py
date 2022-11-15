@@ -1,7 +1,8 @@
 import pytest
 import boa
 
-from boa.test import given, strategy
+from boa.test import strategy
+from hypothesis import given
 
 A_INIT = 10
 B_INIT = boa.env.generate_address()
