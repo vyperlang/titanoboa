@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from boa.test import given, strategy, state_machine
+from boa.test import given, strategy
 
 A_INIT = 10
 B_INIT = boa.env.generate_address()
