@@ -1,6 +1,4 @@
-import eth_abi as abi
 from cached_property import cached_property
-
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.compiler import output as compiler_output
@@ -10,6 +8,12 @@ from vyper.utils import abi_method_id
 
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.compiler_utils import generate_bytecode_for_internal_fn
+
+try:
+    # `eth-stdlib` requires python 3.10 and above
+    from eth.codecs.abi import encode as abi_encode
+except ImportError:
+    from eth_abi import encode_single as abi_encode  # type: ignore
 
 
 class VyperFunction:
@@ -87,7 +91,7 @@ class VyperFunction:
         # allow things with `.address` to be encode-able
         args = [getattr(arg, "address", arg) for arg in args]
 
-        encoded_args = abi.encode_single(args_abi_type, args)
+        encoded_args = abi_encode(args_abi_type, args)
         return method_id + encoded_args
 
     def __call__(self, *args, value=0, gas=None, **kwargs):

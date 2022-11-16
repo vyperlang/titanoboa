@@ -1,7 +1,6 @@
 import contextlib
 import sys
 
-from boa.vyper.contract import check_boa_error_matches
 from boa.environment import (
     Env,
     deregister_precompile,
@@ -10,6 +9,7 @@ from boa.environment import (
     register_precompile,
 )
 from boa.interpret import BoaError, load, load_partial, loads, loads_partial
+from boa.vyper.contract import check_boa_error_matches
 
 # turn off tracebacks if we are in repl
 # https://stackoverflow.com/a/64523765

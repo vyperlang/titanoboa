@@ -15,7 +15,6 @@ import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
 from eth.exceptions import VMError
 from eth_utils import to_canonical_address, to_checksum_address
-
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType, is_base_type
@@ -27,18 +26,18 @@ from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
-from boa.vyper.ast_utils import reason_at, ast_map_of
+from boa.vyper.ast_utils import ast_map_of, reason_at
 from boa.vyper.compiler_utils import generate_bytecode_for_arbitrary_stmt
+from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 from boa.vyper.event import Event, RawEvent
 from boa.vyper.function import VyperFunction, VyperInternalFunction
-from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 
 try:
     # `eth-stdlib` requires python 3.10 and above
-    from eth.codecs.abi import decode as abi_decode, encode as abi_encode
+    from eth.codecs.abi import decode as abi_decode
 
 except ImportError:
-    from eth_abi import decode_single as abi_decode, encode_single as abi_encode
+    from eth_abi import decode_single as abi_decode  # type: ignore
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -88,7 +87,6 @@ class _BaseContract:
 # uses a ERC5202 preamble, when calling `create_from_blueprint` will
 # need to use `code_offset=3`
 class VyperBlueprint(_BaseContract):
-
     def __init__(
         self,
         compiler_data,
@@ -374,7 +372,8 @@ class VyperContract(_BaseContract):
 
         # add all exposed functions from the interface to the contract
         external_fns = {
-            fn.name: fn for fn in self.global_ctx._function_defs
+            fn.name: fn
+            for fn in self.global_ctx._function_defs
             if fn._metadata["type"].is_external
         }
 
@@ -423,9 +422,7 @@ class VyperContract(_BaseContract):
 
     def __repr__(self):
         storage_detail = FrameDetail("storage")
-        storage_detail.update(
-            {k: v.get() for (k, v) in vars(self._storage).items()}
-        )
+        storage_detail.update({k: v.get() for (k, v) in vars(self._storage).items()})
 
         ret = (
             f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "

@@ -1,13 +1,13 @@
 import textwrap
 
 import vyper.ast as vy_ast
-from vyper.ast.utils import parse_to_ast
+import vyper.semantics.validation as validation
 from vyper.ast.signatures.function_signature import FunctionSignature
+from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir as compile_ir
-import vyper.semantics.validation as validation
 from vyper.semantics.validation.utils import get_exact_type_from_node
 from vyper.utils import abi_method_id
 
@@ -58,9 +58,7 @@ def generate_bytecode_for_internal_fn(fn):
 
     contract = fn.contract
     fn_name = fn.fn_signature.name
-    fn_args = ", ".join(
-        [arg.name for arg in fn.fn_signature.args]
-    )
+    fn_args = ", ".join([arg.name for arg in fn.fn_signature.args])
 
     return_sig = ""
     fn_call = ""
@@ -71,7 +69,7 @@ def generate_bytecode_for_internal_fn(fn):
 
     # same but with defaults, signatures, etc.:
     _fn_sig = []
-    for i, arg in enumerate(fn.fn_signature.args):
+    for arg in fn.fn_signature.args:
         sig_arg_text = f"{arg.name}: {arg.typ}"
 
         # check if arg has a default value:
