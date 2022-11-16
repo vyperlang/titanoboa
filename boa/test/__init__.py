@@ -25,6 +25,29 @@ class BoaTestWarning(Warning):
     pass
 
 
+# use like:
+# @boa_fuzz
+# class FooTest(RuleBasedStateMachine):
+#   ...
+def boa_fuzz(state_machine_cls):
+    _init = state_machine_cls.__init__
+    def new_init(self, *args, **kwargs):
+        self._anchor = boa.env.anchor
+        self._anchor.__enter__()
+
+        _init(self, *args, **kwargs)
+
+    _teardown = getattr(state_machine_cls, "teardown", lambda: None)
+
+    def new_teardown(self):
+        _teardown()
+        self._anchor.__exit__(None, None, None)
+
+    state_machine_cls.__init__ = new_init
+    state_machine_cls.teardown = new_teardown
+
+    return state_machine_cls
+
 
 def given(*given_args, **given_kwargs):
     """Wrapper around hypothesis.given, a decorator for turning a test function
