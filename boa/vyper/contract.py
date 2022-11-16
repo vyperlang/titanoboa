@@ -422,10 +422,21 @@ class VyperContract(_BaseContract):
         self.bytecode = bytecode
 
     def __repr__(self):
-        return (
+        storage_detail = FrameDetail("storage")
+        storage_detail.update(
+            {k: v.get() for (k, v) in vars(self._storage).items()}
+        )
+
+        ret = (
             f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
         )
+
+        dump_storage = True  # maybe make this configurable in the future
+        if dump_storage and len(storage_detail) > 0:
+            ret += f"\n{storage_detail}"
+
+        return ret
 
     @cached_property
     def deployer(self):

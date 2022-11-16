@@ -19,7 +19,7 @@ class VyperFunction:
         self.env = contract.env
 
     def __repr__(self):
-        return repr(self.fn_ast)
+        return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
 
     @cached_property
     def fn_signature(self):
