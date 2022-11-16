@@ -157,10 +157,7 @@ class ErrorDetail:
         ast_source = contract.find_source_of(computation.code)
         reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
         frame_detail = contract.debug_frame(computation)
-        storage_detail = FrameDetail("storage")
-        storage_detail.update(
-            {k: v.get() for (k, v) in vars(contract._storage).items()}
-        )
+        storage_detail = contract._storage.dump()
 
         return cls(
             vm_error=computation.error,
@@ -361,6 +358,12 @@ class StorageModel:
                 slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
                 setattr(self, k, VarModel(contract, slot, v.typ))
 
+    def dump(self):
+        ret = FrameDetail("storage")
+        ret.update({k: v.get() for (k, v) in vars(self).items()})
+
+        return ret
+
 
 class VyperContract(_BaseContract):
     def __init__(
@@ -421,8 +424,7 @@ class VyperContract(_BaseContract):
         self.bytecode = bytecode
 
     def __repr__(self):
-        storage_detail = FrameDetail("storage")
-        storage_detail.update({k: v.get() for (k, v) in vars(self._storage).items()})
+        storage_detail = self._storage.dump()
 
         ret = (
             f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "
