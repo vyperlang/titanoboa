@@ -3,24 +3,6 @@ import boa
 import hypothesis
 
 
-_old_init = hypothesis.core.HypothesisHandle.__init__
-
-
-def _HypothesisHandle__init__(self, *args, **kwargs):
-    _old_init(self, *args, **kwargs)
-
-    t = self.inner_test
-
-    def f(*args, **kwargs):
-        with boa.env.anchor():
-            t(*args, **kwargs)
-
-    self.inner_test = f
-
-
-hypothesis.core.HypothesisHandle.__init__ = _HypothesisHandle__init__
-
-
 def pytest_configure(config):
     config.addinivalue_line("markers", "ignore_isolation")
 
