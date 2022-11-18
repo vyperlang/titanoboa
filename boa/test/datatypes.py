@@ -120,7 +120,9 @@ def _return_int(original: Any, value: Any) -> int:
     try:
         return int(value)
     except ValueError:
-        raise TypeError(f"Cannot convert {type(original).__name__} '{original}' to wei.")
+        raise TypeError(
+            f"Cannot convert {type(original).__name__} '{original}' to wei."
+        )
 
 
 class Fixed(Decimal):
@@ -194,7 +196,9 @@ def _to_fixed(value: Any) -> Decimal:
             pass  # vyper set the precision, do nothing.
         return Decimal(value)
     except Exception as e:
-        raise TypeError(f"Cannot convert {type(value).__name__} '{value}' to decimal.") from e
+        raise TypeError(
+            f"Cannot convert {type(value).__name__} '{value}' to decimal."
+        ) from e
 
 
 class EthAddress(str):

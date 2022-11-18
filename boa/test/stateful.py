@@ -1,4 +1,3 @@
-import boa
 import sys
 from collections import deque
 from inspect import getmembers
@@ -8,6 +7,8 @@ from typing import Any, Dict, Optional
 from hypothesis import settings as hp_settings
 from hypothesis import stateful as sf
 from hypothesis.strategies import SearchStrategy
+
+import boa
 
 sf.__tracebackhide__ = True
 
@@ -43,7 +44,10 @@ def _member_filter(member: tuple) -> bool:
     return (
         type(fn) is FunctionType
         and not hasattr(sf.RuleBasedStateMachine, attr)
-        and not next((i for i in fn.__dict__.keys() if i.startswith("hypothesis_stateful")), False)
+        and not next(
+            (i for i in fn.__dict__.keys() if i.startswith("hypothesis_stateful")),
+            False,
+        )
     )
 
 
@@ -55,7 +59,9 @@ def _generate_state_machine(rules_object: type) -> type:
 
     bases = (_BoaStateMachine, rules_object, sf.RuleBasedStateMachine)
     machine = type("BoaStateMachine", bases, {})
-    strategies: Dict = {k: v for k, v in getmembers(rules_object) if isinstance(v, SearchStrategy)}
+    strategies: Dict = {
+        k: v for k, v in getmembers(rules_object) if isinstance(v, SearchStrategy)
+    }
 
     for attr, fn in filter(_member_filter, getmembers(machine)):
         varnames = [[i] for i in fn.__code__.co_varnames[1 : fn.__code__.co_argcount]]

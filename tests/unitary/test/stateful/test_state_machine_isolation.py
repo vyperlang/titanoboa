@@ -1,5 +1,6 @@
 import boa
-from boa.test import given, strategy, state_machine
+from boa.test import strategy
+from hypothesis import given, RuleBasedStateMachine, run_state_machine_as_test
 import pytest
 
 
@@ -15,7 +16,7 @@ def add_to_a(_a: uint256):
     return boa.loads(source_code)
 
 
-class TestStateMachine:
+class TestStateMachine(RuleBasedStateMachine):
 
     def __init__(self, contract, val):
         self.contract = contract
@@ -36,12 +37,11 @@ class TestStateMachine:
 def test_state_machine_isolation(boa_contract, val):
     from hypothesis._settings import HealthCheck
 
-    state_machine(
-        TestStateMachine,
-        boa_contract,
-        val,
-        settings={
-            "max_examples": 5,
-            "suppress_health_check": HealthCheck.all(),
-        }
-    )
+    run_state_machine_as_test( TestStateMachine)
+        #boa_contract,
+        #val,
+        #settings={
+        #    "max_examples": 5,
+        #    "suppress_health_check": HealthCheck.all(),
+        #}
+    #)
