@@ -1,4 +1,3 @@
-import hypothesis
 import pytest
 
 import boa
