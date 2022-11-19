@@ -1,4 +1,8 @@
+import pytest
+from hypothesis import given
+
 import boa
+from boa.test import strategy
 
 source_code = """
 @internal
@@ -39,9 +43,26 @@ def sort(unsorted_x: uint256[3]) -> uint256[3]:
     return self._sort(unsorted_x)
 """
 
-c = boa.loads(source_code)
 
-assert c.internal._test_bool(10, True)
-assert c.internal._sort([1, 2, 3]) == c.sort([1, 2, 3])
-assert c.internal._test_bool(10)
-assert c.internal._test_void_func() is None
+@pytest.fixture(scope="module")
+def contract():
+    return boa.loads(source_code)
+
+
+@given(a=strategy("uint256"), b=strategy("bool"))
+def test_internal(contract, a, b):
+    assert contract.internal._test_bool(a, b)
+
+
+@given(value=strategy("uint256[3]"))
+def test_internal_vs_external(contract, value):
+    assert contract.internal._sort(value) == contract.sort(value)
+
+
+@given(a=strategy("uint256"))
+def test_internal_default(contract, a):
+    assert contract.internal._test_bool(a)
+
+
+def test_internal_void_fn(contract):
+    assert contract.internal._test_void_func() is None

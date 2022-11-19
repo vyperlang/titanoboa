@@ -5,3 +5,6 @@ tmp/
 build/
 dist/
 .idea/
+.hypothesis/
+.idea/
+.pytest_cache
