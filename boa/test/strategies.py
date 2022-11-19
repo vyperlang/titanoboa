@@ -17,6 +17,9 @@ ArrayLengthType = Union[int, list, None]
 NumberType = Union[float, int, None]
 
 
+# note: there are also utils in the vyper codebase we could use for
+# this. also, in the future we may want to replace these with strategies
+# that use vyper types instead of abi types.
 def get_int_bounds(type_str: str) -> Tuple[int, int]:
     """Returns the lower and upper bound for an integer type."""
     size = int(type_str.strip("uint") or 256)
