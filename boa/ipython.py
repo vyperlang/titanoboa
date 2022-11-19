@@ -21,9 +21,7 @@ class TitanoboaMagic(ipython.Magics):
         line = line or None
         c = boa.loads_partial(cell, name=line)
         if line:
-            self.shell.user_ns[
-                line
-            ] = c  # ret available in user ipython locals
+            self.shell.user_ns[line] = c  # ret available in user ipython locals
             _contracts[line] = c  # ret available in boa.ipython._contracts
         _ = c  # ret available at `boa.ipython._`
         return c
@@ -33,9 +31,7 @@ class TitanoboaMagic(ipython.Magics):
         line = line or None
         c = boa.loads(cell, name=line)
         if line:
-            self.shell.user_ns[
-                line
-            ] = c  # ret available in user ipython locals
+            self.shell.user_ns[line] = c  # ret available in user ipython locals
             _contracts[line] = c  # ret available in boa.ipython._contracts
         _ = c  # ret available at `boa.ipython._`
         return c

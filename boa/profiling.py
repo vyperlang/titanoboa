@@ -55,9 +55,7 @@ class _SingleComputation:
         for pc, gas in self.computation._gas_meter._gas_refunded_of.items():
             ret.setdefault(pc, Datum()).merge(Datum(gas_refunded=gas))
 
-        for pc, child in zip(
-            self.computation._child_pcs, self.computation.children
-        ):
+        for pc, child in zip(self.computation._child_pcs, self.computation.children):
             ret[pc].adjust_child(child)
 
         for pc in self.computation.code._trace:
@@ -98,9 +96,7 @@ class LineProfile:
 
     def merge_single(self, single: _SingleComputation) -> None:
         for line, datum in single.by_line.items():
-            self.profile.setdefault((single.contract, line), Datum()).merge(
-                datum
-            )
+            self.profile.setdefault((single.contract, line), Datum()).merge(datum)
 
     def merge(self, other: "LineProfile") -> None:
         for (contract, line), datum in other.profile.items():
@@ -121,9 +117,7 @@ class LineProfile:
 
         tmp = []
         for (contract, line), datum in s:
-            data = ", ".join(
-                f"{c}: {getattr(datum, c)}" for c in display_columns
-            )
+            data = ", ".join(f"{c}: {getattr(datum, c)}" for c in display_columns)
             line_src = get_line(contract.compiler_data.source_code, line)
             x = f"{contract.address}:{contract.compiler_data.contract_name}:{line} {data}"
             tmp.append((x, line_src))

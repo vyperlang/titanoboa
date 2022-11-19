@@ -1,3 +1,5 @@
+from typing import Generator
+
 import pytest
 
 import boa
@@ -8,10 +10,10 @@ def pytest_configure(config):
 
 
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_call(item: pytest.Item):
+def pytest_runtest_call(item: pytest.Item) -> Generator:
 
     if not item.get_closest_marker("ignore_isolation"):
-        function = item.function
+        function = item.function  # type: ignore
         if getattr(function, "is_hypothesis_test", False):
 
             inner = function.hypothesis.inner_test
