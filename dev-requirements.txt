@@ -6,3 +6,4 @@ flake8-use-fstring
 isort
 mypy
 pre-commit
+pytest
