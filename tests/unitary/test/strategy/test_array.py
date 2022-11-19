@@ -8,7 +8,8 @@ from boa.test import strategy
 
 
 @pytest.mark.parametrize(
-    "type_str", ["address", "bool", "bytes32", "decimal", "int", "string", "uint"]
+    "type_str",
+    ["address", "bool", "bytes32", "decimal", "int", "string", "uint"],
 )
 def test_strategy(type_str):
     assert isinstance(strategy(f"{type_str}[2]"), SearchStrategy)

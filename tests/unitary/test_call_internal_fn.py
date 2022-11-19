@@ -1,7 +1,7 @@
 import pytest
-
+from hypothesis import given
 import boa
-from boa.test import given, strategy
+from boa.test import strategy
 
 source_code = """
 @internal

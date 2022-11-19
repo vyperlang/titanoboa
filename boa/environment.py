@@ -428,7 +428,9 @@ class Env:
             code=bytecode,
             data=data,
         )
-        tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
+        tx_ctx = BaseTransactionContext(
+            origin=_addr(sender), gas_price=self._gas_price
+        )
         c = self.vm.state.computation_class.apply_create_message(
             self.vm.state, msg, tx_ctx
         )
@@ -466,11 +468,18 @@ class Env:
         )
         msg._fake_codesize = fake_codesize  # type: ignore
         msg._start_pc = start_pc  # type: ignore
-        tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
-        return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
+        tx_ctx = BaseTransactionContext(
+            origin=_addr(sender), gas_price=self._gas_price
+        )
+        return self.vm.state.computation_class.apply_message(
+            self.vm.state, msg, tx_ctx
+        )
 
 
-GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
+GENESIS_PARAMS = {
+    "difficulty": constants.GENESIS_DIFFICULTY,
+    "gas_limit": int(1e8),
+}
 
 
 # TODO make fork configurable - ex. "latest", "frontier", "berlin"

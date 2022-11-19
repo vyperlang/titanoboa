@@ -103,17 +103,17 @@ In [2]: %vyper msg.sender  # evaluate a vyper expression directly
 Out[2]: '0x0000000000000000000000000000000000000065'
 
 In [3]: %%vyper
-   ...: 
+   ...:
    ...: MY_IMMUTABLE: immutable(uint256)
-   ...: 
+   ...:
    ...: @external
    ...: def __init__(some_number: uint256):
    ...:     MY_IMMUTABLE = some_number * 2
-   ...: 
+   ...:
    ...: @external
    ...: def foo() -> uint256:
    ...:     return MY_IMMUTABLE
-   ...: 
+   ...:
 Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
 
 In [4]: d = _
@@ -156,7 +156,7 @@ In [2]: %load_ext boa.ipython
 In [3]: %%vyper Test
    ...: interface HasName:
    ...:     def name() -> String[32]: view
-   ...: 
+   ...:
    ...: @external
    ...: def get_name_of(addr: HasName) -> String[32]:
    ...:     return addr.name()

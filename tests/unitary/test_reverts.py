@@ -1,6 +1,8 @@
 import contextlib
-import boa
+
 import pytest
+
+import boa
 
 source_code = """
 @external

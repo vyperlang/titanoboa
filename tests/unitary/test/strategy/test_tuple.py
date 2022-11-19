@@ -12,7 +12,9 @@ from boa.test import strategy
 BASE_TYPES = ["address", "bool", "bytes32", "decimal", "int", "string", "uint"]
 
 
-@pytest.mark.parametrize("base1,base2", itertools.product(BASE_TYPES, BASE_TYPES))
+@pytest.mark.parametrize(
+    "base1,base2", itertools.product(BASE_TYPES, BASE_TYPES)
+)
 def test_strategy(base1, base2):
     st = strategy(f"({base1},({base2},{base1}))")
     assert isinstance(st, SearchStrategy)

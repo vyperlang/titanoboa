@@ -179,7 +179,7 @@ def _checkpoint_global() -> Point:
     block_slope: uint256 = 0  # dblock/dt
     if block.timestamp > last_point.ts:
         block_slope = SCALE * (block.number - last_point.blk) / (block.timestamp - last_point.ts)
-    
+
     # apply weekly slope changes and record weekly global snapshots
     t_i: uint256 = self.round_to_week(last_checkpoint)
     for i in range(255):
@@ -218,7 +218,7 @@ def _checkpoint(user: address, old_lock: LockedBalance, new_lock: LockedBalance)
 
     # fill point_history until t=now
     last_point: Point = self._checkpoint_global()
-    
+
     # only affects the last checkpoint at t=now
     if user != empty(address):
         # If last point was in this block, the slope change has been applied already
@@ -282,7 +282,7 @@ def modify_lock(amount: uint256, unlock_time: uint256, user: address = msg.sende
     supply_before: uint256 = self.supply
     self.supply = supply_before + amount
     self.locked[user] = new_lock
-    
+
     self._checkpoint(user, old_lock, new_lock)
 
     if amount > 0:
@@ -305,7 +305,7 @@ def withdraw() -> Withdrawn:
     """
     old_locked: LockedBalance = self.locked[msg.sender]
     assert old_locked.amount > 0  # dev: create a lock first to withdraw
-    
+
     time_left: uint256 = 0
     penalty: uint256 = 0
 
@@ -323,13 +323,13 @@ def withdraw() -> Withdrawn:
     self._checkpoint(msg.sender, old_locked, zero_locked)
 
     assert YFI.transfer(msg.sender, old_locked.amount - penalty)
-    
+
     if penalty > 0:
         assert YFI.approve(REWARD_POOL.address, penalty)
         assert REWARD_POOL.burn(penalty)
 
         log Penalty(msg.sender, penalty, block.timestamp)
-    
+
     log Withdraw(msg.sender, old_locked.amount - penalty, block.timestamp)
     log Supply(supply_before, supply_before - old_locked.amount, block.timestamp)
 
@@ -398,7 +398,7 @@ def replay_slope_changes(user: address, point: Point, ts: uint256) -> Point:
             break
         upoint.slope += d_slope
         upoint.ts = t_i
-    
+
     upoint.bias = max(0, upoint.bias)
     return upoint
 
@@ -418,7 +418,7 @@ def balanceOf(user: address, ts: uint256 = block.timestamp) -> uint256:
 
     epoch = self.find_epoch_by_timestamp(user, ts, epoch)
     upoint: Point = self.point_history[user][epoch]
-    
+
     upoint = self.replay_slope_changes(user, upoint, ts)
 
     return convert(upoint.bias, uint256)

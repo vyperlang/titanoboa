@@ -165,7 +165,9 @@ class ErrorDetail:
     def from_computation(cls, contract, computation):
         error_detail = contract.find_error_meta(computation.code)
         ast_source = contract.find_source_of(computation.code)
-        reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
+        reason = DevReason.at(
+            contract.compiler_data.source_code, ast_source.lineno
+        )
         frame_detail = contract.debug_frame(computation)
         storage_detail = contract._storage.dump()
 
@@ -184,7 +186,10 @@ class ErrorDetail:
         err = self.vm_error
         # decode error msg if it's "Error(string)"
         # b"\x08\xc3y\xa0" == method_id("Error(string)")
-        if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
+        if (
+            isinstance(err.args[0], bytes)
+            and err.args[0][:4] == b"\x08\xc3y\xa0"
+        ):
             return abi_decode("(string)", err.args[0][4:])[0]
 
         return repr(err)
@@ -326,7 +331,9 @@ class VarModel:
     def get(self):
         if isinstance(self.typ, MappingType):
             ret = {}
-            for k in self.contract.env.sstore_trace.get(self.contract.address, {}):
+            for k in self.contract.env.sstore_trace.get(
+                self.contract.address, {}
+            ):
                 path = unwrap_storage_key(self.contract.env.sha3_trace, k)
                 if to_int(path[0]) != self.slot:
                     continue
@@ -365,7 +372,9 @@ class StorageModel:
         for k, v in compiler_data.global_ctx._globals.items():
             is_storage = not v.is_immutable
             if is_storage:  # check that v
-                slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
+                slot = compiler_data.storage_layout["storage_layout"][k][
+                    "slot"
+                ]
                 setattr(self, k, VarModel(contract, slot, v.typ))
 
     def dump(self):
@@ -377,7 +386,12 @@ class StorageModel:
 
 class VyperContract(_BaseContract):
     def __init__(
-        self, compiler_data, *args, env=None, override_address=None, skip_init=False
+        self,
+        compiler_data,
+        *args,
+        env=None,
+        override_address=None,
+        skip_init=False,
     ):
         super().__init__(compiler_data, env, override_address)
 
@@ -422,7 +436,9 @@ class VyperContract(_BaseContract):
             encoded_args = encoded_args[4:]  # strip method_id
 
         initcode = self.compiler_data.bytecode + encoded_args
-        self.bytecode = self.env.deploy_code(bytecode=initcode, deploy_to=self.address)
+        self.bytecode = self.env.deploy_code(
+            bytecode=initcode, deploy_to=self.address
+        )
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
@@ -430,7 +446,9 @@ class VyperContract(_BaseContract):
         if self.data_section_size != 0:
             to_check = bytecode[-self.data_section_size :]
         if to_check != self.compiler_data.bytecode_runtime:
-            warnings.warn(f"casted bytecode does not match compiled bytecode at {self}")
+            warnings.warn(
+                f"casted bytecode does not match compiled bytecode at {self}"
+            )
         self.bytecode = bytecode
 
     def __repr__(self):
@@ -583,7 +601,9 @@ class VyperContract(_BaseContract):
             return None
 
         return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
+        ret = abi_decode(
+            return_typ.abi_type.selector_name(), computation.output
+        )
 
         # unwrap the tuple if needed
         if not isinstance(vyper_typ, TupleType):
@@ -637,7 +657,9 @@ class VyperContract(_BaseContract):
         # do the same thing as vyper_module_folded but skip getter expansion
         vy_ast.folding.fold(module)
         with vy_ns.get_namespace().enter_scope():
-            validation.add_module_namespace(module, self.compiler_data.interface_codes)
+            validation.add_module_namespace(
+                module, self.compiler_data.interface_codes
+            )
             validation.validate_functions(module)
             # we need to cache the namespace right here(!).
             # set_data_positions will modify the type definitions in place.
@@ -704,7 +726,9 @@ class VyperContract(_BaseContract):
         if stmt in self._eval_cache:
             bytecode, source_map, typ = self._eval_cache[stmt]
         else:
-            bytecode, source_map, typ = generate_bytecode_for_arbitrary_stmt(stmt, self)
+            bytecode, source_map, typ = generate_bytecode_for_arbitrary_stmt(
+                stmt, self
+            )
             self._eval_cache[stmt] = (bytecode, source_map, typ)
 
         self._source_map = source_map
@@ -741,11 +765,15 @@ class VyperFunction:
         self.env = contract.env
 
     def __repr__(self):
-        return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
+        return (
+            f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
+        )
 
     @cached_property
     def fn_signature(self):
-        return self.contract.compiler_data.function_signatures[self.fn_ast.name]
+        return self.contract.compiler_data.function_signatures[
+            self.fn_ast.name
+        ]
 
     @cached_property
     def ir(self):
@@ -759,7 +787,12 @@ class VyperFunction:
     @cached_property
     def assembly(self):
         ir = IRnode.from_list(
-            ["with", _METHOD_ID_VAR, ["shr", 224, ["calldataload", 0]], self.ir]
+            [
+                "with",
+                _METHOD_ID_VAR,
+                ["shr", 224, ["calldataload", 0]],
+                self.ir,
+            ]
         )
         return compile_ir.compile_to_assembly(ir)
 
@@ -783,11 +816,13 @@ class VyperFunction:
         sig_kwargs = self.fn_signature.default_args[:num_kwargs]
         sig_args = self.fn_signature.base_args + sig_kwargs
         args_abi_type = (
-            "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
+            "("
+            + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args)
+            + ")"
         )
-        method_id = abi_method_id(self.fn_signature.name + args_abi_type).to_bytes(
-            4, "big"
-        )
+        method_id = abi_method_id(
+            self.fn_signature.name + args_abi_type
+        ).to_bytes(4, "big")
         self._signature_cache[num_kwargs] = (method_id, args_abi_type)
 
         return method_id, args_abi_type
@@ -803,7 +838,9 @@ class VyperFunction:
         # align the kwargs with the signature
         # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
 
-        total_non_base_args = len(kwargs) + len(args) - len(self.fn_signature.base_args)
+        total_non_base_args = (
+            len(kwargs) + len(args) - len(self.fn_signature.base_args)
+        )
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
 
         # allow things with `.address` to be encode-able

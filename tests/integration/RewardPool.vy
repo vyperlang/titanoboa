@@ -284,7 +284,7 @@ def _claim(addr: address, last_token_time: uint256) -> uint256:
 def claim(user: address = msg.sender, relock: bool = False) -> uint256:
     """
     @notice Claim fees for a user
-    @dev 
+    @dev
         Each call to claim looks at a maximum of 50 user veYFI points.
         For accounts with many veYFI related actions, this function
         may need to be called more than once to claim all available

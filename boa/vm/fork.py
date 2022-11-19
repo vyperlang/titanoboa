@@ -114,7 +114,9 @@ class CachingRPC:
         # TODO: batch requests
         req = []
         for (i, method, params) in payloads:
-            req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
+            req.append(
+                {"jsonrpc": "2.0", "method": method, "params": params, "id": i}
+            )
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
         res.raise_for_status()
         res = res.json()

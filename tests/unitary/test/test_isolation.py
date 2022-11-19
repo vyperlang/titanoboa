@@ -1,7 +1,8 @@
 import pytest
-import boa
 
-from boa.test import given, strategy
+from hypothesis import given
+import boa
+from boa.test import strategy
 
 A_INIT = 10
 B_INIT = boa.env.generate_address()
@@ -25,7 +26,7 @@ def __init__(a_input: uint256, b_input: address):
 def set_vars(a_input: uint256, b_input: address):
 
     self.a = a_input
-    self.b = b_input 
+    self.b = b_input
 """
 
     with boa.env.prank(boa.env.generate_address()):

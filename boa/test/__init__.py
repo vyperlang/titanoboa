@@ -4,6 +4,7 @@ Test utils borrowed from Brownie.
 """
 
 import warnings
+
 from hypothesis.errors import HypothesisDeprecationWarning
 
 from .strategies import strategy  # NOQA: F401

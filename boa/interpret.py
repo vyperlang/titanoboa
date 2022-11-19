@@ -48,7 +48,9 @@ def loads(source_code, *args, as_blueprint=False, name=None, **kwargs):
         return d.deploy(*args, **kwargs)
 
 
-def loads_partial(source_code: str, name: Optional[str] = None) -> VyperDeployer:
+def loads_partial(
+    source_code: str, name: Optional[str] = None
+) -> VyperDeployer:
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
     data = compiler_data(source_code, name)
     return VyperDeployer(data)
