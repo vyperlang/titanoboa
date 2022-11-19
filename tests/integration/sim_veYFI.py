@@ -42,12 +42,7 @@ YEAR = 365 * DAY
 MAX_LOCK_DURATION = 4 * YEAR
 
 YFI = boa.load(
-    "examples/ERC20.vy",
-    "yfi token",
-    "YFI",
-    18,
-    0,
-    override_address=format_addr("YFI"),
+    "examples/ERC20.vy", "yfi token", "YFI", 18, 0, override_address=format_addr("YFI")
 )
 timeit("load YFI")
 _rewards_pool_address = format_addr("rewards_pool")
@@ -97,24 +92,18 @@ for t in parties:
 timeit("approve YFI")
 
 # normal 4y lock
-veYFI.modify_lock(
-    10**18, boa.env.vm.patch.timestamp + MAX_LOCK_DURATION, BUNNY
-)
+veYFI.modify_lock(10**18, boa.env.vm.patch.timestamp + MAX_LOCK_DURATION, BUNNY)
 
 # extended 6y lock
 with boa.env.prank(MILKY):
     veYFI.modify_lock(
-        10**18,
-        int(boa.env.vm.patch.timestamp + MAX_LOCK_DURATION / 4 * 6),
-        MILKY,
+        10**18, int(boa.env.vm.patch.timestamp + MAX_LOCK_DURATION / 4 * 6), MILKY
     )
 
 # 4y lock with early exit after 1y
 with boa.env.prank(POOLPI):
     veYFI.modify_lock(
-        10**18,
-        int(boa.env.vm.patch.timestamp + MAX_LOCK_DURATION / 4 * 3),
-        POOLPI,
+        10**18, int(boa.env.vm.patch.timestamp + MAX_LOCK_DURATION / 4 * 3), POOLPI
     )
 
 with boa.env.prank(DOGGIE):
@@ -139,10 +128,7 @@ for i in range(START_TIME, int(START_TIME + YEAR * 1.2), WEEK):
     # Locked:
     #   amount: uint256
     #   end: uint256
-    if (
-        veYFI.locked(POOLPI)[1] != 0
-        and i > START_TIME + MAX_LOCK_DURATION // 4
-    ):
+    if veYFI.locked(POOLPI)[1] != 0 and i > START_TIME + MAX_LOCK_DURATION // 4:
         with boa.env.prank(POOLPI):
             veYFI.withdraw()
     if veYFI.locked(MILKY)[0] == 10**18 and i > int(START_TIME + YEAR * 0.5):

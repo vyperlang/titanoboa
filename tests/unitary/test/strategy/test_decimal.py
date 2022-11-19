@@ -39,9 +39,7 @@ def test_min_max(value):
 
 
 @given(
-    value=strategy(
-        "decimal", min_value=1.23, max_value=1.35, exclude=[1.337, 1.2345]
-    )
+    value=strategy("decimal", min_value=1.23, max_value=1.35, exclude=[1.337, 1.2345])
 )
 def test_exclude(value):
     assert value not in [1.337, 1.2345]
