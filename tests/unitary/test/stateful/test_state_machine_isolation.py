@@ -1,6 +1,14 @@
-import boa
-from boa.test import state_machine
 import pytest
+from hypothesis._settings import HealthCheck
+from hypothesis.stateful import (
+    RuleBasedStateMachine,
+    initialize,
+    invariant,
+    rule,
+    run_state_machine_as_test,
+)
+
+import boa
 
 
 @pytest.fixture(scope="module")
@@ -15,30 +23,32 @@ def add_to_a(_a: uint256):
     return boa.loads(source_code)
 
 
-class TestStateMachine:
+class StateMachine(RuleBasedStateMachine):
+    contract = None
 
-    def __init__(self, contract):
-        self.contract = contract
-
+    @initialize()
     def setup(self):
         self.contract.add_to_a(10)
 
     # empty rule just so hypothesis does not complain
-    def rule_void(self):
+    @rule()
+    def void(self):
         pass
 
-    def invariant_foo(self):
+    @invariant()
+    def foo(self):
         assert self.contract.a() == 10
+
+    # ensure overriding teardown doesn't break things
+    def teardown(self):
+        pass
 
 
 def test_state_machine_isolation(boa_contract):
-    from hypothesis._settings import HealthCheck
 
-    state_machine(
-        TestStateMachine,
-        boa_contract,
-        settings={
-            "max_examples": 5,
-            "suppress_health_check": HealthCheck.all(),
-        }
-    )
+    StateMachine.contract = boa_contract
+    StateMachine.settings = {
+        "max_examples": 5,
+        "suppress_health_check": HealthCheck.all(),
+    }
+    run_state_machine_as_test(StateMachine)

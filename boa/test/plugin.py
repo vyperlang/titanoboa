@@ -1,11 +1,12 @@
 from typing import Generator
 
+import hypothesis
 import pytest
 
 import boa
-import hypothesis
 
-
+# monkey patch HypothesisHandle. this fixes underlying isolation for
+# hypothesis.given() and also hypothesis stateful functionality.
 _old_init = hypothesis.core.HypothesisHandle.__init__
 
 
@@ -21,7 +22,7 @@ def _HypothesisHandle__init__(self, *args, **kwargs):
     self.inner_test = f
 
 
-hypothesis.core.HypothesisHandle.__init__ = _HypothesisHandle__init__
+hypothesis.core.HypothesisHandle.__init__ = _HypothesisHandle__init__  # type: ignore
 
 
 def pytest_configure(config):
@@ -32,22 +33,7 @@ def pytest_configure(config):
 def pytest_runtest_call(item: pytest.Item) -> Generator:
 
     if not item.get_closest_marker("ignore_isolation"):
-        function = item.function  # type: ignore
-        if getattr(function, "is_hypothesis_test", False):
-
-            inner = function.hypothesis.inner_test
-
-            def f(*args, **kwargs):
-                with boa.env.anchor():
-                    inner(*args, **kwargs)
-
-            function.hypothesis.inner_test = f
-
+        with boa.env.anchor():
             yield
-
-        else:
-            with boa.env.anchor():
-                yield
-
     else:
         yield
