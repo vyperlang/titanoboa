@@ -8,3 +8,4 @@ mypy
 pre-commit
 pytest
 pytest-xdist
+hypothesis
