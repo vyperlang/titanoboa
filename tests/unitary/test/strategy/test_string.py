@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 from hypothesis import given
 from hypothesis.strategies import SearchStrategy
 

@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import random
 import string
 from typing import Any, Callable, Iterable, Optional, Tuple, Union
@@ -9,6 +7,9 @@ from eth_utils import to_checksum_address
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
 from hypothesis.strategies._internal.deferred import DeferredStrategy
+
+# hypothesis fuzzing strategies, adapted from brownie 0.19.2 (86258c7bd)
+# in the future these may be superseded by eth-stdlib.
 
 TYPE_STR_TRANSLATIONS = {"byte": "bytes1", "decimal": "fixed168x10"}
 

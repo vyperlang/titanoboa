@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 from hypothesis import HealthCheck, given, settings
 from hypothesis.strategies._internal.deferred import DeferredStrategy
 

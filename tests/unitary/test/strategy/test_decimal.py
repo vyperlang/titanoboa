@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 from decimal import Decimal
 
 import pytest

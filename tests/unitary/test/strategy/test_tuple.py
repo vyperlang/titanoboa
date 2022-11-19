@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import itertools
 from decimal import Decimal
 
