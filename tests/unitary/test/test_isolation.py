@@ -1,6 +1,6 @@
 import pytest
-
 from hypothesis import given
+
 import boa
 from boa.test import strategy
 
