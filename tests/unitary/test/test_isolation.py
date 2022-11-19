@@ -33,8 +33,20 @@ def set_vars(a_input: uint256, b_input: address):
         return boa.loads(source_code, A_INIT, B_INIT)
 
 
+# test isolation of hypothesis fuzz cases
 @given(a=strategy("uint"), b=strategy("address"))
-def test_state_isolation(boa_contract, a, b):
+def test_hypothesis_isolation(boa_contract, a, b):
+    assert boa_contract.a() == A_INIT
+    assert boa_contract.b() == B_INIT
+    boa_contract.set_vars(a, b)
+    assert boa_contract.a() == a
+    assert boa_contract.b() == b
+
+
+# test isolation of pytest items
+@pytest.mark.parametrize("a", [1, 2, 3])
+@pytest.mark.parametrize("b", [boa.env.eoa, boa.env.generate_address()])
+def test_pytest_isolation(boa_contract, a, b):
     assert boa_contract.a() == A_INIT
     assert boa_contract.b() == B_INIT
     boa_contract.set_vars(a, b)
