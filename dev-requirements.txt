@@ -7,3 +7,4 @@ isort
 mypy
 pre-commit
 pytest
+pytest-xdist
