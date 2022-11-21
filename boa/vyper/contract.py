@@ -13,6 +13,7 @@ import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
+from eth.codecs import abi
 from eth.exceptions import VMError
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.codegen.core import calculate_type_for_external_return
@@ -38,16 +39,6 @@ from boa.vyper.compiler_utils import (
 )
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 from boa.vyper.event import Event, RawEvent
-
-try:
-    # `eth-stdlib` requires python 3.10 and above
-    from eth.codecs.abi import decode as abi_decode
-    from eth.codecs.abi import encode as abi_encode
-
-except ImportError:
-    from eth_abi import decode_single as abi_decode  # type: ignore
-    from eth_abi import encode_single as abi_encode  # type: ignore
-
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -185,7 +176,7 @@ class ErrorDetail:
         # decode error msg if it's "Error(string)"
         # b"\x08\xc3y\xa0" == method_id("Error(string)")
         if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-            return abi_decode("(string)", err.args[0][4:])[0]
+            return abi.decode("(string)", err.args[0][4:])[0]
 
         return repr(err)
 
@@ -564,12 +555,12 @@ class VyperContract(_BaseContract):
             # convert to bytes for abi decoder
             encoded_topic = t.to_bytes(32, "big")
             decoded_topics.append(
-                abi_decode(typ.abi_type.selector_name(), encoded_topic)
+                abi.decode(typ.abi_type.selector_name(), encoded_topic)
             )
 
         tuple_typ = TupleType(arg_typs)
 
-        args = abi_decode(tuple_typ.abi_type.selector_name(), data)
+        args = abi.decode(tuple_typ.abi_type.selector_name(), data)
 
         return Event(log_id, self.address, event_t, decoded_topics, args)
 
@@ -583,17 +574,11 @@ class VyperContract(_BaseContract):
             return None
 
         return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
+        ret = abi.decode(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
         if not isinstance(vyper_typ, TupleType):
             (ret,) = ret
-
-        # eth_abi does not checksum addresses. patch this in a limited
-        # way here, but for complex return types, we need an upstream
-        # fix.
-        if is_base_type(vyper_typ, "address"):
-            ret = to_checksum_address(ret)
 
         return vyper_object(ret, vyper_typ)
 
@@ -809,7 +794,7 @@ class VyperFunction:
         # allow things with `.address` to be encode-able
         args = [getattr(arg, "address", arg) for arg in args]
 
-        encoded_args = abi_encode(args_abi_type, args)
+        encoded_args = abi.encode(args_abi_type, args)
         return method_id + encoded_args
 
     def __call__(self, *args, value=0, gas=None, **kwargs):
