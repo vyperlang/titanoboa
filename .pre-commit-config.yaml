@@ -13,7 +13,7 @@ repos:
       - id: black
         args:
           - -C
-          - -t py38
+          - --target-version=py38
   - repo: https://github.com/PyCQA/flake8
     rev: 3.9.2
     hooks:
