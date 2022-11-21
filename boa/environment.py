@@ -469,6 +469,11 @@ class Env:
         tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
+    # function to time travel
+    def time_travel(self, sleep_time):
+        self.vm.patch.timestamp += sleep_time
+        self.vm.patch.block_number += sleep_time // 12
+
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
 
