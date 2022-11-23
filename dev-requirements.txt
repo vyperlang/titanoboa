@@ -1,11 +1,13 @@
 IPython
+Sphinx
 black
 flake8
 flake8-bugbear
 flake8-use-fstring
+hypothesis
 isort
 mypy
 pre-commit
 pytest
 pytest-xdist
-hypothesis
+sphinx-rtd-theme
