@@ -220,8 +220,22 @@ High-Level Functionality
             "0x905794c5566184e642ef14fb0e72cf68ff8c79bf"
         ]
 
+Low-Level Functionality
+-----------------------
+
+.. module:: boa.environment
+
+.. class:: Env
+
+    .. attribute:: eoa
+        :type: str
+
+        The account to use as ``tx.origin`` when performing state mutating contract operations.
+
 Exceptions
 ----------
+
+.. currentmodule:: boa
 
 .. exception:: BoaError
 
