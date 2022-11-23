@@ -32,7 +32,7 @@ Alternatively, the latest in-development version of ``titanoboa`` can be install
    :maxdepth: 2
    :caption: Contents:
 
-
+   api
 
 Indices and tables
 ==================
