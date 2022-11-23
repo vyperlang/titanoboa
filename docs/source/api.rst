@@ -6,6 +6,23 @@ High-Level Functionality
 
 .. module:: boa
 
+.. function:: eval(statement: str) -> Any
+
+    Evaluate a Vyper statement in the context of a contract with no state.
+
+    :param statement: A valid Vyper statement.
+    :returns: The result of the statement execution.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> boa.eval("keccak256('Hello World!')").hex()
+        '3ea2f1d0abf3fc66cf29eebb70cbd4e7fe762ef8a09bcc06c8edf641230afec0'
+        >>> boa.eval("empty(uint256[10])")
+        (0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
 .. function:: register_precompile(address: str, fn: Callable[[eth.vm.computation.BaseComputation], None], force: bool = False)
 
     Register a precompile.
