@@ -227,6 +227,9 @@ Low-Level Functionality
 
 .. class:: Env
 
+    .. attribute:: chain
+        :type: eth.abc.ChainAPI
+
     .. attribute:: eoa
         :type: str
 
