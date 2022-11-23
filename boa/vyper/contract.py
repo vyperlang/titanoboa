@@ -14,6 +14,7 @@ import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
 from eth.exceptions import VMError
+from eth_typing import Address
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
@@ -696,7 +697,9 @@ class VyperContract(_BaseContract):
         )
         return s + self.data_section
 
-    def eval(self, stmt: str, value: int = 0, gas: int = None) -> Any:
+    def eval(
+        self, stmt: str, value: int = 0, gas: int = None, sender: Address = None
+    ) -> Any:
         """eval vyper code in the context of this contract"""
         tmp = self._source_map
 
@@ -713,6 +716,7 @@ class VyperContract(_BaseContract):
         c = self.env.execute_code(
             to_address=self.address,
             bytecode=bytecode,
+            sender=sender,
             data=method_id,
             value=value,
             gas=gas,
@@ -812,12 +816,13 @@ class VyperFunction:
         encoded_args = abi_encode(args_abi_type, args)
         return method_id + encoded_args
 
-    def __call__(self, *args, value=0, gas=None, **kwargs):
+    def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
         computation = self.env.execute_code(
             to_address=self.contract.address,
             bytecode=self.contract.bytecode,
             data=calldata_bytes,
+            sender=sender,
             value=value,
             gas=gas,
         )
@@ -838,12 +843,13 @@ class VyperInternalFunction(VyperFunction):
         bytecode, _, _ = generate_bytecode_for_internal_fn(self)
         return bytecode
 
-    def __call__(self, *args, value=0, gas=None, **kwargs):
+    def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
 
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
         computation = self.env.execute_code(
             to_address=self.contract.address,
             bytecode=self._bytecode,
+            sender=sender,
             data=calldata_bytes,
             value=value,
             gas=gas,
