@@ -23,6 +23,102 @@ High-Level Functionality
         >>> boa.eval("empty(uint256[10])")
         (0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
+.. function:: reverts(reason: str | None = None, /, **kwargs: str)
+
+    A context manager which validates an execution error occurs with optional reason matching.
+
+    .. note::
+
+        If a keyword argument is provided, as opposed to a positional argument, the argument
+        name and value will be used to validate against a developer revert comment.
+
+    :param reason: A string to match against the execution error.
+    :param compiler: A string to match against the internal compiler revert reason.
+    :param vm_error: A string to match against the revert reason string.
+    :raises AssertionError: If there is more than one argument.
+    :raises ValueError: If the execution did not have an error.
+    :raises ValueError: If the reason string provided does not match the error that occurred.
+
+    .. rubric:: Examples
+
+    Revert reason provided as a positional argument:
+
+    .. code-block:: python
+
+        import boa
+
+        source = """
+        @external
+        def foo():
+            raise "0xdeadbeef"
+
+        @external
+        def bar():
+            raise  # dev: 0xdeadbeef
+        """
+        contract = boa.loads(source)
+
+        with boa.reverts("0xdeadbeef"):
+            contract.foo()
+
+        with boa.reverts("0xdeadbeef"):
+            contract.bar()
+
+    Compiler revert reason:
+
+    .. code-block:: python
+
+        import boa
+
+        source = """
+        @external
+        def subtract(a: uint256, b: uint256) -> uint256:
+            return a - b
+
+        @external
+        def addition(a: uint256, b: uint256) -> uint256:
+            return a + b
+        """
+        contract = boa.loads(source)
+
+        with boa.reverts(compiler="safesub"):
+            contract.subtract(1, 2)
+
+        with boa.reverts(compiler="safeadd"):
+            contract.addition(1, 2**256 - 1)
+
+    VM error reason:
+
+    .. code-block:: python
+
+        import boa
+
+        source = """
+        @external
+        def main(a: uint256):
+            assert a == 0, "A is not 0"
+        """
+        contract = boa.loads(source)
+
+        with boa.reverts(vm_error="A is not 0"):
+            contract.main(69)
+
+    Developer revert comment:
+
+    .. code-block:: python
+
+        import boa
+
+        source = """
+        @external
+        def main(a: uint256):
+            assert a == 0  # dev: a is not 0
+        """
+        contract = boa.loads(source)
+
+        with boa.reverts(dev="a is not 0"):
+            contract.main(69)
+
 .. function:: register_precompile(address: str, fn: Callable[[eth.vm.computation.BaseComputation], None], force: bool = False)
 
     Register a precompile.
