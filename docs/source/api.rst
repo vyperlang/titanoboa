@@ -119,7 +119,7 @@ High-Level Functionality
         with boa.reverts(dev="a is not 0"):
             contract.main(69)
 
-.. function:: register_precompile(address: str, fn: Callable[[eth.vm.computation.BaseComputation], None], force: bool = False)
+.. function:: register_precompile(address: str, fn: Callable[[eth.abc.ComputationAPI], None], force: bool = False)
 
     Register a precompile.
 
@@ -146,7 +146,7 @@ High-Level Functionality
     :param force: Whether to force removal of the precompile at the specified address.
     :raises ValueError: If a precompile is not registered at the specified address and the force argument is ``False``.
 
-.. function:: patch_opcode(opcode: int, fn: Callable[[eth.vm.computation.BaseComputation], None])
+.. function:: patch_opcode(opcode: int, fn: Callable[[eth.abc.ComputationAPI], None])
 
     Patch an opcode.
 
@@ -159,7 +159,7 @@ High-Level Functionality
 
         .. code-block:: python
 
-            def baz(computation: eth.vm.computation.BaseComputation):
+            def baz(computation: eth.abc.ComputationAPI):
                 ...
 
     .. rubric:: Example
