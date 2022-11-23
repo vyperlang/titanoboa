@@ -1,6 +1,9 @@
 API Reference
 =============
 
+High-Level Functionality
+------------------------
+
 .. module:: boa
 
 .. function:: register_precompile(address: str, fn: Callable[[eth.vm.computation.BaseComputation], None], force: bool = False)
@@ -103,3 +106,10 @@ API Reference
             "0x097dec6ea6b9eb5fc04db59c0d343f0e3b4097a0",
             "0x905794c5566184e642ef14fb0e72cf68ff8c79bf"
         ]
+
+Exceptions
+----------
+
+.. exception:: BoaError
+
+    Raised when an error occurs during contract execution.
