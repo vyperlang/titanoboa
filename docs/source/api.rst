@@ -294,6 +294,36 @@ Low-Level Functionality
 
 .. class:: VyperContract
 
+    A contract instance.
+
+    Internal and external contract functions are available as methods on :py:class:`VyperContract` instances.
+
+    .. method:: eval(statement: str, value: int = 0, gas: int | None = None, sender: str | None = None) -> Any
+
+        Evaluate a Vyper statement in the context of the contract.
+
+        :param statement: A vyper statment.
+        :param value: The ether value to attach to the statement evaluation (a.k.a ``msg.value``).
+        :param gas: The gas limit provided for statement evaluation (a.k.a. ``msg.gas``).
+        :param sender: The account which will be the ``tx.origin``, and ``msg.sender`` in the context of the evaluation.
+        :returns: The result of the statement evaluation.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = "value: public(uint256)"
+            >>> contract = boa.loads(src)
+            >>> contract.value()
+            0
+            >>> contract.eval("self.value += 1")
+            >>> contract.value()
+            1
+
+    .. property:: deployer
+        :type: VyperDeployer
+
 .. class:: VyperBlueprint
 
     Stub class for :eip:`5202` blueprints.
