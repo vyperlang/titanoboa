@@ -16,6 +16,7 @@ release = "0.1.6"
 
 extensions = [
     "sphinx.ext.autosectionlabel",
+    "sphinx.ext.extlinks",
     "sphinx.ext.intersphinx",
     "sphinx.ext.todo",
 ]
@@ -39,3 +40,8 @@ autosectionlabel_maxdepth = 3
 # https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html
 
 intersphinx_mapping = {"pyevm": ("https://py-evm.readthedocs.io/en/latest", None)}
+
+# -- Options for extlinks extension ------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/extensions/extlinks.html
+
+extlinks = {"eip": ("https://eips.ethereum.org/EIPS/eip-%s", "EIP-%s")}
