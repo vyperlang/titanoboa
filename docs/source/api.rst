@@ -318,6 +318,35 @@ High-Level Functionality
 Low-Level Functionality
 -----------------------
 
+.. module:: boa.environment
+
+.. class:: Env
+
+    A wrapper class around py-evm which provides a "contract-centric" API.
+
+    .. method:: anchor()
+
+        A context manager which snapshots the state and the vm, and reverts to the snapshot on exit.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = """
+            ... value: public(uint256)
+            ... """
+            >>> contract = boa.loads(src)
+            >>> contract.value()
+            0
+            >>> with boa.env.anchor():
+            ...     contract.eval("self.value += 1")
+            ...     contract.value()
+            ...
+            1
+            >>> contract.value()
+            0
+
 .. module:: boa.vyper.contract
 
 .. class:: VyperDeployer
