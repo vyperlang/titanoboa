@@ -6,6 +6,11 @@ High-Level Functionality
 
 .. module:: boa
 
+.. py:data:: env
+    :type: boa.environment.Env
+
+    The global environment object.
+
 .. function:: load(fp: str, *args: Any, **kwargs: Any) -> VyperContract | VyperBlueprint
 
     Compile source from disk and return a deployed instance of the contract.
