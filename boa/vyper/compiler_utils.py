@@ -50,7 +50,7 @@ def _compile_vyper_function(vyper_function, contract):
     bytecode += contract.data_section
     typ = sig.return_type
 
-    return bytecode, source_map, typ
+    return ast, bytecode, source_map, typ
 
 
 def generate_bytecode_for_internal_fn(fn):
@@ -88,7 +88,7 @@ def generate_bytecode_for_internal_fn(fn):
             {fn_call}
     """
     )
-    return _compile_vyper_function(wrapper_code, contract)
+    return _compile_vyper_function(wrapper_code, contract)[1:]
 
 
 def generate_bytecode_for_arbitrary_stmt(source_code, contract):
@@ -119,4 +119,4 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
             {debug_body}
     """
     )
-    return _compile_vyper_function(wrapper_code, contract)
+    return _compile_vyper_function(wrapper_code, contract)[1:]

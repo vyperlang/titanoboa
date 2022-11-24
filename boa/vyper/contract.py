@@ -34,6 +34,7 @@ from boa.util.lrudict import lrudict
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import ast_map_of, reason_at
 from boa.vyper.compiler_utils import (
+    _compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
@@ -697,11 +698,19 @@ class VyperContract(_BaseContract):
         )
         return s + self.data_section
 
+    @contextlib.contextmanager
+    def _anchor_source_map(self, source_map):
+        tmp = self._source_map
+        try:
+            self._source_map = source_map
+            yield
+        finally:
+            self._source_map = tmp
+
     def eval(
         self, stmt: str, value: int = 0, gas: int = None, sender: Address = None
     ) -> Any:
         """eval vyper code in the context of this contract"""
-        tmp = self._source_map
 
         # this method is super slow so we cache compilation results
         if stmt in self._eval_cache:
@@ -710,23 +719,29 @@ class VyperContract(_BaseContract):
             bytecode, source_map, typ = generate_bytecode_for_arbitrary_stmt(stmt, self)
             self._eval_cache[stmt] = (bytecode, source_map, typ)
 
-        self._source_map = source_map
+        with self._anchor_source_map(source_map):
+            method_id = b"dbug"  # note dummy method id, doesn't get validated
+            c = self.env.execute_code(
+                to_address=self.address,
+                bytecode=bytecode,
+                sender=sender,
+                data=method_id,
+                value=value,
+                gas=gas,
+            )
 
-        method_id = b"dbug"  # note dummy method id, doesn't get validated
-        c = self.env.execute_code(
-            to_address=self.address,
-            bytecode=bytecode,
-            sender=sender,
-            data=method_id,
-            value=value,
-            gas=gas,
-        )
+            ret = self.marshal_to_python(c, typ)
 
-        ret = self.marshal_to_python(c, typ)
+            return ret
 
-        self._source_map = tmp  # restore
+    # inject a function into this VyperContract without affecting the
+    # contract's source code. useful for testing private functionality
+    def inject_function(self, fn_source_code):
+        if not hasattr(self, "inject"):
+            self.inject = lambda: None
 
-        return ret
+        f = _InjectVyperFunction(self, fn_source_code)
+        setattr(self.inject, f.fn_ast.name, f)
 
     @cached_property
     def _sigs(self):
@@ -746,6 +761,14 @@ class VyperFunction:
 
     def __repr__(self):
         return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
+
+    @cached_property
+    def _bytecode(self):
+        return self.contract.bytecode
+
+    @cached_property
+    def _source_map(self):
+        return self.contract.source_map
 
     @cached_property
     def fn_signature(self):
@@ -818,17 +841,18 @@ class VyperFunction:
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
-        computation = self.env.execute_code(
-            to_address=self.contract.address,
-            bytecode=self.contract.bytecode,
-            data=calldata_bytes,
-            sender=sender,
-            value=value,
-            gas=gas,
-        )
+        with self.contract._anchor_source_map(self._source_map):
+            computation = self.env.execute_code(
+                to_address=self.contract.address,
+                bytecode=self._bytecode,
+                data=calldata_bytes,
+                sender=sender,
+                value=value,
+                gas=gas,
+            )
 
-        typ = self.fn_signature.return_type
-        return self.contract.marshal_to_python(computation, typ)
+            typ = self.fn_signature.return_type
+            return self.contract.marshal_to_python(computation, typ)
 
 
 class VyperInternalFunction(VyperFunction):
@@ -839,24 +863,36 @@ class VyperInternalFunction(VyperFunction):
     """
 
     @cached_property
+    def _compiled(self):
+        return generate_bytecode_for_internal_fn(self)
+
+    # OVERRIDE so that __call__ uses the specially crafted bytecode
+    @cached_property
     def _bytecode(self):
-        bytecode, _, _ = generate_bytecode_for_internal_fn(self)
+        bytecode, _, _ = self._compiled
         return bytecode
 
-    def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
+    # OVERRIDE so that __call__ uses corresponding source map
+    @cached_property
+    def _source_map(self):
+        _, source_map, _ = self._compiled
+        return source_map
 
-        calldata_bytes = self._prepare_calldata(*args, **kwargs)
-        computation = self.env.execute_code(
-            to_address=self.contract.address,
-            bytecode=self._bytecode,
-            sender=sender,
-            data=calldata_bytes,
-            value=value,
-            gas=gas,
-        )
 
-        typ = self.fn_signature.return_type
-        return self.contract.marshal_to_python(computation, typ)
+class _InjectVyperFunction(VyperFunction):
+    def __init__(self, contract, fn_source):
+        ast, bytecode, source_map, _ = _compile_vyper_function(fn_source, contract)
+        super().__init__(ast, contract)
+
+        # OVERRIDE so that __call__ uses special bytecode
+        self._bytecode = bytecode
+        # OVERRIDE so that __call__ uses special source map
+        self._source_map = source_map
+
+    # OVERRIDE
+    @property
+    def fn_signature(self):
+        return self.fn_ast._metadata["signature"]
 
 
 @dataclass
