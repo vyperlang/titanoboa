@@ -329,6 +329,20 @@ Low-Level Functionality
 
         The account to use as ``msg.sender`` for top-level calls and ``tx.origin`` in the context of state mutating function calls.
 
+    .. method:: generate_address(alias: str | None = None) -> str
+
+        Generate an address and optionally alias it.
+
+        :param alias: The alias to use for the generated address.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> boa.env.generate_address()
+            '0x0000000000000000000000000000000000000066'
+
     .. method:: anchor()
 
         A context manager which snapshots the state and the vm, and reverts to the snapshot on exit.
