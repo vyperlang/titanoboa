@@ -629,45 +629,45 @@ Low-Level Functionality
             >>> contract.main(68)
             69
 
-    .. attribute:: contract
-        :type: VyperContract
+    .. .. attribute:: contract
+    ..     :type: VyperContract
 
-        The :py:class:`VyperContract` instance this :py:class:`VyperFunction` instance is attached to.
+    ..     The :py:class:`VyperContract` instance this :py:class:`VyperFunction` instance is attached to.
 
-    .. attribute:: env
-        :type: boa.environment.Env
+    .. .. attribute:: env
+    ..     :type: boa.environment.Env
 
-        The :py:class:`boa.environment.Env` instance of the :py:attr:`contract` attribute.
+    ..     The :py:class:`boa.environment.Env` instance of the :py:attr:`contract` attribute.
 
-    .. attribute:: fn_ast
-        :type: vyper.ast.nodes.FunctionDef
+    .. .. attribute:: fn_ast
+    ..     :type: vyper.ast.nodes.FunctionDef
 
-        The Vyper AST of this function.
+    ..     The Vyper AST of this function.
 
-    .. property:: assembly
-        :type: list[str]
+    .. .. property:: assembly
+    ..     :type: list[str]
 
-        The function's runtime bytecode as a list of mnemonics.
+    ..     The function's runtime bytecode as a list of mnemonics.
 
-    .. property:: bytecode
-        :type: bytes
+    .. .. property:: bytecode
+    ..     :type: bytes
 
-        The function's runtime bytecode in bytes form.
+    ..     The function's runtime bytecode in bytes form.
 
-    .. property:: fn_signature
-        :type: vyper.ast.signatures.function_signature.FunctionSignature
+    .. .. property:: fn_signature
+    ..     :type: vyper.ast.signatures.function_signature.FunctionSignature
 
-        The internal Vyper representation of the function's signature.
+    ..     The internal Vyper representation of the function's signature.
 
-    .. property:: opcodes
-        :type: str
+    .. .. property:: opcodes
+    ..     :type: str
 
-        The function's runtime bytecode as a string of mnemonics.
+    ..     The function's runtime bytecode as a string of mnemonics.
 
-    .. property:: ir
-        :type: vyper.codegen.ir_node.IRnode
+    .. .. property:: ir
+    ..     :type: vyper.codegen.ir_node.IRnode
 
-        The internal representation of the function (a.k.a. VenomIR).
+    ..     The internal representation of the function (a.k.a. VenomIR).
 
 Exceptions
 ----------
