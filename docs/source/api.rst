@@ -348,6 +348,32 @@ Low-Level Functionality
             >>> boa.env.generate_address()
             '0x0000000000000000000000000000000000000066'
 
+    .. method:: set_balance(address: str, value: int)
+
+        Set the ether balance of an account.
+
+    .. method:: get_balance(address: str) -> int
+
+        Get the ether balance of an account.
+
+    .. method:: fork(provider: str, **kwargs: Any)
+
+        Fork the state of an external node allowing local simulation of state mutations.
+
+        :param provider: The URL of the node provider to fork the state of.
+        :param block_identifier: The block identifier to fork the state at.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> boa.env.vm.state.block_number
+            1
+            >>> boa.env.fork("https://rpc.ankr.com/eth")
+            >>> boa.env.vm.state.block_number
+            16038471
+
     .. method:: anchor()
 
         A context manager which snapshots the state and the vm, and reverts to the snapshot on exit.
