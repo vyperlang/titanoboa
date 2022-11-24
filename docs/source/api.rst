@@ -438,6 +438,13 @@ Low-Level Functionality
             >>> boa.env.vm.state.get_code(b"\x00" * 20).hex()
             '0000000000000000000000000000000022d53366457f9d5e68ec105046fc4383'
 
+    .. method:: time_travel(delta: int)
+
+        Fast forward, increase the chain timestamp and block number.
+
+        :param delta: The time delta to increase by.
+
+
 .. module:: boa.vyper.contract
 
 .. class:: VyperDeployer
