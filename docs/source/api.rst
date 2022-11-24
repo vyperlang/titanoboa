@@ -6,6 +6,96 @@ High-Level Functionality
 
 .. module:: boa
 
+.. function:: load(fp: str, *args: Any, **kwargs: Any) -> VyperContract | VyperBlueprint
+
+    Compile source from disk and return a deployed instance of the contract.
+
+    :param fp: The contract source code file path.
+    :param args: Contract constructor arguments.
+    :param kwargs: Keyword arguments to pass to the :py:func:`loads` function.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        # Foo.vy
+        @external
+        def addition(a: uint256, b: uint256) -> uint256:
+            return a + b
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> boa.load("Foo.vy")
+        <tmp/Foo.vy at 0x0000000000000000000000000000000000000066, compiled with ...>
+
+.. function:: loads(source: str, *args: Any, as_blueprint: bool = False, name: str | None = None, **kwargs) -> VyperContract | VyperBlueprint
+
+    Compile source code and return a deployed instance of the contract.
+
+    :param source: The source code to compile and deploy.
+    :param args: Contract constructor arguments.
+    :param as_blueprint: Whether to deploy an :eip:`5202` blueprint of the compiled contract.
+    :param name: The name of the contract.
+    :param kwargs: Keyword arguments to pass to the :py:class:`VyperContract` or :py:class:`VyperBlueprint` ``__init__`` method.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> src = """
+        ... value: public(uint256)
+        ... @external
+        ... def __init__(_initial_value: uint256):
+        ...     self.value = _initial_value
+        ... """
+        >>> boa.loads(src, 69)
+        <VyperContract at 0x0000000000000000000000000000000000000066, compiled with ...>
+
+.. function:: load_partial(fp: str) -> VyperDeployer
+
+    Compile source from disk and return a :py:class:`VyperDeployer`.
+
+    :param fp: The contract source code file path.
+    :returns: A :py:class:`VyperDeployer` factory instance.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        # Foo.vy
+        @external
+        def addition(a: uint256, b: uint256) -> uint256:
+            return a + b
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> boa.load_partial("Foo.vy")
+        <boa.vyper.contract.VyperDeployer object at ...>
+
+.. function:: loads_partial(source: str, name: str | None = None) -> VyperDeployer
+
+    Compile source and return a :py:class:`VyperDeployer`.
+
+    :param source: The Vyper source code.
+    :param name: The name of the contract.
+    :returns: A :py:class:`VyperDeployer` factory instance.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> src = """
+        ... @external
+        ... def main():
+        ...     pass
+        ... """
+        >>> boa.loads_partial(src, "Foo")
+        <boa.vyper.contract.VyperDeployer object at ...>
+
 .. function:: eval(statement: str) -> Any
 
     Evaluate a Vyper statement in the context of a contract with no state.
