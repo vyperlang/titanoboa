@@ -438,6 +438,19 @@ Low-Level Functionality
             >>> boa.env.vm.state.get_code(b"\x00" * 20).hex()
             '0000000000000000000000000000000022d53366457f9d5e68ec105046fc4383'
 
+    .. method:: execute_code(at: str = "0x0000000000000000000000000000000000000000", sender: str | None = None, gas: int | None = None, value: int = 0, bytecode: bytes = b"", data: bytes = b"", pc: int = 0) -> bytes
+
+        Execute bytecode at a specific account.
+
+        :param at: The account to target.
+        :param sender: The account to set as ``tx.origin`` for the execution context and ``msg.sender`` for the top-level call.
+        :param gas: The gas limit provided for the execution (a.k.a. ``msg.gas``).
+        :param value: The ether value to attach to the execution (a.k.a ``msg.value``).
+        :param bytecode: The runtime bytecode.
+        :param data: The data to attach to the execution (a.k.a. ``msg.data``).
+        :param pc: The program counter to start the execution at.
+        :returns: The return value from the top-level call.
+
     .. method:: time_travel(delta: int)
 
         Fast forward, increase the chain timestamp and block number.
