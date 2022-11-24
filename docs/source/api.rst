@@ -329,6 +329,11 @@ Low-Level Functionality
 
         The account to use as ``msg.sender`` for top-level calls and ``tx.origin`` in the context of state mutating function calls.
 
+    .. attribute:: chain
+        :type: eth.abc.ChainAPI
+
+        The global py-evm chain instance.
+
     .. method:: generate_address(alias: str | None = None) -> str
 
         Generate an address and optionally alias it.
