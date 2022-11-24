@@ -582,27 +582,27 @@ Low-Level Functionality
 
 .. class:: VyperFunction
 
-    .. method:: args_abi_type(nkwargs: int)
+    .. .. method:: args_abi_type(nkwargs: int)
 
-        :param nkwargs: The number of keyword arguments to include when calculating the signature.
-        :returns: A tuple containing the function's method id and the ABI schema of the function's arguments.
-        :rtype: tuple[bytes, str]
+    ..     :param nkwargs: The number of keyword arguments to include when calculating the signature.
+    ..     :returns: A tuple containing the function's method id and the ABI schema of the function's arguments.
+    ..     :rtype: tuple[bytes, str]
 
-        .. rubric:: Example
+    ..     .. rubric:: Example
 
-        .. code-block:: python
+    ..     .. code-block:: python
 
-            >>> import boa
-            >>> src = """
-            ... @external
-            ... def main(a: uint256, b: uint256 = 0) -> uint256:
-            ...     return a + b
-            ... """
-            >>> contract = boa.loads(src)
-            >>> contract.main.args_abi_type(0)
-            (b'\xab:\xe2U', '(uint256)')
-            >>> contract.main.args_abi_type(1)
-            (b'\xccW,\xf9', '(uint256,uint256)')
+    ..         >>> import boa
+    ..         >>> src = """
+    ..         ... @external
+    ..         ... def main(a: uint256, b: uint256 = 0) -> uint256:
+    ..         ...     return a + b
+    ..         ... """
+    ..         >>> contract = boa.loads(src)
+    ..         >>> contract.main.args_abi_type(0)
+    ..         (b'\xab:\xe2U', '(uint256)')
+    ..         >>> contract.main.args_abi_type(1)
+    ..         (b'\xccW,\xf9', '(uint256,uint256)')
 
     .. method:: __call__(*args: Any, value: int = 0, gas: int | None = None, sender: str | None = None, **kwargs: Any) -> Any
 
