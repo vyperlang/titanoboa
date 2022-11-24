@@ -342,6 +342,9 @@ Low-Level Functionality
 
     Stub class for :eip:`5202` blueprints.
 
+    .. property:: address
+        :type: str
+
 .. class:: VyperFunction
 
     .. method:: args_abi_type(nkwargs: int)
