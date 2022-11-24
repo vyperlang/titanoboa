@@ -414,6 +414,30 @@ Low-Level Functionality
             '0x00000000000000000000000000000000000000ff'
             >>> boa.env.eoa
 
+    .. method:: deploy_code(at: str = "0x0000000000000000000000000000000000000000", sender: str | None = None, gas: int | None = None, value: int = 0, bytecode: bytes = b"", data: bytes = b"", pc: int = 0) -> bytes
+
+        Deploy bytecode at a specific account.
+
+        :param at: The account the deployment bytecode will run at.
+        :param sender: The account to set as ``tx.origin`` for the execution context and ``msg.sender`` for the top-level call.
+        :param gas: The gas limit provided for the execution (a.k.a. ``msg.gas``).
+        :param value: The ether value to attach to the execution (a.k.a ``msg.value``).
+        :param bytecode: The deployment bytecode.
+        :param data: The data to attach to the execution (a.k.a. ``msg.data``).
+        :param pc: The program counter to start the execution at.
+        :returns: The return value from the top-level call (typically the runtime bytecode of a contract).
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> code = bytes.fromhex("333452602034f3")  # simply returns the caller
+            >>> boa.env.deploy_code(bytecode=code, sender="0x0000000022D53366457F9d5E68Ec105046FC4383").hex()
+            '0000000000000000000000000000000022d53366457f9d5e68ec105046fc4383'
+            >>> boa.env.vm.state.get_code(b"\x00" * 20).hex()
+            '0000000000000000000000000000000022d53366457f9d5e68ec105046fc4383'
+
 .. module:: boa.vyper.contract
 
 .. class:: VyperDeployer
