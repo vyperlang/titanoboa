@@ -324,6 +324,11 @@ Low-Level Functionality
 
     A wrapper class around py-evm which provides a "contract-centric" API.
 
+    .. attribute:: eoa
+        :type: str
+
+        The account to use as ``msg.sender`` for top-level calls and ``tx.origin`` in the context of state mutating function calls.
+
     .. method:: anchor()
 
         A context manager which snapshots the state and the vm, and reverts to the snapshot on exit.
@@ -346,6 +351,23 @@ Low-Level Functionality
             1
             >>> contract.value()
             0
+
+    .. method:: prank(address: str)
+
+        A context manager which temporarily sets :py:attr:`eoa` and resets it on exit.
+
+        .. rubric:: Example
+
+        .. code-block::
+
+            >>> import boa
+            >>> boa.env.eoa
+            '0x0000000000000000000000000000000000000065'
+            >>> with boa.env.prank("0x00000000000000000000000000000000000000ff"):
+            ...     boa.env.eoa
+            ...
+            '0x00000000000000000000000000000000000000ff'
+            >>> boa.env.eoa
 
 .. module:: boa.vyper.contract
 
