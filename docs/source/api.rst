@@ -225,6 +225,79 @@ Low-Level Functionality
 
 .. module:: boa.vyper.contract
 
+.. class:: VyperDeployer
+
+    Vyper contract factory.
+
+    .. method:: at(address: str) -> VyperContract
+
+        Return a :py:class:`VyperContract` instance for a contract deployed at the provided address.
+
+        :param address: The address of the contract.
+        :returns: A contract instance.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = """
+            ... @external
+            ... def main():
+            ...     pass
+            ... """
+            >>> ContractFactory = boa.loads_partial(src, "Foo")
+            >>> ContractFactory.at("0xD130B7E7F212ECADCfcCa3cecC89f85ce6465896")
+            <Foo at 0xD130B7E7F212ECADCfcCa3cecC89f85ce6465896, compiled with ...>
+
+    .. method:: deploy(*args: Any, **kwargs: Any) -> VyperContract
+
+        Deploy a new contract.
+
+        :param args: The contract constructor arguments.
+        :param kwargs: Keyword arguments to pass to the :py:class:`VyperContract` ``__init__`` method.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = """
+            ... @external
+            ... def main():
+            ...     pass
+            ... """
+            >>> ContractFactory = boa.loads_partial(src, "Foo")
+            >>> ContractFactory.deploy()
+            <Foo at 0x0000000000000000000000000000000000000066, compiled with ...>
+
+    .. method:: deploy_as_blueprint(*args: Any, **kwargs: Any) -> VyperBlueprint
+
+        Deploy a new :eip:`5202` blueprint instance.
+
+        :param args: Positional arguments to pass to the :py:class:`VyperBlueprint` ``__init__`` method.
+        :param kwargs: Keyword arguments to pass to the :py:class:`VyperBlueprint` ``__init__`` method.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = """
+            ... @external
+            ... def main():
+            ...     pass
+            ... """
+            >>> ContractFactory = boa.loads_partial(src, "Foo")
+            >>> ContractFactory.deploy_as_blueprint()
+            <boa.vyper.contract.VyperBlueprint object at ...>
+
+.. class:: VyperContract
+
+.. class:: VyperBlueprint
+
+    Stub class for :eip:`5202` blueprints.
+
 .. class:: VyperFunction
 
     .. method:: args_abi_type(nkwargs: int)
