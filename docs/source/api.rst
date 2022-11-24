@@ -223,17 +223,96 @@ High-Level Functionality
 Low-Level Functionality
 -----------------------
 
-.. module:: boa.environment
+.. module:: boa.vyper.contract
 
-.. class:: Env
+.. class:: VyperFunction
 
-    .. attribute:: chain
-        :type: eth.abc.ChainAPI
+    .. method:: args_abi_type(nkwargs: int)
 
-    .. attribute:: eoa
+        :param nkwargs: The number of keyword arguments to include when calculating the signature.
+        :returns: A tuple containing the function's method id and the ABI schema of the function's arguments.
+        :rtype: tuple[bytes, str]
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = """
+            ... @external
+            ... def main(a: uint256, b: uint256 = 0) -> uint256:
+            ...     return a + b
+            ... """
+            >>> contract = boa.loads(src)
+            >>> contract.main.args_abi_type(0)
+            (b'\xab:\xe2U', '(uint256)')
+            >>> contract.main.args_abi_type(1)
+            (b'\xccW,\xf9', '(uint256,uint256)')
+
+    .. method:: __call__(*args: Any, value: int = 0, gas: int | None = None, sender: str | None = None, **kwargs: Any) -> Any
+
+        Execute the function.
+
+        :param args: The positional arguments of the contract function.
+        :param value: The ether value to attach to the execution of the function (a.k.a ``msg.value``).
+        :param gas: The gas limit provided for function execution (a.k.a. ``msg.gas``).
+        :param sender: The account which will be the ``tx.origin`` of the execution, and ``msg.sender`` of the top-level call.
+        :param kwargs: Keyword arguments of the contract function.
+        :returns: The result of the function.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = """
+            ... @external
+            ... def main(a: uint256) -> uint256:
+            ...     return 1 + a
+            ... """
+            >>> contract = boa.loads(src)
+            >>> contract.main(68)
+            69
+
+    .. attribute:: contract
+        :type: VyperContract
+
+        The :py:class:`VyperContract` instance this :py:class:`VyperFunction` instance is attached to.
+
+    .. attribute:: env
+        :type: boa.environment.Env
+
+        The :py:class:`boa.environment.Env` instance of the :py:attr:`contract` attribute.
+
+    .. attribute:: fn_ast
+        :type: vyper.ast.nodes.FunctionDef
+
+        The Vyper AST of this function.
+
+    .. property:: assembly
+        :type: list[str]
+
+        The function's runtime bytecode as a list of mnemonics.
+
+    .. property:: bytecode
+        :type: bytes
+
+        The function's runtime bytecode in bytes form.
+
+    .. property:: fn_signature
+        :type: vyper.ast.signatures.function_signature.FunctionSignature
+
+        The internal Vyper representation of the function's signature.
+
+    .. property:: opcodes
         :type: str
 
-        The account to use as ``tx.origin`` when performing state mutating contract operations.
+        The function's runtime bytecode as a string of mnemonics.
+
+    .. property:: ir
+        :type: vyper.codegen.ir_node.IRnode
+
+        The internal representation of the function (a.k.a. VenomIR).
 
 Exceptions
 ----------
