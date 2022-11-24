@@ -298,6 +298,20 @@ Low-Level Functionality
 
     Internal and external contract functions are available as methods on :py:class:`VyperContract` instances.
 
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> src = """
+        ... @external
+        ... def main():
+        ...     pass
+        ... """
+        >>> contract = boa.loads(src)
+        >>> type(contract.main)
+        <class 'boa.vyper.contract.VyperFunction'>
+
     .. method:: eval(statement: str, value: int = 0, gas: int | None = None, sender: str | None = None) -> Any
 
         Evaluate a Vyper statement in the context of the contract.
