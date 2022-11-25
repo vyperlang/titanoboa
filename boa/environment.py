@@ -485,8 +485,8 @@ class Env:
         else:
             self.vm.patch.block_number += block_steps
 
-    def mine(self, block_timestamp: int = 12):
-        self.time_travel(block_timestamp, 1)
+    def mine(self, block_time: int = 12):
+        self.time_travel(block_time, 1)
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
