@@ -10,13 +10,13 @@ from typing import Any, Optional
 
 import vyper
 import vyper.ast as vy_ast
-from vyper.ast.utils import parse_to_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
 from eth.exceptions import VMError
 from eth_typing import Address
 from eth_utils import to_canonical_address, to_checksum_address
+from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
@@ -62,6 +62,9 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 class VyperDeployer:
     def __init__(self, compiler_data, env=None):
         self.compiler_data = compiler_data
+
+    def __call__(self, *args, **kwargs):
+        return self.deploy(*args, **kwargs)
 
     def deploy(self, *args, **kwargs):
         return VyperContract(self.compiler_data, *args, **kwargs)
