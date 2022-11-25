@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 import vyper
 import vyper.ast as vy_ast
+from vyper.ast.utils import parse_to_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 import vyper.semantics.validation as validation
@@ -736,12 +737,21 @@ class VyperContract(_BaseContract):
 
     # inject a function into this VyperContract without affecting the
     # contract's source code. useful for testing private functionality
-    def inject_function(self, fn_source_code):
+    def inject_function(self, fn_source_code, force=False):
         if not hasattr(self, "inject"):
             self.inject = lambda: None
 
+        # get an AST so we know the fn name; work is doubled in
+        # _compile_vyper_function but no way around it.
+        fn_ast = parse_to_ast(fn_source_code, {}).body[0]
+        if hasattr(self.inject, fn_ast.name) and not force:
+            raise ValueError(f"already injected: {fn_ast.name}")
+
+        # ensure self._vyper_namespace is computed
+        m = self._ast_module  # noqa: F841
+        self._vyper_namespace["self"].members.pop(fn_ast.name, None)
         f = _InjectVyperFunction(self, fn_source_code)
-        setattr(self.inject, f.fn_ast.name, f)
+        setattr(self.inject, fn_ast.name, f)
 
     @cached_property
     def _sigs(self):
