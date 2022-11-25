@@ -909,6 +909,9 @@ class _InjectVyperFunction(VyperFunction):
 class BoaError(Exception):
     stack_trace: StackTrace
 
+    # perf TODO: don't materialize the stack trace until we need it,
+    # i.e. BoaError ctor only takes what is necessary to construct the
+    # stack trace but does not require the actual stack trace itself.
     def __str__(self):
         frame = self.stack_trace.last_frame
         err = frame.vm_error
