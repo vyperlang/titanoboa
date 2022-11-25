@@ -9,10 +9,11 @@ def precompile(signature):
 
     ast = parse_to_ast(signature).body[0]
     ctx, = GlobalContext()
-    fn_type = FunctionSignature.from_definition(ast, ctx, interface_def=True)
+    fn_sig = FunctionSignature.from_definition(ast, ctx, interface_def=True)
+    fn_typ = ContractFunction.from_FunctionDef(ast, is_interface=True)
 
     def s(inner):
-        inner.fn_type = fn_type
+        inner.fn_sig = fn_sig
 
         @wraps(f)
         def precompile_implementation(computation):
@@ -38,9 +39,8 @@ BOA_FAKE_OBJECT = InterfacePrimitive()
 
 # TODO add force kwarg
 def register_hl(f):
-    BOA_BUILTINS[method_id(fn_sig.base_signature)] = f
-    # how to get it into the global namespace cleanly
-    # BOA_FAKE_OBJECT.members.add_member(ContractFunction.from_FunctionDef
+    BOA_BUILTINS[method_id(f.fn_sig.base_signature)] = f
+    BOA_FAKE_OBJECT.add_member(f.fn_typ)
 
 def boa_builtin_dispatcher(computation):
     # will throw KeyError if the builtin is not there

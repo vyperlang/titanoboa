@@ -29,6 +29,11 @@ def compiler_data(source_code: str, contract_name: str) -> CompilerData:
 
     def func():
         ret = CompilerData(source_code, contract_name)
+
+        if len(BOA_BUILTINS) > 0:
+            boa_iface = [f.fn_sig for f in BOA_BUILTINS.values()]
+            ret.global_ctx._interfaces["BOA"] = boa_iface
+
         ret.bytecode_runtime  # force compilation to happen
         return ret
 
