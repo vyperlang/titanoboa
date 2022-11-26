@@ -451,18 +451,12 @@ Low-Level Functionality
         :param pc: The program counter to start the execution at.
         :returns: The return value from the top-level call.
 
-    .. method:: time_travel(sleep_time: int, block_steps: int = None)
+    .. method:: time_travel(time_delta: int, block_delta: int = 12)
 
-        Fast forward, increase the chain timestamp and block number. If ``block_steps`` is None, it assumes a 12 second block time. Else, it fast-forwards by ``block_steps``.
+        Fast forwards, increase the chain timestamp and block number.
 
-        :param sleep_time: The time delta to increase by.
-        :param block_steps: Number of blocks to travel.
-
-    .. method:: mine(block_time: int = 12)
-
-        Pushes block timestamp and block number by a single block. ``block_timestamp`` is set at a default value of 12 sec.
-
-        :param block_time: Time between subsequent blocks.
+        :param time_delta: The time delta to increase by.
+        :param block_delta: The time between two blocks. Set to 12 as default.
 
 
 .. module:: boa.vyper.contract

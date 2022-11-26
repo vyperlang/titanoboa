@@ -478,15 +478,9 @@ class Env:
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
     # function to time travel
-    def time_travel(self, sleep_time, block_steps: int = None):
-        self.vm.patch.timestamp += sleep_time
-        if not block_steps:
-            self.vm.patch.block_number += sleep_time // 12
-        else:
-            self.vm.patch.block_number += block_steps
-
-    def mine(self, block_time: int = 12):
-        self.time_travel(block_time, 1)
+    def time_travel(self, time_delta: int, block_delta: int = 12):
+        self.vm.patch.timestamp += time_delta
+        self.vm.patch.block_number += time_delta // block_delta
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
