@@ -11,8 +11,8 @@ from typing import Any, Optional
 import vyper
 import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
-import vyper.semantics.namespace as vy_ns
 import vyper.semantics.analysis as analysis
+import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
 from eth_typing import Address
 from eth_utils import to_canonical_address, to_checksum_address
@@ -26,7 +26,7 @@ from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.utils import method_id_int, cached_property
+from vyper.utils import cached_property, method_id_int
 
 from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
