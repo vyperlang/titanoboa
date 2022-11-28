@@ -12,7 +12,7 @@ import vyper
 import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
-import vyper.semantics.validation as validation
+import vyper.semantics.analysis as analysis
 from eth.exceptions import VMError
 from eth_typing import Address
 from eth_utils import to_canonical_address, to_checksum_address
@@ -25,8 +25,8 @@ from vyper.codegen.types.types import MappingType, TupleType, is_base_type
 from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.validation.data_positions import set_data_positions
-from vyper.utils import abi_method_id, cached_property
+from vyper.semantics.analysis.data_positions import set_data_positions
+from vyper.utils import method_id_int, cached_property
 
 from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
@@ -643,8 +643,8 @@ class VyperContract(_BaseContract):
         # do the same thing as vyper_module_folded but skip getter expansion
         vy_ast.folding.fold(module)
         with vy_ns.get_namespace().enter_scope():
-            validation.add_module_namespace(module, self.compiler_data.interface_codes)
-            validation.validate_functions(module)
+            analysis.add_module_namespace(module, self.compiler_data.interface_codes)
+            analysis.validate_functions(module)
             # we need to cache the namespace right here(!).
             # set_data_positions will modify the type definitions in place.
             self._cache_namespace(vy_ns.get_namespace())
@@ -825,7 +825,7 @@ class VyperFunction:
         args_abi_type = (
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
-        method_id = abi_method_id(self.fn_signature.name + args_abi_type).to_bytes(
+        method_id = method_id_int(self.fn_signature.name + args_abi_type).to_bytes(
             4, "big"
         )
         self._signature_cache[num_kwargs] = (method_id, args_abi_type)
