@@ -674,7 +674,7 @@ class VyperContract(_BaseContract):
             with vy_ns.override_global_namespace(self._vyper_namespace):
                 yield
         finally:
-            self._vyper_namespace["self"].members.pop("__boa_debug__", None)
+            self._vyper_namespace["self"].typ.members.pop("__boa_debug__", None)
 
     # for eval(), we need unoptimized assembly, since the dead code
     # eliminator might prune a dead function (which we want to eval)
@@ -752,7 +752,7 @@ class VyperContract(_BaseContract):
 
         # ensure self._vyper_namespace is computed
         m = self._ast_module  # noqa: F841
-        self._vyper_namespace["self"].members.pop(fn_ast.name, None)
+        self._vyper_namespace["self"].typ.members.pop(fn_ast.name, None)
         f = _InjectVyperFunction(self, fn_source_code)
         setattr(self.inject, fn_ast.name, f)
 
