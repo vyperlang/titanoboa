@@ -6,7 +6,7 @@ from typing import Any, List
 class Event:
     log_id: int  # internal py-evm log id, for ordering purposes
     address: str  # checksum address
-    event_type: Any  # vyper.semantics.types.user.Event
+    event_type: Any  # vyper.semantics.types.user.EventT
     topics: List[Any]  # list of decoded topics
     args: List[Any]  # list of decoded args
 
