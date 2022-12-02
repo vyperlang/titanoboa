@@ -16,16 +16,18 @@ def test_no_inputs():
 
 
 def test_block_travel():
-    old_block = boa.env.block_number
-    old_timestamp = boa.env.timestamp
+    state = boa.env.vm.state
+    old_block = state.block_number
+    old_timestamp = state.timestamp
     boa.env.time_travel(blocks=42069, block_delta=12)
-    assert boa.env.block_number == old_block + 42069
-    assert boa.env.timestamp == old_timestamp + 42069 * 12
+    assert state.block_number == old_block + 42069
+    assert state.timestamp == old_timestamp + 42069 * 12
 
 
 def test_seconds_travel():
-    old_timestamp = boa.env.timestamp
-    old_block = boa.env.block_number
+    state = boa.env.vm.state
+    old_timestamp = state.timestamp
+    old_block = state.block_number
     boa.env.time_travel(seconds=42069, block_delta=12)
-    assert boa.env.timestamp == old_timestamp + 42069
-    assert boa.env.block_number == old_block + 42069 // 12
+    assert state.timestamp == old_timestamp + 42069
+    assert state.block_number == old_block + 42069 // 12

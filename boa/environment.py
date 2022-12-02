@@ -266,14 +266,6 @@ class Env:
 
         self._contracts = {}
 
-    @property
-    def timestamp(self):
-        return self.vm.state.timestamp
-
-    @property
-    def block_number(self):
-        return self.vm.state.block_number
-
     def _init_vm(self):
         self.vm = self.chain.get_vm()
 
