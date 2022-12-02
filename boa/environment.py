@@ -478,9 +478,20 @@ class Env:
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
     # function to time travel
-    def time_travel(self, time_delta: int, block_delta: int = 12):
-        self.vm.patch.timestamp += time_delta
-        self.vm.patch.block_number += time_delta // block_delta
+    def time_travel(self, seconds=None, blocks=None, block_delta=12):
+
+        if seconds is None and blocks is None:
+            raise ValueError("One of seconds or blocks should be set")
+        if seconds is not None:
+            if seconds <= 0:
+                raise ValueError("seconds must be greater than 0")
+            blocks = seconds // block_delta
+        else:
+            if blocks <= 0:
+                raise ValueError("blocks must be greater than 0")
+            seconds = blocks * block_delta
+        self.vm.patch.timestamp += seconds
+        self.vm.patch.block_number += blocks
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
