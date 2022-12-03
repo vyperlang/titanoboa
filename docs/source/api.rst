@@ -455,8 +455,8 @@ Low-Level Functionality
 
         Fast forward, increase the chain timestamp and block number.
 
-        :param seconds: Change timestamp by a certain positive amount.
-        :param blocks: Change block number by a certain positive amount.
+        :param seconds: Change current timestamp by `seconds` seconds.
+        :param blocks: Change block number by `blocks` blocks.
         :param block_delta: The time between two blocks. Set to 12 as default.
 
 

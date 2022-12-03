@@ -470,18 +470,20 @@ class Env:
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
     # function to time travel
-    def time_travel(self, seconds=None, blocks=None, block_delta=12):
+    def time_travel(
+        self,
+        seconds: Optional[int] = None,
+        blocks: Optional[int] = None,
+        block_delta: int = 12,
+    ):
 
-        if seconds is None and blocks is None:
+        if not (seconds or blocks):
             raise ValueError("One of seconds or blocks should be set")
-        if seconds is not None:
-            if seconds <= 0:
-                raise ValueError("seconds must be greater than 0")
+        if seconds and not blocks:
             blocks = seconds // block_delta
-        else:
-            if blocks <= 0:
-                raise ValueError("blocks must be greater than 0")
+        elif not seconds and blocks:
             seconds = blocks * block_delta
+
         self.vm.patch.timestamp += seconds
         self.vm.patch.block_number += blocks
 
