@@ -477,11 +477,11 @@ class Env:
         block_delta: int = 12,
     ):
 
-        if not (seconds or blocks):
+        if seconds is None == blocks is None:
             raise ValueError("One of seconds or blocks should be set")
-        if seconds and not blocks:
+        if seconds is not None:
             blocks = seconds // block_delta
-        elif not seconds and blocks:
+        else:
             seconds = blocks * block_delta
 
         self.vm.patch.timestamp += seconds
