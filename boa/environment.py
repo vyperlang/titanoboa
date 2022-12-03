@@ -477,7 +477,7 @@ class Env:
         block_delta: int = 12,
     ):
 
-        if seconds is None == blocks is None:
+        if (seconds is None) == (blocks is None):
             raise ValueError("One of seconds or blocks should be set")
         if seconds is not None:
             blocks = seconds // block_delta
