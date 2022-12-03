@@ -31,21 +31,30 @@ def enable_pyevm_verbose_logging():
 
 
 class PatchSingle:  # the high level interface
-    def __init__(self, patcher, name):
+    def __init__(self, name):
         self._name = name
-        self._patcher = patcher
+        #self._patcher = patcher
 
-    def __get__(self):
-        return getattr(self._patcher, self._name)
+    def __get__(self, obj, objtype=None):
+        return getattr(obj._patcher, self._name)
 
-    def __set__(self, val):
-        return setattr(self._patcher, self._name, val)
+    def __set__(self, obj, val):
+        return setattr(obj._patcher, self._name, val)
 
     @contextlib.contextmanager
     def __call__(self):
         tmp = self.__get__()
         yield
         self.__set__(tmp)
+
+class BlockPatcher:
+    coinbase = PatchSingle("coinbase")
+    difficulty = PatchSingle("difficulty")
+    number = PatchSingle("block_number")
+    timestamp = PatchSingle("timestamp")
+
+    def __init__(self, patcher):
+        self._patcher = patcher
 
 
 class VMPatcher:  # the low level interface
@@ -333,14 +342,8 @@ class Env:
 
         self.vm.patch = VMPatcher(self.vm)
 
-        self.block = lambda: None
-        self.block.coinbase = PatchSingle(self.vm.patch, "coinbase")
-        self.block.difficulty = PatchSingle(self.vm.patch, "difficulty")
-        self.block.number = PatchSingle(self.vm.patch, "block_number")
-        self.block.timestamp = PatchSingle(self.vm.patch, "timestamp")
-
-        self.chain = lambda: None
-        self.chain.id = PatchSingle(self.vm.patch, "chain_id")
+        self.block = BlockPatcher(self.vm.patch)
+        # TODO:self.chain = ChainPatcher(self.vm.patch)
 
         # msg.*? tx.*?
 
