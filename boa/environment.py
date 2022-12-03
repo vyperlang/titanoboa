@@ -30,7 +30,25 @@ def enable_pyevm_verbose_logging():
     logger.setLevel("DEBUG2")
 
 
-class VMPatcher:
+class PatchSingle:  # the high level interface
+    def __init__(self, patcher, name):
+        self._name = name
+        self._patcher = patcher
+
+    def __get__(self):
+        return getattr(self._patcher, self._name)
+
+    def __set__(self, val):
+        return setattr(self._patcher, self._name, val)
+
+    @contextlib.contextmanager
+    def __call__(self):
+        tmp = self.__get__()
+        yield
+        self.__set__(tmp)
+
+
+class VMPatcher:  # the low level interface
     _exc_patchables = {
         # env vars vyper supports
         "block_number": "_block_number",
@@ -314,6 +332,19 @@ class Env:
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.sstore_trace)
 
         self.vm.patch = VMPatcher(self.vm)
+
+        self.block = lambda: None
+        self.block.coinbase = PatchSingle(self.vm.patch, "coinbase")
+        self.block.difficulty = PatchSingle(self.vm.patch, "difficulty")
+        self.block.number = PatchSingle(self.vm.patch, "block_number")
+        self.block.timestamp = PatchSingle(self.vm.patch, "timestamp")
+
+        self.chain = lambda: None
+        self.chain.id = PatchSingle(self.vm.patch, "chain_id")
+
+        # msg.*? tx.*?
+
+
 
     def fork(self, url, **kwargs):
         kwargs["url"] = url
