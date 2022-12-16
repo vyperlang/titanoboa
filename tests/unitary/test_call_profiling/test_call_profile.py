@@ -39,7 +39,6 @@ def test_call_profiling_disabled_by_default(boa_contract):
 @pytest.mark.profile_calls("boa_contract.foo", "boa_contract.bar")
 def test_populate_call_profile_property(boa_contract, a, b, c):
 
-    boa_contract.profile_calls = True
     boa_contract.foo(a, b)
     boa_contract.bar(a, b)
 

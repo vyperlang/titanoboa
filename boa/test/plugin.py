@@ -32,6 +32,23 @@ def pytest_configure(config):
     pytest.call_profile = {}
 
 
+def _enable_call_profiling(item):
+    profile_test = item.get_closest_marker("profile_calls") is not None
+    if not profile_test:
+        return
+
+    profile_calls = item.get_closest_marker("profile_calls").args
+    if len(profile_calls) > 0:
+
+        for call in profile_calls:
+            fixture_name = call.split(".")[0]
+            for name, fixture in item.funcargs.items():
+
+                if name == fixture_name:
+
+                    fixture.profile_calls = True
+
+
 def _profile_calls(item):
 
     profile_calls = item.get_closest_marker("profile_calls").args
@@ -63,6 +80,7 @@ def _profile_calls(item):
 def pytest_runtest_call(item: pytest.Item) -> Generator:
 
     ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
+    _enable_call_profiling(item)
 
     if not ignore_isolation:
         with boa.env.anchor():
