@@ -420,6 +420,10 @@ class VyperContract(_BaseContract):
         if not skip_init:
             self._run_init(*args)
 
+        # call profiling
+        self.profile_calls = False
+        self.call_profile = {}
+
     def _run_init(self, *args):
         encoded_args = b""
 
@@ -465,15 +469,18 @@ class VyperContract(_BaseContract):
     def ast_map(self):
         return ast_map_of(self.compiler_data.vyper_module)
 
-    def debug_frame(self, computation=None):
-        if computation is None:
-            computation = self._computation
-
+    def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation.code)
         if node is None:
             return None
 
-        fn = node.get_ancestor(vy_ast.FunctionDef)
+        return node.get_ancestor(vy_ast.FunctionDef)
+
+    def debug_frame(self, computation=None):
+        if computation is None:
+            computation = self._computation
+
+        fn = self._get_fn_from_computation(computation)
 
         frame_info = self.compiler_data.function_signatures[fn.name].frame_info
 
@@ -600,6 +607,15 @@ class VyperContract(_BaseContract):
         # fix.
         if is_base_type(vyper_typ, "address"):
             ret = to_checksum_address(ret)
+
+        # if call profiling is enabled, store gas used for each call:
+        if self.profile_calls:
+            fn_name = self._get_fn_from_computation(computation).name
+            gas_used = computation.get_gas_used()
+            if fn_name not in self.call_profile.keys():
+                self.call_profile[fn_name] = [gas_used]
+            else:
+                self.call_profile[fn_name].append(gas_used)
 
         return vyper_object(ret, vyper_typ)
 
