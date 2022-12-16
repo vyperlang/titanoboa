@@ -19,7 +19,7 @@ SETTINGS = {"max_examples": 20, "deadline": None}
 
 @pytest.fixture(scope="module")
 def boa_contract():
-    return boa.loads(source_code)
+    return boa.loads(source_code, name="TestContract")
 
 
 def test_call_profiling_disabled_by_default(boa_contract):
@@ -29,7 +29,7 @@ def test_call_profiling_disabled_by_default(boa_contract):
 
 
 @pytest.mark.parametrize("a,b", [(42, 69), (420, 690), (42, 690), (420, 69)])
-@pytest.mark.ignore_isolation
+@pytest.mark.profile_calls("boa_contract.foo", "boa_contract.bar")
 def test_populate_call_profile_property(boa_contract, a, b):
 
     boa_contract.profile_calls = True
@@ -37,12 +37,3 @@ def test_populate_call_profile_property(boa_contract, a, b):
     boa_contract.bar(a, b)
 
     assert boa_contract.call_profile
-    combined_calls = {}
-    for d in (pytest.call_profile, boa_contract.call_profile):
-        for key, value in d.items():
-            if key not in combined_calls.keys():
-                combined_calls[key] = value
-            else:
-                combined_calls[key].extend(value)
-
-    pytest.call_profile = combined_calls

@@ -32,21 +32,49 @@ def pytest_configure(config):
     pytest.call_profile = {}
 
 
+def _profile_calls(item):
+
+    profile_calls = item.get_closest_marker("profile_calls").args
+    if len(profile_calls) > 0:
+
+        combined_calls = {}
+        for call in profile_calls:
+
+            fixture_name = call.split(".")[0]
+            method_name = call.split(".")[1]
+
+            for name, fixture in item.funcargs.items():
+
+                if name == fixture_name:
+
+                    for d in (pytest.call_profile, fixture.call_profile):
+                        for key, value in d.items():
+                            if key != method_name:
+                                continue
+                            if key not in combined_calls.keys():
+                                combined_calls[key] = value
+                            else:
+                                combined_calls[key].extend(value)
+
+        pytest.call_profile = combined_calls
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Generator:
 
-    ignore_isolation = item.get_closest_marker("ignore_isolation")
-    profile_calls = item.get_closest_marker("profile_calls")
-    isolate = not (ignore_isolation and profile_calls)
+    ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
 
-    if isolate:
-
+    if not ignore_isolation:
         with boa.env.anchor():
             yield
-
     else:
-
         yield
+
+    profile_test = item.get_closest_marker("profile_calls") is not None
+    if not profile_test:
+        return
+
+    _profile_calls(item)
 
 
 def pytest_sessionfinish(session, exitstatus):
