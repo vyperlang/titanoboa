@@ -17,6 +17,11 @@ def bar(a: uint256, b: uint256) -> uint256:
     for j in range(N_ITER):
         d = unsafe_mul(d, isqrt(unsafe_div(a, b) + unsafe_mul(a, b)))
     return d
+
+@external
+@view
+def baz(c: address):
+    assert c != empty(address)
 """
 
 SETTINGS = {"max_examples": 20, "deadline": None}
@@ -43,3 +48,8 @@ def test_populate_call_profile_property(boa_contract, a, b, c):
     boa_contract.bar(a, b)
 
     assert boa_contract.call_profile
+
+
+@pytest.mark.profile_calls("boa_contract.baz")
+def test_append_to_pytest_call_profile(boa_contract):
+    boa_contract.baz(boa.env.generate_address())

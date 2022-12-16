@@ -592,6 +592,16 @@ class VyperContract(_BaseContract):
         if computation.is_error:
             self.handle_error(computation)
 
+        # if call profiling is enabled, store gas used for each call:
+        # profile before return None
+        if self.profile_calls:
+            fn_name = self._get_fn_from_computation(computation).name
+            gas_used = computation.get_gas_used()
+            if fn_name not in self.call_profile.keys():
+                self.call_profile[fn_name] = [gas_used]
+            else:
+                self.call_profile[fn_name].append(gas_used)
+
         if vyper_typ is None:
             return None
 
@@ -607,15 +617,6 @@ class VyperContract(_BaseContract):
         # fix.
         if is_base_type(vyper_typ, "address"):
             ret = to_checksum_address(ret)
-
-        # if call profiling is enabled, store gas used for each call:
-        if self.profile_calls:
-            fn_name = self._get_fn_from_computation(computation).name
-            gas_used = computation.get_gas_used()
-            if fn_name not in self.call_profile.keys():
-                self.call_profile[fn_name] = [gas_used]
-            else:
-                self.call_profile[fn_name].append(gas_used)
 
         return vyper_object(ret, vyper_typ)
 

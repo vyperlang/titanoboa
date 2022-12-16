@@ -32,9 +32,17 @@ def pytest_configure(config):
     pytest.call_profile = {}
 
 
-def _enable_call_profiling(item):
+def _items_to_profile(item):
+
     profile_test = item.get_closest_marker("profile_calls") is not None
     if not profile_test:
+        return False
+    return True
+
+
+def _enable_call_profiling(item):
+
+    if not _items_to_profile(item):
         return
 
     profile_calls = item.get_closest_marker("profile_calls").args
@@ -54,7 +62,7 @@ def _profile_calls(item):
     profile_calls = item.get_closest_marker("profile_calls").args
     if len(profile_calls) > 0:
 
-        combined_calls = {}
+        combined_calls = pytest.call_profile
         for call in profile_calls:
 
             fixture_name = call.split(".")[0]
@@ -63,11 +71,13 @@ def _profile_calls(item):
             for name, fixture in item.funcargs.items():
 
                 if name == fixture_name:
-
                     for d in (pytest.call_profile, fixture.call_profile):
+
                         for key, value in d.items():
+
                             if key != method_name:
                                 continue
+
                             if key not in combined_calls.keys():
                                 combined_calls[key] = value
                             else:
@@ -88,8 +98,7 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
     else:
         yield
 
-    profile_test = item.get_closest_marker("profile_calls") is not None
-    if not profile_test:
+    if not _items_to_profile(item):
         return
 
     _profile_calls(item)
@@ -98,7 +107,7 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
 def pytest_sessionfinish(session, exitstatus):
 
     if not pytest.call_profile:
-        pass
+        return
 
     import statistics
     import sys
