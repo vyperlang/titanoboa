@@ -3,6 +3,8 @@ import pytest
 import boa
 
 source_code = """
+N_ITER: constant(uint256) = 10
+
 @external
 @view
 def foo(a: uint256, b: uint256) -> uint256:
@@ -11,7 +13,10 @@ def foo(a: uint256, b: uint256) -> uint256:
 @external
 @view
 def bar(a: uint256, b: uint256) -> uint256:
-    return isqrt(unsafe_div(a, b) + unsafe_mul(a, b))
+    d: uint256 = 0
+    for j in range(N_ITER):
+        d = unsafe_mul(d, isqrt(unsafe_div(a, b) + unsafe_mul(a, b)))
+    return d
 """
 
 SETTINGS = {"max_examples": 20, "deadline": None}
@@ -28,9 +33,11 @@ def test_call_profiling_disabled_by_default(boa_contract):
     assert not boa_contract.call_profile
 
 
-@pytest.mark.parametrize("a,b", [(42, 69), (420, 690), (42, 690), (420, 69)])
+@pytest.mark.parametrize(
+    "a,b,c", [(42, 69, 1), (420, 690, 2), (42, 690, 3), (420, 69, 4)]
+)
 @pytest.mark.profile_calls("boa_contract.foo", "boa_contract.bar")
-def test_populate_call_profile_property(boa_contract, a, b):
+def test_populate_call_profile_property(boa_contract, a, b, c):
 
     boa_contract.profile_calls = True
     boa_contract.foo(a, b)
