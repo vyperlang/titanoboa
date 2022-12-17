@@ -86,7 +86,7 @@ def test_context_manager():
 @external
 @view
 def foo(a: uint256 = 0):
-    assert 1 < 2
+    x: uint256 = a
 """
     contract = boa.loads(source_code, name="FooContract")
     with boa.env.store_call_profile(True):

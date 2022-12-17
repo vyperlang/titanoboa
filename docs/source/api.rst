@@ -461,7 +461,7 @@ Low-Level Functionality
 
     .. method: store_call_profile(enable: bool = True)
 
-        Store call profiles in `boa.env.profiled_calls`` dict. Since this uses a context manager:
+        Store call profiles in `boa.env.profiled_calls`` dict.
 
         .. rubric:: Example
 
@@ -469,16 +469,17 @@ Low-Level Functionality
 
             >>> import boa
             >>> source_code = """
-            @external
-            @view
-            def foo():
-                assert 10 > 0
-            """
+            ... @external
+            ... @view
+            ... def foo():
+            ...     x: uint256 = 1
+            ... """
             >>> contract = boa.loads(source_code, name="TestContract")
             >>> with boa.env.store_call_profile(True):
-                    contract.foo()
+            ...     contract.foo()
+            ...
             >>> boa.env.profiled_calls
-            # TODO: add output after fixing profiling for methods that don't return an output
+            {'TestContract.foo': [110]}
 
 
 .. module:: boa.vyper.contract
