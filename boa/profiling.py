@@ -155,7 +155,7 @@ def print_call_profile(env: Env):
 
         profiled_calls = {}
         for profile in env.profiled_calls.keys():
-            if profile.startswith(contract):
+            if contract == profile.split(".")[0]:
                 fn_name = profile.split(".")[-1]
                 profiled_calls[fn_name] = env.profiled_calls[profile]
 
