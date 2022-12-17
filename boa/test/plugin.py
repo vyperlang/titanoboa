@@ -45,63 +45,39 @@ def _enable_call_profiling(item):
     if not _items_to_profile(item):
         return
 
-    profile_calls = item.get_closest_marker("profile_calls").args
-    if len(profile_calls) > 0:
-
-        for call in profile_calls:
-            fixture_name = call.split(".")[0]
-            for name, fixture in item.funcargs.items():
-
-                if name == fixture_name:
-
-                    fixture.profile_calls = True
+    boa.env.profile_calls = True
 
 
-def _profile_calls(item):
+def _profile_calls():
 
-    profile_calls = item.get_closest_marker("profile_calls").args
-    if len(profile_calls) > 0:
+    combined_calls = pytest.call_profile
+    for d in (pytest.call_profile, boa.env.profiled_calls):
 
-        combined_calls = pytest.call_profile
-        for call in profile_calls:
+        for key, value in d.items():
 
-            fixture_name = call.split(".")[0]
-            method_name = call.split(".")[1]
+            if key not in combined_calls.keys():
+                combined_calls[key] = value
+            else:
+                combined_calls[key].extend(value)
 
-            for name, fixture in item.funcargs.items():
-
-                if name == fixture_name:
-                    for d in (pytest.call_profile, fixture.call_profile):
-
-                        for key, value in d.items():
-
-                            if key != method_name:
-                                continue
-
-                            if key not in combined_calls.keys():
-                                combined_calls[key] = value
-                            else:
-                                combined_calls[key].extend(value)
-
-        pytest.call_profile = combined_calls
+    pytest.call_profile = combined_calls
 
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Generator:
 
     ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
-    _enable_call_profiling(item)
+    call_profiling_enabled = item.get_closest_marker("profile_calls") is not None
 
-    if not ignore_isolation:
-        with boa.env.anchor():
+    with boa.env.store_call_profile(call_profiling_enabled):
+
+        if not ignore_isolation:
+            with boa.env.anchor():
+                yield
+        else:
             yield
-    else:
-        yield
 
-    if not _items_to_profile(item):
-        return
-
-    _profile_calls(item)
+        _profile_calls()
 
 
 def pytest_sessionfinish(session, exitstatus):

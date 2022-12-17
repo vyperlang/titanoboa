@@ -266,6 +266,9 @@ class Env:
 
         self._contracts = {}
 
+        self.profile_calls = False
+        self.profiled_calls = {}
+
     def _init_vm(self):
         self.vm = self.chain.get_vm()
 
@@ -340,6 +343,14 @@ class Env:
 
     def enable_gas_profiling(self) -> None:
         self.set_gas_meter_class(ProfilingGasMeter)
+
+    @contextlib.contextmanager
+    def store_call_profile(self, enable: bool = True) -> None:
+        try:
+            self.profile_calls = enable
+            yield
+        finally:
+            self.profile_calls = False
 
     def disable_gas_metering(self) -> None:
         self.set_gas_meter_class(NoGasMeter)

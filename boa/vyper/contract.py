@@ -420,10 +420,6 @@ class VyperContract(_BaseContract):
         if not skip_init:
             self._run_init(*args)
 
-        # call profiling
-        self.profile_calls = False
-        self.call_profile = {}
-
     def _run_init(self, *args):
         encoded_args = b""
 
@@ -593,14 +589,13 @@ class VyperContract(_BaseContract):
             self.handle_error(computation)
 
         # if call profiling is enabled, store gas used for each call:
-        # profile before return None
-        if self.profile_calls:
+        if self.env.store_call_profile:
             fn_name = self._get_fn_from_computation(computation).name
             gas_used = computation.get_gas_used()
-            if fn_name not in self.call_profile.keys():
-                self.call_profile[fn_name] = [gas_used]
+            if fn_name not in self.env.profiled_calls.keys():
+                self.env.profiled_calls[fn_name] = [gas_used]
             else:
-                self.call_profile[fn_name].append(gas_used)
+                self.env.profiled_calls[fn_name].append(gas_used)
 
         if vyper_typ is None:
             return None
