@@ -16,7 +16,6 @@ classifiers = ["Topic :: Software Development"]
 # Requirements
 dependencies = [
     "vyper >= 0.3.7",
-    "asttokens >= 2.2.1", # resolves some buggy issues with imports
     "eth-abi",
     "py-evm",
     "eth-typing",
