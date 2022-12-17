@@ -29,39 +29,6 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "ignore_isolation")
     config.addinivalue_line("markers", "profile_calls")
 
-    pytest.call_profile = {}
-
-
-def _items_to_profile(item):
-
-    profile_test = item.get_closest_marker("profile_calls") is not None
-    if not profile_test:
-        return False
-    return True
-
-
-def _enable_call_profiling(item):
-
-    if not _items_to_profile(item):
-        return
-
-    boa.env.profile_calls = True
-
-
-def _profile_calls():
-
-    combined_calls = pytest.call_profile
-    for d in (pytest.call_profile, boa.env.profiled_calls):
-
-        for key, value in d.items():
-
-            if key not in combined_calls.keys():
-                combined_calls[key] = value
-            else:
-                combined_calls[key].extend(value)
-
-    pytest.call_profile = combined_calls
-
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Generator:
@@ -77,13 +44,8 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
         else:
             yield
 
-        _profile_calls()
-
 
 def pytest_sessionfinish(session, exitstatus):
-
-    if not pytest.call_profile:
-        return
 
     import statistics
     import sys
@@ -93,7 +55,7 @@ def pytest_sessionfinish(session, exitstatus):
 
     # generate means, stds for each
     call_profiles = {}
-    for key, gas_used in pytest.call_profile.items():
+    for key, gas_used in boa.env.profiled_calls.items():
         call_profile = {}
 
         call_profile["mean"] = statistics.mean(gas_used)

@@ -41,8 +41,6 @@ def test_populate_call_profile_property(boa_contract, a, b, c):
     boa_contract.foo(a, b)
     boa_contract.bar(a, b)
 
-    breakpoint()
-
 
 @pytest.mark.profile_calls
 def test_append_to_pytest_call_profile(boa_contract):
