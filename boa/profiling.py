@@ -149,7 +149,7 @@ def print_call_profile(env: Env):
     for key, gas_used in env.profiled_calls.items():
         call_profile = {}
 
-        call_profile["mean"] = statistics.mean(gas_used)
+        call_profile["mean"] = int(statistics.mean(gas_used))
         call_profile["median"] = int(statistics.median(gas_used))
         call_profile["min"] = min(gas_used)
         call_profile["max"] = max(gas_used)
