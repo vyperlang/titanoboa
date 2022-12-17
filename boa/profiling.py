@@ -144,40 +144,55 @@ def print_call_profile(env: Env):
     from rich.console import Console
     from rich.table import Table
 
-    # generate means, stds for each
-    call_profiles = {}
-    for key, gas_used in env.profiled_calls.items():
-        call_profile = {}
+    profiled_contracts = []
+    for key in env.profiled_calls.keys():
 
-        call_profile["mean"] = int(statistics.mean(gas_used))
-        call_profile["median"] = int(statistics.median(gas_used))
-        call_profile["min"] = min(gas_used)
-        call_profile["max"] = max(gas_used)
-        if len(gas_used) == 1:
-            call_profile["stdev"] = 0
-        else:
-            call_profile["stdev"] = int(statistics.stdev(gas_used))
-        call_profiles[key] = call_profile
+        contract_name = key.split(".")[0]
+        if contract_name not in profiled_contracts:
+            profiled_contracts.append(key.split(".")[0])
 
-    # print rich table
-    table = Table(title="\nCall Profile")
-    table.add_column("Method", justify="right", style="cyan", no_wrap=True)
-    table.add_column("Mean", style="magenta")
-    table.add_column("Median", style="magenta")
-    table.add_column("Stdev", style="magenta")
-    table.add_column("Min", style="magenta")
-    table.add_column("Max", style="magenta")
+    for contract in profiled_contracts:
 
-    for key in call_profiles.keys():
-        profile = call_profiles[key]
-        table.add_row(
-            key,
-            str(profile["mean"]),
-            str(profile["median"]),
-            str(profile["stdev"]),
-            str(profile["min"]),
-            str(profile["max"]),
-        )
+        profiled_calls = {}
+        for profile in env.profiled_calls.keys():
+            if profile.startswith(contract):
+                fn_name = profile.split(".")[-1]
+                profiled_calls[fn_name] = env.profiled_calls[profile]
 
-    console = Console(file=sys.stdout)
-    console.print(table)
+        # generate means, stds for each
+        call_profiles = {}
+        for key, gas_used in profiled_calls.items():
+            call_profile = {}
+
+            call_profile["mean"] = int(statistics.mean(gas_used))
+            call_profile["median"] = int(statistics.median(gas_used))
+            call_profile["min"] = min(gas_used)
+            call_profile["max"] = max(gas_used)
+            if len(gas_used) == 1:
+                call_profile["stdev"] = 0
+            else:
+                call_profile["stdev"] = int(statistics.stdev(gas_used))
+            call_profiles[key] = call_profile
+
+        # print rich table
+        table = Table(title=f"\n{contract} Gas Profile")
+        table.add_column("Method", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Mean", style="magenta")
+        table.add_column("Median", style="magenta")
+        table.add_column("Stdev", style="magenta")
+        table.add_column("Min", style="magenta")
+        table.add_column("Max", style="magenta")
+
+        for key in call_profiles.keys():
+            profile = call_profiles[key]
+            table.add_row(
+                key,
+                str(profile["mean"]),
+                str(profile["median"]),
+                str(profile["stdev"]),
+                str(profile["min"]),
+                str(profile["max"]),
+            )
+
+        console = Console(file=sys.stdout)
+        console.print(table)

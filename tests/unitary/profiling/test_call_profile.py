@@ -61,7 +61,9 @@ def test_hypothesis_profiling(boa_contract, addr):
     boa_contract.baz(addr)
 
 
-@given(a=strategy("uint256"), b=strategy("uint256"))
+@given(
+    a=strategy("uint256", max_value=10**4), b=strategy("uint256", max_value=10**8)
+)
 @settings(**{"max_examples": 100, "deadline": None})
 @pytest.mark.profile_calls
 def test_hypothesis_profiling_uint(boa_contract, a, b):
