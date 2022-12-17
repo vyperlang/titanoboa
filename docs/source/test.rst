@@ -34,7 +34,6 @@ This feature is also available in the `boa.test` framework. To enable, tests can
 
 .. code-block:: python
 
-    ```
     def test_profile():
 
         source_code = """
@@ -48,15 +47,12 @@ This feature is also available in the `boa.test` framework. To enable, tests can
             contract.foo()
 
         assert "FooContract.foo" in boa.env.profiled_calls.keys()
-    ```
 
-The generated profile:
+.. code-block:: markdown
 
-```
                      Call Profile
 ┏━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━┳━━━━━┓
 ┃          Method ┃ Mean ┃ Median ┃ Stdev ┃ Min ┃ Max ┃
 ┡━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━╇━━━━━┩
 │ FooContract.foo │ 137  │ 137    │ 0     │ 137 │ 137 │
 └─────────────────┴──────┴────────┴───────┴─────┴─────┘
-```
