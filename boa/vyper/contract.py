@@ -590,7 +590,11 @@ class VyperContract(_BaseContract):
 
         # if call profiling is enabled, store gas used for each call:
         if self.env.profile_calls:
-            fn_name = self._get_fn_from_computation(computation).name
+            try:
+                fn_name = self._get_fn_from_computation(computation).name
+            except AttributeError:
+                # TODO: https://github.com/vyperlang/vyper/issues/3200  # noqa: E501
+                fn_name = "unnamed"
             fn_name = self.compiler_data.contract_name + "." + fn_name
             gas_used = computation.get_gas_used()
             if fn_name not in self.env.profiled_calls.keys():
