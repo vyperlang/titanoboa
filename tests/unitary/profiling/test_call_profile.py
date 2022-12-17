@@ -61,7 +61,7 @@ def test_ignore_call_profiling(boa_contract):
 @pytest.mark.parametrize(
     "a,b,c", [(42, 69, 1), (420, 690, 20), (42, 690, 10), (420, 69, 5)]
 )
-def test_call_stdev(a, b, c):
+def test_call_variable_iter_method(a, b, c):
 
     source_code = """
 N_ITER: constant(uint256) = 0x00001
@@ -80,15 +80,7 @@ def foo(a: uint256, b: uint256) -> uint256:
     boa_contract.foo(a, b)
 
 
-def test_context_manager(boa_contract):
-
-    with boa.env.store_call_profile(True):
-        boa_contract.sip()
-
-    assert "TestContract.sip" in boa.env.profiled_calls.keys()
-
-
-def test_profiling_needs_input():
+def test_fn_name_none_if_no_inputs():
     source_code = """
 @external
 @view
@@ -96,10 +88,8 @@ def foo():
     assert 1 < 2
 """
     contract = boa.loads(source_code, name="FooContract")
-    with boa.env.store_call_profile(True), pytest.raises(AttributeError):
-        contract.foo()
-
-    assert "FooContract.foo" not in boa.env.profiled_calls.keys()
+    contract.foo()
+    contract._get_fn_from_computation(contract._computation) is None
 
     source_code = """
 @external
@@ -108,7 +98,6 @@ def foo(a: uint256 = 0):
     assert 1 < 2
 """
     contract = boa.loads(source_code, name="FooContract")
-    with boa.env.store_call_profile(True):
-        contract.foo()
+    contract.foo()
 
-    assert "FooContract.foo" in boa.env.profiled_calls.keys()
+    contract._get_fn_from_computation(contract._computation) == "foo"
