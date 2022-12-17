@@ -26,7 +26,7 @@ def baz(c: address):
 @external
 @view
 def sip():
-    assert 10 > 0
+    x: uint256 = 10
 """
 
 
@@ -80,7 +80,7 @@ def foo(a: uint256, b: uint256) -> uint256:
     boa_contract.foo(a, b)
 
 
-def test_fn_name_none_if_no_inputs():
+def test_context_manager():
 
     source_code = """
 @external
@@ -89,20 +89,7 @@ def foo(a: uint256 = 0):
     assert 1 < 2
 """
     contract = boa.loads(source_code, name="FooContract")
-    contract.foo()
+    with boa.env.store_call_profile(True):
+        contract.foo()
 
-    # this should not bork:
-    assert contract._get_fn_from_computation(contract._computation) == "foo"
-
-    # only difference is `foo` has inputs:
-    source_code = """
-@external
-@view
-def foo():
-    assert 1 < 2
-"""
-    contract = boa.loads(source_code, name="FooContract")
-    contract.foo()
-
-    # this should bork:
-    assert contract._get_fn_from_computation(contract._computation) == "foo"
+    assert "FooContract.foo" in boa.env.profiled_calls.keys()
