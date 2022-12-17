@@ -50,9 +50,9 @@ This feature is also available in the `boa.test` framework. To enable, tests can
 
 .. code-block:: markdown
 
-                     Call Profile
-┏━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━┳━━━━━┓
-┃          Method ┃ Mean ┃ Median ┃ Stdev ┃ Min ┃ Max ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━╇━━━━━┩
-│ FooContract.foo │ 137  │ 137    │ 0     │ 137 │ 137 │
-└─────────────────┴──────┴────────┴───────┴─────┴─────┘
+                        Call Profile
+    ┏━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━┳━━━━━┓
+    ┃          Method ┃ Mean ┃ Median ┃ Stdev ┃ Min ┃ Max ┃
+    ┡━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━╇━━━━━┩
+    │ FooContract.foo │ 137  │ 137    │ 0     │ 137 │ 137 │
+    └─────────────────┴──────┴────────┴───────┴─────┴─────┘
