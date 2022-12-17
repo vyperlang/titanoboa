@@ -23,7 +23,6 @@ def bar(a: uint256, b: uint256) -> uint256:
 def baz(c: address):
     assert c != empty(address)
 
-
 @external
 @view
 def sip():
@@ -50,11 +49,11 @@ def test_append_to_pytest_call_profile(boa_contract):
 
     assert "TestContract.foo" in boa.env.profiled_calls.keys()
     assert "TestContract.bar" in boa.env.profiled_calls.keys()
+    assert "TestContract.baz" in boa.env.profiled_calls.keys()
 
 
 def test_ignore_call_profiling(boa_contract):
     boa_contract.sip()
-
     assert "TestContract.sip" not in boa.env.profiled_calls.keys()
 
 
@@ -79,3 +78,11 @@ def foo(a: uint256, b: uint256) -> uint256:
     boa_contract = boa.loads(source_code, name="TestVariableLoopContract")
 
     boa_contract.foo(a, b)
+
+
+def test_context_manager(boa_contract):
+
+    with boa.env.store_call_profile(True):
+        boa_contract.sip()
+
+    assert "TestContract.sip" in boa.env.profiled_calls.keys()
