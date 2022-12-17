@@ -34,6 +34,7 @@ This feature is also available in the `boa.test` framework. To enable, tests can
 
 .. code-block:: python
 
+    @pytest.mark.profile_calls
     def test_profile():
 
         source_code = """
@@ -43,10 +44,7 @@ This feature is also available in the `boa.test` framework. To enable, tests can
         x: uint256 = a
     """
         contract = boa.loads(source_code, name="FooContract")
-        with boa.env.store_call_profile(True):
-            contract.foo()
-
-        assert "FooContract.foo" in boa.env.profiled_calls.keys()
+        contract.foo()
 
 .. code-block:: markdown
 
