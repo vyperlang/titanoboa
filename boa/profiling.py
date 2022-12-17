@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import cached_property
 
+from boa.environment import Env
 from boa.vyper.ast_utils import get_line
 
 
@@ -133,3 +134,50 @@ class LineProfile:
 class _String(str):
     def __repr__(self):
         return self
+
+
+def print_call_profile(env: Env):
+
+    import statistics
+    import sys
+
+    from rich.console import Console
+    from rich.table import Table
+
+    # generate means, stds for each
+    call_profiles = {}
+    for key, gas_used in env.profiled_calls.items():
+        call_profile = {}
+
+        call_profile["mean"] = statistics.mean(gas_used)
+        call_profile["median"] = int(statistics.median(gas_used))
+        call_profile["min"] = min(gas_used)
+        call_profile["max"] = max(gas_used)
+        if len(gas_used) == 1:
+            call_profile["stdev"] = 0
+        else:
+            call_profile["stdev"] = int(statistics.stdev(gas_used))
+        call_profiles[key] = call_profile
+
+    # print rich table
+    table = Table(title="\nCall Profile")
+    table.add_column("Method", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Mean", style="magenta")
+    table.add_column("Median", style="magenta")
+    table.add_column("Stdev", style="magenta")
+    table.add_column("Min", style="magenta")
+    table.add_column("Max", style="magenta")
+
+    for key in call_profiles.keys():
+        profile = call_profiles[key]
+        table.add_row(
+            key,
+            str(profile["mean"]),
+            str(profile["median"]),
+            str(profile["stdev"]),
+            str(profile["min"]),
+            str(profile["max"]),
+        )
+
+    console = Console(file=sys.stdout)
+    console.print(table)
