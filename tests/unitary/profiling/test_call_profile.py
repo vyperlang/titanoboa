@@ -86,3 +86,29 @@ def test_context_manager(boa_contract):
         boa_contract.sip()
 
     assert "TestContract.sip" in boa.env.profiled_calls.keys()
+
+
+def test_profiling_needs_input():
+    source_code = """
+@external
+@view
+def foo():
+    assert 1 < 2
+"""
+    contract = boa.loads(source_code, name="FooContract")
+    with boa.env.store_call_profile(True), pytest.raises(AttributeError):
+        contract.foo()
+
+    assert "FooContract.foo" not in boa.env.profiled_calls.keys()
+
+    source_code = """
+@external
+@view
+def foo(a: uint256 = 0):
+    assert 1 < 2
+"""
+    contract = boa.loads(source_code, name="FooContract")
+    with boa.env.store_call_profile(True):
+        contract.foo()
+
+    assert "FooContract.foo" in boa.env.profiled_calls.keys()
