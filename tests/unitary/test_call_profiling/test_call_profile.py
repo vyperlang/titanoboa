@@ -24,19 +24,15 @@ def baz(c: address):
     assert c != empty(address)
 """
 
-SETTINGS = {"max_examples": 20, "deadline": None}
-
 
 @pytest.fixture(scope="module")
 def boa_contract():
     return boa.loads(source_code, name="TestContract")
 
 
-@pytest.mark.parametrize(
-    "a,b,c", [(42, 69, 1), (420, 690, 2), (42, 690, 3), (420, 69, 4)]
-)
-@pytest.mark.profile_calls
-def test_populate_call_profile_property(boa_contract, a, b, c):
+@pytest.mark.parametrize("a,b", [(42, 69), (420, 690), (42, 690), (420, 69)])
+# @pytest.mark.profile_calls
+def test_populate_call_profile_property(boa_contract, a, b):
 
     boa_contract.foo(a, b)
     boa_contract.bar(a, b)

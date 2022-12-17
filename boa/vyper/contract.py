@@ -589,7 +589,7 @@ class VyperContract(_BaseContract):
             self.handle_error(computation)
 
         # if call profiling is enabled, store gas used for each call:
-        if self.env.store_call_profile:
+        if self.env.profile_calls:
             fn_name = self._get_fn_from_computation(computation).name
             gas_used = computation.get_gas_used()
             if fn_name not in self.env.profiled_calls.keys():
