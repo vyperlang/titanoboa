@@ -1,6 +1,8 @@
 import pytest
+from hypothesis import given, settings  # noqa
 
 import boa
+from boa.test import strategy
 
 source_code = """
 N_ITER: constant(uint256) = 10
@@ -50,6 +52,20 @@ def test_append_to_pytest_call_profile(boa_contract):
     assert "TestContract.foo" in boa.env.profiled_calls.keys()
     assert "TestContract.bar" in boa.env.profiled_calls.keys()
     assert "TestContract.baz" in boa.env.profiled_calls.keys()
+
+
+@given(addr=strategy("address"))
+@settings(**{"max_examples": 100, "deadline": None})
+@pytest.mark.profile_calls
+def test_hypothesis_profiling(boa_contract, addr):
+    boa_contract.baz(addr)
+
+
+@given(a=strategy("uint256"), b=strategy("uint256"))
+@settings(**{"max_examples": 100, "deadline": None})
+@pytest.mark.profile_calls
+def test_hypothesis_profiling_uint(boa_contract, a, b):
+    boa_contract.foo(a, b)
 
 
 def test_ignore_call_profiling(boa_contract):
