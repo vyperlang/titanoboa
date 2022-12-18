@@ -14,11 +14,13 @@ _old_init = hypothesis.core.HypothesisHandle.__init__
 
 @contextlib.contextmanager
 def _enable_profiling(flag: bool):
+
+    cache_profiling_flag = boa.env._profile_calls
     try:
         boa.env._profile_calls = flag
         yield
     finally:
-        boa.env._profile_calls = False
+        boa.env._profile_calls = cache_profiling_flag
 
 
 def _HypothesisHandle__init__(self, *args, **kwargs):
