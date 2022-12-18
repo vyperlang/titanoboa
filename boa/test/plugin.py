@@ -64,4 +64,5 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
 
 def pytest_sessionfinish(session, exitstatus):
 
-    print_call_profile(boa.env)
+    if boa.env._profiled_calls:
+        print_call_profile(boa.env)
