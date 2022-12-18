@@ -26,15 +26,8 @@ def _HypothesisHandle__init__(self, *args, **kwargs):
 
     t = self.inner_test
 
-    enable_profiling = False
-    if "pytestmark" in t.__dict__:
-        for mark in t.pytestmark:
-            if mark.name == "profile_calls":
-                enable_profiling = True
-                break
-
     def f(*args, **kwargs):
-        with boa.env.anchor(), _enable_profiling(enable_profiling):
+        with boa.env.anchor():
             t(*args, **kwargs)
 
     self.inner_test = f
