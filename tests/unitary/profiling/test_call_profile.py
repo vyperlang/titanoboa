@@ -3,6 +3,7 @@ from hypothesis import given, settings  # noqa
 
 import boa
 from boa.test import strategy
+from boa.vyper.contract import SelectorInfo
 
 source_code = """
 N_ITER: constant(uint256) = 10
@@ -49,9 +50,19 @@ def test_populate_call_profile_property(boa_contract, a, b):
 def test_append_to_pytest_call_profile(boa_contract):
     boa_contract.baz(boa.env.generate_address())
 
-    assert "TestContract.foo" in boa.env.profiled_calls.keys()
-    assert "TestContract.bar" in boa.env.profiled_calls.keys()
-    assert "TestContract.baz" in boa.env.profiled_calls.keys()
+    addr = boa_contract.address
+    fns = [
+        SelectorInfo("foo", "TestContract", addr),
+        SelectorInfo("bar", "TestContract", addr),
+        SelectorInfo("baz", "TestContract", addr),
+    ]
+
+    for fn in fns:
+        assert fn in boa.env._profiled_calls.keys()
+
+    # assert "TestContract.foo" in boa.env._profiled_calls.keys()
+    # assert "TestContract.bar" in boa.env._profiled_calls.keys()
+    # assert "TestContract.baz" in boa.env._profiled_calls.keys()
 
 
 @given(addr=strategy("address"))
@@ -72,7 +83,8 @@ def test_hypothesis_profiling_uint(boa_contract, a, b):
 
 def test_ignore_call_profiling(boa_contract):
     boa_contract.sip()
-    assert "TestContract.sip" not in boa.env.profiled_calls.keys()
+    sip_fn = SelectorInfo("sip", "TestContract", boa_contract.address)
+    assert sip_fn not in boa.env._profiled_calls.keys()
 
 
 @pytest.mark.profile_calls
@@ -96,18 +108,3 @@ def foo(a: uint256, b: uint256) -> uint256:
     boa_contract = boa.loads(source_code, name="TestVariableLoopContract")
 
     boa_contract.foo(a, b)
-
-
-def test_context_manager():
-
-    source_code = """
-@external
-@view
-def foo(a: uint256 = 0):
-    x: uint256 = a
-"""
-    contract = boa.loads(source_code, name="FooContract")
-    with boa.env.store_call_profile(True):
-        contract.foo()
-
-    assert "FooContract.foo" in boa.env.profiled_calls.keys()

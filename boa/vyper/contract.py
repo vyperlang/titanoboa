@@ -5,6 +5,7 @@
 import contextlib
 import copy
 import warnings
+from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -57,6 +58,8 @@ EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
 
 # error detail where user possibly provided dev revert reason
 DEV_REASON_ALLOWED = ("user raise", "user assert")
+
+SelectorInfo = namedtuple("SelectorInfo", ["fn_name", "contract_name", "address"])
 
 
 class VyperDeployer:
@@ -589,18 +592,24 @@ class VyperContract(_BaseContract):
             self.handle_error(computation)
 
         # if call profiling is enabled, store gas used for each call:
-        if self.env.profile_calls:
+        if self.env._profile_calls:
             try:
                 fn_name = self._get_fn_from_computation(computation).name
             except AttributeError:
                 # TODO: https://github.com/vyperlang/vyper/issues/3200  # noqa: E501
                 fn_name = "unnamed"
-            fn_name = self.compiler_data.contract_name + "." + fn_name
+
+            fn = SelectorInfo(
+                fn_name=fn_name,
+                contract_name=self.compiler_data.contract_name,
+                address=to_checksum_address(computation.msg.storage_address),
+            )
+
             gas_used = computation.get_gas_used()
-            if fn_name not in self.env.profiled_calls.keys():
-                self.env.profiled_calls[fn_name] = [gas_used]
+            if fn_name not in self.env._profiled_calls.keys():
+                self.env._profiled_calls[fn] = [gas_used]
             else:
-                self.env.profiled_calls[fn_name].append(gas_used)
+                self.env._profiled_calls[fn].append(gas_used)
 
         if vyper_typ is None:
             return None

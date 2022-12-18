@@ -1,3 +1,4 @@
+import contextlib
 from typing import Generator
 
 import hypothesis
@@ -11,20 +12,29 @@ from boa.profiling import print_call_profile
 _old_init = hypothesis.core.HypothesisHandle.__init__
 
 
+@contextlib.contextmanager
+def _enable_profiling(flag: bool):
+    try:
+        boa.env._profile_calls = flag
+        yield
+    finally:
+        boa.env._profile_calls = False
+
+
 def _HypothesisHandle__init__(self, *args, **kwargs):
     _old_init(self, *args, **kwargs)
 
     t = self.inner_test
 
-    has_profiling_flag = False
+    enable_profiling = False
     if "pytestmark" in t.__dict__:
         for mark in t.pytestmark:
             if mark.name == "profile_calls":
-                has_profiling_flag = True
+                enable_profiling = True
                 break
 
     def f(*args, **kwargs):
-        with boa.env.anchor(), boa.env.store_call_profile(has_profiling_flag):
+        with boa.env.anchor(), _enable_profiling(enable_profiling):
             t(*args, **kwargs)
 
     self.inner_test = f
@@ -42,9 +52,9 @@ def pytest_configure(config):
 def pytest_runtest_call(item: pytest.Item) -> Generator:
 
     ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
-    call_profiling_enabled = item.get_closest_marker("profile_calls") is not None
+    profiling_flag = item.get_closest_marker("profile_calls") is not None
 
-    with boa.env.store_call_profile(call_profiling_enabled):
+    with _enable_profiling(profiling_flag):
 
         if not ignore_isolation:
             with boa.env.anchor():

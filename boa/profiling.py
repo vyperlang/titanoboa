@@ -145,19 +145,23 @@ def print_call_profile(env: Env):
     from rich.table import Table
 
     profiled_contracts = []
-    for key in env.profiled_calls.keys():
+    for key in env._profiled_calls.keys():
+        if key.address not in profiled_contracts:
+            profiled_contracts.append(key.address)
 
-        contract_name = key.split(".")[0]
-        if contract_name not in profiled_contracts:
-            profiled_contracts.append(key.split(".")[0])
+    console = Console(file=sys.stdout)
+    console.print("\n[yellow]---------------------------------------------------")
+    console.print("\t \t[blue] Gas Profiles")
+    console.print("[yellow]---------------------------------------------------")
 
     for contract in profiled_contracts:
 
         profiled_calls = {}
-        for profile in env.profiled_calls.keys():
-            if contract == profile.split(".")[0]:
-                fn_name = profile.split(".")[-1]
-                profiled_calls[fn_name] = env.profiled_calls[profile]
+        for profile in env._profiled_calls.keys():
+            if contract == profile.address:
+                contract_name = profile.contract_name
+                fn_name = profile.fn_name
+                profiled_calls[fn_name] = env._profiled_calls[profile]
 
         # generate means, stds for each
         call_profiles = {}
@@ -175,7 +179,8 @@ def print_call_profile(env: Env):
             call_profiles[key] = call_profile
 
         # print rich table
-        table = Table(title=f"\n{contract} Gas Profile")
+        table = Table(title=f"\n{contract_name} \n({contract})")
+
         table.add_column("Method", justify="right", style="cyan", no_wrap=True)
         table.add_column("Mean", style="magenta")
         table.add_column("Median", style="magenta")
@@ -194,5 +199,4 @@ def print_call_profile(env: Env):
                 str(profile["max"]),
             )
 
-        console = Console(file=sys.stdout)
         console.print(table)
