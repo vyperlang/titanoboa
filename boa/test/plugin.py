@@ -13,7 +13,7 @@ _old_init = hypothesis.core.HypothesisHandle.__init__
 
 
 @contextlib.contextmanager
-def _enable_profiling(flag: bool):
+def _toggle_profiling(flag: bool):
 
     cache_profiling_flag = boa.env._profile_calls
     try:
@@ -49,7 +49,7 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
     ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
     profiling_flag = item.get_closest_marker("profile_calls") is not None
 
-    with _enable_profiling(profiling_flag):
+    with _toggle_profiling(profiling_flag):
         if not ignore_isolation:
             with boa.env.anchor():
                 yield
