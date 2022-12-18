@@ -213,7 +213,7 @@ def print_call_profile(env: Env):
         average_gas_costs = []
         for key, gas_used in profiled_calls.items():
             call_profile = {}
-
+            call_profile["contract_name"] = contract_name
             call_profile["count"] = len(gas_used)
             call_profile["mean"] = int(statistics.mean(gas_used))
             call_profile["median"] = int(statistics.median(gas_used))
@@ -241,7 +241,7 @@ def print_call_profile(env: Env):
             cname = ""
             caddr = ""
             if c == 0:
-                cname = contract_name
+                cname = profile["contract_name"]
                 caddr = contract
             table.add_row(
                 cname,
