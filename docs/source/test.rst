@@ -41,3 +41,8 @@ in a contract get appended to the appropriate `Contract.method` key. To enable, 
     ┡━━━━━━━━╇━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━╇━━━━━┩
     │    foo │ 137  │ 137    │ 0     │ 137 │ 137 │
     └────────┴──────┴────────┴───────┴─────┴─────┘
+
+.. note::
+    Note that if a specific fixture is called in two separate tests, pytest will re-instantiate it. Meaning, if a Contract
+    is deployed in a fixture, calling the fixture on tests in two separate files will lead to two deployments of that Contract.
+    This can lead to an over-populated profile table.
