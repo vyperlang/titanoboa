@@ -1,5 +1,8 @@
+from collections import namedtuple
 from dataclasses import dataclass
 from functools import cached_property
+
+from eth_utils import to_checksum_address
 
 from boa.environment import Env
 from boa.vyper.ast_utils import get_line
@@ -134,6 +137,38 @@ class LineProfile:
 class _String(str):
     def __repr__(self):
         return self
+
+
+# simple dataclass for fn
+SelectorInfo = namedtuple("SelectorInfo", ["fn_name", "contract_name", "address"])
+
+
+# cache gas_used for all computation (including children)
+def cache_gas_used_for_computation(computation, env):
+
+    contract = env.lookup_contract(computation.msg.storage_address)
+
+    try:
+        fn_name = contract._get_fn_from_computation(computation).name
+    except AttributeError:
+        # TODO: remove this once vyper PR 3202 is merged
+        # https://github.com/vyperlang/vyper/pull/3202
+        fn_name = "unnamed"
+
+    fn = SelectorInfo(
+        fn_name=fn_name,
+        contract_name=contract.compiler_data.contract_name,
+        address=to_checksum_address(contract.address),
+    )
+
+    gas_used = computation.get_gas_used()
+    if fn_name not in env._profiled_calls.keys():
+        env._profiled_calls[fn] = [gas_used]
+    else:
+        env._profiled_calls[fn].append(gas_used)
+
+    for child_computation in computation.children:
+        cache_gas_used_for_computation(child_computation, env)
 
 
 def print_call_profile(env: Env):

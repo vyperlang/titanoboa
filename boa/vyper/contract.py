@@ -5,7 +5,6 @@
 import contextlib
 import copy
 import warnings
-from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -30,7 +29,7 @@ from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.utils import abi_method_id, cached_property
 
 from boa.environment import AddressT, Env, to_int
-from boa.profiling import LineProfile
+from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vyper import _METHOD_ID_VAR
@@ -58,8 +57,6 @@ EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
 
 # error detail where user possibly provided dev revert reason
 DEV_REASON_ALLOWED = ("user raise", "user assert")
-
-SelectorInfo = namedtuple("SelectorInfo", ["fn_name", "contract_name", "address"])
 
 
 class VyperDeployer:
@@ -593,23 +590,7 @@ class VyperContract(_BaseContract):
 
         # if call profiling is enabled, store gas used for each call:
         if self.env._profile_calls:
-            try:
-                fn_name = self._get_fn_from_computation(computation).name
-            except AttributeError:
-                # TODO: https://github.com/vyperlang/vyper/issues/3200  # noqa: E501
-                fn_name = "unnamed"
-
-            fn = SelectorInfo(
-                fn_name=fn_name,
-                contract_name=self.compiler_data.contract_name,
-                address=to_checksum_address(computation.msg.storage_address),
-            )
-
-            gas_used = computation.get_gas_used()
-            if fn_name not in self.env._profiled_calls.keys():
-                self.env._profiled_calls[fn] = [gas_used]
-            else:
-                self.env._profiled_calls[fn].append(gas_used)
+            cache_gas_used_for_computation(computation, self.env)
 
         if vyper_typ is None:
             return None
