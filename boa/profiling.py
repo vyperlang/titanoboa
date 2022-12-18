@@ -197,6 +197,8 @@ def print_call_profile(env: Env):
         if key.address not in profiled_contracts:
             profiled_contracts.append(key.address)
 
+    contract_profiles = {}
+    max_avg_gas = []
     for contract in profiled_contracts:
 
         profiled_calls = {}
@@ -208,6 +210,7 @@ def print_call_profile(env: Env):
 
         # generate means, stds for each
         call_profiles = {}
+        average_gas_costs = []
         for key, gas_used in profiled_calls.items():
             call_profile = {}
 
@@ -221,7 +224,17 @@ def print_call_profile(env: Env):
             else:
                 call_profile["stdev"] = int(statistics.stdev(gas_used))
             call_profiles[key] = call_profile
+            average_gas_costs.append(call_profile["mean"])
 
+        contract_profiles[contract] = call_profiles
+        max_avg_gas.append(max(average_gas_costs))
+
+    # arrange from most to least expensive contracts:
+    sort_gas = sorted(zip(max_avg_gas, profiled_contracts), reverse=True)
+    sorted_contracts = [x for _, x in sort_gas]
+
+    for contract in sorted_contracts:
+        call_profiles = contract_profiles[contract]
         c = 0
         for key in call_profiles.keys():
             profile = call_profiles[key]
