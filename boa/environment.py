@@ -77,6 +77,7 @@ class VMPatcher:
                 snap[attr] = getattr(self, attr)
 
         try:
+
             yield
 
         finally:

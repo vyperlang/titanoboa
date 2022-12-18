@@ -55,7 +55,6 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
     profiling_flag = item.get_closest_marker("profile_calls") is not None
 
     with _enable_profiling(profiling_flag):
-
         if not ignore_isolation:
             with boa.env.anchor():
                 yield

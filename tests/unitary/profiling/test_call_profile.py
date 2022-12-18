@@ -2,8 +2,8 @@ import pytest
 from hypothesis import given, settings  # noqa
 
 import boa
+from boa.profiling import SelectorInfo
 from boa.test import strategy
-from boa.vyper.contract import SelectorInfo
 
 source_code = """
 N_ITER: constant(uint256) = 10
