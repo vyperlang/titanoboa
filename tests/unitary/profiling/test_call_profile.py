@@ -87,27 +87,29 @@ def test_ignore_call_profiling(boa_contract):
     assert sip_fn not in boa.env._profiled_calls.keys()
 
 
-@pytest.mark.profile_calls
-@pytest.mark.parametrize(
-    "a,b,c", [(42, 69, 1), (420, 690, 20), (42, 690, 10), (420, 69, 5)]
-)
-def test_call_variable_iter_method(a, b, c):
+@pytest.fixture(scope="module")
+def boa_contract_variable():
 
     source_code = """
-N_ITER: constant(uint256) = 0x00001
-
 @external
 @view
-def foo(a: uint256, b: uint256) -> uint256:
+def foo(a: uint256, b: uint256, c: uint256) -> uint256:
     d: uint256 = 0
-    for j in range(N_ITER):
-        d = unsafe_mul(d, isqrt(unsafe_div(a, b) + unsafe_mul(a, b)))
+    for j in range(1000):
+        d = d + a + b
+        if d > c:
+            break
     return d
 """
-    source_code = source_code.replace("0x00001", str(c))
-    boa_contract = boa.loads(source_code, name="TestVariableLoopContract")
+    return boa.loads(source_code, name="TestVariableLoopContract")
 
-    boa_contract.foo(a, b)
+
+@pytest.mark.parametrize(
+    "a,b,c", [(42, 69, 150), (420, 690, 20000), (42, 690, 10000), (420, 69, 5000)]
+)
+@pytest.mark.profile_calls
+def test_call_variable_iter_method(boa_contract_variable, a, b, c):
+    boa_contract_variable.foo(a, b, c)
 
 
 @pytest.mark.profile_calls

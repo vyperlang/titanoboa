@@ -162,7 +162,7 @@ def cache_gas_used_for_computation(computation, env):
     )
 
     gas_used = computation.get_gas_used()
-    if fn_name not in env._profiled_calls.keys():
+    if fn not in env._profiled_calls.keys():
         env._profiled_calls[fn] = [gas_used]
     else:
         env._profiled_calls[fn].append(gas_used)
@@ -179,15 +179,23 @@ def print_call_profile(env: Env):
     from rich.console import Console
     from rich.table import Table
 
+    console = Console(file=sys.stdout)
+    table = Table(title="\n")
+
+    table.add_column("Contract", justify="right", style="blue", no_wrap=True)
+    table.add_column("Address", justify="left", style="blue", no_wrap=True)
+    table.add_column("Method", justify="center", style="cyan", no_wrap=True)
+    table.add_column("Count", style="magenta")
+    table.add_column("Mean", style="magenta")
+    table.add_column("Median", style="magenta")
+    table.add_column("Stdev", style="magenta")
+    table.add_column("Min", style="magenta")
+    table.add_column("Max", style="magenta")
+
     profiled_contracts = []
     for key in env._profiled_calls.keys():
         if key.address not in profiled_contracts:
             profiled_contracts.append(key.address)
-
-    console = Console(file=sys.stdout)
-    console.print("\n[yellow]---------------------------------------------------")
-    console.print("\t \t[blue] Gas Profiles")
-    console.print("[yellow]---------------------------------------------------")
 
     for contract in profiled_contracts:
 
@@ -203,6 +211,7 @@ def print_call_profile(env: Env):
         for key, gas_used in profiled_calls.items():
             call_profile = {}
 
+            call_profile["count"] = len(gas_used)
             call_profile["mean"] = int(statistics.mean(gas_used))
             call_profile["median"] = int(statistics.median(gas_used))
             call_profile["min"] = min(gas_used)
@@ -213,25 +222,27 @@ def print_call_profile(env: Env):
                 call_profile["stdev"] = int(statistics.stdev(gas_used))
             call_profiles[key] = call_profile
 
-        # print rich table
-        table = Table(title=f"\n{contract_name} \n({contract})")
-
-        table.add_column("Method", justify="right", style="cyan", no_wrap=True)
-        table.add_column("Mean", style="magenta")
-        table.add_column("Median", style="magenta")
-        table.add_column("Stdev", style="magenta")
-        table.add_column("Min", style="magenta")
-        table.add_column("Max", style="magenta")
-
+        c = 0
         for key in call_profiles.keys():
             profile = call_profiles[key]
+            cname = ""
+            caddr = ""
+            if c == 0:
+                cname = contract_name
+                caddr = contract
             table.add_row(
+                cname,
+                caddr,
                 key,
+                str(profile["count"]),
                 str(profile["mean"]),
                 str(profile["median"]),
                 str(profile["stdev"]),
                 str(profile["min"]),
                 str(profile["max"]),
             )
+            c += 1
 
-        console.print(table)
+        table.add_section()
+
+    console.print(table)
