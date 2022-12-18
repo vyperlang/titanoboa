@@ -184,7 +184,7 @@ def print_call_profile(env: Env):
 
     table.add_column("Contract", justify="right", style="blue", no_wrap=True)
     table.add_column("Address", justify="left", style="blue", no_wrap=True)
-    table.add_column("Method", justify="center", style="cyan", no_wrap=True)
+    table.add_column("Method", justify="right", style="cyan", no_wrap=True)
     table.add_column("Count", style="magenta")
     table.add_column("Mean", style="magenta")
     table.add_column("Median", style="magenta")
