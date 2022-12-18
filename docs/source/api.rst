@@ -459,29 +459,6 @@ Low-Level Functionality
         :param blocks: Change block number by `blocks` blocks.
         :param block_delta: The time between two blocks. Set to 12 as default.
 
-    .. method: store_call_profile(enable: bool = True)
-
-        Store call profiles in `boa.env.profiled_calls`` dict.
-
-        .. rubric:: Example
-
-        .. code-block:: python
-
-            >>> import boa
-            >>> source_code = """
-            ... @external
-            ... @view
-            ... def foo():
-            ...     x: uint256 = 1
-            ... """
-            >>> contract = boa.loads(source_code, name="TestContract")
-            >>> with boa.env.store_call_profile(True):
-            ...     contract.foo()
-            ...
-            >>> boa.env.profiled_calls
-            {'TestContract.foo': [110]}
-
-
 .. module:: boa.vyper.contract
 
 .. class:: VyperDeployer

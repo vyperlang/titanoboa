@@ -108,3 +108,16 @@ def foo(a: uint256, b: uint256) -> uint256:
     boa_contract = boa.loads(source_code, name="TestVariableLoopContract")
 
     boa_contract.foo(a, b)
+
+
+@pytest.mark.profile_calls
+def test_profile():
+
+    source_code = """
+@external
+@view
+def foo(a: uint256 = 0):
+    x: uint256 = a
+"""
+    contract = boa.loads(source_code, name="FooContract")
+    contract.foo()
