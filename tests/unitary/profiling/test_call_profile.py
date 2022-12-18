@@ -48,6 +48,8 @@ def test_populate_call_profile_property(boa_contract, a, b):
 
 @pytest.mark.profile_calls
 def test_append_to_pytest_call_profile(boa_contract):
+    boa_contract.foo(42, 69)
+    boa_contract.bar(420, 690)
     boa_contract.baz(boa.env.generate_address())
 
     addr = boa_contract.address
@@ -59,10 +61,6 @@ def test_append_to_pytest_call_profile(boa_contract):
 
     for fn in fns:
         assert fn in boa.env._profiled_calls.keys()
-
-    # assert "TestContract.foo" in boa.env._profiled_calls.keys()
-    # assert "TestContract.bar" in boa.env._profiled_calls.keys()
-    # assert "TestContract.baz" in boa.env._profiled_calls.keys()
 
 
 @given(addr=strategy("address"))
