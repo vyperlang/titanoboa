@@ -39,14 +39,14 @@ hypothesis.core.HypothesisHandle.__init__ = _HypothesisHandle__init__  # type: i
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "ignore_isolation")
-    config.addinivalue_line("markers", "call_profile")
+    config.addinivalue_line("markers", "profile")
 
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Generator:
 
     ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
-    profiling_flag = item.get_closest_marker("call_profile") is not None
+    profiling_flag = item.get_closest_marker("profile") is not None
 
     with _toggle_profiling(profiling_flag):
         if not ignore_isolation:

@@ -6,17 +6,16 @@ Testing Functionality
 
 
 
-Profiling Functionality
+Gas Profiling Functionality
 -----------------------
 
-Titanoboa has native call profiling tools that store and generate statistics for contract calls. If enabled,
-call gas costs are stored in a global `boa.env._cached_call_profiles` dictionary. Subsequent calls from the same method
-in a contract get appended to the appropriate `Contract.method` key. To enable, tests can be decorated with
-`@pytest.mark.call_profile`.
+Titanoboa has native gas profiling tools that store and generate statistics upon calling a contract. When enabled,
+gas costs are stored per call in global `boa.env._cached_call_profiles` and `boa.env._cached_line_profiles` dictionaries.
+To enable, tests can be decorated with `@pytest.mark.profile`.
 
 .. code-block:: python
 
-    @pytest.mark.call_profile
+    @pytest.mark.profile
     def test_profile():
 
         source_code = """

@@ -37,14 +37,14 @@ def boa_contract(external_contract):
     return boa.loads(source_code_b, external_contract.address, name="TestContract")
 
 
-@pytest.mark.call_profile
+@pytest.mark.profile
 def test_single_computation(external_contract):
     external_contract.foo(2000)
     lp = external_contract.line_profile().summary()
     assert lp
 
 
-@pytest.mark.call_profile
+@pytest.mark.profile
 def test_external_call(boa_contract):
     boa_contract.bar(10)
     lp = boa_contract.line_profile().summary()
