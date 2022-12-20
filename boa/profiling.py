@@ -7,6 +7,12 @@ from eth_utils import to_checksum_address
 from boa.environment import Env
 from boa.vyper.ast_utils import get_line
 
+# simple dataclass for fn
+CallInfo = namedtuple("SelectorInfo", ["fn_name", "contract_name", "address"])
+LineInfo = namedtuple(
+    "LineGasUsedInfo", ["address", "contract_name", "lineno", "line_src"]
+)
+
 
 @dataclass
 class Datum:
@@ -127,10 +133,24 @@ class LineProfile:
             tmp.append((x, line_src))
 
         just = max(len(t[0]) for t in tmp)
-
         ret = [f"{l.ljust(just)}  {r.strip()}" for (l, r) in tmp]
-
         return _String("\n".join(ret))
+
+    def get_line_data(self):
+        raw_summary = self.raw_summary()
+
+        line_gas_data = {}
+        for (contract, line), datum in raw_summary:
+
+            # here we use net_gas to include child computation costs:
+            line_info = LineInfo(
+                address=contract.address,
+                contract_name=contract.compiler_data.contract_name,
+                lineno=line,
+                line_src=get_line(contract.compiler_data.source_code, line),
+            )
+            line_gas_data[line_info] = getattr(datum, "net_gas")
+        return line_gas_data
 
 
 # stupid class whose __str__ method doesn't escape (good for repl)
@@ -139,15 +159,16 @@ class _String(str):
         return self
 
 
-# simple dataclass for fn
-SelectorInfo = namedtuple("SelectorInfo", ["fn_name", "contract_name", "address"])
-
-
 # cache gas_used for all computation (including children)
 def cache_gas_used_for_computation(contract, computation):
 
     profile = contract.line_profile(computation)
     env = contract.env
+
+    line_profile = profile.get_line_data()
+
+    # -------------------- CACHE CALL PROFILE --------------------
+    # TODO: looks a bit unkempt, can we refactor most of it to LineProfile?
 
     # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
     # because a call's profile includes children call costs.
@@ -161,17 +182,29 @@ def cache_gas_used_for_computation(contract, computation):
         # https://github.com/vyperlang/vyper/pull/3202
         fn_name = "unnamed"
 
-    fn = SelectorInfo(
+    fn = CallInfo(
         fn_name=fn_name,
         contract_name=contract.compiler_data.contract_name,
         address=to_checksum_address(contract.address),
     )
 
-    if fn not in env._profiled_calls.keys():
-        env._profiled_calls[fn] = [gas_used]
+    if fn not in env._cached_call_profiles.keys():
+        env._cached_call_profiles[fn] = [gas_used]
     else:
-        env._profiled_calls[fn].append(gas_used)
+        env._cached_call_profiles[fn].append(gas_used)
+    # ------------------------------------------------------------
 
+    # -------------------- CACHE LINE PROFILE --------------------
+
+    for line, gas_used in line_profile.items():
+        if line not in env._cached_line_profiles.keys():
+            env._cached_line_profiles[line] = [gas_used]
+        else:
+            env._cached_line_profiles[line].append(gas_used)
+
+    # ------------------------------------------------------------
+
+    # recursion for child computations
     for _computation in computation.children:
         child_contract = env.lookup_contract(_computation.msg.code_address)
         # ignore black box contracts
@@ -201,7 +234,7 @@ def print_call_profile(env: Env):
     table.add_column("Max", style="magenta")
 
     profiled_contracts = []
-    for key in env._profiled_calls.keys():
+    for key in env._cached_call_profiles.keys():
         if key.address not in profiled_contracts:
             profiled_contracts.append(key.address)
 
@@ -210,11 +243,11 @@ def print_call_profile(env: Env):
     for contract in profiled_contracts:
 
         profiled_calls = {}
-        for profile in env._profiled_calls.keys():
+        for profile in env._cached_call_profiles.keys():
             if contract == profile.address:
                 contract_name = profile.contract_name
                 fn_name = profile.fn_name
-                profiled_calls[fn_name] = env._profiled_calls[profile]
+                profiled_calls[fn_name] = env._cached_call_profiles[profile]
 
         # generate means, stds for each
         call_profiles = {}

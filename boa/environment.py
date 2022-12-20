@@ -267,7 +267,8 @@ class Env:
 
         self._contracts = {}
 
-        self._profiled_calls = {}
+        self._cached_call_profiles = {}
+        self._cached_line_profiles = {}
 
     def _init_vm(self):
         self.vm = self.chain.get_vm()

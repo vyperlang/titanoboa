@@ -60,7 +60,7 @@ def test_append_to_pytest_call_profile(boa_contract):
     ]
 
     for fn in fns:
-        assert fn in boa.env._profiled_calls.keys()
+        assert fn in boa.env._cached_call_profiles.keys()
 
 
 @given(addr=strategy("address"))
@@ -82,7 +82,7 @@ def test_hypothesis_profiling_uint(boa_contract, a, b):
 def test_ignore_call_profiling(boa_contract):
     boa_contract.sip()
     sip_fn = SelectorInfo("sip", "TestContract", boa_contract.address)
-    assert sip_fn not in boa.env._profiled_calls.keys()
+    assert sip_fn not in boa.env._cached_call_profiles.keys()
 
 
 @pytest.fixture(scope="module")
