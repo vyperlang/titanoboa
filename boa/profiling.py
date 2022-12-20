@@ -330,7 +330,7 @@ def get_line_profile_table(env: Env):
     table = _create_table(show_contract=False)
     for (contract_name, _), _data in contracts.items():
 
-        c = 0
+        l_profile = []
         for code, gas_used in _data:
 
             if len(gas_used) == 1:
@@ -341,19 +341,37 @@ def get_line_profile_table(env: Env):
             if code.endswith("\n"):
                 code = code[:-1]
 
+            l_profile.append(
+                [
+                    contract_name,
+                    code,
+                    len(gas_used),
+                    int(statistics.mean(gas_used)),
+                    int(statistics.median(gas_used)),
+                    stdev,
+                    min(gas_used),
+                    max(gas_used),
+                ]
+            )
+
+        l_profile = sorted(l_profile, key=lambda x: int(x[3]), reverse=True)
+
+        c = 0
+        for profile in l_profile:
+
             cname = ""
             if c == 0:
                 cname = contract_name
 
             table.add_row(
                 cname,
-                code,
-                str(len(gas_used)),
-                str(int(statistics.mean(gas_used))),
-                str(int(statistics.median(gas_used))),
-                str(stdev),
-                str(min(gas_used)),
-                str(max(gas_used)),
+                profile[1],
+                str(profile[2]),
+                str(profile[3]),
+                str(profile[4]),
+                str(profile[5]),
+                str(profile[6]),
+                str(profile[7]),
             )
 
             c += 1
