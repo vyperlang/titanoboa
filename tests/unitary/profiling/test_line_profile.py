@@ -38,5 +38,14 @@ def boa_contract(external_contract):
 
 
 @pytest.mark.profile_calls
+def test_single_computation(external_contract):
+    external_contract.foo(2000)
+    lp = external_contract.line_profile().summary()
+    breakpoint()
+    assert lp
+
+
+@pytest.mark.profile_calls
 def test_external_call(boa_contract):
     boa_contract.bar(10)
+    assert boa_contract.line_profile().summary()
