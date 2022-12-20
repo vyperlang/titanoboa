@@ -190,9 +190,6 @@ def cache_gas_used_for_computation(contract, computation):
     else:
         env._profiled_calls[fn].append(gas_used)
 
-    for child_computation in computation.children:
-        cache_gas_used_for_computation(child_computation, env)
-
 
 def print_call_profile(env: Env):
 

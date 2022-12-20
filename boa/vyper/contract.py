@@ -589,7 +589,7 @@ class VyperContract(_BaseContract):
         if computation.is_error:
             self.handle_error(computation)
 
-        # store gas used for each call if profiling is enabled
+        # cache gas used for call if profiling is enabled
         gas_meter = self.env.vm.state.computation_class._gas_meter_class
         if gas_meter == ProfilingGasMeter:
             cache_gas_used_for_computation(self, computation)
@@ -635,26 +635,20 @@ class VyperContract(_BaseContract):
         child_trace = child_obj.vyper_stack_trace(child)
         return StackTrace(child_trace + ret)
 
-    def line_profile(self, computation=None):
+    def _profile(self, typ=LineProfile, computation=None):
         computation = computation or self._computation
-        ret = LineProfile.from_single(self, computation)
+        ret = typ.from_single(self, computation)
         for child in computation.children:
             child_obj = self.env.lookup_contract(child.msg.code_address)
             if child_obj is not None:
-                ret.merge(child_obj.line_profile(computation))
-
+                ret.merge(child_obj.call_profile(child))
         return ret
+
+    def line_profile(self, computation=None):
+        return self._profile(LineProfile, computation)
 
     def call_profile(self, computation=None):
-        computation = computation or self._computation
-        ret = CallProfile.from_single(self, computation)
-        for child in computation.children:
-            child_obj = self.env.lookup_contract(child.msg.code_address)
-            breakpoint()
-            if child_obj is not None:
-                ret.merge(child_obj.call_profile(computation))
-
-        return ret
+        return self._profile(CallProfile, computation)
 
     @cached_property
     def _ast_module(self):
