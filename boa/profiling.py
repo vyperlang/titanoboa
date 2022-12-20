@@ -214,12 +214,13 @@ def cache_gas_used_for_computation(contract, computation):
             cache_gas_used_for_computation(child_contract, _computation)
 
 
-def _create_table():
+def _create_table(show_contract: bool = True):
 
     table = Table(title="\n")
 
     table.add_column("Contract", justify="right", style="blue", no_wrap=True)
-    table.add_column("Address", justify="left", style="blue", no_wrap=True)
+    if show_contract:
+        table.add_column("Address", justify="left", style="blue", no_wrap=True)
     table.add_column("Code", justify="left", style="blue", no_wrap=True)
     table.add_column("Count", style="magenta")
     table.add_column("Mean", style="magenta")
@@ -309,15 +310,24 @@ def get_line_profile_table(env: Env):
     contracts = {}
     for lp, gas_data in env._cached_line_profiles.items():
         contract_uid = (lp.contract_name, lp.address)
-        gas_data = (str(lp.lineno) + ": " + lp.line_src, gas_data)
+
+        # add spaces so numbers take up equal space
+        lineno = str(lp.lineno)
+        if lp.lineno < 10:
+            lineno = "   " + lineno
+        if 10 <= lp.lineno < 100:
+            lineno = "  " + lineno
+        if 100 <= lp.lineno < 1000:
+            lineno = " " + lineno
+
+        gas_data = (lineno + ": " + lp.line_src, gas_data)
         if contract_uid not in contracts:
             contracts[contract_uid] = [gas_data]
         else:
             contracts[contract_uid].append(gas_data)
 
-    table = _create_table()
-
-    for (contract_name, address), _data in contracts.items():
+    table = _create_table(show_contract=False)
+    for (contract_name, _), _data in contracts.items():
 
         c = 0
         for code, gas_used in _data:
@@ -331,14 +341,11 @@ def get_line_profile_table(env: Env):
                 code = code[:-1]
 
             cname = ""
-            caddr = ""
             if c == 0:
                 cname = contract_name
-                caddr = address
 
             table.add_row(
                 cname,
-                caddr,
                 code,
                 str(len(gas_used)),
                 str(int(statistics.mean(gas_used))),
