@@ -112,15 +112,15 @@ class LineProfile:
     def summary(
         self, display_columns=("net_tot_gas",), sortkey="net_tot_gas", limit=10
     ):
-        s = self.raw_summary()
+        raw_summary = self.raw_summary()
 
         if sortkey is not None:
-            s.sort(reverse=True, key=lambda x: getattr(x[1], sortkey))
+            raw_summary.sort(reverse=True, key=lambda x: getattr(x[1], sortkey))
         if limit is not None and limit > 0:
-            s = s[:limit]
+            raw_summary = raw_summary[:limit]
 
         tmp = []
-        for (contract, line), datum in s:
+        for (contract, line), datum in raw_summary:
             data = ", ".join(f"{c}: {getattr(datum, c)}" for c in display_columns)
             line_src = get_line(contract.compiler_data.source_code, line)
             x = f"{contract.address}:{contract.compiler_data.contract_name}:{line} {data}"
