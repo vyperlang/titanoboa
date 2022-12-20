@@ -5,7 +5,7 @@ import hypothesis
 import pytest
 
 import boa
-from boa.profiling import get_call_profile_table
+from boa.profiling import get_call_profile_table, get_line_profile_table
 from boa.vm.gas_meters import ProfilingGasMeter
 
 # monkey patch HypothesisHandle. this fixes underlying isolation for
@@ -56,16 +56,13 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
             yield
 
 
-def _display_call_profile_table(table):
-    import sys
-
-    from rich.console import Console
-
-    console = Console(file=sys.stdout)
-    console.print(table)
-
-
 def pytest_sessionfinish(session, exitstatus):
 
     if boa.env._cached_call_profiles:
-        _display_call_profile_table(get_call_profile_table(boa.env))
+        import sys
+
+        from rich.console import Console
+
+        console = Console(file=sys.stdout)
+        console.print(get_call_profile_table(boa.env))
+        console.print(get_line_profile_table(boa.env))

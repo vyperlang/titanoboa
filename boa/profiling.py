@@ -1,8 +1,10 @@
+import statistics
 from collections import namedtuple
 from dataclasses import dataclass
 from functools import cached_property
 
 from eth_utils import to_checksum_address
+from rich.table import Table
 
 from boa.environment import Env
 from boa.vyper.ast_utils import get_line
@@ -212,23 +214,26 @@ def cache_gas_used_for_computation(contract, computation):
             cache_gas_used_for_computation(child_contract, _computation)
 
 
-def get_call_profile_table(env: Env):
-
-    import statistics
-
-    from rich.table import Table
+def _create_table():
 
     table = Table(title="\n")
 
     table.add_column("Contract", justify="right", style="blue", no_wrap=True)
     table.add_column("Address", justify="left", style="blue", no_wrap=True)
-    table.add_column("Method", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Code", justify="left", style="blue", no_wrap=True)
     table.add_column("Count", style="magenta")
     table.add_column("Mean", style="magenta")
     table.add_column("Median", style="magenta")
     table.add_column("Stdev", style="magenta")
     table.add_column("Min", style="magenta")
     table.add_column("Max", style="magenta")
+
+    return table
+
+
+def get_call_profile_table(env: Env):
+
+    table = _create_table()
 
     profiled_contracts = []
     for key in env._cached_call_profiles.keys():
@@ -292,6 +297,57 @@ def get_call_profile_table(env: Env):
                 str(profile["min"]),
                 str(profile["max"]),
             )
+            c += 1
+
+        table.add_section()
+
+    return table
+
+
+def get_line_profile_table(env: Env):
+
+    contracts = {}
+    for lp, gas_data in env._cached_line_profiles.items():
+        contract_uid = (lp.contract_name, lp.address)
+        gas_data = (str(lp.lineno) + ": " + lp.line_src, gas_data)
+        if contract_uid not in contracts:
+            contracts[contract_uid] = [gas_data]
+        else:
+            contracts[contract_uid].append(gas_data)
+
+    table = _create_table()
+
+    for (contract_name, address), _data in contracts.items():
+
+        c = 0
+        for code, gas_used in _data:
+
+            if len(gas_used) == 1:
+                stdev = 0
+            else:
+                stdev = int(statistics.stdev(gas_used))
+
+            if code.endswith("\n"):
+                code = code[:-1]
+
+            cname = ""
+            caddr = ""
+            if c == 0:
+                cname = contract_name
+                caddr = address
+
+            table.add_row(
+                cname,
+                caddr,
+                code,
+                str(len(gas_used)),
+                str(int(statistics.mean(gas_used))),
+                str(int(statistics.median(gas_used))),
+                str(stdev),
+                str(min(gas_used)),
+                str(max(gas_used)),
+            )
+
             c += 1
 
         table.add_section()
