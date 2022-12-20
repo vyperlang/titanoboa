@@ -98,6 +98,9 @@ class LineProfile:
         ret.merge_single(_SingleComputation(contract, computation))
         return ret
 
+    def raw_summary(self):
+        return list(self.profile.items())
+
     def merge_single(self, single: _SingleComputation) -> None:
         for line, datum in single.by_line.items():
             self.profile.setdefault((single.contract, line), Datum()).merge(datum)
@@ -105,9 +108,6 @@ class LineProfile:
     def merge(self, other: "LineProfile") -> None:
         for (contract, line), datum in other.profile.items():
             self.profile.setdefault((contract, line), Datum()).merge(datum)
-
-    def raw_summary(self):
-        return list(self.profile.items())
 
     def summary(
         self, display_columns=("net_tot_gas",), sortkey="net_tot_gas", limit=10
@@ -133,26 +133,6 @@ class LineProfile:
         return _String("\n".join(ret))
 
 
-# Call Profile
-class CallProfile:
-    def __init__(self):
-        self.profile = {}
-
-    @classmethod
-    def from_single(cls, contract, computation):
-        ret = cls()
-        ret.merge_single(_SingleComputation(contract, computation))
-        return ret
-
-    def merge_single(self, single: _SingleComputation) -> None:
-        for call, datum in single.by_pc.items():
-            self.profile.setdefault((single.contract, call), Datum()).merge(datum)
-
-    def merge(self, other: "CallProfile") -> None:
-        for (contract, call), datum in other.profile.items():
-            self.profile.setdefault((contract, call), Datum()).merge(datum)
-
-
 # stupid class whose __str__ method doesn't escape (good for repl)
 class _String(str):
     def __repr__(self):
@@ -166,13 +146,13 @@ SelectorInfo = namedtuple("SelectorInfo", ["fn_name", "contract_name", "address"
 # cache gas_used for all computation (including children)
 def cache_gas_used_for_computation(contract, computation):
 
-    call_profile = contract.call_profile(computation)
+    profile = contract.line_profile(computation)
     env = contract.env
 
     # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
     # because a call's profile includes children call costs.
     # There will be double counting, but that is by choice.
-    gas_used = sum([i.net_gas for i in call_profile.profile.values()])
+    gas_used = sum([i.net_gas for i in profile.profile.values()])
 
     try:
         fn_name = contract._get_fn_from_computation(computation).name

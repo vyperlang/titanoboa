@@ -39,14 +39,14 @@ def boa_contract():
 
 
 @pytest.mark.parametrize("a,b", [(42, 69), (420, 690), (42, 690), (420, 69)])
-@pytest.mark.profile_calls
+@pytest.mark.call_profile
 def test_populate_call_profile_property(boa_contract, a, b):
 
     boa_contract.foo(a, b)
     boa_contract.bar(a, b)
 
 
-@pytest.mark.profile_calls
+@pytest.mark.call_profile
 def test_append_to_pytest_call_profile(boa_contract):
     boa_contract.foo(42, 69)
     boa_contract.bar(420, 690)
@@ -65,7 +65,7 @@ def test_append_to_pytest_call_profile(boa_contract):
 
 @given(addr=strategy("address"))
 @settings(**{"max_examples": 100, "deadline": None})
-@pytest.mark.profile_calls
+@pytest.mark.call_profile
 def test_hypothesis_profiling(boa_contract, addr):
     boa_contract.baz(addr)
 
@@ -74,7 +74,7 @@ def test_hypothesis_profiling(boa_contract, addr):
     a=strategy("uint256", max_value=10**4), b=strategy("uint256", max_value=10**8)
 )
 @settings(**{"max_examples": 100, "deadline": None})
-@pytest.mark.profile_calls
+@pytest.mark.call_profile
 def test_hypothesis_profiling_uint(boa_contract, a, b):
     boa_contract.foo(a, b)
 
@@ -105,12 +105,12 @@ def foo(a: uint256, b: uint256, c: uint256) -> uint256:
 @pytest.mark.parametrize(
     "a,b,c", [(42, 69, 150), (420, 690, 20000), (42, 690, 10000), (420, 69, 5000)]
 )
-@pytest.mark.profile_calls
+@pytest.mark.call_profile
 def test_call_variable_iter_method(boa_contract_variable, a, b, c):
     boa_contract_variable.foo(a, b, c)
 
 
-@pytest.mark.profile_calls
+@pytest.mark.call_profile
 def test_profile():
 
     source_code = """

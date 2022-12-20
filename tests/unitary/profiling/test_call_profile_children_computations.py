@@ -37,6 +37,6 @@ def boa_contract(external_contract):
     return boa.loads(source_code_b, external_contract.address, name="TestContract")
 
 
-@pytest.mark.profile_calls
+@pytest.mark.call_profile
 def test_external_call(boa_contract):
     boa_contract.bar(10)

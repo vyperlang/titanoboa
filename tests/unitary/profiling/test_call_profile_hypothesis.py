@@ -22,6 +22,6 @@ def boa_contract():
 
 @given(value=strategy("uint256", min_value=10, max_value=10000))
 @settings(**SETTINGS)
-@pytest.mark.profile_calls
+@pytest.mark.call_profile
 def test_profile_hypothesis(boa_contract, value):
     boa_contract.foo(value)

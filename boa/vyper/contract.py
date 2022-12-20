@@ -29,7 +29,7 @@ from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.utils import abi_method_id, cached_property
 
 from boa.environment import AddressT, Env, to_int
-from boa.profiling import CallProfile, LineProfile, cache_gas_used_for_computation
+from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
@@ -635,20 +635,14 @@ class VyperContract(_BaseContract):
         child_trace = child_obj.vyper_stack_trace(child)
         return StackTrace(child_trace + ret)
 
-    def _profile(self, typ=LineProfile, computation=None):
+    def line_profile(self, computation=None):
         computation = computation or self._computation
-        ret = typ.from_single(self, computation)
+        ret = LineProfile.from_single(self, computation)
         for child in computation.children:
             child_obj = self.env.lookup_contract(child.msg.code_address)
             if child_obj is not None:
-                ret.merge(child_obj.call_profile(child))
+                ret.merge(child_obj.line_profile(child))
         return ret
-
-    def line_profile(self, computation=None):
-        return self._profile(LineProfile, computation)
-
-    def call_profile(self, computation=None):
-        return self._profile(CallProfile, computation)
 
     @cached_property
     def _ast_module(self):
