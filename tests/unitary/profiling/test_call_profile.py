@@ -2,7 +2,7 @@ import pytest
 from hypothesis import given, settings  # noqa
 
 import boa
-from boa.profiling import SelectorInfo
+from boa.profiling import CallInfo
 from boa.test import strategy
 
 source_code = """
@@ -54,9 +54,9 @@ def test_append_to_pytest_call_profile(boa_contract):
 
     addr = boa_contract.address
     fns = [
-        SelectorInfo("foo", "TestContract", addr),
-        SelectorInfo("bar", "TestContract", addr),
-        SelectorInfo("baz", "TestContract", addr),
+        CallInfo("foo", "TestContract", addr),
+        CallInfo("bar", "TestContract", addr),
+        CallInfo("baz", "TestContract", addr),
     ]
 
     for fn in fns:
@@ -81,7 +81,7 @@ def test_hypothesis_profiling_uint(boa_contract, a, b):
 
 def test_ignore_call_profiling(boa_contract):
     boa_contract.sip()
-    sip_fn = SelectorInfo("sip", "TestContract", boa_contract.address)
+    sip_fn = CallInfo("sip", "TestContract", boa_contract.address)
     assert sip_fn not in boa.env._cached_call_profiles.keys()
 
 

@@ -212,15 +212,12 @@ def cache_gas_used_for_computation(contract, computation):
             cache_gas_used_for_computation(child_contract, _computation)
 
 
-def print_call_profile(env: Env):
+def get_call_profile_table(env: Env):
 
     import statistics
-    import sys
 
-    from rich.console import Console
     from rich.table import Table
 
-    console = Console(file=sys.stdout)
     table = Table(title="\n")
 
     table.add_column("Contract", justify="right", style="blue", no_wrap=True)
@@ -299,4 +296,4 @@ def print_call_profile(env: Env):
 
         table.add_section()
 
-    console.print(table)
+    return table
