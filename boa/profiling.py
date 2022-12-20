@@ -133,6 +133,26 @@ class LineProfile:
         return _String("\n".join(ret))
 
 
+# Call Profile
+class CallProfile:
+    def __init__(self):
+        self.profile = {}
+
+    @classmethod
+    def from_single(cls, contract, computation):
+        ret = cls()
+        ret.merge_single(_SingleComputation(contract, computation))
+        return ret
+
+    def merge_single(self, single: _SingleComputation) -> None:
+        for call, datum in single.by_pc.items():
+            self.profile.setdefault((single.contract, call), Datum()).merge(datum)
+
+    def merge(self, other: "CallProfile") -> None:
+        for (contract, call), datum in other.profile.items():
+            self.profile.setdefault((contract, call), Datum()).merge(datum)
+
+
 # stupid class whose __str__ method doesn't escape (good for repl)
 class _String(str):
     def __repr__(self):
@@ -144,9 +164,13 @@ SelectorInfo = namedtuple("SelectorInfo", ["fn_name", "contract_name", "address"
 
 
 # cache gas_used for all computation (including children)
-def cache_gas_used_for_computation(computation, env):
+def cache_gas_used_for_computation(contract, computation):
 
-    contract = env.lookup_contract(computation.msg.storage_address)
+    call_profile = contract.call_profile(computation)
+    env = contract.env
+
+    # get gas used
+    gas_used = sum([i.net_gas for i in call_profile.profile.values()])
 
     try:
         fn_name = contract._get_fn_from_computation(computation).name
@@ -161,7 +185,6 @@ def cache_gas_used_for_computation(computation, env):
         address=to_checksum_address(contract.address),
     )
 
-    gas_used = computation.get_gas_used()
     if fn not in env._profiled_calls.keys():
         env._profiled_calls[fn] = [gas_used]
     else:

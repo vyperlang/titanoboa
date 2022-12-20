@@ -29,9 +29,10 @@ from vyper.semantics.validation.data_positions import set_data_positions
 from vyper.utils import abi_method_id, cached_property
 
 from boa.environment import AddressT, Env, to_int
-from boa.profiling import LineProfile, cache_gas_used_for_computation
+from boa.profiling import CallProfile, LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
+from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import ast_map_of, reason_at
 from boa.vyper.compiler_utils import (
@@ -588,9 +589,10 @@ class VyperContract(_BaseContract):
         if computation.is_error:
             self.handle_error(computation)
 
-        # if call profiling is enabled, store gas used for each call:
-        if self.env._profile_calls:
-            cache_gas_used_for_computation(computation, self.env)
+        # store gas used for each call if profiling is enabled
+        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        if gas_meter == ProfilingGasMeter:
+            cache_gas_used_for_computation(self, computation)
 
         if vyper_typ is None:
             return None
@@ -640,6 +642,17 @@ class VyperContract(_BaseContract):
             child_obj = self.env.lookup_contract(child.msg.code_address)
             if child_obj is not None:
                 ret.merge(child_obj.line_profile(computation))
+
+        return ret
+
+    def call_profile(self, computation=None):
+        computation = computation or self._computation
+        ret = CallProfile.from_single(self, computation)
+        for child in computation.children:
+            child_obj = self.env.lookup_contract(child.msg.code_address)
+            breakpoint()
+            if child_obj is not None:
+                ret.merge(child_obj.call_profile(computation))
 
         return ret
 

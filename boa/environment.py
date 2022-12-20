@@ -267,7 +267,6 @@ class Env:
 
         self._contracts = {}
 
-        self._profile_calls = False
         self._profiled_calls = {}
 
     def _init_vm(self):

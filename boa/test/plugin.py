@@ -6,6 +6,7 @@ import pytest
 
 import boa
 from boa.profiling import print_call_profile
+from boa.vm.gas_meters import ProfilingGasMeter
 
 # monkey patch HypothesisHandle. this fixes underlying isolation for
 # hypothesis.given() and also hypothesis stateful functionality.
@@ -13,14 +14,12 @@ _old_init = hypothesis.core.HypothesisHandle.__init__
 
 
 @contextlib.contextmanager
-def _toggle_profiling(flag: bool):
-
-    cache_profiling_flag = boa.env._profile_calls
-    try:
-        boa.env._profile_calls = flag
+def _toggle_profiling(yes: bool = False):
+    if yes:
+        with boa.env.gas_meter_class(ProfilingGasMeter):
+            yield
+    else:
         yield
-    finally:
-        boa.env._profile_calls = cache_profiling_flag
 
 
 def _HypothesisHandle__init__(self, *args, **kwargs):
