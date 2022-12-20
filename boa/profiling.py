@@ -169,7 +169,9 @@ def cache_gas_used_for_computation(contract, computation):
     call_profile = contract.call_profile(computation)
     env = contract.env
 
-    # get gas used
+    # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
+    # because a call's profile includes children call costs.
+    # There will be double counting, but that is by choice.
     gas_used = sum([i.net_gas for i in call_profile.profile.values()])
 
     try:
@@ -189,6 +191,12 @@ def cache_gas_used_for_computation(contract, computation):
         env._profiled_calls[fn] = [gas_used]
     else:
         env._profiled_calls[fn].append(gas_used)
+
+    for _computation in computation.children:
+        child_contract = env.lookup_contract(_computation.msg.code_address)
+        # ignore black box contracts
+        if child_contract:
+            cache_gas_used_for_computation(child_contract, _computation)
 
 
 def print_call_profile(env: Env):
