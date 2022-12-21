@@ -219,10 +219,10 @@ def _create_table(show_contract: bool = True):
 
     table = Table(title="\n")
 
-    table.add_column("Contract", justify="right", style="blue", no_wrap=True)
+    table.add_column("Contract", justify="right", style="cyan", no_wrap=True)
     if show_contract:
-        table.add_column("Address", justify="left", style="blue", no_wrap=True)
-    table.add_column("Code", justify="left", style="blue", no_wrap=True)
+        table.add_column("Address", justify="left", style="cyan", no_wrap=True)
+    table.add_column("Code", justify="left", style="cyan", no_wrap=True)
     table.add_column("Count", style="magenta")
     table.add_column("Mean", style="magenta")
     table.add_column("Median", style="magenta")
