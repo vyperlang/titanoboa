@@ -48,7 +48,10 @@ def decode_vyper_object(mem, typ):
         # TODO tag return value like `vyper_object` does
         return mem[: typ._bytes_info.m].tobytes()
     if is_base_type(typ, "address"):
-        return to_checksum_address(mem[12:32].tobytes())
+        addr = ""
+        if mem[12:32].nbytes:
+            addr = to_checksum_address(mem[12:32].tobytes())
+        return addr
     if is_base_type(typ, "bool"):
         return bool.from_bytes(mem[31:32], "big")
     if is_integer_type(typ):
