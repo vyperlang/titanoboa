@@ -33,7 +33,7 @@ from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vyper import _METHOD_ID_VAR
-from boa.vyper.ast_utils import ast_map_of, reason_at
+from boa.vyper.ast_utils import ast_map_of, extract_reason
 from boa.vyper.compiler_utils import (
     _compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
@@ -146,8 +146,8 @@ class DevReason:
     reason_str: str
 
     @classmethod
-    def at(cls, source_code: str, lineno: int) -> Optional["DevReason"]:
-        s = reason_at(source_code, lineno)
+    def extract_from(cls, source_code: str) -> Optional["DevReason"]:
+        s = extract_reason(source_code)
         if s is None:
             return None
         reason_type, reason_str = s
@@ -171,7 +171,7 @@ class ErrorDetail:
     def from_computation(cls, contract, computation):
         error_detail = contract.find_error_meta(computation.code)
         ast_source = contract.find_source_of(computation.code)
-        reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
+        reason = DevReason.extract_from(ast_source.node_source_code)
         frame_detail = contract.debug_frame(computation)
         storage_detail = contract._storage.dump()
 
@@ -623,6 +623,8 @@ class VyperContract(_BaseContract):
 
         child = computation.children[-1]
         child_obj = self.env.lookup_contract(child.msg.code_address)
+        if not child_obj:
+            return StackTrace(ret)
         child_trace = child_obj.vyper_stack_trace(child)
         return StackTrace(child_trace + ret)
 
