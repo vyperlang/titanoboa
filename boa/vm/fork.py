@@ -33,7 +33,7 @@ def _to_hex(s: int) -> str:
 
 
 def _to_int(hex_str: str) -> int:
-    if hex_str == '0x':
+    if hex_str == "0x":
         return 0
     return int(hex_str, 16)
 
