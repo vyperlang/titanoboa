@@ -319,7 +319,11 @@ class VarModel:
         self.slot = slot
         self.typ = typ
 
-    def _decode(self, slot, typ):
+    def _decode(self, slot, typ, truncate_limit=None):
+        n = typ.memory_bytes_required
+        if truncate_limit is not None and n > truncate_limit:
+            return None  # indicate failure to caller
+
         fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
         return decode_vyper_object(fakemem, typ)
 
@@ -329,7 +333,7 @@ class VarModel:
         except KeyError:  # not found, return the input
             return maybe_address
 
-    def get(self):
+    def get(self, truncate_limit=None):
         if isinstance(self.typ, MappingType):
             ret = {}
             for k in self.contract.env.sstore_trace.get(self.contract.address, {}):
@@ -346,7 +350,7 @@ class VarModel:
                     path_t.append(ty.keytype)
                     ty = ty.valuetype
 
-                val = self._decode(to_int(k), ty)
+                val = self._decode(to_int(k), ty, truncate_limit)
 
                 # set val only if value is nonzero
                 if val:
@@ -361,7 +365,7 @@ class VarModel:
             return ret
 
         else:
-            return self._decode(self.slot, self.typ)
+            return self._decode(self.slot, self.typ, truncate_limit)
 
 
 # data structure to represent the storage variables in a contract
@@ -376,7 +380,12 @@ class StorageModel:
 
     def dump(self):
         ret = FrameDetail("storage")
-        ret.update({k: v.get() for (k, v) in vars(self).items()})
+
+        for k, v in vars(self).items():
+            t = v.get(truncate_limit=1024)
+            if t is None:
+                t = "<truncated>"  # too large, truncated
+            ret[k] = t
 
         return ret
 
