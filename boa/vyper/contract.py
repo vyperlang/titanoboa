@@ -623,7 +623,7 @@ class VyperContract(_BaseContract):
 
         child = computation.children[-1]
         child_obj = self.env.lookup_contract(child.msg.code_address)
-        if not child_obj:
+        if child_obj is None:
             return StackTrace(ret)
         child_trace = child_obj.vyper_stack_trace(child)
         return StackTrace(child_trace + ret)
