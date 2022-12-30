@@ -488,6 +488,9 @@ class VyperContract(_BaseContract):
 
         mem = computation._memory
         frame_detail = FrameDetail(fn.name)
+
+        # ensure memory is initialized for `decode_vyper_object()`
+        mem.extend(frame_info.frame_start, frame_info.frame_size)
         for k, v in frame_info.frame_vars.items():
             if v.location.name != "memory":
                 continue
