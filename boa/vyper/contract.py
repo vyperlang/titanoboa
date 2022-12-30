@@ -628,18 +628,11 @@ class VyperContract(_BaseContract):
             # inspired by answers in https://stackoverflow.com/q/1603940/
             raise strip_internal_frames(b) from None
 
-    def vyper_stack_trace(self, computation, unknown=False):
-        if unknown:
-            ret = StackTrace(
-                [
-                    f"<Unknown location in unknown contract {computation.msg.code_address.hex()}>"
-                ]
-            )
-        else:
-            ret = StackTrace([ErrorDetail.from_computation(self, computation)])
-            error_detail = self.find_error_meta(computation.code)
-            if error_detail not in EXTERNAL_CALL_ERRORS:
-                return ret
+    def vyper_stack_trace(self, computation):
+        ret = StackTrace([ErrorDetail.from_computation(self, computation)])
+        error_detail = self.find_error_meta(computation.code)
+        if error_detail not in EXTERNAL_CALL_ERRORS:
+            return ret
 
         if len(computation.children) == 0:
             return ret
