@@ -475,13 +475,14 @@ class Env:
         seconds: Optional[int] = None,
         blocks: Optional[int] = None,
         block_delta: int = 12,
-    ):
+    ) -> None:
 
         if (seconds is None) == (blocks is None):
             raise ValueError("One of seconds or blocks should be set")
         if seconds is not None:
             blocks = seconds // block_delta
         else:
+            assert blocks is not None  # mypy hint
             seconds = blocks * block_delta
 
         self.vm.patch.timestamp += seconds
