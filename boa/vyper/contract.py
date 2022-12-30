@@ -227,6 +227,23 @@ class StackTrace(list):
         return self[-1]
 
 
+def trace_for_unknown_contract(computation, env):
+    ret = StackTrace(
+        [f"<Unknown location in unknown contract {computation.msg.code_address.hex()}>"]
+    )
+    if len(computation.children) == 0:
+        return ret
+    if not computation.children[-1].is_error:
+        return ret
+    child = computation.children[-1]
+    child_obj = env.lookup_contract(child.msg.code_address)
+    if child_obj is None:
+        child_trace = trace_for_unknown_contract(child, env)
+    else:
+        child_trace = child_obj.vyper_stack_trace(child)
+    return StackTrace(child_trace + ret)
+
+
 # "pattern match" a BoaError. tries to match fields of the error
 # to the args/kwargs provided. raises if no match
 def check_boa_error_matches(error, *args, **kwargs):
@@ -632,7 +649,7 @@ class VyperContract(_BaseContract):
         child = computation.children[-1]
         child_obj = self.env.lookup_contract(child.msg.code_address)
         if child_obj is None:
-            child_trace = self.vyper_stack_trace(child, True)
+            child_trace = trace_for_unknown_contract(child, self.env)
         else:
             child_trace = child_obj.vyper_stack_trace(child)
         return StackTrace(child_trace + ret)
