@@ -61,6 +61,7 @@ def test_ignore_profiling(variable_loop_contract, a, b, c):
 
     variable_loop_contract.foo(a, b, c)
     assert not boa.env._cached_call_profiles
+    assert not boa.env._cached_line_profiles
 
 
 @pytest.mark.parametrize(
@@ -86,6 +87,11 @@ def test_fuzz_profiling(variable_loop_contract, a, b, c):
 
 
 @pytest.mark.profile
+def test_external_call(source_contract):
+    source_contract.bar(10)
+
+
+@pytest.mark.profile
 def test_profile():
 
     source_code = """
@@ -99,5 +105,13 @@ def foo(a: uint256 = 0):
 
 
 @pytest.mark.profile
-def test_external_call(source_contract):
-    source_contract.bar(10)
+def test_profile_empty_function():
+
+    source_code = """
+@external
+@view
+def bar():
+    pass
+"""
+    contract = boa.loads(source_code, name="EmptyFooContract")
+    contract.bar()

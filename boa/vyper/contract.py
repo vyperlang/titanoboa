@@ -468,10 +468,14 @@ class VyperContract(_BaseContract):
 
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation.code)
-        if node is None:
-            return None
 
-        return node.get_ancestor(vy_ast.FunctionDef)
+        if type(node) is vy_ast.FunctionDef:
+            return node
+
+        if node is not None and type(node) is not vy_ast.FunctionDef:
+            return node.get_ancestor(vy_ast.FunctionDef)
+
+        return None
 
     def debug_frame(self, computation=None):
         if computation is None:
@@ -516,7 +520,6 @@ class VyperContract(_BaseContract):
         for pc in reversed(code_stream._trace):
             if pc in pc_map and pc_map[pc] in self.ast_map:
                 return self.ast_map[pc_map[pc]]
-
         return None
 
     # ## handling events

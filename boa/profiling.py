@@ -183,6 +183,8 @@ def cache_gas_used_for_computation(contract, computation):
     except AttributeError:
         # TODO: remove this once vyper PR 3202 is merged
         # https://github.com/vyperlang/vyper/pull/3202
+        # and new vyper is released (so update vyper requirements
+        # in pyproject.toml)
         fn_name = "unnamed"
 
     fn = CallInfo(
