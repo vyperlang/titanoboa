@@ -468,14 +468,9 @@ class VyperContract(_BaseContract):
 
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation.code)
-
-        if type(node) is vy_ast.FunctionDef:
+        if isinstance(node, vy_ast.FunctionDef):
             return node
-
-        if node is not None and type(node) is not vy_ast.FunctionDef:
-            return node.get_ancestor(vy_ast.FunctionDef)
-
-        return None
+        return node.get_ancestor(vy_ast.FunctionDef)
 
     def debug_frame(self, computation=None):
         if computation is None:
