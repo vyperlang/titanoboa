@@ -176,7 +176,9 @@ class ErrorDetail:
         reason = None
         if ast_source is not None:
             reason = DevReason.at(
-                contract.compiler_data.source_code, ast_source.lineno, ast_source.end_lineno
+                contract.compiler_data.source_code,
+                ast_source.lineno,
+                ast_source.end_lineno,
             )
         frame_detail = contract.debug_frame(computation)
         storage_detail = contract._storage.dump()
