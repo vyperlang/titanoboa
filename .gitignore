@@ -8,3 +8,4 @@ dist/
 .hypothesis/
 .idea/
 .pytest_cache
+venv/
