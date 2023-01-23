@@ -652,11 +652,27 @@ class VyperContract(_BaseContract):
                 abi.decode(typ.abi_type.selector_name(), encoded_topic)
             )
 
-        tuple_typ = TupleT(arg_typs)
+        tuple_typ = TupleType(arg_typs)
+        args = abi_decode(tuple_typ.abi_type.selector_name(), data)
 
-        args = abi.decode(tuple_typ.abi_type.selector_name(), data)
+        # align the evm topic + args lists with the way they appear in the source
+        # ex. Transfer(indexed address, address, indexed address)
+        t_i = 0
+        a_i = 0
+        decoded_values = []
+        for is_topic, k in zip(
+            event_t.indexed, event_t.arguments.keys()
+        ):
+            if is_topic:
+                decoded_values.append((k, decoded_topics[t_i]))
+                t_i += 1
+            else:
+                decoded_values.append((k, args[a_i]))
+                a_i += 1
 
-        return Event(log_id, self.address, event_t, decoded_topics, args, {})
+        event_name = ", ".join(f"{k}={v}" for k, v in decoded_values)
+        args_map = dict([(k,v) for k, v in decoded_values])
+        return Event(log_id, self.address, event_t, event_name, decoded_topics, args, args_map)
 
     def marshal_to_python(self, computation, vyper_typ):
         self._computation = computation  # for further inspection
