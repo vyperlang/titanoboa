@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any, List, Dict
+
 
 
 @dataclass
@@ -9,6 +10,7 @@ class Event:
     event_type: Any  # vyper.semantics.types.user.Event
     topics: List[Any]  # list of decoded topics
     args: List[Any]  # list of decoded args
+    args_map: Dict[str, Any]  # Mapping of decoded args
 
     def __repr__(self):
         t_i = 0
@@ -27,6 +29,7 @@ class Event:
                 a_i += 1
 
         args = ", ".join(f"{k}={v}" for k, v in b)
+        self.args_map = dict([(k,v) for k, v in b])
         return f"{self.event_type.name}({args})"
 
 
