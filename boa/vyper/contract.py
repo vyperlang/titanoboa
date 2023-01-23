@@ -627,8 +627,7 @@ class VyperContract(_BaseContract):
                 a_i += 1
 
         event_name = ", ".join(f"{k}={v}" for k, v in decoded_values)
-        args_map = dict([(k,v) for k, v in decoded_values])
-        return Event(log_id, self.address, event_t, event_name, decoded_topics, args, args_map)
+        return Event(log_id, self.address, event_t, event_name, decoded_topics, args)
 
     def marshal_to_python(self, computation, vyper_typ):
         self._computation = computation  # for further inspection
