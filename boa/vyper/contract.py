@@ -656,7 +656,7 @@ class VyperContract(_BaseContract):
 
         args = abi.decode(tuple_typ.abi_type.selector_name(), data)
 
-        return Event(log_id, self.address, event_t, decoded_topics, args)
+        return Event(log_id, self.address, event_t, decoded_topics, args, {})
 
     def marshal_to_python(self, computation, vyper_typ):
         self._computation = computation  # for further inspection

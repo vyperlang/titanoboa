@@ -1,7 +1,12 @@
 from dataclasses import dataclass
+<<<<<<< HEAD
 from typing import Any, Dict, List, Tuple
 
 from vyper.utils import cached_property
+=======
+from typing import Any, List, Dict
+
+>>>>>>> 7fe0723 (add key-value pair of event variable name to data emitted to all boa.Event objects)
 
 
 @dataclass
@@ -11,6 +16,7 @@ class Event:
     event_type: Any  # vyper.semantics.types.user.EventT
     topics: List[Any]  # list of decoded topics
     args: List[Any]  # list of decoded args
+    args_map: Dict[str, Any]  # Mapping of decoded args
 
     def __repr__(self):
         args = ", ".join(f"{k}={v}" for k, v in self.ordered_args())
