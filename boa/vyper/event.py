@@ -35,8 +35,8 @@ class Event:
     @functools.cached_property
     def args_map(self) -> Dict[str, Any]:
         # get values from inside event pareentheses
-		event_values = dict(re.findall(r"(\w+)=([\w\d]+)", self.__repr__()))
-		return event_values
+        event_values = dict(re.findall(r"(\w+)=([\w\d]+)", self.__repr__()))
+        return event_values
 
 class RawEvent:
-	event_data: Any
+    event_data: Any
