@@ -1,7 +1,6 @@
 import functools
-import re
 from dataclasses import dataclass
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Tuple
 
 
 
@@ -14,6 +13,15 @@ class Event:
     args: List[Any]  # list of decoded args
 
     def __repr__(self):
+        args = ", ".join(f"{k}={v}" for k, v in self._get_ordered_args())
+        return f"{self.event_type.name}({args})"
+    
+    @functools.cached_property
+    def args_map(self) -> Dict[str, str | int]:
+        return dict(self._get_ordered_args())
+    
+    @functools.cached_property
+    def _get_ordered_args(self) -> List[Tuple[str, str | int]]:
         t_i = 0
         a_i = 0
         b = []
@@ -28,15 +36,8 @@ class Event:
             else:
                 b.append((k, self.args[a_i]))
                 a_i += 1
-
-        args = ", ".join(f"{k}={v}" for k, v in b)
-        return f"{self.event_type.name}({args})"
-    
-    @functools.cached_property
-    def args_map(self) -> Dict[str, Any]:
-        # get values from inside event pareentheses
-        event_values = dict(re.findall(r"(\w+)=([\w\d]+)", self.__repr__()))
-        return event_values
+        
+        return b
 
 class RawEvent:
     event_data: Any
