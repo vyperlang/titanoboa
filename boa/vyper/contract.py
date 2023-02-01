@@ -146,8 +146,10 @@ class DevReason:
     reason_str: str
 
     @classmethod
-    def at(cls, source_code: str, lineno: int) -> Optional["DevReason"]:
-        s = reason_at(source_code, lineno)
+    def at(
+        cls, source_code: str, lineno: int, end_lineno: int
+    ) -> Optional["DevReason"]:
+        s = reason_at(source_code, lineno, end_lineno)
         if s is None:
             return None
         reason_type, reason_str = s
@@ -173,7 +175,11 @@ class ErrorDetail:
         ast_source = contract.find_source_of(computation.code)
         reason = None
         if ast_source is not None:
-            reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
+            reason = DevReason.at(
+                contract.compiler_data.source_code,
+                ast_source.lineno,
+                ast_source.end_lineno,
+            )
         frame_detail = contract.debug_frame(computation)
         storage_detail = contract._storage.dump()
 
