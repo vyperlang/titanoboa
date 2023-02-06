@@ -3,10 +3,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
 from vyper.utils import cached_property
+<<<<<<< HEAD
 =======
 from typing import Any, List, Dict
 
 >>>>>>> 7fe0723 (add key-value pair of event variable name to data emitted to all boa.Event objects)
+=======
+>>>>>>> 581e92e (add initial event tests)
 
 
 @dataclass
