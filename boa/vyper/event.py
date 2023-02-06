@@ -1,6 +1,7 @@
-import functools
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
+
+from vyper.utils import cached_property
 
 
 @dataclass
@@ -15,11 +16,11 @@ class Event:
         args = ", ".join(f"{k}={v}" for k, v in self.ordered_args())
         return f"{self.event_type.name}({args})"
 
-    @functools.cached_property
+    @cached_property
     def args_map(self) -> Dict[str, str | int]:
         return dict(self.ordered_args())
 
-    @functools.cached_property
+    @cached_property
     def ordered_args(self) -> List[Tuple[str, str | int]]:
         t_i = 0
         a_i = 0
