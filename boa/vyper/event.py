@@ -20,7 +20,6 @@ class Event:
     def args_map(self) -> Dict[str, str | int]:
         return dict(self.ordered_args())
 
-    @cached_property
     def ordered_args(self) -> List[Tuple[str, str | int]]:
         t_i = 0
         a_i = 0

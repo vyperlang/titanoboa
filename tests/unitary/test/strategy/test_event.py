@@ -36,7 +36,7 @@ def test_args_saved_to_event(args):
     event = Event("0x0", "0x0", "", [], args, {})
     assert event.args == args
     assert event.topics == []
-    assert len(event["ordered_args"]()) == len(args)
+    assert len(event.ordered_args()) == len(args)
 
 
 @given(args=strategy("(bool,uint8,address,bytes32)"))
@@ -45,15 +45,13 @@ def test_args_ordered_to_event_param_sequence(args):
     # to make sure they get merged properly
     topics = [args[1], args[2]]
     params = [args[0], args[3]]
-    args_map = (
-        {idx: value for idx, value in enumerate(args)},
-    )  # order param keys so ordered_args() matches actual params
     event_type = {
         "indexed": [False, True, True, False],
-        "arguments": args_map,  # copy dict but all 0 vals bc dont need
+        # order param keys so ordered_args() matches actual params
+        "arguments": {idx: value for idx, value in enumerate(args)},
     }
 
-    event = Event("0x0", "0x0", event_type, topics, params, args_map)
+    event = Event("0x0", "0x0", event_type, topics, params)
     assert event.args == params
     assert event.topics == topics
     assert len(event.ordered_args()) == len(args)
@@ -67,17 +65,17 @@ def test_args_ordered_to_event_param_sequence(args):
 def test_args_map_values_match_ordered_args(args):
     event_type = {
         "indexed": [False, True, True, False],
-        "arguments": {"param3": 0, "param1": 0, "param2": 0, "param4": 0},
-    }  # order param keys so ordered_args() matches actual params
-    event = Event("0x0", "0x0", event_type, [], args, {})
+        # order args so ordered_args() matches actual params
+        "arguments": {idx: value for idx, value in enumerate(args)},
+    }
+    event = Event("0x0", "0x0", event_type, [], args)
     for idx, k in enumerate(event_type["arguments"].keys()):
-        print(f"key - {k}, idx = {idx}, mapping = {event.args_map} ")
         assert event.args_map[k] == args[idx]
 
 
 def test_event_is_emitted():
     me = Env.generate_address()
-    token = load("examples/MockERC20.vy", sender=me)
+    token = load("examples/ERC20.vy", "test", "TEST", 18, 0, sender=me)
     token.mint(me, 100, sender=me)
     mint_events = token.get_logs()
     assert len(mint_events) == 1
