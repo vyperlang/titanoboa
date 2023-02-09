@@ -362,7 +362,7 @@ class VarModel:
         except KeyError:  # not found, return the input
             return maybe_address
 
-    def get(self):
+    def get(self, truncate_limit=None):
         if is_type_t(self.typ, HashMapT):
             ret = {}
             for k in self.contract.env.sstore_trace.get(self.contract.address, {}):
