@@ -40,7 +40,7 @@ def test_hypothesis_isolation(boa_contract, a, b):
     assert boa_contract.b() == B_INIT
     boa_contract.set_vars(a, b)
     assert boa_contract.a() == a
-    assert boa_contract.b() == b
+    assert boa_contract.b() == b.lower()
 
 
 # test isolation of pytest items
