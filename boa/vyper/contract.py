@@ -6,6 +6,7 @@ import contextlib
 import copy
 import warnings
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Any, Optional
 
 import vyper
@@ -20,13 +21,12 @@ from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
-from vyper.codegen.module import parse_external_interfaces
 from vyper.codegen.types.types import MappingType, TupleType, is_base_type
 from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.utils import cached_property, method_id_int
+from vyper.utils import method_id_int
 
 from boa.environment import AddressT, Env, to_int
 from boa.profiling import LineProfile
@@ -368,7 +368,7 @@ class VarModel:
 class StorageModel:
     def __init__(self, contract):
         compiler_data = contract.compiler_data
-        for k, v in compiler_data.global_ctx._globals.items():
+        for k, v in compiler_data.global_ctx.variables.items():
             is_storage = not v.is_immutable
             if is_storage:  # check that v
                 slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
@@ -392,7 +392,7 @@ class VyperContract(_BaseContract):
         # add all exposed functions from the interface to the contract
         external_fns = {
             fn.name: fn
-            for fn in self.global_ctx._function_defs
+            for fn in self.global_ctx.functions
             if fn._metadata["type"].is_external
         }
 
@@ -406,7 +406,7 @@ class VyperContract(_BaseContract):
 
         # set internal methods as class.internal attributes:
         self.internal = lambda: None
-        for fn in self.global_ctx._function_defs:
+        for fn in self.global_ctx.functions:
             if not fn._metadata["type"].is_internal:
                 continue
             setattr(self.internal, fn.name, VyperInternalFunction(fn, self))
@@ -760,8 +760,6 @@ class VyperContract(_BaseContract):
     def _sigs(self):
         sigs = {}
         global_ctx = self.compiler_data.global_ctx
-        if global_ctx._contracts or global_ctx._interfaces:
-            sigs = parse_external_interfaces(sigs, global_ctx)
         sigs["self"] = self.compiler_data.function_signatures
         return sigs
 
