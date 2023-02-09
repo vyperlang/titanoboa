@@ -183,5 +183,5 @@ Cast current deployed addresses to vyper contract
 
 basic tests:
 ```bash
-$ python -m tests.sim_veYFI
+$ python -m tests.integration.sim_veYFI
 ```
