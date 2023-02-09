@@ -6,9 +6,13 @@ from typing import Any, Optional, Tuple
 from vyper.codegen.core import getpos
 
 
-def get_line(source_code: str, lineno: int) -> str:
+def get_block(source_code: str, lineno: int, end_lineno: int) -> str:
     source_lines = source_code.splitlines(keepends=True)
-    return source_lines[lineno - 1]
+    return "".join(source_lines[lineno - 1 : end_lineno])
+
+
+def get_line(source_code: str, lineno: int) -> str:
+    return get_block(source_code, lineno, lineno)
 
 
 def _get_comment(source_line: str) -> Optional[str]:
@@ -29,9 +33,9 @@ def _extract_reason(comment: str) -> Any:
 
 # extract the dev revert reason at a given line.
 # somewhat heuristic.
-def reason_at(source_code: str, lineno: int) -> Optional[Tuple[str, str]]:
-    line = get_line(source_code, lineno)
-    c = _get_comment(line)
+def reason_at(source_code, lineno: int, end_lineno: int) -> Optional[Tuple[str, str]]:
+    block = get_block(source_code, lineno, end_lineno)
+    c = _get_comment(block)
     if c is not None:
         return _extract_reason(c)
     return None

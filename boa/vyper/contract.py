@@ -146,8 +146,10 @@ class DevReason:
     reason_str: str
 
     @classmethod
-    def at(cls, source_code: str, lineno: int) -> Optional["DevReason"]:
-        s = reason_at(source_code, lineno)
+    def at(
+        cls, source_code: str, lineno: int, end_lineno: int
+    ) -> Optional["DevReason"]:
+        s = reason_at(source_code, lineno, end_lineno)
         if s is None:
             return None
         reason_type, reason_str = s
@@ -171,7 +173,13 @@ class ErrorDetail:
     def from_computation(cls, contract, computation):
         error_detail = contract.find_error_meta(computation.code)
         ast_source = contract.find_source_of(computation.code)
-        reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
+        reason = None
+        if ast_source is not None:
+            reason = DevReason.at(
+                contract.compiler_data.source_code,
+                ast_source.lineno,
+                ast_source.end_lineno,
+            )
         frame_detail = contract.debug_frame(computation)
         storage_detail = contract._storage.dump()
 
@@ -225,6 +233,27 @@ class StackTrace(list):
     @property
     def last_frame(self):
         return self[-1]
+
+
+def trace_for_unknown_contract(computation, env):
+    ret = StackTrace(
+        [f"<Unknown location in unknown contract {computation.msg.code_address.hex()}>"]
+    )
+    return _handle_child_trace(computation, env, ret)
+
+
+def _handle_child_trace(computation, env, return_trace):
+    if len(computation.children) == 0:
+        return return_trace
+    if not computation.children[-1].is_error:
+        return return_trace
+    child = computation.children[-1]
+    child_obj = env.lookup_contract(child.msg.code_address)
+    if child_obj is None:
+        child_trace = trace_for_unknown_contract(child, env)
+    else:
+        child_trace = child_obj.vyper_stack_trace(child)
+    return StackTrace(child_trace + return_trace)
 
 
 # "pattern match" a BoaError. tries to match fields of the error
@@ -319,7 +348,11 @@ class VarModel:
         self.slot = slot
         self.typ = typ
 
-    def _decode(self, slot, typ):
+    def _decode(self, slot, typ, truncate_limit=None):
+        n = typ.memory_bytes_required
+        if truncate_limit is not None and n > truncate_limit:
+            return None  # indicate failure to caller
+
         fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
         return decode_vyper_object(fakemem, typ)
 
@@ -346,7 +379,7 @@ class VarModel:
                     path_t.append(ty.keytype)
                     ty = ty.valuetype
 
-                val = self._decode(to_int(k), ty)
+                val = self._decode(to_int(k), ty, truncate_limit)
 
                 # set val only if value is nonzero
                 if val:
@@ -361,7 +394,7 @@ class VarModel:
             return ret
 
         else:
-            return self._decode(self.slot, self.typ)
+            return self._decode(self.slot, self.typ, truncate_limit)
 
 
 # data structure to represent the storage variables in a contract
@@ -376,7 +409,12 @@ class StorageModel:
 
     def dump(self):
         ret = FrameDetail("storage")
-        ret.update({k: v.get() for (k, v) in vars(self).items()})
+
+        for k, v in vars(self).items():
+            t = v.get(truncate_limit=1024)
+            if t is None:
+                t = "<truncated>"  # too large, truncated
+            ret[k] = t
 
         return ret
 
@@ -479,6 +517,9 @@ class VyperContract(_BaseContract):
 
         mem = computation._memory
         frame_detail = FrameDetail(fn.name)
+
+        # ensure memory is initialized for `decode_vyper_object()`
+        mem.extend(frame_info.frame_start, frame_info.frame_size)
         for k, v in frame_info.frame_vars.items():
             if v.location.name != "memory":
                 continue
@@ -616,15 +657,7 @@ class VyperContract(_BaseContract):
         error_detail = self.find_error_meta(computation.code)
         if error_detail not in EXTERNAL_CALL_ERRORS:
             return ret
-        if len(computation.children) == 0:
-            return ret
-        if not computation.children[-1].is_error:
-            return ret
-
-        child = computation.children[-1]
-        child_obj = self.env.lookup_contract(child.msg.code_address)
-        child_trace = child_obj.vyper_stack_trace(child)
-        return StackTrace(child_trace + ret)
+        return _handle_child_trace(computation, self.env, ret)
 
     def line_profile(self, computation=None):
         computation = computation or self._computation
