@@ -31,7 +31,6 @@ def pytest_configure(config):
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Generator:
-
     if not item.get_closest_marker("ignore_isolation"):
         with boa.env.anchor():
             yield

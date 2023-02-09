@@ -21,14 +21,14 @@ from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
-from vyper.codegen.types.types import MappingType, TupleType, is_base_type
 from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
+from vyper.semantics.types import AddressT, HashMapT, TupleT, is_type_t
 from vyper.utils import method_id_int
 
-from boa.environment import AddressT, Env, to_int
+from boa.environment import AddressType, Env, to_int
 from boa.profiling import LineProfile
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
@@ -72,7 +72,7 @@ class VyperDeployer:
     def deploy_as_blueprint(self, *args, **kwargs):
         return VyperBlueprint(self.compiler_data, *args, **kwargs)
 
-    def at(self, address: AddressT) -> "VyperContract":
+    def at(self, address: AddressType) -> "VyperContract":
         address = to_checksum_address(address)
         ret = VyperContract(
             self.compiler_data, override_address=address, skip_init=True
@@ -330,7 +330,7 @@ class VarModel:
             return maybe_address
 
     def get(self):
-        if isinstance(self.typ, MappingType):
+        if is_type_t(self.typ, HashMapT):
             ret = {}
             for k in self.contract.env.sstore_trace.get(self.contract.address, {}):
                 path = unwrap_storage_key(self.contract.env.sha3_trace, k)
@@ -353,7 +353,7 @@ class VarModel:
                     # decode aliases as needed/possible
                     dealiased_path = []
                     for p, t in zip(path, path_t):
-                        if is_base_type(t, "address"):
+                        if is_type_t(t, AddressT):
                             p = self._dealias(p)
                         dealiased_path.append(p)
                     setpath(ret, dealiased_path, val)
@@ -573,7 +573,7 @@ class VyperContract(_BaseContract):
                 abi_decode(typ.abi_type.selector_name(), encoded_topic)
             )
 
-        tuple_typ = TupleType(arg_typs)
+        tuple_typ = TupleT(arg_typs)
 
         args = abi_decode(tuple_typ.abi_type.selector_name(), data)
 
@@ -592,13 +592,13 @@ class VyperContract(_BaseContract):
         ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
-        if not isinstance(vyper_typ, TupleType):
+        if not isinstance(vyper_typ, TupleT):
             (ret,) = ret
 
         # eth_abi does not checksum addresses. patch this in a limited
         # way here, but for complex return types, we need an upstream
         # fix.
-        if is_base_type(vyper_typ, "address"):
+        if is_type_t(vyper_typ, AddressT):
             ret = to_checksum_address(ret)
 
         return vyper_object(ret, vyper_typ)
@@ -759,7 +759,6 @@ class VyperContract(_BaseContract):
     @cached_property
     def _sigs(self):
         sigs = {}
-        global_ctx = self.compiler_data.global_ctx
         sigs["self"] = self.compiler_data.function_signatures
         return sigs
 
