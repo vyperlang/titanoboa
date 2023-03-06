@@ -1,7 +1,7 @@
 import statistics
-from collections import namedtuple
 from dataclasses import dataclass
 from functools import cached_property
+from textwrap import dedent
 
 from eth_utils import to_checksum_address
 from rich.table import Table
@@ -9,11 +9,67 @@ from rich.table import Table
 from boa.environment import Env
 from boa.vyper.ast_utils import get_line
 
-# simple dataclass for fn
-CallInfo = namedtuple("SelectorInfo", ["fn_name", "contract_name", "address"])
-LineInfo = namedtuple(
-    "LineGasUsedInfo", ["address", "contract_name", "lineno", "line_src"]
-)
+
+@dataclass(unsafe_hash=True)
+class LineInfo:
+    address: str
+    contract_name: str
+    lineno: int
+    line_src: str
+    fn_name: str = ""
+
+
+@dataclass(unsafe_hash=True)
+class ContractMethodInfo:
+    address: str
+    contract_name: str
+    fn_name: str
+
+
+@dataclass
+class Stats:
+    count: int = 0
+    avg_gas: int = 0
+    median_gas: int = 0
+    stdev_gas: int = 0
+    min_gas: int = 0
+    max_gas: int = 0
+
+    def __init__(self, gas_data):
+
+        self.count = len(gas_data)
+        self.avg_gas = int(statistics.mean(gas_data))
+        self.median_gas = int(statistics.median(gas_data))
+        self.stdev_gas = int(statistics.stdev(gas_data) if self.count > 1 else 0)
+        self.min_gas = min(gas_data)
+        self.max_gas = max(gas_data)
+
+    def get_str_repr(self):
+        return iter(
+            [
+                str(self.count),
+                str(self.avg_gas),
+                str(self.median_gas),
+                str(self.stdev_gas),
+                str(self.min_gas),
+                str(self.max_gas),
+            ]
+        )
+
+
+class CallGasStats:
+    def __init__(self):
+        self.net_gas = []
+        self.net_tot_gas = []
+
+    def compute_stats(self, typ: str = "net_gas"):
+
+        gas_data = getattr(self, typ)
+        setattr(self, typ + "_stats", Stats(gas_data))
+
+    def merge_gas_data(self, net_gas: int, net_tot_gas: int):
+        self.net_gas.append(net_gas)
+        self.net_tot_gas.append(net_tot_gas)
 
 
 @dataclass
@@ -171,12 +227,12 @@ def cache_gas_used_for_computation(contract, computation):
     line_profile = profile.get_line_data()
 
     # -------------------- CACHE CALL PROFILE --------------------
-    # TODO: looks a bit unkempt, can we refactor most of it to LineProfile?
-
     # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
     # because a call's profile includes children call costs.
     # There will be double counting, but that is by choice.
-    gas_used = sum([i.net_gas for i in profile.profile.values()])
+
+    sum_net_gas = sum([i.net_gas for i in profile.profile.values()])
+    sum_net_tot_gas = sum([i.net_tot_gas for i in profile.profile.values()])
 
     try:
         fn_name = contract._get_fn_from_computation(computation).name
@@ -187,33 +243,33 @@ def cache_gas_used_for_computation(contract, computation):
         # in pyproject.toml)
         fn_name = "unnamed"
 
-    fn = CallInfo(
-        fn_name=fn_name,
+    fn = ContractMethodInfo(
         contract_name=contract.compiler_data.contract_name,
         address=to_checksum_address(contract.address),
+        fn_name=fn_name,
     )
 
-    if fn not in env._cached_call_profiles.keys():
-        env._cached_call_profiles[fn] = [gas_used]
-    else:
-        env._cached_call_profiles[fn].append(gas_used)
-    # ------------------------------------------------------------
+    env._cached_call_profiles.setdefault(fn, CallGasStats()).merge_gas_data(
+        sum_net_gas, sum_net_tot_gas
+    )
+
+    s = env._profiled_contracts.setdefault(fn.address, [])
+    if fn not in env._profiled_contracts[fn.address]:
+        s.append(fn)
 
     # -------------------- CACHE LINE PROFILE --------------------
 
     for line, gas_used in line_profile.items():
-        if line not in env._cached_line_profiles.keys():
-            env._cached_line_profiles[line] = [gas_used]
-        else:
-            env._cached_line_profiles[line].append(gas_used)
+        line.fn_name = fn_name
+        env._cached_line_profiles.setdefault(line, []).append(gas_used)
 
-    # ------------------------------------------------------------
+    # ------------------------- RECURSION -------------------------
 
     # recursion for child computations
     for _computation in computation.children:
         child_contract = env.lookup_contract(_computation.msg.code_address)
         # ignore black box contracts
-        if child_contract:
+        if child_contract is not None:
             cache_gas_used_for_computation(child_contract, _computation)
 
 
@@ -239,69 +295,36 @@ def get_call_profile_table(env: Env):
 
     table = _create_table()
 
-    profiled_contracts = []
-    for key in env._cached_call_profiles.keys():
-        if key.address not in profiled_contracts:
-            profiled_contracts.append(key.address)
+    cache = env._cached_call_profiles
+    cached_contracts = env._profiled_contracts
+    contract_vs_max_gas = []
+    for profile in cache:
+        cache[profile].compute_stats()
+        contract_vs_max_gas.append(
+            (cache[profile].net_gas_stats.max_gas, profile.address)
+        )
 
-    contract_profiles = {}
-    max_avg_gas = []
-    for contract in profiled_contracts:
+    # # arrange from most to least expensive contracts:
+    sort_gas = sorted(contract_vs_max_gas, reverse=True)
 
-        profiled_calls = {}
-        for profile in env._cached_call_profiles.keys():
-            if contract == profile.address:
-                contract_name = profile.contract_name
-                fn_name = profile.fn_name
-                profiled_calls[fn_name] = env._cached_call_profiles[profile]
+    # --------------- POPULATE TABLE -----------------
 
-        # generate means, stds for each
-        call_profiles = {}
-        average_gas_costs = []
-        for key, gas_used in profiled_calls.items():
-            call_profile = {}
-            call_profile["contract_name"] = contract_name
-            call_profile["count"] = len(gas_used)
-            call_profile["mean"] = int(statistics.mean(gas_used))
-            call_profile["median"] = int(statistics.median(gas_used))
-            call_profile["min"] = min(gas_used)
-            call_profile["max"] = max(gas_used)
-            if len(gas_used) == 1:
-                call_profile["stdev"] = 0
-            else:
-                call_profile["stdev"] = int(statistics.stdev(gas_used))
-            call_profiles[key] = call_profile
-            average_gas_costs.append(call_profile["mean"])
+    for (_, address) in sort_gas:
 
-        contract_profiles[contract] = call_profiles
-        max_avg_gas.append(max(average_gas_costs))
+        for c, profile in enumerate(cached_contracts[address]):
 
-    # arrange from most to least expensive contracts:
-    sort_gas = sorted(zip(max_avg_gas, profiled_contracts), reverse=True)
-    sorted_contracts = [x for _, x in sort_gas]
+            stats = cache[profile]
 
-    for contract in sorted_contracts:
-        call_profiles = contract_profiles[contract]
-        c = 0
-        for key in call_profiles.keys():
-            profile = call_profiles[key]
+            # only first line should be populated for name and address
             cname = ""
             caddr = ""
             if c == 0:
-                cname = profile["contract_name"]
-                caddr = contract
+                cname = profile.contract_name
+                caddr = address
+
             table.add_row(
-                cname,
-                caddr,
-                key,
-                str(profile["count"]),
-                str(profile["mean"]),
-                str(profile["median"]),
-                str(profile["stdev"]),
-                str(profile["min"]),
-                str(profile["max"]),
+                cname, caddr, profile.fn_name, *stats.net_gas_stats.get_str_repr()
             )
-            c += 1
 
         table.add_section()
 
@@ -312,71 +335,42 @@ def get_line_profile_table(env: Env):
 
     contracts = {}
     for lp, gas_data in env._cached_line_profiles.items():
+
         contract_uid = (lp.contract_name, lp.address)
 
         # add spaces so numbers take up equal space
-        lineno = str(lp.lineno)
-        if lp.lineno < 10:
-            lineno = "   " + lineno
-        if 10 <= lp.lineno < 100:
-            lineno = "  " + lineno
-        if 100 <= lp.lineno < 1000:
-            lineno = " " + lineno
+        lineno = str(lp.lineno).rjust(3)
+        gas_data = (lineno + ": " + dedent(lp.line_src), gas_data)
 
-        gas_data = (lineno + ": " + lp.line_src, gas_data)
-        if contract_uid not in contracts:
-            contracts[contract_uid] = [gas_data]
-        else:
-            contracts[contract_uid].append(gas_data)
+        contracts.setdefault(contract_uid, {}).setdefault(lp.fn_name, []).append(
+            gas_data
+        )
 
     table = _create_table(show_contract=False)
-    for (contract_name, _), _data in contracts.items():
+    for (contract_name, _), fn_data in contracts.items():
 
-        l_profile = []
-        for code, gas_used in _data:
+        for fn_name, _data in fn_data.items():
 
-            if len(gas_used) == 1:
-                stdev = 0
-            else:
-                stdev = int(statistics.stdev(gas_used))
+            l_profile = []
+            for code, gas_used in _data:
 
-            if code.endswith("\n"):
-                code = code[:-1]
+                if code.endswith("\n"):
+                    code = code[:-1]
 
-            l_profile.append(
-                [
-                    contract_name,
-                    code,
-                    len(gas_used),
-                    int(statistics.mean(gas_used)),
-                    int(statistics.median(gas_used)),
-                    stdev,
-                    min(gas_used),
-                    max(gas_used),
-                ]
-            )
+                stats = Stats(gas_used)
+                data = [contract_name, fn_name, code, *stats.get_str_repr()]
+                l_profile.append(data)
 
-        l_profile = sorted(l_profile, key=lambda x: int(x[3]), reverse=True)
+            # sorted by mean (x[3]):
+            l_profile = sorted(l_profile, key=lambda x: int(x[4]), reverse=True)
 
-        c = 0
-        for profile in l_profile:
+            for c, profile in enumerate(l_profile):
 
-            cname = ""
-            if c == 0:
-                cname = contract_name
+                cname = ""
+                if c == 0:
+                    cname = contract_name + f".{fn_name}"
 
-            table.add_row(
-                cname,
-                profile[1],
-                str(profile[2]),
-                str(profile[3]),
-                str(profile[4]),
-                str(profile[5]),
-                str(profile[6]),
-                str(profile[7]),
-            )
-
-            c += 1
+                table.add_row(cname, *profile[2:])
 
         table.add_section()
 

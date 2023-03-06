@@ -13,15 +13,6 @@ from boa.vm.gas_meters import ProfilingGasMeter
 _old_init = hypothesis.core.HypothesisHandle.__init__
 
 
-@contextlib.contextmanager
-def _toggle_profiling(yes: bool = False):
-    if yes:
-        with boa.env.gas_meter_class(ProfilingGasMeter):
-            yield
-    else:
-        yield
-
-
 def _HypothesisHandle__init__(self, *args, **kwargs):
     _old_init(self, *args, **kwargs)
 
@@ -46,9 +37,17 @@ def pytest_configure(config):
 def pytest_runtest_call(item: pytest.Item) -> Generator:
 
     ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
-    profiling_flag = item.get_closest_marker("profile") is not None
+    profiling_enabled = item.get_closest_marker("profile") is not None
 
-    with _toggle_profiling(profiling_flag):
+    @contextlib.contextmanager
+    def _toggle_profiling(enabled: bool = False):
+        if enabled:
+            with boa.env.gas_meter_class(ProfilingGasMeter):
+                yield
+        else:
+            yield
+
+    with _toggle_profiling(profiling_enabled):
         if not ignore_isolation:
             with boa.env.anchor():
                 yield

@@ -50,6 +50,16 @@ def foo(a: uint256, b: uint256, c: uint256) -> uint256:
         if d > c:
             break
     return d
+
+@external
+@view
+def _barfoo(a: uint256, b: uint256, c: uint256) -> uint256:
+    d: uint256 = 0
+    for j in range(1000):
+        d = d * a / b
+        if d > c:
+            break
+    return d
 """
     return boa.loads(source_code, name="TestVariableLoopContract")
 
@@ -70,6 +80,7 @@ def test_ignore_profiling(variable_loop_contract, a, b, c):
 @pytest.mark.profile
 def test_call_variable_iter_method(variable_loop_contract, a, b, c):
     variable_loop_contract.foo(a, b, c)
+    variable_loop_contract._barfoo(a, b, c)
 
     assert boa.env._cached_call_profiles
     assert boa.env._cached_line_profiles

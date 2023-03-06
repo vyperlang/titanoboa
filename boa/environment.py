@@ -267,6 +267,7 @@ class Env:
 
         self._contracts = {}
 
+        self._profiled_contracts = {}
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
 
