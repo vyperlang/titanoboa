@@ -358,7 +358,7 @@ def get_line_profile_table(env: Env):
                     code = code[:-1]
 
                 stats = Stats(gas_used)
-                data = [contract_name, fn_name, code, *stats.get_str_repr()]
+                data = (contract_name, fn_name, code, *stats.get_str_repr())
                 l_profile.append(data)
 
             # sorted by mean (x[3]):
