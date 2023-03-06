@@ -25,7 +25,7 @@ from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.semantics.types import AddressT, HashMapT, TupleT, is_type_t
+from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id_int
 
 from boa.environment import AddressType, Env, to_int
@@ -363,7 +363,7 @@ class VarModel:
             return maybe_address
 
     def get(self, truncate_limit=None):
-        if is_type_t(self.typ, HashMapT):
+        if isinstance(self.typ, HashMapT):
             ret = {}
             for k in self.contract.env.sstore_trace.get(self.contract.address, {}):
                 path = unwrap_storage_key(self.contract.env.sha3_trace, k)
@@ -386,7 +386,7 @@ class VarModel:
                     # decode aliases as needed/possible
                     dealiased_path = []
                     for p, t in zip(path, path_t):
-                        if is_type_t(t, AddressT):
+                        if isinstance(t, AddressT):
                             p = self._dealias(p)
                         dealiased_path.append(p)
                     setpath(ret, dealiased_path, val)
@@ -639,7 +639,7 @@ class VyperContract(_BaseContract):
         # eth_abi does not checksum addresses. patch this in a limited
         # way here, but for complex return types, we need an upstream
         # fix.
-        if is_type_t(vyper_typ, AddressT):
+        if isinstance(vyper_typ, AddressT):
             ret = to_checksum_address(ret)
 
         return vyper_object(ret, vyper_typ)
