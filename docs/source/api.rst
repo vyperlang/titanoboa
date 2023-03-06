@@ -451,14 +451,13 @@ Low-Level Functionality
         :param pc: The program counter to start the execution at.
         :returns: The return value from the top-level call.
 
-    .. method:: time_travel(seconds = None, blocks = None, block_delta=12)
+    .. method:: time_travel(seconds: int = None, blocks: int = None, block_delta: int = 12)
 
         Fast forward, increase the chain timestamp and block number.
 
         :param seconds: Change current timestamp by `seconds` seconds.
         :param blocks: Change block number by `blocks` blocks.
         :param block_delta: The time between two blocks. Set to 12 as default.
-
 
 .. module:: boa.vyper.contract
 
