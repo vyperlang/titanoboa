@@ -54,7 +54,7 @@ def decode_vyper_object(mem, typ):
         return bool.from_bytes(mem[31:32], "big")
     if isinstance(typ, IntegerT):
         ret = int.from_bytes(mem[:32], "big")
-        if typ._int_info.is_signed:
+        if typ.is_signed:
             return unsigned_to_signed(ret, 256)
         return ret
     if isinstance(typ, _BytestringT):
