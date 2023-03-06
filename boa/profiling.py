@@ -297,21 +297,28 @@ def get_call_profile_table(env: Env):
 
     cache = env._cached_call_profiles
     cached_contracts = env._profiled_contracts
-    contract_vs_max_gas = []
+    contract_vs_mean_gas = []
     for profile in cache:
         cache[profile].compute_stats()
-        contract_vs_max_gas.append(
-            (cache[profile].net_gas_stats.max_gas, profile.address)
+        contract_vs_mean_gas.append(
+            (cache[profile].net_gas_stats.avg_gas, profile.address)
         )
 
-    # # arrange from most to least expensive contracts:
-    sort_gas = sorted(contract_vs_max_gas, reverse=True)
+    # arrange from most to least expensive contracts:
+    sort_gas = sorted(contract_vs_mean_gas, reverse=True)
 
     # --------------- POPULATE TABLE -----------------
 
     for (_, address) in sort_gas:
 
-        for c, profile in enumerate(cached_contracts[address]):
+        fn_vs_mean_gas = []
+        for profile in cached_contracts[address]:
+            fn_vs_mean_gas.append((cache[profile].net_gas_stats.avg_gas, profile))
+
+        # arrange from most to least expensive contracts:
+        sort_gas = sorted(fn_vs_mean_gas, reverse=True)
+
+        for c, (_, profile) in enumerate(sort_gas):
 
             stats = cache[profile]
 
@@ -361,7 +368,7 @@ def get_line_profile_table(env: Env):
                 data = (contract_name, fn_name, code, *stats.get_str_repr())
                 l_profile.append(data)
 
-            # sorted by mean (x[3]):
+            # sorted by mean (x[4]):
             l_profile = sorted(l_profile, key=lambda x: int(x[4]), reverse=True)
 
             for c, profile in enumerate(l_profile):
