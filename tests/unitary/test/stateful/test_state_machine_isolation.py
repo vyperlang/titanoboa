@@ -45,7 +45,6 @@ class StateMachine(RuleBasedStateMachine):
 
 
 def test_state_machine_isolation(boa_contract):
-
     StateMachine.contract = boa_contract
     StateMachine.settings = {
         "max_examples": 5,

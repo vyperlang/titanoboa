@@ -86,10 +86,10 @@ class VMPatcher:
                     setattr(self, attr, snap[attr])
 
 
-AddressT = Union[Address, bytes, str]  # make mypy happy
+AddressType = Union[Address, bytes, str]  # make mypy happy
 
 
-def _addr(addr: AddressT) -> Address:
+def _addr(addr: AddressType) -> Address:
     return Address(to_canonical_address(addr))
 
 
@@ -400,7 +400,7 @@ class Env:
             cls._singleton = cls()
         return cls._singleton
 
-    def generate_address(self, alias: Optional[str] = None) -> AddressT:
+    def generate_address(self, alias: Optional[str] = None) -> AddressType:
         self._address_counter += 1
         t = self._address_counter.to_bytes(length=20, byteorder="big")
         # checksum addr easier for humans to debug
@@ -412,8 +412,8 @@ class Env:
 
     def deploy_code(
         self,
-        deploy_to: AddressT = constants.ZERO_ADDRESS,
-        sender: Optional[AddressT] = None,
+        deploy_to: AddressType = constants.ZERO_ADDRESS,
+        sender: Optional[AddressType] = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
@@ -444,8 +444,8 @@ class Env:
 
     def execute_code(
         self,
-        to_address: AddressT = constants.ZERO_ADDRESS,
-        sender: AddressT = None,
+        to_address: AddressType = constants.ZERO_ADDRESS,
+        sender: AddressType = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
