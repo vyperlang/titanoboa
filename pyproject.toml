@@ -21,17 +21,15 @@ dependencies = [
     "eth-typing",
     "hypothesis",
     "pytest",
-#'eth-stdlib; python_version >= "3.10"',
+    "rich",
+    #'eth-stdlib; python_version >= "3.10"',
 
-# required for forking:
+    # required for forking:
     "requests",
 ]
 
 [project.optional-dependencies]
-forking-recommended = [
-    "plyvel",
-    "ujson",
-]
+forking-recommended = ["plyvel", "ujson"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

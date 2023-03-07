@@ -29,9 +29,10 @@ from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id_int
 
 from boa.environment import AddressType, Env, to_int
-from boa.profiling import LineProfile
+from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
+from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import ast_map_of, reason_at
 from boa.vyper.compiler_utils import (
@@ -503,15 +504,17 @@ class VyperContract(_BaseContract):
     def ast_map(self):
         return ast_map_of(self.compiler_data.vyper_module)
 
+    def _get_fn_from_computation(self, computation):
+        node = self.find_source_of(computation.code)
+        if isinstance(node, vy_ast.FunctionDef):
+            return node
+        return node.get_ancestor(vy_ast.FunctionDef)
+
     def debug_frame(self, computation=None):
         if computation is None:
             computation = self._computation
 
-        node = self.find_source_of(computation.code)
-        if node is None:
-            return None
-
-        fn = node.get_ancestor(vy_ast.FunctionDef)
+        fn = self._get_fn_from_computation(computation)
 
         frame_info = self.compiler_data.function_signatures[fn.name].frame_info
 
@@ -553,7 +556,6 @@ class VyperContract(_BaseContract):
         for pc in reversed(code_stream._trace):
             if pc in pc_map and pc_map[pc] in self.ast_map:
                 return self.ast_map[pc_map[pc]]
-
         return None
 
     # ## handling events
@@ -626,6 +628,11 @@ class VyperContract(_BaseContract):
         if computation.is_error:
             self.handle_error(computation)
 
+        # cache gas used for call if profiling is enabled
+        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        if gas_meter == ProfilingGasMeter:
+            cache_gas_used_for_computation(self, computation)
+
         if vyper_typ is None:
             return None
 
@@ -665,8 +672,7 @@ class VyperContract(_BaseContract):
         for child in computation.children:
             child_obj = self.env.lookup_contract(child.msg.code_address)
             if child_obj is not None:
-                ret.merge(child_obj.line_profile(computation))
-
+                ret.merge(child_obj.line_profile(child))
         return ret
 
     @cached_property

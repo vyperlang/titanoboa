@@ -1,9 +1,12 @@
+import contextlib
 from typing import Generator
 
 import hypothesis
 import pytest
 
 import boa
+from boa.profiling import get_call_profile_table, get_line_profile_table
+from boa.vm.gas_meters import ProfilingGasMeter
 
 # monkey patch HypothesisHandle. this fixes underlying isolation for
 # hypothesis.given() and also hypothesis stateful functionality.
@@ -27,12 +30,38 @@ hypothesis.core.HypothesisHandle.__init__ = _HypothesisHandle__init__  # type: i
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "ignore_isolation")
+    config.addinivalue_line("markers", "profile")
 
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Generator:
-    if not item.get_closest_marker("ignore_isolation"):
-        with boa.env.anchor():
+
+    ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
+    profiling_enabled = item.get_closest_marker("profile") is not None
+
+    @contextlib.contextmanager
+    def _toggle_profiling(enabled: bool = False):
+        if enabled:
+            with boa.env.gas_meter_class(ProfilingGasMeter):
+                yield
+        else:
             yield
-    else:
-        yield
+
+    with _toggle_profiling(profiling_enabled):
+        if not ignore_isolation:
+            with boa.env.anchor():
+                yield
+        else:
+            yield
+
+
+def pytest_sessionfinish(session, exitstatus):
+
+    if boa.env._cached_call_profiles:
+        import sys
+
+        from rich.console import Console
+
+        console = Console(file=sys.stdout)
+        console.print(get_call_profile_table(boa.env))
+        console.print(get_line_profile_table(boa.env))
