@@ -497,8 +497,8 @@ class VyperContract(_BaseContract):
         return VyperDeployer(self.compiler_data, env=self.env)
 
     # is this actually useful?
-    def at(self, *args, **kwargs):
-        return self.deployer.wrap(*args, **kwargs)
+    def at(self, address):
+        return self.deployer.at(address)
 
     @cached_property
     def ast_map(self):
