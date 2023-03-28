@@ -62,12 +62,12 @@ class CallGasStats:
         self.net_gas = []
         self.net_tot_gas = []
 
-    def compute_stats(self, typ: str = "net_gas"):
+    def compute_stats(self, typ: str = "net_gas") -> None:
 
         gas_data = getattr(self, typ)
         setattr(self, typ + "_stats", Stats(gas_data))
 
-    def merge_gas_data(self, net_gas: int, net_tot_gas: int):
+    def merge_gas_data(self, net_gas: int, net_tot_gas: int) -> None:
         self.net_gas.append(net_gas)
         self.net_tot_gas.append(net_tot_gas)
 
@@ -273,7 +273,7 @@ def cache_gas_used_for_computation(contract, computation):
             cache_gas_used_for_computation(child_contract, _computation)
 
 
-def _create_table(show_contract: bool = True):
+def _create_table(show_contract: bool = True) -> Table:
 
     table = Table(title="\n")
 
@@ -291,7 +291,7 @@ def _create_table(show_contract: bool = True):
     return table
 
 
-def get_call_profile_table(env: Env):
+def get_call_profile_table(env: Env) -> Table:
 
     table = _create_table()
 
@@ -338,7 +338,7 @@ def get_call_profile_table(env: Env):
     return table
 
 
-def get_line_profile_table(env: Env):
+def get_line_profile_table(env: Env) -> Table:
 
     contracts = {}
     for lp, gas_data in env._cached_line_profiles.items():

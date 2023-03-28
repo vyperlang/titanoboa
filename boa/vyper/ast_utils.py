@@ -33,7 +33,9 @@ def _extract_reason(comment: str) -> Any:
 
 # extract the dev revert reason at a given line.
 # somewhat heuristic.
-def reason_at(source_code, lineno: int, end_lineno: int) -> Optional[Tuple[str, str]]:
+def reason_at(
+    source_code: str, lineno: int, end_lineno: int
+) -> Optional[Tuple[str, str]]:
     block = get_block(source_code, lineno, end_lineno)
     c = _get_comment(block)
     if c is not None:
