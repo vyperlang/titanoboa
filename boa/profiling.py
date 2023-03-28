@@ -196,7 +196,7 @@ class LineProfile:
 
     def get_line_data(self):
         raw_summary = self.raw_summary()
-        raw_summary.sort(reverse=True, key=lambda x: getattr(x[1], "net_gas"))
+        raw_summary.sort(reverse=True, key=lambda x: x[1].net_gas)
 
         line_gas_data = {}
         for (contract, line), datum in raw_summary:
@@ -208,7 +208,7 @@ class LineProfile:
                 lineno=line,
                 line_src=get_line(contract.compiler_data.source_code, line),
             )
-            line_gas_data[line_info] = getattr(datum, "net_gas")
+            line_gas_data[line_info] = datum.net_gas
         return line_gas_data
 
 
