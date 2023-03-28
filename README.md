@@ -8,8 +8,14 @@ Titanoboa achieves feature parity with the vyper compiler while providing an int
 
 ## Installation
 ```
+pip install titanoboa
+```
+
+For latest dev version:
+```
 pip install git+https://github.com/vyperlang/titanoboa
 ```
+
 
 If you are installing titanoboa from git alongside brownie, you may have to manually install titanoboa *after* installing brownie
 
