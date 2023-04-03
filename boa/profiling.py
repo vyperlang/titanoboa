@@ -280,7 +280,7 @@ def _create_table(show_contract: bool = True):
     table.add_column("Contract", justify="right", style="cyan", no_wrap=True)
     if show_contract:
         table.add_column("Address", justify="left", style="cyan", no_wrap=True)
-    table.add_column("Code", justify="left", style="cyan", no_wrap=True)
+    table.add_column("Computation", justify="left", style="cyan", no_wrap=True)
     table.add_column("Count", style="magenta")
     table.add_column("Mean", style="magenta")
     table.add_column("Median", style="magenta")
@@ -329,9 +329,15 @@ def get_call_profile_table(env: Env):
                 cname = profile.contract_name
                 caddr = address
 
-            table.add_row(
-                cname, caddr, profile.fn_name, *stats.net_gas_stats.get_str_repr()
-            )
+            fn_name = profile.fn_name
+
+            if len(cname) > 25:
+                cname = "..." + cname[-10:]
+
+            if len(fn_name) > 10:
+                fn_name = fn_name[:5] + "..."
+
+            table.add_row(cname, caddr, fn_name, *stats.net_gas_stats.get_str_repr())
 
         table.add_section()
 
@@ -364,6 +370,9 @@ def get_line_profile_table(env: Env):
                 if code.endswith("\n"):
                     code = code[:-1]
 
+                if len(code) > 50:
+                    code = code[:60] + " ..."
+
                 stats = Stats(gas_used)
                 data = (contract_name, fn_name, code, *stats.get_str_repr())
                 l_profile.append(data)
@@ -375,7 +384,14 @@ def get_line_profile_table(env: Env):
 
                 cname = ""
                 if c == 0:
-                    cname = contract_name + f".{fn_name}"
+
+                    if len(contract_name) > 20:
+                        contract_name = "..." + contract_name[-10:]
+
+                    if len(fn_name) > 15:
+                        fn_name = fn_name[:5] + "..."
+
+                    cname = contract_name + f"({fn_name})"
 
                 table.add_row(cname, *profile[2:])
 
