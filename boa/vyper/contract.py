@@ -18,6 +18,7 @@ from eth.exceptions import VMError
 from eth_typing import Address
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.ast.utils import parse_to_ast
+from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.compiler import output as compiler_output
@@ -635,8 +636,8 @@ class VyperContract(_BaseContract):
         if vyper_typ is None:
             return None
 
-        # return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi_decode(vyper_typ.abi_type.selector_name(), computation.output)
+        return_typ = calculate_type_for_external_return(vyper_typ)
+        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
         if not isinstance(vyper_typ, TupleT):
