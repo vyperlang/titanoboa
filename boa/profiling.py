@@ -17,7 +17,6 @@ class LineInfo:
     lineno: int
     line_src: str
     fn_name: str
-    invocation: str = ""
 
 
 @dataclass(unsafe_hash=True)
@@ -268,10 +267,8 @@ def cache_gas_used_for_computation(
     if not ignore_line_profile:
 
         line_profile = profile.get_line_data()
-        invocation = f"{contract_name}({fn_name})"
 
         for line, gas_used in line_profile.items():
-            line.invocation = invocation
             env._cached_line_profiles.setdefault(line, []).append(gas_used)
 
     # ------------------------- RECURSION -------------------------
@@ -282,7 +279,7 @@ def cache_gas_used_for_computation(
 
         # ignore black box contracts
         if child_contract is not None:
-            # ignore line profiling for child calls
+            # ignore line profiling for child calls (because it is covered)
             cache_gas_used_for_computation(child_contract, _computation, True)
 
 
