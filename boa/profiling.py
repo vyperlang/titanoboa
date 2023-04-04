@@ -7,7 +7,7 @@ from eth_utils import to_checksum_address
 from rich.table import Table
 
 from boa.environment import Env
-from boa.vyper.ast_utils import get_fn_node_from_lineno, get_line
+from boa.vyper.ast_utils import get_fn_name_from_lineno, get_line
 
 
 @dataclass(unsafe_hash=True)
@@ -201,7 +201,7 @@ class LineProfile:
         line_gas_data = {}
         for (contract, line), datum in raw_summary:
 
-            fn_name = get_fn_node_from_lineno(contract.ast_map, line)
+            fn_name = get_fn_name_from_lineno(contract.ast_map, line)
 
             # here we use net_gas to include child computation costs:
             line_info = LineInfo(
@@ -213,7 +213,7 @@ class LineProfile:
             )
 
             line_gas_data[line_info] = datum.net_gas
-            
+
         return line_gas_data
 
 

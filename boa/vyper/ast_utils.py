@@ -52,7 +52,7 @@ def ast_map_of(ast_node):
     return ast_map
 
 
-def get_fn_node_from_lineno(ast_map, lineno: int):
+def get_fn_name_from_lineno(ast_map, lineno: int):
 
     for source_map, node in ast_map.items():
         if source_map[0] == lineno:
