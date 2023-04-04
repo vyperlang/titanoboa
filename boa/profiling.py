@@ -62,12 +62,12 @@ class CallGasStats:
         self.net_gas = []
         self.net_tot_gas = []
 
-    def compute_stats(self, typ: str = "net_gas"):
+    def compute_stats(self, typ: str = "net_gas") -> None:
 
         gas_data = getattr(self, typ)
         setattr(self, typ + "_stats", Stats(gas_data))
 
-    def merge_gas_data(self, net_gas: int, net_tot_gas: int):
+    def merge_gas_data(self, net_gas: int, net_tot_gas: int) -> None:
         self.net_gas.append(net_gas)
         self.net_tot_gas.append(net_tot_gas)
 
@@ -196,7 +196,7 @@ class LineProfile:
 
     def get_line_data(self):
         raw_summary = self.raw_summary()
-        raw_summary.sort(reverse=True, key=lambda x: getattr(x[1], "net_gas"))
+        raw_summary.sort(reverse=True, key=lambda x: x[1].net_gas)
 
         line_gas_data = {}
         for (contract, line), datum in raw_summary:
@@ -212,8 +212,8 @@ class LineProfile:
                 fn_name=fn_name,
             )
 
-            line_gas_data[line_info] = getattr(datum, "net_gas")
-
+            line_gas_data[line_info] = datum.net_gas
+            
         return line_gas_data
 
 
@@ -283,7 +283,7 @@ def cache_gas_used_for_computation(
             cache_gas_used_for_computation(child_contract, _computation, True)
 
 
-def _create_table(show_contract: bool = True):
+def _create_table(show_contract: bool = True) -> Table:
 
     table = Table(title="\n")
 
@@ -301,7 +301,7 @@ def _create_table(show_contract: bool = True):
     return table
 
 
-def get_call_profile_table(env: Env):
+def get_call_profile_table(env: Env) -> Table:
 
     table = _create_table()
 
@@ -354,7 +354,7 @@ def get_call_profile_table(env: Env):
     return table
 
 
-def get_line_profile_table(env: Env):
+def get_line_profile_table(env: Env) -> Table:
 
     contracts = {}
     for lp, gas_data in env._cached_line_profiles.items():

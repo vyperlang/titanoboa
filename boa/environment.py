@@ -15,7 +15,7 @@ from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
-from eth_abi import decode_single
+from eth_abi import decode
 from eth_typing import Address
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
@@ -126,8 +126,8 @@ def deregister_precompile(address, force=True):
 
 def console_log(computation):
     msgdata = computation.msg.data_as_bytes
-    schema, payload = decode_single("(string,bytes)", msgdata[4:])
-    data = decode_single(schema, payload)
+    schema, payload = decode(["(string,bytes)"], [msgdata[4:]])
+    data = decode([schema], [payload])
     print(*data, file=sys.stderr)
     return computation
 

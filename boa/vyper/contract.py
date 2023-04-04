@@ -49,8 +49,13 @@ try:
     from eth.codecs.abi import encode as abi_encode
 
 except ImportError:
-    from eth_abi import decode_single as abi_decode  # type: ignore
-    from eth_abi import encode_single as abi_encode  # type: ignore
+    import eth_abi
+
+    def abi_decode(schema, data):
+        return eth_abi.decode([schema], [data])
+
+    def abi_encode(schema, data):
+        return eth_abi.encode([schema], [data])
 
 
 # error messages for external calls
