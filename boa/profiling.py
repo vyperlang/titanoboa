@@ -7,7 +7,7 @@ from eth_utils import to_checksum_address
 from rich.table import Table
 
 from boa.environment import Env
-from boa.vyper.ast_utils import get_line
+from boa.vyper.ast_utils import get_fn_node_from_lineno, get_line
 
 
 @dataclass(unsafe_hash=True)
@@ -16,7 +16,8 @@ class LineInfo:
     contract_name: str
     lineno: int
     line_src: str
-    fn_name: str = ""
+    fn_name: str
+    invocation: str = ""
 
 
 @dataclass(unsafe_hash=True)
@@ -201,14 +202,19 @@ class LineProfile:
         line_gas_data = {}
         for (contract, line), datum in raw_summary:
 
+            fn_name = get_fn_node_from_lineno(contract.ast_map, line)
+
             # here we use net_gas to include child computation costs:
             line_info = LineInfo(
                 address=contract.address,
                 contract_name=contract.compiler_data.contract_name,
                 lineno=line,
                 line_src=get_line(contract.compiler_data.source_code, line),
+                fn_name=fn_name,
             )
+
             line_gas_data[line_info] = getattr(datum, "net_gas")
+
         return line_gas_data
 
 
@@ -219,12 +225,13 @@ class _String(str):
 
 
 # cache gas_used for all computation (including children)
-def cache_gas_used_for_computation(contract, computation):
+def cache_gas_used_for_computation(
+    contract, computation, ignore_line_profile: bool = False
+):
 
     profile = contract.line_profile(computation)
     env = contract.env
-
-    line_profile = profile.get_line_data()
+    contract_name = contract.compiler_data.contract_name
 
     # -------------------- CACHE CALL PROFILE --------------------
     # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
@@ -244,7 +251,7 @@ def cache_gas_used_for_computation(contract, computation):
         fn_name = "unnamed"
 
     fn = ContractMethodInfo(
-        contract_name=contract.compiler_data.contract_name,
+        contract_name=contract_name,
         address=to_checksum_address(contract.address),
         fn_name=fn_name,
     )
@@ -258,19 +265,25 @@ def cache_gas_used_for_computation(contract, computation):
         s.append(fn)
 
     # -------------------- CACHE LINE PROFILE --------------------
+    if not ignore_line_profile:
 
-    for line, gas_used in line_profile.items():
-        line.fn_name = fn_name
-        env._cached_line_profiles.setdefault(line, []).append(gas_used)
+        line_profile = profile.get_line_data()
+        invocation = f"{contract_name}({fn_name})"
+
+        for line, gas_used in line_profile.items():
+            line.invocation = invocation
+            env._cached_line_profiles.setdefault(line, []).append(gas_used)
 
     # ------------------------- RECURSION -------------------------
 
     # recursion for child computations
     for _computation in computation.children:
         child_contract = env.lookup_contract(_computation.msg.code_address)
+
         # ignore black box contracts
         if child_contract is not None:
-            cache_gas_used_for_computation(child_contract, _computation)
+            # ignore line profiling for child calls
+            cache_gas_used_for_computation(child_contract, _computation, True)
 
 
 def _create_table(show_contract: bool = True):

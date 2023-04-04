@@ -11,7 +11,13 @@ def external_contract():
 @external
 @view
 def foo(a: uint256) -> uint256:
-    return unsafe_div(isqrt(a) * 100, 2)
+    return self._foo(a)
+
+
+@internal
+@pure
+def _foo(b: uint256) -> uint256:
+    return unsafe_div(isqrt(b) * 100, 2)
 """
     return boa.loads(source_code, name="ExternalContract")
 

@@ -48,3 +48,20 @@ def ast_map_of(ast_node):
     for node in nodes:
         ast_map[getpos(node)] = node
     return ast_map
+
+
+def get_fn_node_from_lineno(ast_map, lineno: int):
+
+    for source_map, node in ast_map.items():
+        if source_map[0] == lineno:
+            break
+
+    def _walk_to_fn_node(_node):
+
+        if _node.ast_type == "FunctionDef":
+            return _node
+
+        return _walk_to_fn_node(_node.get_ancestor())
+
+    fn_node = _walk_to_fn_node(node)
+    return fn_node.name
