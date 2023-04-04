@@ -58,10 +58,12 @@ def get_fn_node_from_lineno(ast_map, lineno: int):
 
     def _walk_to_fn_node(_node):
 
+        if _node is None:
+            return ""
+
         if _node.ast_type == "FunctionDef":
-            return _node
+            return _node.name
 
         return _walk_to_fn_node(_node.get_ancestor())
 
-    fn_node = _walk_to_fn_node(node)
-    return fn_node.name
+    return _walk_to_fn_node(node)

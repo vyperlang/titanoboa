@@ -372,6 +372,7 @@ def get_line_profile_table(env: Env):
     table = _create_table(show_contract=False)
     for (contract_name, _), fn_data in contracts.items():
 
+        num_fn = 0
         for fn_name, _data in fn_data.items():
 
             l_profile = []
@@ -401,9 +402,15 @@ def get_line_profile_table(env: Env):
                     if len(fn_name) > 15:
                         fn_name = fn_name[:5] + "..."
 
-                    cname = contract_name + f"({fn_name})"
+                    cname = contract_name
+                    if fn_name:
+                        cname += f"({fn_name})"
 
                 table.add_row(cname, *profile[2:])
+
+            if not num_fn + 1 == len(fn_data):
+                table.add_row("", "-" * 64, *[""] * (len(profile[2:]) - 1))
+                num_fn += 1
 
         table.add_section()
 
