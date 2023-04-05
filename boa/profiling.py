@@ -225,9 +225,7 @@ class _String(str):
 
 
 # cache gas_used for all computation (including children)
-def cache_gas_used_for_computation(
-    contract, computation, ignore_line_profile: bool = False
-):
+def cache_gas_used_for_computation(contract, computation):
 
     profile = contract.line_profile(computation)
     env = contract.env
@@ -265,12 +263,10 @@ def cache_gas_used_for_computation(
         s.append(fn)
 
     # -------------------- CACHE LINE PROFILE --------------------
-    if not ignore_line_profile:
+    line_profile = profile.get_line_data()
 
-        line_profile = profile.get_line_data()
-
-        for line, gas_used in line_profile.items():
-            env._cached_line_profiles.setdefault(line, []).append(gas_used)
+    for line, gas_used in line_profile.items():
+        env._cached_line_profiles.setdefault(line, []).append(gas_used)
 
     # ------------------------- RECURSION -------------------------
 
@@ -280,8 +276,7 @@ def cache_gas_used_for_computation(
 
         # ignore black box contracts
         if child_contract is not None:
-            # ignore line profiling for child calls (because it is covered)
-            cache_gas_used_for_computation(child_contract, _computation, True)
+            cache_gas_used_for_computation(child_contract, _computation)
 
 
 def _create_table(show_contract: bool = True) -> Table:
