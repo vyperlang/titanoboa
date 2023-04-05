@@ -48,10 +48,12 @@ def pytest_collection_modifyitems(config, items):
 
             ignore_isolation = item.get_closest_marker("ignore_isolation")
             ignore_profiling = item.get_closest_marker("ignore_profiling")
-            if ignore_isolation or ignore_profiling:
-                continue
 
-            item.add_marker("profile")
+            if not ignore_profiling:
+                item.add_market("profile")
+
+            if ignore_isolation:
+                continue
 
 
 @pytest.hookimpl(hookwrapper=True)
