@@ -416,6 +416,8 @@ def get_line_profile_table(env: Env) -> Table:
 
                 cname = ""
                 if c == 0:
+                    if len(fn_name) > 30:
+                        fn_name = fn_name[:30] + "..."
                     cname = f"Function: {fn_name}"
 
                 table.add_row(cname, *profile[2:])
