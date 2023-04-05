@@ -43,12 +43,10 @@ def pytest_configure(config):
 def pytest_collection_modifyitems(config, items):
 
     if config.getoption("profile"):
-
         for item in items:
-
             ignore_profiling = item.get_closest_marker("ignore_profiling")
             if not ignore_profiling:
-                item.add_market("profile")
+                item.add_marker("profile")
 
 
 @pytest.hookimpl(hookwrapper=True)

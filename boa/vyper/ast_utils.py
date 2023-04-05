@@ -54,11 +54,11 @@ def ast_map_of(ast_node):
 
 
 def get_fn_name_from_lineno(ast_map, lineno: int):
-
     for source_map, node in ast_map.items():
         if source_map[0] == lineno:
             if isinstance(node, vy_ast.FunctionDef):
                 return node.name
-            return node.get_ancestor(vy_ast.FunctionDef).name
-
+            fn_node = node.get_ancestor(vy_ast.FunctionDef)
+            if fn_node:
+                return fn_node.name
     return ""
