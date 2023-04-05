@@ -1,3 +1,4 @@
+import os
 import statistics
 from dataclasses import dataclass
 from functools import cached_property
@@ -287,7 +288,7 @@ def _create_table(show_contract: bool = True) -> Table:
 
     table = Table(title="\n")
 
-    table.add_column("Contract", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Contract", justify="left", style="cyan", no_wrap=True)
     if show_contract:
         table.add_column("Address", justify="left", style="cyan", no_wrap=True)
     table.add_column("Computation", justify="left", style="cyan", no_wrap=True)
@@ -341,11 +342,11 @@ def get_call_profile_table(env: Env) -> Table:
 
             fn_name = profile.fn_name
 
-            if len(cname) > 25:
-                cname = "..." + cname[-10:]
+            if len(cname) > 45:
+                cname = "..." + cname[-45:]
 
-            if len(fn_name) > 10:
-                fn_name = fn_name[:5] + "..."
+            if len(fn_name) > 25:
+                fn_name = fn_name[:25] + "..."
 
             table.add_row(cname, caddr, fn_name, *stats.net_gas_stats.get_str_repr())
 
@@ -370,7 +371,26 @@ def get_line_profile_table(env: Env) -> Table:
         )
 
     table = _create_table(show_contract=False)
-    for (contract_name, _), fn_data in contracts.items():
+    for (contract_name, contract_address), fn_data in contracts.items():
+
+        contract_file_path = os.path.split(contract_name)
+        contract_data_str = (
+            f"Path: {contract_file_path[0]}\n"
+            f"Name: {contract_file_path[1]}\n"
+            f"Address: {contract_address}\n"
+            f"{'-'*52}"
+        )
+
+        table.add_row(
+            contract_data_str,
+            "\n\n\n" + "-" * 74,
+            "\n\nCount\n-----",
+            "\n\nMean\n-----",
+            "\n\nMedian\n-----",
+            "\n\nStdev\n-----",
+            "\n\nMin\n-----",
+            "\n\nMax\n-----",
+        )
 
         num_fn = 0
         for fn_name, _data in fn_data.items():
@@ -381,8 +401,8 @@ def get_line_profile_table(env: Env) -> Table:
                 if code.endswith("\n"):
                     code = code[:-1]
 
-                if len(code) > 50:
-                    code = code[:60] + " ..."
+                if len(code) > 70:
+                    code = code[:70] + " ..."
 
                 stats = Stats(gas_used)
                 data = (contract_name, fn_name, code, *stats.get_str_repr())
@@ -395,21 +415,12 @@ def get_line_profile_table(env: Env) -> Table:
 
                 cname = ""
                 if c == 0:
-
-                    if len(contract_name) > 20:
-                        contract_name = "..." + contract_name[-10:]
-
-                    if len(fn_name) > 15:
-                        fn_name = fn_name[:5] + "..."
-
-                    cname = contract_name
-                    if fn_name:
-                        cname += f"({fn_name})"
+                    cname = f"Function: {fn_name}"
 
                 table.add_row(cname, *profile[2:])
 
             if not num_fn + 1 == len(fn_data):
-                table.add_row("", "-" * 64, *[""] * (len(profile[2:]) - 1))
+                table.add_row("-" * 52, "-" * 74, *["-----"] * (len(profile[2:]) - 1))
                 num_fn += 1
 
         table.add_section()
