@@ -317,19 +317,20 @@ def get_call_profile_table(env: Env) -> Table:
 
     # arrange from most to least expensive contracts:
     sort_gas = sorted(contract_vs_mean_gas, key=lambda x: x[0], reverse=True)
+    sorted_addresses = list(set([x[1] for x in sort_gas]))
 
     # --------------- POPULATE TABLE -----------------
 
-    for (_, address) in sort_gas:
+    for address in sorted_addresses:
 
         fn_vs_mean_gas = []
         for profile in cached_contracts[address]:
             fn_vs_mean_gas.append((cache[profile].net_gas_stats.avg_gas, profile))
 
         # arrange from most to least expensive contracts:
-        sort_gas = sorted(fn_vs_mean_gas, key=lambda x: x[0], reverse=True)
+        fn_vs_mean_gas = sorted(fn_vs_mean_gas, key=lambda x: x[0], reverse=True)
 
-        for c, (_, profile) in enumerate(sort_gas):
+        for c, (_, profile) in enumerate(fn_vs_mean_gas):
 
             stats = cache[profile]
 
