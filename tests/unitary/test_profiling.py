@@ -11,7 +11,13 @@ def external_contract():
 @external
 @view
 def foo(a: uint256) -> uint256:
-    return unsafe_div(isqrt(a) * 100, 2)
+    return self._foo(a)
+
+
+@internal
+@pure
+def _foo(b: uint256) -> uint256:
+    return unsafe_div(isqrt(b) * 100, 2)
 """
     return boa.loads(source_code, name="ExternalContract")
 
@@ -67,11 +73,15 @@ def _barfoo(a: uint256, b: uint256, c: uint256) -> uint256:
 @pytest.mark.parametrize(
     "a,b,c", [(42, 69, 150), (420, 690, 20000), (42, 690, 10000), (420, 69, 5000)]
 )
+@pytest.mark.ignore_profiling
 def test_ignore_profiling(variable_loop_contract, a, b, c):
 
+    cached_profiles = [boa.env._cached_call_profiles, boa.env._cached_line_profiles]
+
     variable_loop_contract.foo(a, b, c)
-    assert not boa.env._cached_call_profiles
-    assert not boa.env._cached_line_profiles
+
+    assert boa.env._cached_call_profiles == cached_profiles[0]
+    assert boa.env._cached_line_profiles == cached_profiles[1]
 
 
 @pytest.mark.parametrize(
@@ -126,3 +136,31 @@ def bar():
 """
     contract = boa.loads(source_code, name="EmptyFooContract")
     contract.bar()
+
+
+@pytest.mark.profile
+def test_profile_long_contract():
+
+    source_code = """
+@external
+@view
+def bar() -> uint256:
+    a: uint256 = 1 + 2 + 123124129847129847120 + 1028371928319724128 - 123123 - 123123 + 12312938712983712  # noqa: E501
+    return a
+"""
+    contract = boa.loads(source_code, name="LongFooContract")
+    contract.bar()
+
+
+@pytest.mark.profile
+def test_profile_long_names():
+
+    source_code = """
+@external
+@view
+def bar_foo_baz_foobar_baz_something_something_anything_nothing_everything() -> uint256:
+    a: uint256 = 1 + 2 + 123124129847129847120 + 1028371928319724128 - 123123 - 123123 + 12312938712983712  # noqa: E501
+    return a
+"""
+    contract = boa.loads(source_code, name="LongFooBarBazNameContract")
+    contract.bar_foo_baz_foobar_baz_something_something_anything_nothing_everything()
