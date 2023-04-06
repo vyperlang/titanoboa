@@ -54,6 +54,7 @@ def ast_map_of(ast_node):
 
 
 def get_fn_name_from_lineno(ast_map, lineno: int):
+    # TODO: this could be a performance bottleneck
     for source_map, node in ast_map.items():
         if source_map[0] == lineno:
             if isinstance(node, vy_ast.FunctionDef):
