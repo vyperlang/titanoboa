@@ -100,6 +100,10 @@ def patch_opcode(opcode_value, fn):
     global _opcode_overrides
     _opcode_overrides[opcode_value] = fn
 
+def _breakpoint(computation):
+    breakpoint()
+
+patch_opcode(0xA6, _breakpoint)
 
 # _precompiles is a global which is loaded to the env computation
 # every time one is created. the reasoning is that it would seem
