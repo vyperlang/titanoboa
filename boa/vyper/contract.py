@@ -367,9 +367,9 @@ class VarModel:
 
                 ty = self.typ
                 for i, p in enumerate(path):
-                    path[i] = decode_vyper_object(memoryview(p), ty.keytype)
-                    path_t.append(ty.keytype)
-                    ty = ty.valuetype
+                    path[i] = decode_vyper_object(memoryview(p), ty.key_type)
+                    path_t.append(ty.key_type)
+                    ty = ty.value_type
 
                 val = self._decode(to_int(k), ty, truncate_limit)
 

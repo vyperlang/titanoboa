@@ -3,6 +3,7 @@ import re
 import tokenize
 from typing import Any, Optional, Tuple
 
+import vyper.ast as vy_ast
 from vyper.codegen.core import getpos
 
 
@@ -50,3 +51,15 @@ def ast_map_of(ast_node):
     for node in nodes:
         ast_map[getpos(node)] = node
     return ast_map
+
+
+def get_fn_name_from_lineno(ast_map, lineno: int):
+    # TODO: this could be a performance bottleneck
+    for source_map, node in ast_map.items():
+        if source_map[0] == lineno:
+            if isinstance(node, vy_ast.FunctionDef):
+                return node.name
+            fn_node = node.get_ancestor(vy_ast.FunctionDef)
+            if fn_node:
+                return fn_node.name
+    return ""
