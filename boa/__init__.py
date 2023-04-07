@@ -31,6 +31,15 @@ def reset_env():
     set_env(Env())
 
 
+def _breakpoint(computation):
+    global env
+    env._computation = computation
+    breakpoint()
+
+
+patch_opcode(0xA6, _breakpoint)
+
+
 @contextlib.contextmanager
 def reverts(*args, **kwargs):
     try:
