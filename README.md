@@ -1,11 +1,21 @@
 # Titanoboa
 
-An experimental [Vyper](https://github.com/vyperlang/vyper) interpreter
+A [Vyper](https://github.com/vyperlang/vyper) interpreter with pretty tracebacks, forking, debugging features and more! Titanoboa's goal is to provide a modern, advanced and integrated development experience for vyper users.
+
+## Architecture
+
+Titanoboa achieves feature parity with the vyper compiler while providing an interpreted experience. How does it do this? Internally, titanoboa uses vyper as a library to compile source code to bytecode, and then runs the bytecode using [py-evm](https://github.com/ethereum/py-evm), adding instrumenting hooks to provide introspection. The use of `py-evm` means that the entire experience is highly configurable, down to the ability to patch opcodes and precompiles at the EVM level.
 
 ## Installation
 ```
+pip install titanoboa
+```
+
+For latest dev version:
+```
 pip install git+https://github.com/vyperlang/titanoboa
 ```
+
 
 If you are installing titanoboa from git alongside brownie, you may have to manually install titanoboa *after* installing brownie
 
@@ -17,6 +27,7 @@ pip install git+https://github.com/vyperlang/titanoboa
 To get a performance boost for mainnet forking, install with the `forking-recommended` extra (`pip install "git+https://github.com/vyperlang/titanoboa#egg=titanoboa[forking-recommended]"`, or `pip install titanoboa[forking-recommended]`). This installs `plyvel` to cache RPC results between sessions, and `ujson` which improves json performance.
 
 If you are running titanoboa on a local [Vyper](https://github.com/vyperlang/vyper) project folder, you might need to run `python setup.py install` on your [Vyper](https://github.com/vyperlang/vyper) project if you encounter errors such as `ModuleNotFoundError: No module named 'vyper.version'`
+
 ## Background
 
 Titanoboa (/tiˌtɑːnoʊˈboʊə/) is an extinct genus of very large snakes that lived in what is now La Guajira in northeastern Colombia. They could grow up to 12.8 m (42 ft), perhaps even 14.3 m (47 ft) long and reach a weight of 1,135 kg (2,500 lb). This snake lived during the Middle to Late Paleocene epoch, around 60 to 58 million years ago following the extinction of the dinosaurs. Although originally thought to be an apex predator, the discovery of skull bones revealed that it was more than likely specialized in preying on fish. The only known species is Titanoboa cerrejonensis, the largest snake ever discovered,[1] which supplanted the previous record holder, Gigantophis garstini.[2]
@@ -78,7 +89,7 @@ def foo() -> uint256:
 >>> 1000000000000000000000000000000000000
 ```
 
-### Expecting BoaErrors
+### Expecting BoaErrors / handling reverts
 ```python
 >>> import boa
 >>> erc20 = boa.load("examples/ERC20.vy", "titanoboa", "boa", 18, 0)
@@ -178,5 +189,5 @@ Cast current deployed addresses to vyper contract
 
 basic tests:
 ```bash
-$ python -m tests.sim_veYFI
+$ python -m tests.integration.sim_veYFI
 ```

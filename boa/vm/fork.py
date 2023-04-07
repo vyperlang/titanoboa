@@ -33,6 +33,8 @@ def _to_hex(s: int) -> str:
 
 
 def _to_int(hex_str: str) -> int:
+    if hex_str == "0x":
+        return 0
     return int(hex_str, 16)
 
 
@@ -97,7 +99,7 @@ class CachingRPC:
 
         if len(batch) > 0:
             res = self._raw_fetch_multi(batch)
-            for (i, s) in res.items():
+            for i, s in res.items():
                 k = ks[i]
                 ret[i] = s
                 self._db[k] = json.dumps(s).encode("utf-8")
@@ -113,7 +115,7 @@ class CachingRPC:
     def _raw_fetch_multi(self, payloads):
         # TODO: batch requests
         req = []
-        for (i, method, params) in payloads:
+        for i, method, params in payloads:
             req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
         res.raise_for_status()

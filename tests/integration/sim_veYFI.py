@@ -48,14 +48,14 @@ timeit("load YFI")
 _rewards_pool_address = format_addr("rewards_pool")
 
 veYFI = boa.load(
-    "tests/veYFI.vy",
+    "tests/integration/veYFI.vy",
     YFI.address,
     _rewards_pool_address,
     override_address=format_addr("veYFI"),
 )
 timeit("load veYFI")
 rewards_pool = boa.load(
-    "tests/RewardPool.vy",
+    "tests/integration/RewardPool.vy",
     veYFI.address,
     START_TIME,
     override_address=_rewards_pool_address,

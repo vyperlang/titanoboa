@@ -1,15 +1,15 @@
 import textwrap
 
 import vyper.ast as vy_ast
-import vyper.semantics.validation as validation
+import vyper.semantics.analysis as analysis
 from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir as compile_ir
-from vyper.semantics.validation.utils import get_exact_type_from_node
-from vyper.utils import abi_method_id
+from vyper.semantics.analysis.utils import get_exact_type_from_node
+from vyper.utils import method_id_int
 
 from boa.vyper import _METHOD_ID_VAR
 
@@ -28,8 +28,8 @@ def _compile_vyper_function(vyper_function, contract):
 
     # override namespace and add wrapper code at the top
     with contract.override_vyper_namespace():
-        validation.add_module_namespace(ast, ifaces)
-        validation.validate_functions(ast)
+        analysis.add_module_namespace(ast, ifaces)
+        analysis.validate_functions(ast)
 
     ast = ast.body[0]
     sig = FunctionSignature.from_definition(ast, global_ctx)
@@ -39,7 +39,7 @@ def _compile_vyper_function(vyper_function, contract):
     ir = generate_ir_for_function(ast, sigs, global_ctx, False)
 
     ir = IRnode.from_list(
-        ["with", _METHOD_ID_VAR, abi_method_id(sig.base_signature), ir]
+        ["with", _METHOD_ID_VAR, method_id_int(sig.base_signature), ir]
     )
     assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
 
@@ -50,7 +50,7 @@ def _compile_vyper_function(vyper_function, contract):
     bytecode += contract.data_section
     typ = sig.return_type
 
-    return bytecode, source_map, typ
+    return ast, bytecode, source_map, typ
 
 
 def generate_bytecode_for_internal_fn(fn):
@@ -88,7 +88,7 @@ def generate_bytecode_for_internal_fn(fn):
             {fn_call}
     """
     )
-    return _compile_vyper_function(wrapper_code, contract)
+    return _compile_vyper_function(wrapper_code, contract)[1:]
 
 
 def generate_bytecode_for_arbitrary_stmt(source_code, contract):
@@ -119,4 +119,4 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
             {debug_body}
     """
     )
-    return _compile_vyper_function(wrapper_code, contract)
+    return _compile_vyper_function(wrapper_code, contract)[1:]

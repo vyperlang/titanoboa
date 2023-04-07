@@ -77,6 +77,7 @@ class VMPatcher:
                 snap[attr] = getattr(self, attr)
 
         try:
+
             yield
 
         finally:
@@ -85,10 +86,10 @@ class VMPatcher:
                     setattr(self, attr, snap[attr])
 
 
-AddressT = Union[Address, bytes, str]  # make mypy happy
+AddressType = Union[Address, bytes, str]  # make mypy happy
 
 
-def _addr(addr: AddressT) -> Address:
+def _addr(addr: AddressType) -> Address:
     return Address(to_canonical_address(addr))
 
 
@@ -266,6 +267,10 @@ class Env:
 
         self._contracts = {}
 
+        self._profiled_contracts = {}
+        self._cached_call_profiles = {}
+        self._cached_line_profiles = {}
+
     def _init_vm(self):
         self.vm = self.chain.get_vm()
 
@@ -395,7 +400,7 @@ class Env:
             cls._singleton = cls()
         return cls._singleton
 
-    def generate_address(self, alias: Optional[str] = None) -> AddressT:
+    def generate_address(self, alias: Optional[str] = None) -> AddressType:
         self._address_counter += 1
         t = self._address_counter.to_bytes(length=20, byteorder="big")
         # checksum addr easier for humans to debug
@@ -407,8 +412,8 @@ class Env:
 
     def deploy_code(
         self,
-        deploy_to: AddressT = constants.ZERO_ADDRESS,
-        sender: Optional[AddressT] = None,
+        deploy_to: AddressType = constants.ZERO_ADDRESS,
+        sender: Optional[AddressType] = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
@@ -439,8 +444,8 @@ class Env:
 
     def execute_code(
         self,
-        to_address: AddressT = constants.ZERO_ADDRESS,
-        sender: AddressT = None,
+        to_address: AddressType = constants.ZERO_ADDRESS,
+        sender: AddressType = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
@@ -468,6 +473,25 @@ class Env:
         msg._start_pc = start_pc  # type: ignore
         tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
+
+    # function to time travel
+    def time_travel(
+        self,
+        seconds: Optional[int] = None,
+        blocks: Optional[int] = None,
+        block_delta: int = 12,
+    ) -> None:
+
+        if (seconds is None) == (blocks is None):
+            raise ValueError("One of seconds or blocks should be set")
+        if seconds is not None:
+            blocks = seconds // block_delta
+        else:
+            assert blocks is not None  # mypy hint
+            seconds = blocks * block_delta
+
+        self.vm.patch.timestamp += seconds
+        self.vm.patch.block_number += blocks
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}

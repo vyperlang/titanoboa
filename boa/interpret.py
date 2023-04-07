@@ -36,8 +36,11 @@ def compiler_data(source_code: str, contract_name: str) -> CompilerData:
 
 
 def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
+    name = filename
+    if "name" in kwargs:
+        name = kwargs.pop("name")
     with open(filename) as f:
-        return loads(f.read(), *args, name=filename, **kwargs)
+        return loads(f.read(), *args, name=name, **kwargs)
 
 
 def loads(source_code, *args, as_blueprint=False, name=None, **kwargs):
