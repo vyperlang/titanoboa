@@ -60,7 +60,7 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
         raise ValueError("Cannot ignore profiling and profile at the same time")
 
     @contextlib.contextmanager
-    def _toggle_profiling(enabled: bool = False):
+    def _toggle_profiling(enabled: bool = False) -> Generator:
         if enabled:
             with boa.env.gas_meter_class(ProfilingGasMeter):
                 yield

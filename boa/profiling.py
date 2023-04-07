@@ -357,7 +357,7 @@ def get_call_profile_table(env: Env) -> Table:
 
 def get_line_profile_table(env: Env) -> Table:
 
-    contracts = {}
+    contracts: dict = {}
     for lp, gas_data in env._cached_line_profiles.items():
 
         contract_uid = (lp.contract_name, lp.address)
