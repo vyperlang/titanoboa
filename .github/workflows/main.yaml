@@ -12,7 +12,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
 
-    name: "tests: py${{ matrix.python-version }}"
+    name: "tests: Python ${{ matrix.python-version }}"
 
     steps:
       - uses: actions/checkout@v2
