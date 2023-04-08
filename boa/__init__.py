@@ -7,6 +7,7 @@ from boa.environment import (
     enable_pyevm_verbose_logging,
     patch_opcode,
     register_precompile,
+    precompile
 )
 from boa.interpret import BoaError, load, load_partial, loads, loads_partial
 from boa.vyper.contract import check_boa_error_matches
