@@ -6,6 +6,10 @@ A [Vyper](https://github.com/vyperlang/vyper) interpreter with pretty tracebacks
 
 Titanoboa achieves feature parity with the vyper compiler while providing an interpreted experience. How does it do this? Internally, titanoboa uses vyper as a library to compile source code to bytecode, and then runs the bytecode using [py-evm](https://github.com/ethereum/py-evm), adding instrumenting hooks to provide introspection. The use of `py-evm` means that the entire experience is highly configurable, down to the ability to patch opcodes and precompiles at the EVM level.
 
+## Documentation
+
+Read the [documentation](https://titanoboa.readthedocs.io/en/latest/index.html) for more details on how to use titanoboa.
+
 ## Installation
 ```
 pip install titanoboa
