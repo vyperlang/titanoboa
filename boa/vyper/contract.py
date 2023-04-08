@@ -771,6 +771,7 @@ class VyperContract(_BaseContract):
                 data=method_id,
                 value=value,
                 gas=gas,
+                contract=self,
             )
 
             ret = self.marshal_to_python(c, typ)
@@ -897,10 +898,11 @@ class VyperFunction:
             computation = self.env.execute_code(
                 to_address=self.contract.address,
                 bytecode=self._bytecode,
-                data=calldata_bytes,
                 sender=sender,
+                data=calldata_bytes,
                 value=value,
                 gas=gas,
+                contract=self.contract,
             )
 
             typ = self.fn_signature.return_type

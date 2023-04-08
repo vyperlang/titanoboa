@@ -10,6 +10,7 @@ from boa.environment import (
 )
 from boa.interpret import BoaError, load, load_partial, loads, loads_partial
 from boa.vyper.contract import check_boa_error_matches
+from boa.debugger import BoaDebug
 
 # turn off tracebacks if we are in repl
 # https://stackoverflow.com/a/64523765
@@ -32,9 +33,7 @@ def reset_env():
 
 
 def _breakpoint(computation):
-    global env
-    env._computation = computation
-    breakpoint()
+    BoaDebug(computation).cmdloop()
 
 
 patch_opcode(0xA6, _breakpoint)
