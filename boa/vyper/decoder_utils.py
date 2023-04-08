@@ -47,7 +47,7 @@ class ByteAddressableStorage:
 def decode_vyper_object(mem, typ):
     if isinstance(typ, BytesM_T):
         # TODO tag return value like `vyper_object` does
-        return mem[: typ._bytes_info.m].tobytes()
+        return mem[: typ.m_bits].tobytes()
     if isinstance(typ, AddressT):
         return to_checksum_address(mem[12:32].tobytes())
     if isinstance(typ, BoolT):
