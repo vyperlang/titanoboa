@@ -452,6 +452,7 @@ class Env:
         data: bytes = b"",
         start_pc: int = 0,
         fake_codesize: int = None,
+        contract: Any = None,  # the calling VyperContract
     ) -> Any:
         if gas is None:
             gas = self.vm.state.gas_limit
@@ -471,6 +472,7 @@ class Env:
         )
         msg._fake_codesize = fake_codesize  # type: ignore
         msg._start_pc = start_pc  # type: ignore
+        msg._contract = contract
         tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
