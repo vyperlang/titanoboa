@@ -12,9 +12,12 @@ class BoaDebug(cmd.Cmd):
         self.contract = computation.msg._contract
         self.contract._computation = computation
 
+    @property
+    def intro(self):
+        computation = self.contract._computation
         ast_source = self.contract.find_source_of(computation.code)
         if ast_source is not None:
-            print(VyperException("breakpoint at:", ast_source), file=self.stdout)
+            return str(VyperException("breakpoint at:", ast_source))
 
     def do_show_contract(self, *args):
         print(self.contract, file=self.stdout)
