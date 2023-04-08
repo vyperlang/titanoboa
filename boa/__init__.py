@@ -33,7 +33,7 @@ def reset_env():
 
 
 def _breakpoint(computation):
-    BoaDebug(computation).cmdloop()
+    BoaDebug(computation).start()
 
 
 patch_opcode(0xA6, _breakpoint)
