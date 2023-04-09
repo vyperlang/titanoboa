@@ -35,7 +35,7 @@ from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vyper import _METHOD_ID_VAR
-from boa.vyper.ast_utils import ast_map_of, get_fn_node_from_node, reason_at
+from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
     _compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
@@ -497,7 +497,7 @@ class VyperContract(_BaseContract):
 
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation.code)
-        fn_node = get_fn_node_from_node(node)
+        fn_node = get_fn_ancestor_from_node(node)
         if fn_node:
             return fn_node
 
