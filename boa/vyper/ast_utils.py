@@ -65,8 +65,10 @@ def get_fn_name_from_lineno(ast_map: dict, lineno: int) -> str:
 
 def get_fn_node_from_node(node):
 
+    if node is None:
+        return None
+
     if isinstance(node, vy_ast.FunctionDef):
         return node
-    fn_node = node.get_ancestor(vy_ast.FunctionDef)
-    if fn_node:
-        return fn_node
+
+    return node.get_ancestor(vy_ast.FunctionDef)
