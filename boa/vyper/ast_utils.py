@@ -57,9 +57,16 @@ def get_fn_name_from_lineno(ast_map: dict, lineno: int) -> str:
     # TODO: this could be a performance bottleneck
     for source_map, node in ast_map.items():
         if source_map[0] == lineno:
-            if isinstance(node, vy_ast.FunctionDef):
-                return node.name
-            fn_node = node.get_ancestor(vy_ast.FunctionDef)
+            fn_node = get_fn_node_from_node(node)
             if fn_node:
                 return fn_node.name
     return ""
+
+
+def get_fn_node_from_node(node):
+
+    if isinstance(node, vy_ast.FunctionDef):
+        return node
+    fn_node = node.get_ancestor(vy_ast.FunctionDef)
+    if fn_node:
+        return fn_node
