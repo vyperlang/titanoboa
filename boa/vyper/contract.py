@@ -497,9 +497,7 @@ class VyperContract(_BaseContract):
 
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation.code)
-        fn_node = get_fn_ancestor_from_node(node)
-        if fn_node:
-            return fn_node
+        return get_fn_ancestor_from_node(node)
 
     def debug_frame(self, computation=None):
         if computation is None:
