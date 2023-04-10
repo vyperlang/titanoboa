@@ -6,10 +6,10 @@ from boa.environment import (
     deregister_precompile,
     enable_pyevm_verbose_logging,
     patch_opcode,
-    precompile,
     register_precompile,
 )
 from boa.interpret import BoaError, load, load_partial, loads, loads_partial
+from boa.precompile import precompile
 from boa.vyper.contract import check_boa_error_matches
 
 # turn off tracebacks if we are in repl

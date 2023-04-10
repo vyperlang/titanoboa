@@ -109,40 +109,6 @@ def patch_opcode(opcode_value, fn):
 _precompiles = {}
 
 
-def extract_arg_types(signature: str) -> str:
-    # Extract argument types and their names using regex
-
-    args = signature.split("(")[1].split(")")[0].split(",")
-    cleaned_args = [x.split(":")[1].strip().split("[")[0].lower() for x in args]
-
-    # Combine the cleaned argument types and return them in parentheses
-    return f"({', '.join(cleaned_args)})"
-
-
-def precompile(signature: str):
-    def decorator(func):
-        def wrapper(computation):
-            # Decode input arguments from message data
-            message_data = computation.msg.data_as_bytes
-            input_args = abi.decode(extract_arg_types(signature), message_data[4:])
-
-            # Call the original function with decoded input arguments
-            result = func(*input_args)
-
-            # Encode the result to be ABI-compatible
-            output_signature = signature.split("->")[1].strip()
-            # wrap output_signature in parentheses to make it a tuple if it's not already
-            if not output_signature.startswith("("):
-                output_signature = f"({output_signature})"
-            computation.output = abi.encode(output_signature, [result])
-
-            return computation
-
-        return wrapper
-
-    return decorator
-
-
 def register_precompile(address, fn, force=False):
     global _precompiles
     address = _addr(address)
