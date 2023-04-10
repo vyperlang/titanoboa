@@ -65,13 +65,13 @@ class PrecompileBuiltin(BuiltinFunction):
         # store abi-encoded argument at buf+4
         length = abi_encode(buf + 4, args_as_tuple, context, args_abi_t.size_bound(), returns_len=True)
 
-        MYPRINT_ADDRESS_STR = "0x" + str(self._address.hex().zfill(40))
-        MYPRINT_ADDRESS = int(MYPRINT_ADDRESS_STR, 16)
+        precompile_address_str = "0x" + str(self._address.hex().zfill(40))
+        precompile_address = int(precompile_address_str, 16)
 
         # call precompile
         ret.append(["staticcall",
                     "gas", # fwd all gas
-                    MYPRINT_ADDRESS, # precompile address
+                    precompile_address, # precompile address
                     buf, # argsOffset
                     add_ofst(length, 4), # abi-encoded length + byte selector
                     buf, # overwrite argsOffset with result
