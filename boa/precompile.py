@@ -75,8 +75,7 @@ class PrecompileBuiltin(BuiltinFunction):
                     buf, # argsOffset
                     add_ofst(length, 4), # abi-encoded length + byte selector
                     buf, # overwrite argsOffset with result
-                    # self._return_type.size_bound() # return length
-                    32 # return length
+                    self._return_type.abi_type.size_bound() # return length
                     ])
         ret += [buf]
 
