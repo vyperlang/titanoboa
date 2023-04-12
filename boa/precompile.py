@@ -104,9 +104,3 @@ def precompile(user_signature: str) -> Any:
         return wrapper
 
     return decorator
-
-
-@precompile("def printmsg(x: uint256, y: uint256) -> uint256")
-def printmsg(x: int, y: int) -> int:
-    print(x)
-    return x + y
