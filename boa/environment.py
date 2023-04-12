@@ -4,6 +4,7 @@
 import contextlib
 import logging
 import sys
+import warnings
 from typing import Any, Iterator, Optional, Union
 
 import eth.constants as constants
@@ -109,7 +110,11 @@ def patch_opcode(opcode_value, fn):
 _precompiles = {}
 
 
-def register_precompile(address, fn, force=False):
+def register_precompile(*args, **kwargs):
+    warnings.warn("register_recompile has been renamed to register_raw_precompile!")
+
+
+def register_raw_precompile(address, fn, force=False):
     global _precompiles
     address = _addr(address)
     if address in _precompiles and not force:
@@ -117,7 +122,7 @@ def register_precompile(address, fn, force=False):
     _precompiles[address] = fn
 
 
-def deregister_precompile(address, force=True):
+def deregister_raw_precompile(address, force=True):
     address = _addr(address)
     if address not in _precompiles and not force:
         raise ValueError("Not registered: {address}")
@@ -135,7 +140,7 @@ def console_log(computation):
 CONSOLE_ADDRESS = bytes.fromhex("000000000000000000636F6E736F6C652E6C6F67")
 
 
-register_precompile(CONSOLE_ADDRESS, console_log)
+register_raw_precompile(CONSOLE_ADDRESS, console_log)
 
 
 # a code stream which keeps a trace of opcodes it has executed
@@ -472,7 +477,7 @@ class Env:
         )
         msg._fake_codesize = fake_codesize  # type: ignore
         msg._start_pc = start_pc  # type: ignore
-        msg._contract = contract
+        msg._contract = contract  # type: ignore
         tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
