@@ -543,7 +543,7 @@ Low-Level Functionality
         ... @external
         ... def main():
         ...     pass
-        ... 
+        ...
         ... @internal
         ... def foo() -> uint256:
         ...     return 123
