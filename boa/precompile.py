@@ -59,7 +59,7 @@ class PrecompileBuiltin(BuiltinFunction):
 # takes a user-provided signature and produces shim code for
 # serializing and deserializing
 # ex. precompile("def foo() -> uint256")
-def precompile(user_signature: str) -> Any:
+def precompile(user_signature: str, force: bool = False) -> Any:
     def decorator(func):
         vy_ast = parse_to_ast(user_signature + ": view").body[0]
         func_t = ContractFunctionT.from_FunctionDef(vy_ast, is_interface=True)
@@ -88,7 +88,7 @@ def precompile(user_signature: str) -> Any:
                 return computation
 
         address = keccak256(user_signature.encode("utf-8"))[:20]
-        register_raw_precompile(address, wrapper)
+        register_raw_precompile(address, wrapper, force=force)
 
         args = list(func_t.arguments.items())
         fn_name = func_t.name
