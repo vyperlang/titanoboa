@@ -12,17 +12,18 @@ from vyper.builtins.functions import (
     process_inputs,
 )
 from vyper.codegen.core import IRnode, needs_external_call_wrap
-from vyper.semantics.types import ContractFunctionT, TupleT
+from vyper.semantics.types import TupleT
+from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import keccak256
 
 from boa.environment import register_precompile
 
 
 class PrecompileBuiltin(BuiltinFunction):
-    def __init__(self, name, args_type, return_type, address):
+    def __init__(self, name, args, return_type, address):
         # override BuiltinFunction attributes
         self._id = name
-        self._inputs = args_type
+        self._inputs = args  # list[tuple[str, VyperType]]
         self._return_type = return_type
 
         # set the precompile address
@@ -31,9 +32,9 @@ class PrecompileBuiltin(BuiltinFunction):
     @process_inputs
     def build_IR(self, expr, args, kwargs, context):
         # allocate buffer for data to pass to precompile
-        # we will pass 4-byte function selector and 32-byte argument
         ret_buf = context.new_internal_variable(self._return_type)
 
+        # allocate args buffer
         args_as_tuple = ir_tuple_from_args(args)
         args_abi_t = args_as_tuple.typ.abi_type
         args_buf = context.new_internal_variable(args_as_tuple.typ)
@@ -60,18 +61,18 @@ class PrecompileBuiltin(BuiltinFunction):
 # ex. precompile("def foo() -> uint256")
 def precompile(user_signature: str) -> Any:
     def decorator(func):
-        vy_ast = parse_to_ast(user_signature + ":\n\tpass")
+        vy_ast = parse_to_ast(user_signature + ": view").body[0]
         func_t = ContractFunctionT.from_FunctionDef(vy_ast, is_interface=True)
-        # TODO update once ContractFunctionT is refactored
+
         args_t = TupleT(tuple(func_t.arguments.values()))
 
         def wrapper(computation):
             # Decode input arguments from message data
-            message_data = computation.msg.data_as_bytes
-            input_args = abi.decode(args_t, message_data)
+            msg_data = computation.msg.data_as_bytes
+            arg_values = abi.decode(args_t.abi_type.selector_name(), msg_data)
 
             # Call the original function with decoded input arguments
-            res = func(*input_args)
+            res = func(*arg_values)
 
             return_t = func_t.return_type
             if return_t is not None:
@@ -81,21 +82,24 @@ def precompile(user_signature: str) -> Any:
                     res = (res,)
                     return_t = TupleT((return_t,))
 
-                computation.output = abi.encode(return_t.abi_type.selector(), res)
+                ret_abi_t = return_t.abi_type.selector_name()
+                computation.output = abi.encode(ret_abi_t, res)
 
                 return computation
 
-        address = keccak256(user_signature)[:20]
+        address = keccak256(user_signature.encode("utf-8"))[:20]
         register_precompile(address, wrapper)
 
-        builtin = PrecompileBuiltin(func_t.name, args_t, func_t.return_type, address)
+        args = list(func_t.arguments.items())
+        fn_name = func_t.name
+        builtin = PrecompileBuiltin(fn_name, args, func_t.return_type, address)
 
         # sketchy check to see which dispatch table it should go in
         # ideally upstream vyper should be refactored to deal with this
         if func_t.return_type is not None:
-            DISPATCH_TABLE[func_t.name] = builtin
+            DISPATCH_TABLE[fn_name] = builtin
         else:
-            STMT_DISPATCH_TABLE[func_t.name] = builtin
+            STMT_DISPATCH_TABLE[fn_name] = builtin
 
         return wrapper
 
