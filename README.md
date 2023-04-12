@@ -6,6 +6,10 @@ A [Vyper](https://github.com/vyperlang/vyper) interpreter with pretty tracebacks
 
 Titanoboa achieves feature parity with the vyper compiler while providing an interpreted experience. How does it do this? Internally, titanoboa uses vyper as a library to compile source code to bytecode, and then runs the bytecode using [py-evm](https://github.com/ethereum/py-evm), adding instrumenting hooks to provide introspection. The use of `py-evm` means that the entire experience is highly configurable, down to the ability to patch opcodes and precompiles at the EVM level.
 
+## Documentation
+
+Usage and quickstart are [below](#usage-quick-start). For more detailed documentation, please see the [documentation](https://titanoboa.readthedocs.io/en/latest/index.html).
+
 ## Installation
 ```
 pip install titanoboa
@@ -30,9 +34,9 @@ If you are running titanoboa on a local [Vyper](https://github.com/vyperlang/vyp
 
 ## Background
 
-Titanoboa (/tiˌtɑːnoʊˈboʊə/) is an extinct genus of very large snakes that lived in what is now La Guajira in northeastern Colombia. They could grow up to 12.8 m (42 ft), perhaps even 14.3 m (47 ft) long and reach a weight of 1,135 kg (2,500 lb). This snake lived during the Middle to Late Paleocene epoch, around 60 to 58 million years ago following the extinction of the dinosaurs. Although originally thought to be an apex predator, the discovery of skull bones revealed that it was more than likely specialized in preying on fish. The only known species is Titanoboa cerrejonensis, the largest snake ever discovered,[1] which supplanted the previous record holder, Gigantophis garstini.[2]
+Titanoboa (/ˌtaɪtənəˈboʊə/;[1] lit. 'titanic boa') is an extinct genus of very large snakes that lived in what is now La Guajira in northeastern Colombia. They could grow up to 12.8 m (42 ft), perhaps even 14.3 m (47 ft) long and reach a body mass of 730–1,135 kg (1,610–2,500 lb). This snake lived during the Middle to Late Paleocene epoch, around 60 to 58 million years ago, following the extinction of all non-avian dinosaurs. Although originally thought to be an apex predator, the discovery of skull bones revealed that it was more than likely specialized in preying on fish. The only known species is Titanoboa cerrejonensis, the largest snake ever discovered,[2] which supplanted the previous record holder, Gigantophis garstini.[3]
 
-## Usage
+## Usage / Quick Start
 
 ### Hello, world
 

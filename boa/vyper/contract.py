@@ -35,7 +35,7 @@ from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vyper import _METHOD_ID_VAR
-from boa.vyper.ast_utils import ast_map_of, reason_at
+from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
     _compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
@@ -497,15 +497,16 @@ class VyperContract(_BaseContract):
 
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation.code)
-        if isinstance(node, vy_ast.FunctionDef):
-            return node
-        return node.get_ancestor(vy_ast.FunctionDef)
+        return get_fn_ancestor_from_node(node)
 
     def debug_frame(self, computation=None):
         if computation is None:
             computation = self._computation
 
         fn = self._get_fn_from_computation(computation)
+        if fn is None:
+            # TODO: figure out why fn is None.
+            return None
 
         frame_info = self.compiler_data.function_signatures[fn.name].frame_info
 
@@ -756,6 +757,7 @@ class VyperContract(_BaseContract):
                 data=method_id,
                 value=value,
                 gas=gas,
+                contract=self,
             )
 
             ret = self.marshal_to_python(c, typ)
@@ -879,10 +881,11 @@ class VyperFunction:
             computation = self.env.execute_code(
                 to_address=self.contract.address,
                 bytecode=self._bytecode,
-                data=calldata_bytes,
                 sender=sender,
+                data=calldata_bytes,
                 value=value,
                 gas=gas,
+                contract=self.contract,
             )
 
             typ = self.fn_signature.return_type

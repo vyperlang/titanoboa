@@ -1,6 +1,7 @@
 import contextlib
 import sys
 
+from boa.debugger import BoaDebug
 from boa.environment import (
     Env,
     deregister_precompile,
@@ -30,6 +31,13 @@ def set_env(new_env):
 
 def reset_env():
     set_env(Env())
+
+
+def _breakpoint(computation):
+    BoaDebug(computation).start()
+
+
+patch_opcode(0xA6, _breakpoint)
 
 
 @contextlib.contextmanager
