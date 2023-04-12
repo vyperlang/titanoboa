@@ -16,7 +16,7 @@ from vyper.semantics.types import TupleT
 from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import keccak256
 
-from boa.environment import register_precompile
+from boa.environment import register_raw_precompile
 
 
 class PrecompileBuiltin(BuiltinFunction):
@@ -88,7 +88,7 @@ def precompile(user_signature: str) -> Any:
                 return computation
 
         address = keccak256(user_signature.encode("utf-8"))[:20]
-        register_precompile(address, wrapper)
+        register_raw_precompile(address, wrapper)
 
         args = list(func_t.arguments.items())
         fn_name = func_t.name
