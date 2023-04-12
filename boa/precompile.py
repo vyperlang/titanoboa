@@ -13,7 +13,9 @@ from vyper.builtins.functions import (
 )
 from vyper.codegen.core import IRnode, needs_external_call_wrap
 from vyper.semantics.types import TupleT
+from vyper.semantics.analysis.base import VarInfo
 from vyper.semantics.types.function import ContractFunctionT
+from vyper.semantics.namespace import get_namespace
 from vyper.utils import keccak256
 
 from boa.environment import register_raw_precompile
@@ -100,6 +102,9 @@ def precompile(user_signature: str, force: bool = False) -> Any:
             DISPATCH_TABLE[fn_name] = builtin
         else:
             STMT_DISPATCH_TABLE[fn_name] = builtin
+
+        # yuck. note to refactor on vyper side.
+        get_namespace()[fn_name] = VarInfo(builtin)
 
         return wrapper
 
