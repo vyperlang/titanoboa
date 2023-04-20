@@ -1,7 +1,9 @@
 from typing import Optional, Union
+from pathlib import Path
 
 import vyper
 from vyper.compiler.phases import CompilerData
+from vyper.cli.vyper_compile import get_interface_codes
 
 from boa.util.disk_cache import DiskCache
 from boa.vyper.contract import BoaError, VyperBlueprint, VyperContract, VyperDeployer
@@ -24,11 +26,20 @@ def set_cache_dir(cache_dir="~/.cache/titanoboa"):
 def compiler_data(source_code: str, contract_name: str) -> CompilerData:
     global _disk_cache
 
+    def _ifaces():
+        # use get_interface_codes to get the interface source dict
+        # TODO revisit this once imports are cleaned up vyper-side
+        ret = get_interface_codes(Path("."), {contract_name: source_code})
+        return ret[contract_name]
+
     if _disk_cache is None:
-        return CompilerData(source_code, contract_name)
+        ifaces = _ifaces()
+        ret = CompilerData(source_code, contract_name, interface_codes=ifaces)
+        return ret
 
     def func():
-        ret = CompilerData(source_code, contract_name)
+        ifaces = _ifaces()
+        ret = CompilerData(source_code, contract_name, interface_codes=ifaces)
         ret.bytecode_runtime  # force compilation to happen
         return ret
 
