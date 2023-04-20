@@ -12,10 +12,10 @@ from vyper.builtins.functions import (
     process_inputs,
 )
 from vyper.codegen.core import IRnode, needs_external_call_wrap
-from vyper.semantics.types import TupleT
 from vyper.semantics.analysis.base import VarInfo
-from vyper.semantics.types.function import ContractFunctionT
 from vyper.semantics.namespace import get_namespace
+from vyper.semantics.types import TupleT
+from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import keccak256
 
 from boa.environment import register_raw_precompile

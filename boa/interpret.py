@@ -1,9 +1,9 @@
-from typing import Optional, Union
 from pathlib import Path
+from typing import Optional, Union
 
 import vyper
-from vyper.compiler.phases import CompilerData
 from vyper.cli.vyper_compile import get_interface_codes
+from vyper.compiler.phases import CompilerData
 
 from boa.util.disk_cache import DiskCache
 from boa.vyper.contract import BoaError, VyperBlueprint, VyperContract, VyperDeployer
