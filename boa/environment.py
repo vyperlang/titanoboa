@@ -256,6 +256,8 @@ class SstoreTracer:
 
 # wrapper class around py-evm which provides a "contract-centric" API
 class Env:
+    has_vm = True
+
     _singleton = None
     _initial_address_counter = 100
 
