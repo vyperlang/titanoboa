@@ -14,6 +14,9 @@ release = "0.1.6"
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
+# Use a different LaTeX engine for better support of Unicode characters
+latex_engine = "xelatex"
+
 extensions = [
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.extlinks",
