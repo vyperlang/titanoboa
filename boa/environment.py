@@ -379,6 +379,10 @@ class Env:
     def lookup_alias(self, address):
         return self._aliases[to_checksum_address(address)]
 
+    # advanced: reset warm/cold counters for addresses and storage
+    def _reset_access_counters(self):
+        self.vm.state._account_db._reset_access_counters()
+
     # context manager which snapshots the state and reverts
     # to the snapshot on exiting the with statement
     @contextlib.contextmanager
