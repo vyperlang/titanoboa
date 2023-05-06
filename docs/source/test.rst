@@ -4,6 +4,7 @@ Boa Test
 Testing Functionality
 ----------------------
 
+Titanoboa integrates natively with `pytest <https://docs.pytest.org/>`_ and `hypothesis <https://hypothesis.readthedocs.io/en/latest/quickstart.html>`_. Nothing special is needed to enable these, as the plugins for these packages will be loaded automatically. By default, isolation is enabled for tests - that is, any changes to the EVM state inside the test case will automatically be rolled back after the test case completes.
 
 
 Gas Profiling Functionality
@@ -13,10 +14,10 @@ Titanoboa has native gas profiling tools that store and generate statistics upon
 gas costs are stored per call in global `boa.env._cached_call_profiles` and `boa.env._cached_line_profiles` dictionaries.
 To enable gas profiling,
 
-1. decorate tests with `@pytest.mark.profile`
+1. decorate tests with `@pytest.mark.profile`, or
 2. run pytest with `--profile`, e.g. `pytest tests/unitary --profile`
 
-To ignore profiling for specific tests, decorate the test with `@pytest.mark.ignore_profiling`.
+If `--profile` is selected, to ignore profiling for specific tests, decorate the test with `@pytest.mark.ignore_profiling`.
 
 .. code-block:: python
 
