@@ -2,7 +2,6 @@ import textwrap
 
 import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
-from vyper.ast.signatures.function_signature import FunctionSignature
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
@@ -32,11 +31,7 @@ def _compile_vyper_function(vyper_function, contract):
         analysis.validate_functions(ast)
 
     ast = ast.body[0]
-    sig = FunctionSignature.from_definition(ast, global_ctx)
-    ast._metadata["signature"] = sig
-
-    sigs = {"self": compiler_data.function_signatures}
-    ir = generate_ir_for_function(ast, sigs, global_ctx, False)
+    ir = generate_ir_for_function(ast, global_ctx, False)
 
     ir = IRnode.from_list(
         ["with", _METHOD_ID_VAR, method_id_int(sig.base_signature), ir]
@@ -58,7 +53,7 @@ def generate_bytecode_for_internal_fn(fn):
 
     contract = fn.contract
     fn_name = fn.fn_signature.name
-    fn_args = ", ".join([arg.name for arg in fn.fn_signature.args])
+    fn_args = ", ".join([arg.name for arg in fn.fn_signature.arguments])
 
     return_sig = ""
     fn_call = ""
@@ -69,7 +64,7 @@ def generate_bytecode_for_internal_fn(fn):
 
     # same but with defaults, signatures, etc.:
     _fn_sig = []
-    for arg in fn.fn_signature.args:
+    for arg in fn.fn_signature.arguments:
         sig_arg_text = f"{arg.name}: {arg.typ}"
 
         # check if arg has a default value:

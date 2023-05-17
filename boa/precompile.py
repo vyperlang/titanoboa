@@ -1,7 +1,7 @@
 from typing import Any
 
 from eth.codecs import abi
-from vyper.address_space import MEMORY
+from vyper.evm.address_space import MEMORY
 from vyper.ast import parse_to_ast
 from vyper.builtins._signatures import BuiltinFunction
 from vyper.builtins.functions import (

@@ -27,7 +27,7 @@ from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
 from vyper.semantics.types import AddressT, HashMapT, TupleT
-from vyper.utils import method_id_int
+from vyper.utils import method_id
 
 from boa.environment import AddressType, Env, to_int
 from boa.profiling import LineProfile, cache_gas_used_for_computation
@@ -806,9 +806,10 @@ class VyperFunction:
     def _source_map(self):
         return self.contract.source_map
 
-    @cached_property
+    @property
     def fn_signature(self):
-        return self.contract.compiler_data.function_signatures[self.fn_ast.name]
+        return self.fn_ast._metadata["type"]
+
 
     @cached_property
     def ir(self):
@@ -843,30 +844,28 @@ class VyperFunction:
             return self._signature_cache[num_kwargs]
 
         # align the kwargs with the signature
-        sig_kwargs = self.fn_signature.default_args[:num_kwargs]
-        sig_args = self.fn_signature.base_args + sig_kwargs
+        sig_kwargs = self.fn_signature.keyword_args[:num_kwargs]
+        sig_args = self.fn_signature.positional_args + sig_kwargs
         args_abi_type = (
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
-        method_id = method_id_int(self.fn_signature.name + args_abi_type).to_bytes(
-            4, "big"
-        )
-        self._signature_cache[num_kwargs] = (method_id, args_abi_type)
+        abi_sig = self.fn_signature.name + args_abi_type
+        self._signature_cache[num_kwargs] = (method_id(abi_sig), args_abi_type)
 
         return method_id, args_abi_type
 
     def _prepare_calldata(self, *args, **kwargs):
         if (
-            not len(self.fn_signature.base_args)
+            not self.fn_signature.n_positional_args
             <= len(args)
-            <= len(self.fn_signature.args)
+            <= self.fn_signature.n_total_args
         ):
             raise Exception(f"bad args to {self}")
 
         # align the kwargs with the signature
         # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
 
-        total_non_base_args = len(kwargs) + len(args) - len(self.fn_signature.base_args)
+        total_non_base_args = len(kwargs) + len(args) - self.fn_signature.n_positional_args
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
 
         # allow things with `.address` to be encode-able
@@ -925,11 +924,6 @@ class _InjectVyperFunction(VyperFunction):
         self._bytecode = bytecode
         # OVERRIDE so that __call__ uses special source map
         self._source_map = source_map
-
-    # OVERRIDE
-    @property
-    def fn_signature(self):
-        return self.fn_ast._metadata["signature"]
 
 
 @dataclass
