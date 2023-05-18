@@ -850,9 +850,10 @@ class VyperFunction:
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
         abi_sig = self.fn_signature.name + args_abi_type
-        self._signature_cache[num_kwargs] = (method_id(abi_sig), args_abi_type)
+        _method_id = method_id(abi_sig)
+        self._signature_cache[num_kwargs] = (_method_id, args_abi_type)
 
-        return method_id, args_abi_type
+        return _method_id, args_abi_type
 
     def _prepare_calldata(self, *args, **kwargs):
         if (
