@@ -816,7 +816,7 @@ class VyperFunction:
         sigs = self.contract._sigs
         global_ctx = self.contract.global_ctx
 
-        ir = generate_ir_for_function(self.fn_ast, sigs, global_ctx, False)
+        ir = generate_ir_for_function(self.fn_ast, global_ctx, False)
         return optimize(ir)
 
     @cached_property
