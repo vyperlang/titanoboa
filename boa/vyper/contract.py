@@ -508,7 +508,7 @@ class VyperContract(_BaseContract):
             # TODO: figure out why fn is None.
             return None
 
-        frame_info = self.compiler_data.function_signatures[fn.name].frame_info
+        frame_info = self.compiler_data.function_signatures[fn.name]._ir_info.frame_info
 
         mem = computation._memory
         frame_detail = FrameDetail(fn.name)
