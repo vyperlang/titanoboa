@@ -810,7 +810,6 @@ class VyperFunction:
     def fn_signature(self):
         return self.fn_ast._metadata["type"]
 
-
     @cached_property
     def ir(self):
         # patch compiler_data to have IR for every function
@@ -866,7 +865,9 @@ class VyperFunction:
         # align the kwargs with the signature
         # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
 
-        total_non_base_args = len(kwargs) + len(args) - self.fn_signature.n_positional_args
+        total_non_base_args = (
+            len(kwargs) + len(args) - self.fn_signature.n_positional_args
+        )
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
 
         # allow things with `.address` to be encode-able
