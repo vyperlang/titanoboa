@@ -80,7 +80,7 @@ for t in parties:
     assert YFI.balanceOf(t) == YFI.eval(f"self.balanceOf[{t}]")
 
 # check external call == eval for immutable
-assert YFI.name() == YFI.eval("NAME"), (YFI.name(), YFI.eval("NAME"))
+assert YFI.name() == YFI.eval("name"), (YFI.name(), YFI.eval("name"))
 
 timeit("set up balances")
 

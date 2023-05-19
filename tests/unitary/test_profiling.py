@@ -45,7 +45,6 @@ def bar(b: uint256) -> uint256:
 
 @pytest.fixture(scope="module")
 def variable_loop_contract():
-
     source_code = """
 @external
 @view
@@ -75,7 +74,6 @@ def _barfoo(a: uint256, b: uint256, c: uint256) -> uint256:
 )
 @pytest.mark.ignore_profiling
 def test_ignore_profiling(variable_loop_contract, a, b, c):
-
     cached_profiles = [boa.env._cached_call_profiles, boa.env._cached_line_profiles]
 
     variable_loop_contract.foo(a, b, c)
@@ -114,7 +112,6 @@ def test_external_call(source_contract):
 
 @pytest.mark.profile
 def test_profile():
-
     source_code = """
 @external
 @view
@@ -127,7 +124,6 @@ def foo(a: uint256 = 0):
 
 @pytest.mark.profile
 def test_profile_empty_function():
-
     source_code = """
 @external
 @view
@@ -140,7 +136,6 @@ def bar():
 
 @pytest.mark.profile
 def test_profile_long_contract():
-
     source_code = """
 @external
 @view
@@ -154,7 +149,6 @@ def bar() -> uint256:
 
 @pytest.mark.profile
 def test_profile_long_names():
-
     source_code = """
 @external
 @view

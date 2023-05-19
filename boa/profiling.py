@@ -37,7 +37,6 @@ class Stats:
     max_gas: int = 0
 
     def __init__(self, gas_data):
-
         self.count = len(gas_data)
         self.avg_gas = int(statistics.mean(gas_data))
         self.median_gas = int(statistics.median(gas_data))
@@ -64,7 +63,6 @@ class CallGasStats:
         self.net_tot_gas = []
 
     def compute_stats(self, typ: str = "net_gas") -> None:
-
         gas_data = getattr(self, typ)
         setattr(self, typ + "_stats", Stats(gas_data))
 
@@ -201,7 +199,6 @@ class LineProfile:
 
         line_gas_data = {}
         for (contract, line), datum in raw_summary:
-
             fn_name = get_fn_name_from_lineno(contract.ast_map, line)
 
             # here we use net_gas to include child computation costs:
@@ -226,7 +223,6 @@ class _String(str):
 
 # cache gas_used for all computation (including children)
 def cache_gas_used_for_computation(contract, computation):
-
     profile = contract.line_profile(computation)
     env = contract.env
     contract_name = contract.compiler_data.contract_name
@@ -277,7 +273,6 @@ def cache_gas_used_for_computation(contract, computation):
 
 
 def _create_table(for_line_profile: bool = False) -> Table:
-
     table = Table(title="\n")
 
     if not for_line_profile:
@@ -307,7 +302,6 @@ def _create_table(for_line_profile: bool = False) -> Table:
 
 
 def get_call_profile_table(env: Env) -> Table:
-
     table = _create_table()
 
     cache = env._cached_call_profiles
@@ -326,7 +320,6 @@ def get_call_profile_table(env: Env) -> Table:
     # --------------- POPULATE TABLE -----------------
 
     for address in sorted_addresses:
-
         fn_vs_mean_gas = []
         for profile in cached_contracts[address]:
             fn_vs_mean_gas.append((cache[profile].net_gas_stats.avg_gas, profile))
@@ -335,7 +328,6 @@ def get_call_profile_table(env: Env) -> Table:
         fn_vs_mean_gas = sorted(fn_vs_mean_gas, key=lambda x: x[0], reverse=True)
 
         for c, (_, profile) in enumerate(fn_vs_mean_gas):
-
             stats = cache[profile]
 
             # only first line should be populated for name and address
@@ -353,10 +345,8 @@ def get_call_profile_table(env: Env) -> Table:
 
 
 def get_line_profile_table(env: Env) -> Table:
-
     contracts: dict = {}
     for lp, gas_data in env._cached_line_profiles.items():
-
         contract_uid = (lp.contract_name, lp.address)
 
         # add spaces so numbers take up equal space
@@ -369,7 +359,6 @@ def get_line_profile_table(env: Env) -> Table:
 
     table = _create_table(for_line_profile=True)
     for (contract_name, contract_address), fn_data in contracts.items():
-
         contract_file_path = os.path.split(contract_name)
         contract_data_str = (
             f"Path: {contract_file_path[0]}\n"
@@ -391,7 +380,6 @@ def get_line_profile_table(env: Env) -> Table:
 
         num_fn = 0
         for fn_name, _data in fn_data.items():
-
             l_profile = []
             for code, gas_used in _data:
                 if code.endswith("\n"):
