@@ -33,6 +33,7 @@ def _compile_vyper_function(vyper_function, contract):
 
     ast = ast.body[0]
     func_t = ast._metadata["type"]
+    # this can be removed after https://github.com/vyperlang/vyper/pull/3437 is merged
     func_t._ir_info = FuncIRInfo(func_t)
 
     ir = generate_ir_for_function(ast, global_ctx, False)
