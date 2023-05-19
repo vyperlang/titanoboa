@@ -41,7 +41,6 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-
     if config.getoption("profile"):
         for item in items:
             ignore_profiling = item.get_closest_marker("ignore_profiling")
@@ -51,7 +50,6 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Generator:
-
     ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
     profiling_ignored = item.get_closest_marker("ignore_profiling") is not None
     profiling_enabled = item.get_closest_marker("profile") is not None
@@ -76,7 +74,6 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
 
 
 def pytest_sessionfinish(session, exitstatus):
-
     if boa.env._cached_call_profiles:
         import sys
 

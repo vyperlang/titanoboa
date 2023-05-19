@@ -79,7 +79,6 @@ class VMPatcher:
                 snap[attr] = getattr(self, attr)
 
         try:
-
             yield
 
         finally:
@@ -493,7 +492,6 @@ class Env:
         blocks: Optional[int] = None,
         block_delta: int = 12,
     ) -> None:
-
         if (seconds is None) == (blocks is None):
             raise ValueError("One of seconds or blocks should be set")
         if seconds is not None:

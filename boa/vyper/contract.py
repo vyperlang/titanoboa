@@ -20,10 +20,10 @@ from eth_typing import Address
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
-from vyper.codegen.module import generate_ir_for_module
-from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.function_definitions import generate_ir_for_function
+from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
+from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
@@ -788,12 +788,6 @@ class VyperContract(_BaseContract):
         f = _InjectVyperFunction(self, fn_source_code)
         setattr(self.inject, fn_ast.name, f)
 
-    @cached_property
-    def _sigs(self):
-        sigs = {}
-        sigs["self"] = self.compiler_data.function_signatures
-        return sigs
-
 
 class VyperFunction:
     def __init__(self, fn_ast, contract):
@@ -819,7 +813,6 @@ class VyperFunction:
     @cached_property
     def ir(self):
         # patch compiler_data to have IR for every function
-        sigs = self.contract._sigs
         global_ctx = self.contract.global_ctx
 
         ir = generate_ir_for_function(self.fn_ast, global_ctx, False)
