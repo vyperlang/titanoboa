@@ -20,6 +20,8 @@ from eth_typing import Address
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
+from vyper.codegen.module import generate_ir_for_module
+from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.compiler import output as compiler_output
@@ -678,6 +680,10 @@ class VyperContract(_BaseContract):
         # calculate slots for all storage variables, tagging
         # the types in the namespace.
         set_data_positions(module, storage_layout_overrides=None)
+
+        # ensure _ir_info is generated for all functions in this copied/shadow
+        # namespace
+        _ = generate_ir_for_module(GlobalContext(module))
 
         return module
 
