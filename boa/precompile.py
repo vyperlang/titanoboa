@@ -1,7 +1,6 @@
 from typing import Any
 
 from eth.codecs import abi
-from vyper.evm.address_space import MEMORY
 from vyper.ast import parse_to_ast
 from vyper.builtins._signatures import BuiltinFunction
 from vyper.builtins.functions import (
@@ -12,6 +11,7 @@ from vyper.builtins.functions import (
     process_inputs,
 )
 from vyper.codegen.core import IRnode, needs_external_call_wrap
+from vyper.evm.address_space import MEMORY
 from vyper.semantics.analysis.base import VarInfo
 from vyper.semantics.namespace import get_namespace
 from vyper.semantics.types import TupleT

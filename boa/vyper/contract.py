@@ -508,7 +508,7 @@ class VyperContract(_BaseContract):
             # TODO: figure out why fn is None.
             return None
 
-        frame_info = self.compiler_data.function_signatures[fn.name].frame_info
+        frame_info = self.compiler_data.function_signatures[fn.name]._ir_info.frame_info
 
         mem = computation._memory
         frame_detail = FrameDetail(fn.name)
@@ -810,14 +810,13 @@ class VyperFunction:
     def fn_signature(self):
         return self.fn_ast._metadata["type"]
 
-
     @cached_property
     def ir(self):
         # patch compiler_data to have IR for every function
         sigs = self.contract._sigs
         global_ctx = self.contract.global_ctx
 
-        ir = generate_ir_for_function(self.fn_ast, sigs, global_ctx, False)
+        ir = generate_ir_for_function(self.fn_ast, global_ctx, False)
         return optimize(ir)
 
     @cached_property
@@ -850,9 +849,10 @@ class VyperFunction:
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
         abi_sig = self.fn_signature.name + args_abi_type
-        self._signature_cache[num_kwargs] = (method_id(abi_sig), args_abi_type)
+        _method_id = method_id(abi_sig)
+        self._signature_cache[num_kwargs] = (_method_id, args_abi_type)
 
-        return method_id, args_abi_type
+        return _method_id, args_abi_type
 
     def _prepare_calldata(self, *args, **kwargs):
         if (
@@ -865,7 +865,9 @@ class VyperFunction:
         # align the kwargs with the signature
         # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
 
-        total_non_base_args = len(kwargs) + len(args) - self.fn_signature.n_positional_args
+        total_non_base_args = (
+            len(kwargs) + len(args) - self.fn_signature.n_positional_args
+        )
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
 
         # allow things with `.address` to be encode-able

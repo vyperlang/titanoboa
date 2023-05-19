@@ -4,6 +4,7 @@ import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
+from vyper.codegen.function_definitions.common import FuncIRInfo
 from vyper.codegen.ir_node import IRnode
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir as compile_ir
@@ -31,11 +32,13 @@ def _compile_vyper_function(vyper_function, contract):
         analysis.validate_functions(ast)
 
     ast = ast.body[0]
+    func_t = ast._metadata["type"]
+    func_t._ir_info = FuncIRInfo(func_t)
+
     ir = generate_ir_for_function(ast, global_ctx, False)
 
-    ir = IRnode.from_list(
-        ["with", _METHOD_ID_VAR, method_id_int(sig.base_signature), ir]
-    )
+    base_signature = func_t.abi_signature_for_kwargs([])
+    ir = IRnode.from_list(["with", _METHOD_ID_VAR, method_id_int(base_signature), ir])
     assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
 
     # extend IR with contract's unoptimized assembly
@@ -43,7 +46,7 @@ def _compile_vyper_function(vyper_function, contract):
     compile_ir._optimize_assembly(assembly)
     bytecode, source_map = compile_ir.assembly_to_evm(assembly)
     bytecode += contract.data_section
-    typ = sig.return_type
+    typ = func_t.return_type
 
     return ast, bytecode, source_map, typ
 
