@@ -268,9 +268,10 @@ class Env:
         # TODO differentiate between origin and sender
         self.eoa = self.generate_address("root")
 
-        self._init_vm()
-
         self._contracts = {}
+        self._blueprints = {}
+
+        self._init_vm()
 
         self._profiled_contracts = {}
         self._cached_call_profiles = {}
@@ -278,6 +279,7 @@ class Env:
 
     def _init_vm(self):
         self.vm = self.chain.get_vm()
+        env = self
 
         class OpcodeTracingComputation(self.vm.state.computation_class):
             _gas_meter_class = GasMeter
@@ -311,6 +313,21 @@ class Env:
                 super().add_child_computation(child_computation)
                 # track PCs of child calls for profiling purposes
                 self._child_pcs.append(self.code.program_counter)
+
+            # hijack creations to automatically generate blueprints
+            @classmethod
+            def apply_create_message(cls, state, msg, tx_ctx):
+                computation = super().apply_create_message(state, msg, tx_ctx)
+
+                contract_address = (
+                    msg.storage_address
+                )  # cf. eth/vm/logic/system/Create* opcodes
+                if msg.code in self._blueprints:
+                    target = self._blueprints[msg.code].deployer.at(contract_address)
+                    target.created_from = to_checksum_address(msg.sender)
+                    env.register_contract(contract_address, target)
+
+                return computation
 
         # TODO make metering toggle-able
         c = OpcodeTracingComputation
@@ -368,6 +385,9 @@ class Env:
 
     def register_contract(self, address, obj):
         self._contracts[to_checksum_address(address)] = obj
+
+    def register_blueprint(self, bytecode, obj):
+        self._blueprints[bytecode] = obj
 
     def lookup_contract(self, address):
         return self._contracts.get(to_checksum_address(address))

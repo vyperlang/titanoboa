@@ -126,6 +126,12 @@ class VyperBlueprint(_BaseContract):
             bytecode=deploy_bytecode, deploy_to=self.address
         )
 
+        self.env.register_blueprint(compiler_data.bytecode, self)
+
+    @cached_property
+    def deployer(self):
+        return VyperDeployer(self.compiler_data, env=self.env)
+
 
 class FrameDetail(dict):
     def __init__(self, fn_name, *args, **kwargs):
@@ -418,9 +424,17 @@ class StorageModel:
 
 class VyperContract(_BaseContract):
     def __init__(
-        self, compiler_data, *args, env=None, override_address=None, skip_init=False
+        self,
+        compiler_data,
+        *args,
+        env=None,
+        override_address=None,
+        skip_init=False,
+        created_from=None,
     ):
         super().__init__(compiler_data, env, override_address)
+
+        self.created_from = created_from
 
         self.env.register_contract(self.address, self)
 
@@ -481,6 +495,9 @@ class VyperContract(_BaseContract):
             f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
         )
+
+        if self.created_from is not None:
+            ret += f" (created by {self.created_from})"
 
         dump_storage = True  # maybe make this configurable in the future
         if dump_storage and len(storage_detail) > 0:
