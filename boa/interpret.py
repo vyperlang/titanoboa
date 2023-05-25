@@ -1,6 +1,6 @@
+import textwrap
 from pathlib import Path
 from typing import Optional, Union
-import textwrap
 
 import vyper
 from vyper.cli.vyper_compile import get_interface_codes
@@ -63,7 +63,9 @@ def loads(source_code, *args, as_blueprint=False, name=None, **kwargs):
         return d.deploy(*args, **kwargs)
 
 
-def loads_partial(source_code: str, name: Optional[str] = None, dedent=True) -> VyperDeployer:
+def loads_partial(
+    source_code: str, name: Optional[str] = None, dedent: bool = True
+) -> VyperDeployer:
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
     if dedent:
         source_code = textwrap.dedent(source_code)
