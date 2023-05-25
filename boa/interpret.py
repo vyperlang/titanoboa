@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional, Union
+import textwrap
 
 import vyper
 from vyper.cli.vyper_compile import get_interface_codes
