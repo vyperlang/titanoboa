@@ -75,6 +75,9 @@ class VyperDeployer:
         bytecode = vm.state.get_code(to_canonical_address(address))
 
         ret._set_bytecode(bytecode)
+
+        ret.env.register_contract(address, ret)
+
         return ret
 
 
