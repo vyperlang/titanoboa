@@ -1,7 +1,7 @@
 [project]
 name = "titanoboa"
-version = "0.1.6"
-description = "Experimental Vyper interpreter"
+version = "0.1.7"
+description = "A Vyper interpreter"
 #authors = []
 license = { file = "LICENSE" }
 readme = "README.md"
