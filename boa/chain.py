@@ -4,8 +4,8 @@
 def _computation_from_trace(trace):
     computation = lambda: None
 
-    # per debug_traceTransaction. this seems not right though
-    computation.output = bytes.fromhex(trace["output"].strip("0x"))
+    # per debug_traceTransaction. construct a fake computation.
+    computation.output = bytes.fromhex(trace.get("output", "").strip("0x"))
 
     return computation
 
@@ -36,10 +36,32 @@ class Chain(Env):
         start_pc=0,
         fake_codesize=None,
     ):
-        # pseudo code
-        tx_data = dict(sender=sender, gas=gas, value=value, data=data)
+        _, trace = self._tx_helper(from_=sender, to=to_address, value=value, gas=gas, data=data)
 
-        if self.eoa not in self._accounts:
+    def deploy_code(
+        self,
+        sender=None,
+        gas=None,
+        value=0,
+        bytecode=b"",
+        data=b"",
+    ):
+        _, trace = self._tx_helper(from_=sender, to=to_checksum_address(ZERO_ADDRESS), value=value, gas=gas, data=bytecode)
+        return _computation_from_trace(trace)
+
+
+    def _tx_helper(self, from_, to, gas=None, value=None, data=b""):
+        # pseudo code
+        tx_data = {
+            "from": from_,
+            "to": to,
+            "gas": gas,
+            "value": value,
+            "data": data,
+        }
+        sender = self.eoa if sender is None else sender
+
+        if sender not in self._accounts:
             raise ValueError(f"Account not available: {self.eoa}")
 
         signed = self._accounts[eoa].sign_transaction(tx_data)
@@ -48,21 +70,7 @@ class Chain(Env):
 
         self.web3.wait_for_transaction_receipt(tx_hash)
 
-        trace = self.web3.provider.make_request("debug_traceTransaction", tx_hash)
+        # works with alchemy
+        trace = self.web3.provider.make_request("debug_traceTransaction", [tx_hash, {"tracer": "callTracer", "tracerConfig": {"onlyTopCall": True}}])
 
-        computation = computation_from_trace(trace)
-
-        return computation
-
-    def deploy_code(
-        self,
-        deploy_to=ZERO_ADDRESS,
-        sender=None,
-        gas=None,
-        value=0,
-        bytecode=b"",
-        data=b"",
-        start_pc=0,
-    ):
-        # pseudo code
-        pass
+        return tx_hash, trace
