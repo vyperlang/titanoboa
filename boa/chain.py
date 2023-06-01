@@ -33,11 +33,13 @@ class ChainEnv(Env):
         _, trace = self._tx_helper(
             from_=sender, to=to_address, value=value, gas=gas, data=data
         )
+        return _computation_from_trace(trace)
 
     def deploy_code(self, sender=None, gas=None, value=0, bytecode=b""):
         sender = self.eoa if sender is None else sender
         _, trace = self._tx_helper(from_=sender, value=value, gas=gas, data=bytecode)
-        return _computation_from_trace(trace)
+        create_address = trace["to"]
+        return create_address, _computation_from_trace(trace)
 
     def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
         start = time.time()
