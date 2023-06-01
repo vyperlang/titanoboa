@@ -766,7 +766,11 @@ class VyperContract(_BaseContract):
             self._source_map = tmp
 
     def eval(
-        self, stmt: str, value: int = 0, gas: int = None, sender: Address = None
+        self,
+        stmt: str,
+        value: int = 0,
+        gas: Optional[int] = None,
+        sender: Optional[Address] = None,
     ) -> Any:
         """eval vyper code in the context of this contract"""
 

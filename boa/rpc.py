@@ -1,11 +1,12 @@
-import os
-import requests
 from dataclasses import dataclass
+
+import requests
 
 TIMEOUT = 60  # default timeout for http requests in seconds
 
 
 # some utility functions
+
 
 def to_hex(s: int) -> str:
     return hex(s)

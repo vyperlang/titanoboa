@@ -1,12 +1,10 @@
 import os
 from typing import Any
 
-import requests
-
 try:
     import ujson as json
 except ImportError:
-    import json
+    import json  # type: ignore
 
 import rlp
 from eth.db.account import AccountDB, keccak
@@ -17,7 +15,7 @@ from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth_utils import int_to_big_endian, to_checksum_address
 
-from boa.rpc import EthereumRPC, to_hex, to_int, to_bytes
+from boa.rpc import EthereumRPC, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
 
 TIMEOUT = 60  # default timeout for http requests in seconds
@@ -29,10 +27,8 @@ DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork.db"
 _EMPTY = b""  # empty rlp stuff
 
 
-
-
 class CachingRPC(EthereumRPC):
-    def __init__(self, url: str, cache_file=DEFAULT_CACHE_DIR):
+    def __init__(self, url: str, cache_file: str = DEFAULT_CACHE_DIR):
         super().__init__(url)
 
         # (default to memory db plyvel not found or cache_file is None)
@@ -43,15 +39,15 @@ class CachingRPC(EthereumRPC):
                 # use CacheDB as an additional layer over disk
                 # (ideally would use leveldb lru cache but it's not configurable
                 # via LevelDB API).
-                self._db = CacheDB(LevelDB(cache_file), cache_size=1024 * 1024)
+                self._db = CacheDB(LevelDB(cache_file), cache_size=1024 * 1024)  # type: ignore
             except ImportError:
                 # plyvel not found
                 pass
 
     # _loaded is a cache for the constructor.
     # reduces fork time after the first fork.
-    _loaded = {}
-    _pid = os.getpid()  # so we can detect if our fds are bad
+    _loaded: dict[tuple[str, str], "CachingRPC"] = {}
+    _pid: int = os.getpid()  # so we can detect if our fds are bad
 
     @classmethod
     def get_rpc(cls, url, cache_file=DEFAULT_CACHE_DIR):
@@ -98,7 +94,7 @@ class CachingRPC(EthereumRPC):
 # AccountDB which dispatches to an RPC when we don't have the
 # data locally
 class AccountDBFork(AccountDB):
-    _rpc_init_kwargs = {}
+    _rpc_init_kwargs: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -112,7 +108,7 @@ class AccountDBFork(AccountDB):
                 [(1, "eth_blockNumber", [])]
             ).items()
             # fork 15 blocks back to avoid reorg shenanigans
-            self._block_number = _to_int(blknum) - 15
+            self._block_number = to_int(blknum) - 15
         else:
             self._block_number = block_identifier
 
@@ -122,7 +118,7 @@ class AccountDBFork(AccountDB):
 
     @property
     def _block_id(self):
-        return _to_hex(self._block_number)
+        return to_hex(self._block_number)
 
     def _has_account(self, address, from_journal=True):
         return super()._get_encoded_account(address, from_journal) != _EMPTY

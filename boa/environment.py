@@ -458,13 +458,13 @@ class Env:
     def deploy_code(
         self,
         sender: Optional[AddressType] = None,
-        gas: int = None,
+        gas: Optional[int] = None,
         value: int = 0,
         bytecode: bytes = b"",
         start_pc: int = 0,
         # override the target address:
         override_address: Optional[AddressType] = None,
-    ) -> bytes:
+    ) -> tuple[AddressType, bytes]:
         if gas is None:
             gas = self.vm.state.gas_limit
         if sender is None:
@@ -501,13 +501,13 @@ class Env:
     def execute_code(
         self,
         to_address: AddressType = constants.ZERO_ADDRESS,
-        sender: AddressType = None,
-        gas: int = None,
+        sender: Optional[AddressType] = None,
+        gas: Optional[int] = None,
         value: int = 0,
         bytecode: bytes = b"",
         data: bytes = b"",
         start_pc: int = 0,
-        fake_codesize: int = None,
+        fake_codesize: Optional[int] = None,
         contract: Any = None,  # the calling VyperContract
     ) -> Any:
         if gas is None:

@@ -1,12 +1,13 @@
 # an Environment which interacts with a real (prod or test) chain
 import time
-from dataclasses import dataclass
+from functools import cached_property
 
-from boa.rpc import EthereumRPC
+from boa.environment import Env
+from boa.rpc import EthereumRPC, RPCError
 
 
-def _computation_from_struct_logs(trace):
-    computation = lambda: None
+def _computation_from_trace(trace):
+    computation = lambda: None  # noqa: E731
 
     # per debug_traceTransaction. construct a fake computation.
     # hardhat just gives structLogs no matter what tracer you give it
@@ -15,12 +16,12 @@ def _computation_from_struct_logs(trace):
     else:
         returndata = trace.get("output")
 
-    computation.output = bytes.fromhex(returndata).strip("0x"))
+    computation.output = bytes.fromhex(returndata).strip("0x")
 
     return computation
 
 
-class Chain(Env):
+class ChainEnv(Env):
     def __init__(self, rpc_url):
         self._rpc = EthereumRPC(rpc_url)
 
@@ -28,29 +29,17 @@ class Chain(Env):
     def vm(self):
         raise RuntimeError("VM is not available in prod")
 
-    def execute_code(
-        self,
-        to_address,
-        sender=None,
-        gas=None,
-        value=0,
-        data=b"",
-    ):
+    def execute_code(self, to_address, sender=None, gas=None, value=0, data=b""):
         _, trace = self._tx_helper(
             from_=sender, to=to_address, value=value, gas=gas, data=data
         )
 
     def deploy_code(self, sender=None, gas=None, value=0, bytecode=b""):
         sender = self.eoa if sender is None else sender
-        _, trace = self._tx_helper(
-            from_=sender,
-            value=value,
-            gas=gas,
-            data=bytecode,
-        )
+        _, trace = self._tx_helper(from_=sender, value=value, gas=gas, data=bytecode)
         return _computation_from_trace(trace)
 
-    def _wait_for_tx_trace(tx_hash, timeout = 60, poll_latency = 0.25):
+    def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
         start = time.time()
         while True:
             trace = self._rpc.fetch_single("debug_traceTransaction", [tx_hash])
@@ -74,21 +63,23 @@ class Chain(Env):
                 return None
         return tracer
 
-
-
     def _tx_helper(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         tx_data = {k: v for (k, v) in tx_data.items() if bool(v)}
 
-        if sender not in self._accounts:
-            raise ValueError(f"Account not available: {self.eoa}")
+        if from_ not in self._accounts:
+            raise ValueError(f"Account not available: {from_}")
 
-        signed = self._accounts[eoa].sign_transaction(tx_data)
+        signed = self._accounts[from_].sign_transaction(tx_data)
 
-        tx_hash = self._rpc.fetch_single("eth_sendRawTransaction", [signed.rawTransaction])
+        tx_hash = self._rpc.fetch_single(
+            "eth_sendRawTransaction", [signed.rawTransaction]
+        )
 
         trace = self._wait_for_tx_trace(tx_hash)
 
-        trace = self._rpc.fetch_single("debug_traceTransaction", [tx_hash, self._tracer])
+        trace = self._rpc.fetch_single(
+            "debug_traceTransaction", [tx_hash, self._tracer]
+        )
 
         return tx_hash, trace
