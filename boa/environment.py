@@ -20,6 +20,7 @@ from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
+from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 
@@ -319,10 +320,16 @@ class Env:
             def apply_create_message(cls, state, msg, tx_ctx):
                 computation = super().apply_create_message(state, msg, tx_ctx)
 
-                if msg.code in self._code_registry:
-                    # cf. eth/vm/logic/system/Create* opcodes
-                    contract_address = msg.storage_address
-                    target = self._code_registry[msg.code].deployer.at(contract_address)
+                bytecode = msg.code
+                # cf. eth/vm/logic/system/Create* opcodes
+                contract_address = msg.storage_address
+
+                if is_eip1167_contract(bytecode):
+                    contract_address = extract_eip1167_address(bytecode)
+                    bytecode = self.vm.state.get_code(contract_address)
+
+                if bytecode in self._code_registry:
+                    target = self._code_registry[bytecode].deployer.at(contract_address)
                     target.created_from = to_checksum_address(msg.sender)
                     env.register_contract(contract_address, target)
 
@@ -384,6 +391,9 @@ class Env:
 
     def register_contract(self, address, obj):
         self._contracts[to_checksum_address(address)] = obj
+
+        # also register it in the registry for
+        # create_minimal_proxy_to and create_copy_of
         bytecode = self.vm.state.get_code(to_canonical_address(address))
         self._code_registry[bytecode] = obj
 
