@@ -17,6 +17,7 @@ from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth_utils import int_to_big_endian, to_checksum_address
 
+from boa.rpc import EthereumRPC, to_hex, to_int, to_bytes
 from boa.util.lrudict import lrudict
 
 TIMEOUT = 60  # default timeout for http requests in seconds
@@ -28,25 +29,14 @@ DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork.db"
 _EMPTY = b""  # empty rlp stuff
 
 
-def _to_hex(s: int) -> str:
-    return hex(s)
 
 
-def _to_int(hex_str: str) -> int:
-    if hex_str == "0x":
-        return 0
-    return int(hex_str, 16)
-
-
-def _to_bytes(hex_str: str) -> bytes:
-    return bytes.fromhex(hex_str[2:])
-
-
-class CachingRPC:
+class CachingRPC(EthereumRPC):
     def __init__(self, url: str, cache_file=DEFAULT_CACHE_DIR):
+        super().__init__(url)
+
         # (default to memory db plyvel not found or cache_file is None)
         self._db = MemoryDB(lrudict(1024 * 1024))
-        self._session = requests.Session()
         if cache_file is not None:
             try:
                 cache_file = os.path.expanduser(cache_file)
@@ -57,8 +47,6 @@ class CachingRPC:
             except ImportError:
                 # plyvel not found
                 pass
-
-        self._rpc_url = url
 
     # _loaded is a cache for the constructor.
     # reduces fork time after the first fork.
@@ -79,13 +67,13 @@ class CachingRPC:
         cls._loaded[(url, cache_file)] = ret
         return ret
 
-    # caching fetch
-    def fetch_single(self, method, params):
-        (res,) = self.fetch([(method, params)])
-        return res
+    # a stupid key for the kv store
+    def _mk_key(self, method: str, params: Any) -> Any:
+        return json.dumps({"method": method, "params": params}).encode("utf-8")
 
     # caching fetch of multiple payloads
-    def fetch(self, payload):
+    # note: overrides super().fetch_multi!
+    def fetch_multi(self, payload):
         ret = {}
         ks = []
         batch = []
@@ -105,29 +93,6 @@ class CachingRPC:
                 self._db[k] = json.dumps(s).encode("utf-8")
 
         return [ret[i] for i in range(len(ret))]
-
-    # a stupid key for the kv store
-    def _mk_key(self, method: str, params: Any) -> Any:
-        return json.dumps({"method": method, "params": params}).encode("utf-8")
-
-    # raw fetch - dispatch the args via http request
-    # TODO: maybe use async for all of this
-    def _raw_fetch_multi(self, payloads):
-        # TODO: batch requests
-        req = []
-        for i, method, params in payloads:
-            req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
-        res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
-        res.raise_for_status()
-        res = res.json()
-
-        ret = {}
-        for t in res:
-            if "error" in t:
-                raise ValueError(res)
-            ret[t["id"]] = t["result"]
-
-        return ret
 
 
 # AccountDB which dispatches to an RPC when we don't have the
@@ -189,9 +154,9 @@ class AccountDBFork(AccountDB):
             ("eth_getCode", [addr, self._block_id]),
         ]
         res = self._rpc.fetch(reqs)
-        balance = _to_int(res[0])
-        nonce = _to_int(res[1])
-        code = _to_bytes(res[2])
+        balance = to_int(res[0])
+        nonce = to_int(res[1])
+        code = to_bytes(res[2])
         code_hash = keccak(code)
 
         return Account(nonce=nonce, balance=balance, code_hash=code_hash)
@@ -203,7 +168,7 @@ class AccountDBFork(AccountDB):
             ret = self._rpc.fetch_single(
                 "eth_getCode", [to_checksum_address(address), self._block_id]
             )
-            return _to_bytes(ret)
+            return to_bytes(ret)
 
     def get_storage(self, address, slot, from_journal=True):
         # call super to get address warming semantics
@@ -222,9 +187,9 @@ class AccountDBFork(AccountDB):
 
         addr = to_checksum_address(address)
         ret = self._rpc.fetch_single(
-            "eth_getStorageAt", [addr, _to_hex(slot), self._block_id]
+            "eth_getStorageAt", [addr, to_hex(slot), self._block_id]
         )
-        return _to_int(ret)
+        return to_int(ret)
 
     def account_exists(self, address):
         if super().account_exists(address):
