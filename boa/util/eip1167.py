@@ -6,7 +6,7 @@ def is_eip1167_contract(bytecode):
     return bytecode.startswith(EIP1167_PREFIX) and bytecode.endswith(EIP1167_SUFFIX)
 
 
-def extract_eip_1167_address(bytecode):
+def extract_eip1167_address(bytecode):
     assert is_eip1167_contract(bytecode)
     ret = bytecode.strip(EIP1167_PREFIX).strip(EIP1167_SUFFIX)
     assert len(ret) == 20
