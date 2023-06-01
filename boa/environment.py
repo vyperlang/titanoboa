@@ -269,7 +269,7 @@ class Env:
         self.eoa = self.generate_address("root")
 
         self._contracts = {}
-        self._blueprints = {}
+        self._code_registry = {}
 
         self._init_vm()
 
@@ -319,11 +319,10 @@ class Env:
             def apply_create_message(cls, state, msg, tx_ctx):
                 computation = super().apply_create_message(state, msg, tx_ctx)
 
-                contract_address = (
-                    msg.storage_address
-                )  # cf. eth/vm/logic/system/Create* opcodes
-                if msg.code in self._blueprints:
-                    target = self._blueprints[msg.code].deployer.at(contract_address)
+                if msg.code in self._code_registry:
+                    # cf. eth/vm/logic/system/Create* opcodes
+                    contract_address = msg.storage_address
+                    target = self._code_registry[msg.code].deployer.at(contract_address)
                     target.created_from = to_checksum_address(msg.sender)
                     env.register_contract(contract_address, target)
 
@@ -385,9 +384,11 @@ class Env:
 
     def register_contract(self, address, obj):
         self._contracts[to_checksum_address(address)] = obj
+        bytecode = self.vm.state.get_code(to_canonical_address(address))
+        self._code_registry[bytecode] = obj
 
     def register_blueprint(self, bytecode, obj):
-        self._blueprints[bytecode] = obj
+        self._code_registry[bytecode] = obj
 
     def lookup_contract(self, address):
         return self._contracts.get(to_checksum_address(address))
