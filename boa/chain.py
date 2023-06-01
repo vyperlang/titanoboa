@@ -15,8 +15,12 @@ class Chain(Env):
 
     _supports_traces = None
 
-    def __init__(self, web3):
-        self.web3 = web3
+    def __init__(self, rpc_url):
+        self._rpc_url = rpc_url
+
+    @cached_property
+    def session(self):
+        return requests.Session()
 
     @property
     def vm(self):
@@ -36,29 +40,23 @@ class Chain(Env):
         start_pc=0,
         fake_codesize=None,
     ):
-        _, trace = self._tx_helper(from_=sender, to=to_address, value=value, gas=gas, data=data)
+        _, trace = self._tx_helper(
+            from_=sender, to=to_address, value=value, gas=gas, data=data
+        )
 
-    def deploy_code(
-        self,
-        sender=None,
-        gas=None,
-        value=0,
-        bytecode=b"",
-        data=b"",
-    ):
-        _, trace = self._tx_helper(from_=sender, to=to_checksum_address(ZERO_ADDRESS), value=value, gas=gas, data=bytecode)
+    def deploy_code(self, sender=None, gas=None, value=0, bytecode=b"", data=b""):
+        _, trace = self._tx_helper(
+            from_=sender,
+            to=to_checksum_address(ZERO_ADDRESS),
+            value=value,
+            gas=gas,
+            data=bytecode,
+        )
         return _computation_from_trace(trace)
-
 
     def _tx_helper(self, from_, to, gas=None, value=None, data=b""):
         # pseudo code
-        tx_data = {
-            "from": from_,
-            "to": to,
-            "gas": gas,
-            "value": value,
-            "data": data,
-        }
+        tx_data = {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         sender = self.eoa if sender is None else sender
 
         if sender not in self._accounts:
@@ -71,6 +69,9 @@ class Chain(Env):
         self.web3.wait_for_transaction_receipt(tx_hash)
 
         # works with alchemy
-        trace = self.web3.provider.make_request("debug_traceTransaction", [tx_hash, {"tracer": "callTracer", "tracerConfig": {"onlyTopCall": True}}])
+        trace = self.web3.provider.make_request(
+            "debug_traceTransaction",
+            [tx_hash, {"tracer": "callTracer", "tracerConfig": {"onlyTopCall": True}}],
+        )
 
         return tx_hash, trace
