@@ -2,22 +2,14 @@
 import time
 from dataclasses import dataclass
 
+from boa.rpc import EthereumRPC
 
-@dataclass(frozen=True)
-class RPCError:
-    code: int
-    message: str
-
-    @classmethod
-    def from_json(cls, data):
-        err = data["error"]
-        return cls(code=err["code"], message=err["message"])
 
 def _computation_from_struct_logs(trace):
     computation = lambda: None
 
     # per debug_traceTransaction. construct a fake computation.
-    # res["structLogs"]["returnValue"]
+    # hardhat just gives structLogs no matter what tracer you give it
     if "structLogs" in trace:
         returndata = trace["returnValue"]
     else:
@@ -29,23 +21,12 @@ def _computation_from_struct_logs(trace):
 
 
 class Chain(Env):
-    has_vm = False
-
-    _supports_traces = None
-
     def __init__(self, rpc_url):
-        self._rpc_url = rpc_url
-
-    @cached_property
-    def session(self):
-        return requests.Session()
+        self._rpc = EthereumRPC(rpc_url)
 
     @property
     def vm(self):
         raise RuntimeError("VM is not available in prod")
-
-    def get_balance(self, account):
-        return self.web3.eth.get_balance(account)
 
     def execute_code(
         self,
@@ -72,7 +53,7 @@ class Chain(Env):
     def _wait_for_tx_trace(tx_hash, timeout = 60, poll_latency = 0.25):
         start = time.time()
         while True:
-            trace = self._rpc_helper("debug_traceTransaction", [tx_hash])
+            trace = self._rpc.fetch_single("debug_traceTransaction", [tx_hash])
             if trace is not None:
                 break
             if time.time() + poll_latency > start + timeout:
@@ -80,19 +61,12 @@ class Chain(Env):
             time.sleep(poll_latency)
         return trace
 
-    def _rpc_helper(method, params, timeout = 60):
-        req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 1})
-        res = self._session.post(self._rpc_url, json=req, timeout=timeout)
-        res.raise_for_status()
-        ret = res.json()
-        if "error" in ret:
-            raise RPCError.from_json(ret)
-        return ret["result"]
-
     @cached_property
     def _tracer(self):
         try:
             txn_hash = "0x" + "00" * 32
+            # alchemy only can do callTracer, plus it has lowest
+            # overhead.
             tracer = {"tracer": "callTracer", "onlyTopCall": True}
             self._rpc_helper("debug_traceTransaction", [txn_hash, tracer])
         except RPCError as e:
@@ -111,11 +85,10 @@ class Chain(Env):
 
         signed = self._accounts[eoa].sign_transaction(tx_data)
 
-        tx_hash = self._rpc_helper("eth_sendRawTransaction", [signed.rawTransaction])
+        tx_hash = self._rpc.fetch_single("eth_sendRawTransaction", [signed.rawTransaction])
 
         trace = self._wait_for_tx_trace(tx_hash)
 
-        # works with alchemy
-        trace = self._rpc_helper("debug_traceTransaction", [tx_hash, self._tracer])
+        trace = self._rpc.fetch_single("debug_traceTransaction", [tx_hash, self._tracer])
 
         return tx_hash, trace

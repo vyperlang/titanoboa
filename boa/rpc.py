@@ -1,5 +1,6 @@
 import os
 import requests
+from dataclasses import dataclass
 
 TIMEOUT = 60  # default timeout for http requests in seconds
 
@@ -18,6 +19,16 @@ def to_int(hex_str: str) -> int:
 
 def to_bytes(hex_str: str) -> bytes:
     return bytes.fromhex(hex_str[2:])
+
+
+@dataclass(frozen=True)
+class RPCError:
+    code: int
+    message: str
+
+    @classmethod
+    def from_json(cls, data):
+        return cls(code=data["code"], message=data["message"])
 
 
 class EthereumRPC:
