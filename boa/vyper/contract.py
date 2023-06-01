@@ -485,7 +485,10 @@ class VyperContract(_BaseContract):
         if self.data_section_size != 0:
             to_check = bytecode[: -self.data_section_size]
         if to_check != self.compiler_data.bytecode_runtime:
-            warnings.warn(f"casted bytecode does not match compiled bytecode at {self}")
+            warnings.warn(
+                f"casted bytecode does not match compiled bytecode at {self}",
+                stacklevel=2,
+            )
         self.bytecode = bytecode
 
     def __repr__(self):

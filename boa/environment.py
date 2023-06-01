@@ -112,7 +112,9 @@ _precompiles = {}
 
 
 def register_precompile(*args, **kwargs):
-    warnings.warn("register_recompile has been renamed to register_raw_precompile!")
+    warnings.warn(
+        "register_recompile has been renamed to register_raw_precompile!", stacklevel=2
+    )
 
 
 def register_raw_precompile(address, fn, force=False):
