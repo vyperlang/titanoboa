@@ -10,6 +10,7 @@ from typing import Any, Iterator, Optional, Union
 import eth.constants as constants
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
+from eth._utils.address import generate_contract_address
 from eth.chains.mainnet import MainnetChain
 from eth.codecs import abi
 from eth.db.atomic import AtomicDB
@@ -428,15 +429,17 @@ class Env:
         finally:
             self.vm.state.revert(snapshot_id)
 
-    # TODO is this a good name
     @contextlib.contextmanager
-    def prank(self, address):
+    def sender(self, address):
         tmp = self.eoa
         self.eoa = to_checksum_address(address)
         try:
             yield
         finally:
             self.eoa = tmp
+
+    def prank(self, *args, **kwargs):
+        return self.sender(*args, **kwargs)
 
     @classmethod
     def get_singleton(cls):
@@ -456,35 +459,46 @@ class Env:
 
     def deploy_code(
         self,
-        deploy_to: AddressType = constants.ZERO_ADDRESS,
         sender: Optional[AddressType] = None,
         gas: int = None,
         value: int = 0,
         bytecode: bytes = b"",
-        data: bytes = b"",
         start_pc: int = 0,
+        # override the target address:
+        override_address: Optional[AddressType] = None,
     ) -> bytes:
         if gas is None:
             gas = self.vm.state.gas_limit
         if sender is None:
             sender = self.eoa
+        sender = _addr(sender)
+
+        if override_address is not None:
+            target_address = _addr(override_address)
+        else:
+            nonce = self.vm.state.get_nonce(sender)
+            self.vm.state.increment_nonce(sender)
+            target_address = generate_contract_address(sender, nonce)
 
         msg = Message(
-            to=_addr(deploy_to),
-            sender=_addr(sender),
+            to=constants.CREATE_CONTRACT_ADDRESS,  # i.e., b""
+            sender=sender,
             gas=gas,
             value=value,
             code=bytecode,
-            data=data,
+            create_address=target_address,
+            data=b"",
         )
-        tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
+        origin = sender  # XXX: consider making this parametrizable
+        tx_ctx = BaseTransactionContext(origin=origin, gas_price=self._gas_price)
         c = self.vm.state.computation_class.apply_create_message(
             self.vm.state, msg, tx_ctx
         )
 
         if c.is_error:
             raise c.error
-        return c.output
+
+        return target_address, c.output
 
     def execute_code(
         self,
@@ -502,22 +516,25 @@ class Env:
             gas = self.vm.state.gas_limit
         if sender is None:
             sender = self.eoa
+        sender = _addr(sender)
 
         class FakeMessage(Message):  # Message object with settable attrs
             __dict__: dict = {}
 
         msg = FakeMessage(
-            sender=_addr(sender),
+            sender=sender,
             to=_addr(to_address),
             gas=gas,
             value=value,
             code=bytecode,
             data=data,
         )
+
         msg._fake_codesize = fake_codesize  # type: ignore
         msg._start_pc = start_pc  # type: ignore
         msg._contract = contract  # type: ignore
-        tx_ctx = BaseTransactionContext(origin=_addr(sender), gas_price=self._gas_price)
+        origin = sender  # XXX: consider making this parametrizable
+        tx_ctx = BaseTransactionContext(origin=origin, gas_price=self._gas_price)
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
     # function to time travel

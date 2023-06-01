@@ -69,7 +69,7 @@ class VyperDeployer:
     def at(self, address: AddressType) -> "VyperContract":
         address = to_checksum_address(address)
         ret = VyperContract(
-            self.compiler_data, override_address=address, skip_init=True
+            self.compiler_data, override_address=address, skip_initcode=True
         )
         vm = ret.env.vm
         bytecode = vm.state.get_code(to_canonical_address(address))
@@ -83,17 +83,13 @@ class VyperDeployer:
 
 # a few lines of shared code between VyperBlueprint and VyperContract
 class _BaseContract:
-    def __init__(self, compiler_data, env=None, override_address=None):
+    def __init__(self, compiler_data, env=None):
         self.compiler_data = compiler_data
 
         if env is None:
             env = Env.get_singleton()
 
         self.env = env
-        if override_address is None:
-            self.address = self.env.generate_address()
-        else:
-            self.address = override_address
 
 
 # create a blueprint for use with `create_from_blueprint`.
@@ -109,7 +105,7 @@ class VyperBlueprint(_BaseContract):
     ):
         # note slight code duplication with VyperContract ctor,
         # maybe use common base class?
-        super().__init__(compiler_data, env, override_address)
+        super().__init__(compiler_data, env)
 
         if blueprint_preamble is None:
             blueprint_preamble = b""
@@ -122,8 +118,8 @@ class VyperBlueprint(_BaseContract):
 
         deploy_bytecode += blueprint_bytecode
 
-        self.bytecode = self.env.deploy_code(
-            bytecode=deploy_bytecode, deploy_to=self.address
+        self.address, self.bytecode = self.env.deploy_code(
+            bytecode=deploy_bytecode, override_address=override_address
         )
 
         self.env.register_blueprint(compiler_data.bytecode, self)
@@ -429,14 +425,13 @@ class VyperContract(_BaseContract):
         *args,
         env=None,
         override_address=None,
-        skip_init=False,
+        # whether or not to skip constructor
+        skip_initcode=False,
         created_from=None,
     ):
-        super().__init__(compiler_data, env, override_address)
+        super().__init__(compiler_data, env)
 
         self.created_from = created_from
-
-        self.env.register_contract(self.address, self)
 
         # add all exposed functions from the interface to the contract
         external_fns = {
@@ -449,6 +444,11 @@ class VyperContract(_BaseContract):
         self._ctor = None
         if "__init__" in external_fns:
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
+
+        if skip_initcode:
+            self.address = to_checksum_address(override_address)
+        else:
+            self.address = self._run_init(*args, override_address=override_address)
 
         for fn_name, fn in external_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))
@@ -466,18 +466,18 @@ class VyperContract(_BaseContract):
         self._source_map = None
         self._computation = None
 
-        if not skip_init:
-            self._run_init(*args)
+        self.env.register_contract(self.address, self)
 
-    def _run_init(self, *args):
+    def _run_init(self, *args, override_address=None):
         encoded_args = b""
-
         if self._ctor:
             encoded_args = self._ctor._prepare_calldata(*args)
-            encoded_args = encoded_args[4:]  # strip method_id
 
         initcode = self.compiler_data.bytecode + encoded_args
-        self.bytecode = self.env.deploy_code(bytecode=initcode, deploy_to=self.address)
+        addr, self.bytecode = self.env.deploy_code(
+            bytecode=initcode, override_address=override_address
+        )
+        return to_checksum_address(addr)
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
@@ -830,7 +830,7 @@ class VyperFunction:
         return self.contract.source_map
 
     @property
-    def fn_signature(self):
+    def func_t(self):
         return self.fn_ast._metadata["type"]
 
     @cached_property
@@ -865,37 +865,34 @@ class VyperFunction:
             return self._signature_cache[num_kwargs]
 
         # align the kwargs with the signature
-        sig_kwargs = self.fn_signature.keyword_args[:num_kwargs]
-        sig_args = self.fn_signature.positional_args + sig_kwargs
+        sig_kwargs = self.func_t.keyword_args[:num_kwargs]
+        sig_args = self.func_t.positional_args + sig_kwargs
         args_abi_type = (
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
-        abi_sig = self.fn_signature.name + args_abi_type
+        abi_sig = self.func_t.name + args_abi_type
         _method_id = method_id(abi_sig)
         self._signature_cache[num_kwargs] = (_method_id, args_abi_type)
 
         return _method_id, args_abi_type
 
     def _prepare_calldata(self, *args, **kwargs):
-        if (
-            not self.fn_signature.n_positional_args
-            <= len(args)
-            <= self.fn_signature.n_total_args
-        ):
+        if not self.func_t.n_positional_args <= len(args) <= self.func_t.n_total_args:
             raise Exception(f"bad args to {self}")
 
         # align the kwargs with the signature
-        # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
+        # sig_kwargs = self.func_t.default_args[: len(kwargs)]
 
-        total_non_base_args = (
-            len(kwargs) + len(args) - self.fn_signature.n_positional_args
-        )
-        method_id, args_abi_type = self.args_abi_type(total_non_base_args)
-
+        total_non_base_args = len(kwargs) + len(args) - self.func_t.n_positional_args
         # allow things with `.address` to be encode-able
         args = [getattr(arg, "address", arg) for arg in args]
 
+        method_id, args_abi_type = self.args_abi_type(total_non_base_args)
         encoded_args = abi.encode(args_abi_type, args)
+
+        if self.func_t.is_constructor or self.func_t.is_fallback:
+            return encoded_args
+
         return method_id + encoded_args
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
@@ -911,7 +908,7 @@ class VyperFunction:
                 contract=self.contract,
             )
 
-            typ = self.fn_signature.return_type
+            typ = self.func_t.return_type
             return self.contract.marshal_to_python(computation, typ)
 
 
