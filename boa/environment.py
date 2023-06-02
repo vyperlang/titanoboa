@@ -455,6 +455,12 @@ class Env:
 
         return ret
 
+    # helper fn
+    def _get_sender(self, sender = None):
+        if sender is None:
+            sender = self.eoa
+        return _addr(sender)
+
     def deploy_code(
         self,
         sender: Optional[AddressType] = None,
@@ -467,9 +473,7 @@ class Env:
     ) -> tuple[AddressType, bytes]:
         if gas is None:
             gas = self.vm.state.gas_limit
-        if sender is None:
-            sender = self.eoa
-        sender = _addr(sender)
+        sender = self._get_sender(sender)
 
         if override_address is not None:
             target_address = _addr(override_address)

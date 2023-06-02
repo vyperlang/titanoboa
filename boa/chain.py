@@ -2,6 +2,8 @@
 import time
 from functools import cached_property
 
+from eth_account import Account
+
 from boa.environment import Env
 from boa.rpc import EthereumRPC, RPCError
 
@@ -20,24 +22,37 @@ def _computation_from_trace(trace):
 
     return computation
 
+def trim_dict(kv):
+    return {k: v for (k, v) in tx_data.items() if bool(v)}
+
 
 class ChainEnv(Env):
     def __init__(self, rpc_url):
         self._rpc = EthereumRPC(rpc_url)
 
+        self._accounts: dict[str, Account] = {}
+
+
     @property
     def vm(self):
         raise RuntimeError("VM is not available in prod")
 
-    def execute_code(self, to_address, sender=None, gas=None, value=0, data=b""):
-        _, trace = self._tx_helper(
-            from_=sender, to=to_address, value=value, gas=gas, data=data
-        )
+    def execute_code(self, to_address, sender=None, gas=None, value=0, data=b"", override_bytecode=None, contract=None, is_modifying=True):
+        sender = self.eoa if sender is None else sender
+
+        if is_modifying:
+            _, trace = self._send_txn(
+                from_=sender, to=to_address, value=value, gas=gas, data=data
+            )
+
+        else:
+            args = trim_dict({"from": from_, "to": to, "gas": gas, "value": value, "data": data})
+            trace = self._rpc.fetch_single("debug_traceCall", [args, "latest", self._tracer])
         return _computation_from_trace(trace)
 
     def deploy_code(self, sender=None, gas=None, value=0, bytecode=b""):
         sender = self.eoa if sender is None else sender
-        _, trace = self._tx_helper(from_=sender, value=value, gas=gas, data=bytecode)
+        _, trace = self._send_txn(from_=sender, value=value, gas=gas, data=bytecode)
         create_address = trace["to"]
         return create_address, _computation_from_trace(trace)
 
@@ -65,9 +80,8 @@ class ChainEnv(Env):
                 return None
         return tracer
 
-    def _tx_helper(self, from_, to=None, gas=None, value=None, data=None):
-        tx_data = {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
-        tx_data = {k: v for (k, v) in tx_data.items() if bool(v)}
+    def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
+        tx_data = trim_dict({"from": from_, "to": to, "gas": gas, "value": value, "data": data})
 
         if from_ not in self._accounts:
             raise ValueError(f"Account not available: {from_}")
