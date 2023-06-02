@@ -263,14 +263,14 @@ class Env:
     def __init__(self):
         self.chain = _make_chain()
 
-        self._gas_price = 0
+        self._gas_price = None
 
         self._address_counter = self.__class__._initial_address_counter
 
         self._aliases = {}
 
         # TODO differentiate between origin and sender
-        self.eoa = self.generate_address("root")
+        self.eoa = self.generate_address("eoa")
 
         self._contracts = {}
         self._code_registry = {}
@@ -280,6 +280,9 @@ class Env:
         self._profiled_contracts = {}
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
+
+    def get_gas_price(self):
+        return self._gas_price or 0
 
     def _init_vm(self):
         self.vm = self.chain.get_vm()
@@ -456,7 +459,7 @@ class Env:
         return ret
 
     # helper fn
-    def _get_sender(self, sender = None):
+    def _get_sender(self, sender=None):
         if sender is None:
             sender = self.eoa
         return _addr(sender)
@@ -492,7 +495,7 @@ class Env:
             data=b"",
         )
         origin = sender  # XXX: consider making this parametrizable
-        tx_ctx = BaseTransactionContext(origin=origin, gas_price=self._gas_price)
+        tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
         c = self.vm.state.computation_class.apply_create_message(
             self.vm.state, msg, tx_ctx
         )
@@ -544,7 +547,7 @@ class Env:
         msg._start_pc = start_pc  # type: ignore
         msg._contract = contract  # type: ignore
         origin = sender  # XXX: consider making this parametrizable
-        tx_ctx = BaseTransactionContext(origin=origin, gas_price=self._gas_price)
+        tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
     # function to time travel

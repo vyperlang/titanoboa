@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 import requests
 
 TIMEOUT = 60  # default timeout for http requests in seconds
@@ -9,7 +7,16 @@ TIMEOUT = 60  # default timeout for http requests in seconds
 
 
 def to_hex(s: int) -> str:
-    return hex(s)
+    if isinstance(s, int):
+        return hex(s)
+    if isinstance(s, bytes):
+        return "0x" + s.hex()
+    if isinstance(s, str):
+        assert s.startswith("0x")
+        return s
+    raise TypeError(
+        f"to_hex expects bytes, int or (hex) string, but got {type(s)}: {s}"
+    )
 
 
 def to_int(hex_str: str) -> int:
@@ -22,14 +29,14 @@ def to_bytes(hex_str: str) -> bytes:
     return bytes.fromhex(hex_str[2:])
 
 
-@dataclass(frozen=True)
-class RPCError:
-    code: int
-    message: str
+class RPCError(Exception):
+    def __init__(self, message, code):
+        super().__init__(f"{code}: {message}")
+        self.code: str = code
 
     @classmethod
     def from_json(cls, data):
-        return cls(code=data["code"], message=data["message"])
+        return cls(message=data["message"], code=data["code"])
 
 
 class EthereumRPC:
@@ -45,8 +52,8 @@ class EthereumRPC:
     # raw fetch - dispatch the args via http request
     # TODO: maybe use async for all of this
     def _raw_fetch_multi(self, payloads):
-        # TODO: batch the requests
         req = []
+        #print(payloads)
         for i, method, params in payloads:
             req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
@@ -59,8 +66,11 @@ class EthereumRPC:
                 raise RPCError.from_json(t["error"])
             ret[t["id"]] = t["result"]
 
+        #print(ret)
+
         return ret
 
     def fetch_multi(self, payloads):
-        res = self._raw_fetch_multi(payloads)
+        reqs = [(i, m, p) for i, (m, p) in enumerate(payloads)]
+        res = self._raw_fetch_multi(reqs)
         return [res[i] for i in range(len(res))]

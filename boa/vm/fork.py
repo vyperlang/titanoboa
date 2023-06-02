@@ -100,21 +100,17 @@ class AccountDBFork(AccountDB):
         super().__init__(*args, **kwargs)
 
         rpc_kwargs = self._rpc_init_kwargs.copy()
-        block_identifier = rpc_kwargs.pop("block_identifier", "latest")
+
+        block_identifier = rpc_kwargs.pop("block_identifier", "safe")
         self._rpc = CachingRPC.get_rpc(**rpc_kwargs)
 
-        if block_identifier == "latest":
-            ((_, blknum),) = self._rpc._raw_fetch_multi(
-                [(1, "eth_blockNumber", [])]
-            ).items()
-            # fork 15 blocks back to avoid reorg shenanigans
-            self._block_number = to_int(blknum) - 15
-        else:
-            self._block_number = block_identifier
+        if block_identifier not in ("safe", "latest", "finalized"):
+            block_identifier = to_hex(block_identifier)
 
-        self._block_info = self._rpc.fetch_single(
-            "eth_getBlockByNumber", [self._block_id, False]
-        )
+        self._block_info = self._rpc._raw_fetch_multi(
+            [(0, "eth_getBlockByNumber", [block_identifier, False])]
+        )[0]
+        self._block_number = to_int(self._block_info["number"])
 
     @property
     def _block_id(self):
@@ -149,7 +145,7 @@ class AccountDBFork(AccountDB):
             ("eth_getTransactionCount", [addr, self._block_id]),
             ("eth_getCode", [addr, self._block_id]),
         ]
-        res = self._rpc.fetch(reqs)
+        res = self._rpc.fetch_multi(reqs)
         balance = to_int(res[0])
         nonce = to_int(res[1])
         code = to_bytes(res[2])
