@@ -826,10 +826,6 @@ class VyperFunction:
         return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
 
     @cached_property
-    def _bytecode(self):
-        return self.contract.bytecode
-
-    @cached_property
     def _source_map(self):
         return self.contract.source_map
 
@@ -901,6 +897,7 @@ class VyperFunction:
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
+        override_bytecode = getattr(self, "override_bytecode", None)
         with self.contract._anchor_source_map(self._source_map):
             computation = self.env.execute_code(
                 to_address=self.contract.address,
@@ -909,6 +906,7 @@ class VyperFunction:
                 value=value,
                 gas=gas,
                 is_modifying=self.func_t.is_mutable,
+                override_bytecode=override_bytecode,
                 contract=self.contract,
             )
 
@@ -929,7 +927,7 @@ class VyperInternalFunction(VyperFunction):
 
     # OVERRIDE so that __call__ uses the specially crafted bytecode
     @cached_property
-    def _bytecode(self):
+    def override_bytecode(self):
         bytecode, _, _ = self._compiled
         return bytecode
 
@@ -945,8 +943,8 @@ class _InjectVyperFunction(VyperFunction):
         ast, bytecode, source_map, _ = _compile_vyper_function(fn_source, contract)
         super().__init__(ast, contract)
 
-        # OVERRIDE so that __call__ uses special bytecode
-        self._bytecode = bytecode
+        self.override_bytecode = bytecode
+
         # OVERRIDE so that __call__ uses special source map
         self._source_map = source_map
 
