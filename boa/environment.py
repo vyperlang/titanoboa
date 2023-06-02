@@ -504,28 +504,36 @@ class Env:
         sender: Optional[AddressType] = None,
         gas: Optional[int] = None,
         value: int = 0,
-        bytecode: bytes = b"",
         data: bytes = b"",
+        override_bytecode: Optional[bytes] = None,
+        is_modifying: bool = True,
         start_pc: int = 0,
         fake_codesize: Optional[int] = None,
         contract: Any = None,  # the calling VyperContract
     ) -> Any:
         if gas is None:
             gas = self.vm.state.gas_limit
-        if sender is None:
-            sender = self.eoa
-        sender = _addr(sender)
+        sender = self._get_sender(sender)
 
         class FakeMessage(Message):  # Message object with settable attrs
             __dict__: dict = {}
 
+        to = _addr(to_address)
+
+        bytecode = override_bytecode
+        if override_bytecode is None:
+            bytecode = self.vm.state.get_code(to)
+
+        is_static = not is_modifying
+
         msg = FakeMessage(
             sender=sender,
-            to=_addr(to_address),
+            to=to,
             gas=gas,
             value=value,
             code=bytecode,
             data=data,
+            is_static=is_static,
         )
 
         msg._fake_codesize = fake_codesize  # type: ignore

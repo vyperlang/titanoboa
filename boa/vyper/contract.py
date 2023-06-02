@@ -785,12 +785,12 @@ class VyperContract(_BaseContract):
             method_id = b"dbug"  # note dummy method id, doesn't get validated
             c = self.env.execute_code(
                 to_address=self.address,
-                bytecode=bytecode,
                 sender=sender,
                 data=method_id,
                 value=value,
                 gas=gas,
                 contract=self,
+                override_bytecode=bytecode,
             )
 
             ret = self.marshal_to_python(c, typ)
@@ -904,11 +904,11 @@ class VyperFunction:
         with self.contract._anchor_source_map(self._source_map):
             computation = self.env.execute_code(
                 to_address=self.contract.address,
-                bytecode=self._bytecode,
                 sender=sender,
                 data=calldata_bytes,
                 value=value,
                 gas=gas,
+                is_modifying=self.func_t.is_mutable,
                 contract=self.contract,
             )
 
