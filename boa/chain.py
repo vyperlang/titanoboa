@@ -4,7 +4,7 @@ import warnings
 from functools import cached_property
 
 from eth_account import Account
-from eth_utils import to_canonical_address
+from eth_utils import to_canonical_address, to_checksum_address
 
 from boa.environment import Env
 from boa.rpc import EthereumRPC, RPCError, to_hex, to_int
@@ -42,18 +42,20 @@ class ChainEnv(Env):
     def __init__(self, rpc_url, accounts = None):
         super().__init__()
 
-        self._reset_fork()
-
         self._rpc = EthereumRPC(rpc_url)
+
+        self._reset_fork()
 
         self._accounts: dict[str, Account] = accounts or {}
 
-        self.eoa = next(iter(self._accounts.keys()))
+        self.eoa = None
 
         self._gas_price = None
 
     def add_account(self, account: Account):
         self._accounts[account.address] = account
+        if self.eoa is None:
+            self.eoa = account.address
 
     # overrides
     def get_gas_price(self):
@@ -64,9 +66,10 @@ class ChainEnv(Env):
     def hex_gas_price(self):
         return to_hex(self.get_gas_price())
 
-    # @property
-    # def vm(self):
-    #    raise RuntimeError("VM is not available in prod")
+    def _check_sender(self, address):
+        if address is None:
+            raise ValueError("No sender!")
+        return to_checksum_address(address)
 
     # OVERRIDES
     def execute_code(
@@ -91,7 +94,7 @@ class ChainEnv(Env):
             contract=contract,
         )
 
-        sender = self.eoa if sender is None else sender
+        sender = self._check_sender(self._get_sender(sender))
 
         data = to_hex(data)
 
@@ -130,8 +133,8 @@ class ChainEnv(Env):
         )
         if trim_dict(kwargs):
             raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
-        sender = self.eoa if sender is None else sender
         bytecode = to_hex(bytecode)
+        sender = self._check_sender(self._get_sender(sender))
 
         receipt, trace = self._send_txn(
             from_=sender, value=value, gas=gas, data=bytecode
@@ -183,7 +186,7 @@ class ChainEnv(Env):
 
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state
-        super().fork(self._rpc._rpc_url, block_identifier)
+        super().fork(self._rpc._rpc_url, block_identifier=block_identifier)
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = _fixup_dict(
