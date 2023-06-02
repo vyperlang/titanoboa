@@ -102,6 +102,7 @@ class ChainEnv(Env):
             receipt, trace = self._send_txn(
                 from_=sender, to=to_address, value=value, gas=gas, data=data
             )
+            output = trace.returndata_bytes
             # gas_used = to_int(receipt["gasUsed"])
 
         else:
@@ -115,9 +116,10 @@ class ChainEnv(Env):
                 }
             )
             returnvalue = self._rpc.fetch_single("eth_call", [args, "latest"])
+            output = bytes.fromhex(returnvalue.removeprefix("0x"))
             # gas_used = to_int(self._rpc.fetch_single("eth_estimateGas", [args, "latest"]))
 
-        if computation.output != bytes.fromhex(returnvalue.removeprefix("0x")):
+        if computation.output != output:
             # not sure what to do about this, for now just complain
             warnings.warn(
                 "local fork did not match node! this likely indicates a bug in titanoboa!",
