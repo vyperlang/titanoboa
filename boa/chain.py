@@ -52,16 +52,19 @@ class ChainEnv(Env):
 
         self._gas_price = None
 
-    def add_account(self, account: Account):
+    def add_account(self, account: Account, force_eoa=False):
         self._accounts[account.address] = account
-        if self.eoa is None:
+        if self.eoa is None or force_eoa:
             self.eoa = account.address
+
+    def set_eoa(self, eoa: Account):
+        self.add_account(eoa, force_eoa=True)
 
     # overrides
     def get_gas_price(self):
         if self._gas_price is not None:
             return self._gas_price
-        return to_int(self._rpc.fetch_single("eth_gasPrice", []))
+        return to_int(self._rpc.fetch("eth_gasPrice", []))
 
     def hex_gas_price(self):
         return to_hex(self.get_gas_price())
@@ -115,9 +118,9 @@ class ChainEnv(Env):
                     "data": data,
                 }
             )
-            returnvalue = self._rpc.fetch_single("eth_call", [args, "latest"])
+            returnvalue = self._rpc.fetch("eth_call", [args, "latest"])
             output = bytes.fromhex(returnvalue.removeprefix("0x"))
-            # gas_used = to_int(self._rpc.fetch_single("eth_estimateGas", [args, "latest"]))
+            # gas_used = to_int(self._rpc.fetch("eth_estimateGas", [args, "latest"]))
 
         if computation.output != output:
             # not sure what to do about this, for now just complain
@@ -152,18 +155,22 @@ class ChainEnv(Env):
         if local_address != create_address:
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
 
+        # TODO get contract info in here
+        print(f"contract deployed at {to_checksum_address(create_address)}")
+
         return create_address, trace.returndata_bytes
 
     def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
         start = time.time()
         while True:
-            receipt = self._rpc.fetch_single("eth_getTransactionReceipt", [tx_hash])
+            receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
             if receipt is not None:
                 break
             if time.time() + poll_latency > start + timeout:
                 raise ValueError(f"Timed out waiting for ({tx_hash})")
             time.sleep(poll_latency)
-        trace = self._rpc.fetch_single(
+
+        trace = self._rpc.fetch(
             "debug_traceTransaction", [tx_hash, self._tracer]
         )
         return receipt, trace
@@ -175,7 +182,7 @@ class ChainEnv(Env):
             # alchemy only can do callTracer, plus it has lowest
             # overhead.
             call_tracer = {"tracer": "callTracer", "onlyTopCall": True}
-            self._rpc.fetch_single("debug_traceTransaction", [txn_hash, call_tracer])
+            self._rpc.fetch("debug_traceTransaction", [txn_hash, call_tracer])
         except RPCError as e:
             if e.code == -32601:
                 return None
@@ -184,7 +191,7 @@ class ChainEnv(Env):
         return call_tracer
 
     def _get_nonce(self, addr):
-        return self._rpc.fetch_single("eth_getTransactionCount", [addr, "latest"])
+        return self._rpc.fetch("eth_getTransactionCount", [addr, "latest"])
 
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state
@@ -195,7 +202,7 @@ class ChainEnv(Env):
             {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         )
         tx_data["gasPrice"] = self.hex_gas_price()
-        tx_data["gas"] = self._rpc.fetch_single("eth_estimateGas", [tx_data])
+        tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
         tx_data["nonce"] = self._get_nonce(from_)
 
         if from_ not in self._accounts:
@@ -204,11 +211,16 @@ class ChainEnv(Env):
         signed = self._accounts[from_].sign_transaction(tx_data)
 
         # note: signed.rawTransaction has type HexBytes
-        tx_hash = self._rpc.fetch_single(
+        tx_hash = self._rpc.fetch(
             "eth_sendRawTransaction", [to_hex(bytes(signed.rawTransaction))]
         )
 
+        # TODO real logging
+        print(f"tx broadcasted: {tx_hash}")
+
         receipt, trace = self._wait_for_tx_trace(tx_hash)
+
+        print(f"{tx_hash} mined in block {receipt['blockHash']}!")
 
         # the block was mined, reset state
         self._reset_fork(block_identifier=receipt["blockNumber"])

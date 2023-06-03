@@ -67,6 +67,11 @@ class CachingRPC(EthereumRPC):
     def _mk_key(self, method: str, params: Any) -> Any:
         return json.dumps({"method": method, "params": params}).encode("utf-8")
 
+    def fetch(self, method, params):
+        # dispatch into fetch_multi for caching behavior.
+        (res,) = self.fetch_multi([(method, params)])
+        return res
+
     # caching fetch of multiple payloads
     # note: overrides super().fetch_multi!
     def fetch_multi(self, payload):
@@ -107,6 +112,7 @@ class AccountDBFork(AccountDB):
         if block_identifier not in ("safe", "latest", "finalized"):
             block_identifier = to_hex(block_identifier)
 
+        # do not cache - use raw_fetch
         self._block_info = self._rpc._raw_fetch_multi(
             [(0, "eth_getBlockByNumber", [block_identifier, False])]
         )[0]
@@ -157,7 +163,7 @@ class AccountDBFork(AccountDB):
         try:
             return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
-            ret = self._rpc.fetch_single(
+            ret = self._rpc.fetch(
                 "eth_getCode", [to_checksum_address(address), self._block_id]
             )
             return to_bytes(ret)
@@ -178,7 +184,7 @@ class AccountDBFork(AccountDB):
             return s
 
         addr = to_checksum_address(address)
-        ret = self._rpc.fetch_single(
+        ret = self._rpc.fetch(
             "eth_getStorageAt", [addr, to_hex(slot), self._block_id]
         )
         return to_int(ret)

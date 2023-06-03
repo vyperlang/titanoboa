@@ -44,10 +44,24 @@ class EthereumRPC:
         self._rpc_url = url
         self._session = requests.Session()
 
-    # caching fetch
-    def fetch_single(self, method, params):
-        (res,) = self.fetch_multi([(method, params)])
-        return res
+    def fetch(self, method, params):
+        # the obvious thing to do here is dispatch into fetch_multi.
+        # but some providers (alchemy) can't handle batched requests
+        # for certain endpoints (debug_traceTransaction).
+        req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
+        #print(req)
+        res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
+        res.raise_for_status()
+        res = res.json()
+        #print(res)
+        if "error" in res:
+            raise RPCError.from_json(res["error"])
+        return res["result"]
+
+    def fetch_multi(self, payloads):
+        reqs = [(i, m, p) for i, (m, p) in enumerate(payloads)]
+        res = self._raw_fetch_multi(reqs)
+        return [res[i] for i in range(len(res))]
 
     # raw fetch - dispatch the args via http request
     # TODO: maybe use async for all of this
@@ -69,8 +83,3 @@ class EthereumRPC:
         #print(ret)
 
         return ret
-
-    def fetch_multi(self, payloads):
-        reqs = [(i, m, p) for i, (m, p) in enumerate(payloads)]
-        res = self._raw_fetch_multi(reqs)
-        return [res[i] for i in range(len(res))]
