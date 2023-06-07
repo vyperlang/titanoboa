@@ -26,6 +26,9 @@ dependencies = [
 
     # required for forking:
     "requests",
+
+    # required for networked accounts
+    "eth-accounts",
 ]
 
 [project.optional-dependencies]
