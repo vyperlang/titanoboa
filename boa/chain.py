@@ -184,6 +184,7 @@ class ChainEnv(Env):
         except RPCError as e:
             if e.code == -32601:
                 return None
+            # can't handle callTracer, use default (i.e. structLogs)
             if e.code == -32602:
                 return {}
         return call_tracer
