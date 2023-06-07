@@ -184,9 +184,7 @@ class AccountDBFork(AccountDB):
             return s
 
         addr = to_checksum_address(address)
-        ret = self._rpc.fetch(
-            "eth_getStorageAt", [addr, to_hex(slot), self._block_id]
-        )
+        ret = self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
         return to_int(ret)
 
     def account_exists(self, address):

@@ -39,7 +39,7 @@ def _fixup_dict(kv):
 
 
 class ChainEnv(Env):
-    def __init__(self, rpc_url, accounts = None):
+    def __init__(self, rpc_url, accounts=None):
         super().__init__()
 
         self._rpc = EthereumRPC(rpc_url)
@@ -170,9 +170,7 @@ class ChainEnv(Env):
                 raise ValueError(f"Timed out waiting for ({tx_hash})")
             time.sleep(poll_latency)
 
-        trace = self._rpc.fetch(
-            "debug_traceTransaction", [tx_hash, self._tracer]
-        )
+        trace = self._rpc.fetch("debug_traceTransaction", [tx_hash, self._tracer])
         return receipt, trace
 
     @cached_property
