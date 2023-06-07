@@ -1,5 +1,10 @@
 import requests
 
+try:
+    import ujson as json
+except ImportError:
+    import json  # type: ignore
+
 TIMEOUT = 60  # default timeout for http requests in seconds
 
 
@@ -49,11 +54,11 @@ class EthereumRPC:
         # but some providers (alchemy) can't handle batched requests
         # for certain endpoints (debug_traceTransaction).
         req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
-        #print(req)
+        # print(req)
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
         res.raise_for_status()
-        res = res.json()
-        #print(res)
+        res = json.load(res.text)
+        # print(res)
         if "error" in res:
             raise RPCError.from_json(res["error"])
         return res["result"]
@@ -67,12 +72,12 @@ class EthereumRPC:
     # TODO: maybe use async for all of this
     def _raw_fetch_multi(self, payloads):
         req = []
-        #print(payloads)
+        # print(payloads)
         for i, method, params in payloads:
             req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
         res.raise_for_status()
-        res = res.json()
+        res = json.load(res.text)
 
         ret = {}
         for t in res:
@@ -80,6 +85,6 @@ class EthereumRPC:
                 raise RPCError.from_json(t["error"])
             ret[t["id"]] = t["result"]
 
-        #print(ret)
+        # print(ret)
 
         return ret
