@@ -57,7 +57,7 @@ class EthereumRPC:
         # print(req)
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
         res.raise_for_status()
-        res = json.load(res.text)
+        res = json.loads(res.text)
         # print(res)
         if "error" in res:
             raise RPCError.from_json(res["error"])
@@ -77,7 +77,7 @@ class EthereumRPC:
             req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
         res.raise_for_status()
-        res = json.load(res.text)
+        res = json.loads(res.text)
 
         ret = {}
         for t in res:

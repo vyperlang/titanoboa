@@ -18,7 +18,7 @@ dependencies = [
     "vyper >= 0.3.8",
     "eth-stdlib",
     "eth-abi",
-    "py-evm",
+    "py-evm>=0.7.0a2",
     "eth-typing",
     "hypothesis",
     "pytest",
@@ -28,7 +28,7 @@ dependencies = [
     "requests",
 
     # required for networked accounts
-    "eth-accounts",
+    "eth-account",
 ]
 
 [project.optional-dependencies]
