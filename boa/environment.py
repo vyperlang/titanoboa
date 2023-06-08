@@ -206,6 +206,25 @@ def to_bytes(value):
     raise ValueError("invalid type %s", type(value))
 
 
+class Mcopy:
+    mnemonic = "MCOPY"
+
+    def __call__(self, computation):
+        dst = computation.stack_pop1_int()
+        src = computation.stack_pop1_int()
+        size = computation.stack_pop1_int()
+
+        computation.extend_memory(max(dst, src), size)
+
+        word_count = ceil32(size) // 32
+        copy_gas_cost = word_count * constants.GAS_COPY + 3
+
+        computation.consume_gas(copy_gas_cost, reason="MCOPY fee")
+
+        mem = computation._memory._bytes
+        mem[dst:dst + size] = mem[src:src + size]
+ 
+
 class Sha3PreimageTracer:
     mnemonic = "SHA3"
 

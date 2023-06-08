@@ -33,6 +33,7 @@ def _breakpoint(computation):
 
 patch_opcode(0xA6, _breakpoint)
 
+patch_opcode(0x5E, Mcopy())
 
 @contextlib.contextmanager
 def reverts(*args, **kwargs):
