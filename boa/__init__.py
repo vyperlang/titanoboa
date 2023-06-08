@@ -2,7 +2,7 @@ import contextlib
 import sys
 
 from boa.debugger import BoaDebug
-from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
+from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode, Mcopy
 from boa.interpret import BoaError, load, load_partial, loads, loads_partial
 from boa.precompile import precompile
 from boa.vyper.contract import check_boa_error_matches

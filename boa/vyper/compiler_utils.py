@@ -9,8 +9,15 @@ from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir as compile_ir
 from vyper.semantics.analysis.utils import get_exact_type_from_node
 from vyper.utils import method_id_int
+import vyper.evm.opcodes as opcodes
 
 from boa.vyper import _METHOD_ID_VAR
+
+
+def set_vyper_evm_version(version: str):
+    # throws KeyError if invalid
+    opcodes.active_evm_version = opcodes.EVM_VERSIONS[version]
+    opcodes.DEFAULT_EVM_VERSION = version
 
 
 def _compile_vyper_function(vyper_function, contract):
