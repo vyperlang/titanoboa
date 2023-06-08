@@ -118,9 +118,11 @@ class VyperBlueprint(_BaseContract):
 
         deploy_bytecode += blueprint_bytecode
 
-        self.address, self.bytecode = self.env.deploy_code(
+        addr, self.bytecode = self.env.deploy_code(
             bytecode=deploy_bytecode, override_address=override_address
         )
+
+        self.address = to_checksum_address(addr)
 
         self.env.register_blueprint(compiler_data.bytecode, self)
 
