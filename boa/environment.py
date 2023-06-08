@@ -210,6 +210,7 @@ class Mcopy:
     mnemonic = "MCOPY"
 
     def __call__(self, computation):
+        from eth._utils.numeric import ceil32
         dst = computation.stack_pop1_int()
         src = computation.stack_pop1_int()
         size = computation.stack_pop1_int()
