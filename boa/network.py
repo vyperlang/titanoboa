@@ -38,7 +38,12 @@ def _fixup_dict(kv):
     return {k: to_hex(v) for (k, v) in trim_dict(kv).items()}
 
 
-class ChainEnv(Env):
+class NetworkEnv(Env):
+    """
+    An Env object which can be swapped in via `boa.set_env()`.
+    It runs non-mutable (view or pure) functions via eth_call,
+    mutable functions and contract creation via eth_sendRawTransaction.
+    """
     def __init__(self, rpc_url, accounts=None):
         super().__init__()
 
