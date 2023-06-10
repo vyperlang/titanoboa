@@ -38,27 +38,41 @@ require(['ethers'], function(ethers) {
     // Initialize ethers
     let provider = new ethers.BrowserProvider(window.ethereum);
 
+    // check that we have a signer for this account
+    Jupyter.notebook.kernel.comm_manager.register_target('get_signer', function(c, msg) {
+        // console.log("get_signer created", c)
+        c.on_msg(function(msg) {
+            // console.log("get_signer called", c)
+            let account = msg.content.data.account
+            provider.getSigner(account).then(signer => {
+                console.log("success", signer)
+                c.send({"success": signer});
+            }).catch(function(error) {
+                console.error("got error, percolating up:", error);
+                c.send({"error": error});
+            });
+        });
+    });
+
     Jupyter.notebook.kernel.comm_manager.register_target('sign_transaction', function(c, msg) {
         c.on_msg(function(msg) {
             let tx_data = msg.content.data.transaction_data;
             let account = msg.content.data.account
-            console.log("debug", msg.content.data);
             provider.getSigner(account).then(signer => {
                 signer.sendTransaction(tx_data).then(response => {
                     c.send({"success": response});
                 }).catch(function(error) {
-                    console.error(error);
+                    console.error("got error, percolating up:", error);
                     c.send({"error": error});
                 });
             }).catch(function(error) {
-                console.error(error);
+                console.error("got error, percolating up:", error);
                 c.send({"error": error});
             });
         });
     });
 });
 
-console.log("FIRST", Jupyter.notebook.kernel.comm_manager)
 Jupyter.notebook.kernel.comm_manager.register_target("test_comm", function(comm, msg) {
     console.log("ENTER", comm);
     /*comm.on_close(function(msg) {
@@ -167,6 +181,8 @@ class _UIComm(ipykernel.comm.Comm):
                 else:
                     k._publish_status("idle")
 
+                await asyncio.sleep(0.001)
+
 
     async def do_one_iteration(self):
         try:
@@ -236,13 +252,27 @@ def foo():
     return response
 
 class BrowserSigner(Account):
-    def __init__(self, address):
-        self.address = to_checksum_address(address)
+    def __init__(self, address=None):
+        comm = _UIComm(target_name="get_signer")
+        comm.on_msg(self._on_msg(comm))
 
-    def sign_transaction(self, tx_data):
-        comm = _UIComm(target_name="sign_transaction")
+        if address is not None:
+            address = to_checksum_address(address)
 
-        @comm.on_msg
+        comm.send({"address": address})
+
+        res = comm.poll()
+
+        result_address = to_checksum_address(res["address"])
+
+        if result_address != address and address is not None:
+            raise ValueError(f"signer returned by RPC is not what we wanted! expected {address}, got {result_address}")
+
+        self.address = result_address
+
+    @staticmethod
+    # boilerplate
+    def _on_msg(comm):
         def _recv(msg):
             try:
                 res = msg["content"]["data"]
@@ -251,6 +281,13 @@ class BrowserSigner(Account):
                 comm._future.set_result(res["success"])
             except Exception as e:
                 comm._future.set_exception(e)
+
+        return _recv
+
+    def sign_transaction(self, tx_data):
+        comm = _UIComm(target_name="sign_transaction")
+
+        comm.on_msg(self._on_msg(comm))
 
         comm.send({"transaction_data": tx_data, "account": self.address})
         print("waiting.")
