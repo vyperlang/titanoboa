@@ -212,12 +212,18 @@ class NetworkEnv(Env):
         if from_ not in self._accounts:
             raise ValueError(f"Account not available: {from_}")
 
-        signed = self._accounts[from_].sign_transaction(tx_data)
+        account = self._accounts[from_]
+        if hasattr(account, "sign_transaction"):
+            signed = account.sign_transaction(tx_data)
 
-        # note: signed.rawTransaction has type HexBytes
-        tx_hash = self._rpc.fetch(
-            "eth_sendRawTransaction", [to_hex(bytes(signed.rawTransaction))]
-        )
+            # note: signed.rawTransaction has type HexBytes
+            tx_hash = self._rpc.fetch(
+                "eth_sendRawTransaction", [to_hex(bytes(signed.rawTransaction))]
+            )
+        else:
+            # some providers (i.e. metamask) don't have sign_transaction
+            # we just have to call send_transaction and pray for the best
+            tx_hash = account.send_transaction(tx_data)["hash"]
 
         # TODO real logging
         print(f"tx broadcasted: {tx_hash}")

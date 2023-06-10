@@ -45,7 +45,7 @@ require(['ethers'], function(ethers) {
             // console.log("get_signer called", c)
             let account = msg.content.data.account
             provider.getSigner(account).then(signer => {
-                console.log("success", signer)
+                // console.log("success", signer)
                 c.send({"success": signer});
             }).catch(function(error) {
                 console.error("got error, percolating up:", error);
@@ -54,12 +54,13 @@ require(['ethers'], function(ethers) {
         });
     });
 
-    Jupyter.notebook.kernel.comm_manager.register_target('sign_transaction', function(c, msg) {
+    Jupyter.notebook.kernel.comm_manager.register_target("send_transaction", function(c, msg) {
         c.on_msg(function(msg) {
             let tx_data = msg.content.data.transaction_data;
             let account = msg.content.data.account
             provider.getSigner(account).then(signer => {
                 signer.sendTransaction(tx_data).then(response => {
+                    console.log(response);
                     c.send({"success": response});
                 }).catch(function(error) {
                     console.error("got error, percolating up:", error);
@@ -251,7 +252,7 @@ def foo():
 
     return response
 
-class BrowserSigner(Account):
+class BrowserSigner:
     def __init__(self, address=None):
         comm = _UIComm(target_name="get_signer")
         comm.on_msg(self._on_msg(comm))
@@ -284,8 +285,8 @@ class BrowserSigner(Account):
 
         return _recv
 
-    def sign_transaction(self, tx_data):
-        comm = _UIComm(target_name="sign_transaction")
+    def send_transaction(self, tx_data):
+        comm = _UIComm(target_name="send_transaction")
 
         comm.on_msg(self._on_msg(comm))
 
@@ -296,18 +297,7 @@ class BrowserSigner(Account):
 
         print(response)
 
-        # convert ethers.js TransactionResponse to a
-        # fake `eth_account.datastructures.SignedTransaction` for downstream code
-        sig = response.pop("signature")
-        v, r, s = sig["v"], to_int(sig["r"]), to_int(sig["s"])
-        print((v,r,s))
-        # trim unused fields
-        for k in ('from', '_type', 'gasPrice', 'hash'):
-            response.pop(k)
-        # rename metamask field
-        if "gasLimit" in response:
-            response["gas"] = response.pop("gasLimit")
-
+        # clean response
         def try_cast_int(s):
             # cast js bigint to string
             if isinstance(s, str) and s.isnumeric():
@@ -320,7 +310,4 @@ class BrowserSigner(Account):
         # cast js bigint values
         response = {k: try_cast_int(v) for (k, v) in response.items()}
 
-        raw_tx = lambda: None
-        raw_tx.rawTransaction = encode_transaction(serializable_unsigned_transaction_from_dict(response), vrs=(v,r,s))
-
-        return raw_tx
+        return response
