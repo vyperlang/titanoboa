@@ -7,7 +7,7 @@ from eth_account import Account
 from eth_utils import to_canonical_address, to_checksum_address
 
 from boa.environment import Env
-from boa.rpc import EthereumRPC, RPCError, to_hex, to_int
+from boa.rpc import EthereumRPC, RPCError, to_hex, to_int, to_bytes
 
 
 class TraceObject:
@@ -27,7 +27,7 @@ class TraceObject:
 
     @cached_property
     def returndata_bytes(self):
-        return bytes.fromhex(self.returndata.removeprefix("0x"))
+        return to_bytes(self.returndata)
 
 
 def trim_dict(kv):
@@ -124,7 +124,7 @@ class NetworkEnv(Env):
                 }
             )
             returnvalue = self._rpc.fetch("eth_call", [args, "latest"])
-            output = bytes.fromhex(returnvalue.removeprefix("0x"))
+            output = to_bytes(returnvalue)
             # gas_used = to_int(self._rpc.fetch("eth_estimateGas", [args, "latest"]))
 
         if computation.output != output:

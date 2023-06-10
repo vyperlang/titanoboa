@@ -31,7 +31,7 @@ def to_int(hex_str: str) -> int:
 
 
 def to_bytes(hex_str: str) -> bytes:
-    return bytes.fromhex(hex_str[2:])
+    return bytes.fromhex(hex_str.removeprefix("0x"))
 
 
 class RPCError(Exception):
