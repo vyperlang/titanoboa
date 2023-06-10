@@ -1,9 +1,12 @@
 from concurrent.futures import Future
 from typing import Any
+import contextlib
 from inspect import isawaitable, iscoroutinefunction
 import asyncio
 import threading
 import nest_asyncio
+nest_asyncio.apply()
+
 import sys
 
 
@@ -154,7 +157,8 @@ class _UIComm(ipykernel.comm.Comm):
             else:
                 rr = k.execute_request(stream, ident, parent)
                 if isawaitable(rr):
-                    await rr
+                    with self._preempt_current_task():
+                        await rr
 
                 # replicate shell_dispatch behaviour
                 self._flush_stdio()
@@ -197,26 +201,29 @@ class _UIComm(ipykernel.comm.Comm):
 
             await self.do_one_iteration()
 
-    def poll(self):
+    @staticmethod
+    @contextlib.contextmanager
+    def _preempt_current_task(loop = None):
         # note: cursed code. do not touch!
-        loop = self._loop
-        nest_asyncio.apply(loop)
-        tsk = asyncio.current_task()
         # use asyncio internals; suspend current task to avoid race conditions
-        self._kernel.log.critical(f"READY 1 {loop._ready}")
-        asyncio._leave_task(loop, tsk)
-        self._kernel.log.critical(f"READY 2 {loop._ready}")
+        if loop is None:
+            loop = asyncio.get_running_loop()
         try:
-            self._kernel.log.critical(f"READY 3 {loop._ready}")
-            s = loop.create_task(self._poll_async())
-            #s.add_done_callback(lambda _: loop.call_soon(asyncio._enter_task, loop, tsk))
-            return loop.run_until_complete(s)
+            # i.e., asyncio._leave_task(loop, tsk) with no checks
+            tsk = asyncio.tasks._current_tasks.pop(loop, None)
+            yield
         finally:
-            self._kernel.log.critical(f"READY 4 {loop._ready}")
-            #loop.call_soon(asyncio._enter_task, loop, tsk)
-            asyncio._enter_task(loop, tsk)
-            self._kernel.log.critical(f"READY 5 {loop._ready}")
+            # i.e., asyncio._enter_task(loop, tsk) with no checks
+            if tsk is not None:
+                asyncio.tasks._current_tasks[loop] = tsk
+            else:
+                asyncio.tasks._current_tasks.pop(loop, None)
 
+
+    def poll(self):
+        return self._loop.run_until_complete(self._poll_async())
+
+# a test function
 def foo():
     comm = _UIComm(target_name="sign_transaction")
 
