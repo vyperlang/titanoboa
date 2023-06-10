@@ -47,12 +47,12 @@ require(['ethers'], function(ethers) {
                 signer.sendTransaction(tx_data).then(response => {
                     c.send({"success": response});
                 }).catch(function(error) {
-                    // TODO percolate upstream
                     console.error(error);
+                    c.send({"error": error});
                 });
             }).catch(function(error) {
-                // TODO percolate upstream
                 console.error(error);
+                c.send({"error": error});
             });
         });
     });
@@ -199,6 +199,7 @@ class _UIComm(ipykernel.comm.Comm):
 
             await self.do_one_iteration()
 
+
     @staticmethod
     @contextlib.contextmanager
     def _preempt_current_task(loop = None):
@@ -248,17 +249,13 @@ class BrowserSigner(Account):
                 if "success" not in res:
                     raise ValueError(res)
                 comm._future.set_result(res["success"])
-
             except Exception as e:
                 comm._future.set_exception(e)
 
         comm.send({"transaction_data": tx_data, "account": self.address})
         print("waiting.")
 
-        # Wait for the future to complete
         response = comm.poll()
-
-        # --> KERNEL DIES SOME TIME AFTER HERE <--
 
         print(response)
 
