@@ -26,7 +26,7 @@ ZMQ_POLLOUT = 2  # zmq.POLLOUT without zmq dependency
 
 
 
-js0 = frontend.Javascript("""
+js = frontend.Javascript("""
 require.config({
     paths: {
         //ethers: "https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min"
@@ -57,11 +57,9 @@ require(['ethers'], function(ethers) {
         });
     });
 });
-""")
 
-js = frontend.Javascript("""
 console.log("FIRST", Jupyter.notebook.kernel.comm_manager)
-Jupyter.notebook.kernel.comm_manager.register_target("sign_transaction", function(comm, msg) {
+Jupyter.notebook.kernel.comm_manager.register_target("test_comm", function(comm, msg) {
     console.log("ENTER", comm);
     /*comm.on_close(function(msg) {
         console.log("CLOSING", msg);
@@ -75,13 +73,12 @@ Jupyter.notebook.kernel.comm_manager.register_target("sign_transaction", functio
             comm.send({"success": "hello", "echo": msg.content.data});
             comm.close();
             console.log(comm);
-        }, 1000);
+        }, 350);
     });
 });
 """)
 
-#frontend.display(js)
-frontend.display(js0)
+frontend.display(js)
 
 # adapted from:
 # https://github.com/Kirill888/jupyter-ui-poll/blob/cb3fa2dbcb75/jupyter_ui_poll/_poll.py
@@ -157,6 +154,7 @@ class _UIComm(ipykernel.comm.Comm):
             else:
                 rr = k.execute_request(stream, ident, parent)
                 if isawaitable(rr):
+                    # note: cursed code. do not touch!
                     with self._preempt_current_task():
                         await rr
 
@@ -204,7 +202,6 @@ class _UIComm(ipykernel.comm.Comm):
     @staticmethod
     @contextlib.contextmanager
     def _preempt_current_task(loop = None):
-        # note: cursed code. do not touch!
         # use asyncio internals; suspend current task to avoid race conditions
         if loop is None:
             loop = asyncio.get_running_loop()
@@ -225,7 +222,7 @@ class _UIComm(ipykernel.comm.Comm):
 
 # a test function
 def foo():
-    comm = _UIComm(target_name="sign_transaction")
+    comm = _UIComm(target_name="test_comm")
 
     @comm.on_msg
     def _recv(msg):
