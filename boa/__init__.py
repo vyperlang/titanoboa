@@ -3,7 +3,7 @@ import sys
 
 from boa.debugger import BoaDebug
 from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
-from boa.interpret import BoaError, load, load_partial, loads, loads_partial
+from boa.interpret import BoaError, load, load_partial, loads, loads_partial, load_abi, loads_abi
 from boa.precompile import precompile
 from boa.vyper.contract import check_boa_error_matches
 

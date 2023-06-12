@@ -1,3 +1,4 @@
+import json
 import textwrap
 from pathlib import Path
 from typing import Optional, Union
@@ -7,7 +8,13 @@ from vyper.cli.vyper_compile import get_interface_codes
 from vyper.compiler.phases import CompilerData
 
 from boa.util.disk_cache import DiskCache
-from boa.vyper.contract import BoaError, VyperBlueprint, VyperContract, VyperDeployer
+from boa.vyper.contract import (
+    ABIContractFactory,
+    BoaError,
+    VyperBlueprint,
+    VyperContract,
+    VyperDeployer,
+)
 
 _Contract = Union[VyperContract, VyperBlueprint]
 
@@ -49,6 +56,7 @@ def compiler_data(source_code: str, contract_name: str) -> CompilerData:
 
 def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
     name = filename
+    # TODO: investigate if we can just put name in the signature
     if "name" in kwargs:
         name = kwargs.pop("name")
     with open(filename) as f:
@@ -61,6 +69,17 @@ def loads(source_code, *args, as_blueprint=False, name=None, **kwargs):
         return d.deploy_as_blueprint(**kwargs)
     else:
         return d.deploy(*args, **kwargs)
+
+
+def load_abi(filename: str, *args, name=None, **kwargs) -> ABIContractFactory:
+    if name is None:
+        name = filename
+    with open(filename) as fp:
+        return loads_abi(fp.read(), *args, name=name, **kwargs)
+
+
+def loads_abi(json_str: str, *args, name=None, **kwargs) -> ABIContractFactory:
+    return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
 
 
 def loads_partial(

@@ -28,7 +28,8 @@ from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.semantics.types import AddressT, HashMapT, TupleT
+from vyper.semantics.types import AddressT, HashMapT, InterfaceT, TupleT
+from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import method_id
 
 from boa.environment import AddressType, Env, to_int
@@ -54,8 +55,12 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
 class VyperDeployer:
-    def __init__(self, compiler_data, env=None):
+    def __init__(self, compiler_data):
         self.compiler_data = compiler_data
+
+        # force compilation so that if there are any errors in the contract,
+        # we fail at load rather than at deploy time.
+        _ = compiler_data.bytecode
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
@@ -147,7 +152,7 @@ class DevReason:
     reason_str: str
 
     @classmethod
-    def at(
+    def at_source_location(
         cls, source_code: str, lineno: int, end_lineno: int
     ) -> Optional["DevReason"]:
         s = reason_at(source_code, lineno, end_lineno)
@@ -176,7 +181,7 @@ class ErrorDetail:
         ast_source = contract.find_source_of(computation.code)
         reason = None
         if ast_source is not None:
-            reason = DevReason.at(
+            reason = DevReason.at_source_location(
                 contract.compiler_data.source_code,
                 ast_source.lineno,
                 ast_source.end_lineno,
@@ -494,8 +499,6 @@ class VyperContract(_BaseContract):
         self.bytecode = bytecode
 
     def __repr__(self):
-        storage_detail = self._storage.dump()
-
         ret = (
             f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
@@ -505,6 +508,7 @@ class VyperContract(_BaseContract):
             ret += f" (created by {self.created_from})"
 
         dump_storage = True  # maybe make this configurable in the future
+        storage_detail = self._storage.dump()
         if dump_storage and len(storage_detail) > 0:
             ret += f"\n{storage_detail}"
 
@@ -938,6 +942,99 @@ class VyperInternalFunction(VyperFunction):
     def _source_map(self):
         _, source_map, _ = self._compiled
         return source_map
+
+
+# a contract which we only have the ABI for.
+# TODO refactor:
+# right now inherits functionality from VyperContract
+# but would be better to put this in like BaseContract
+# and have both BaseContract => InterfaceContract
+# and separately BaseContract => VyperContract
+class ABIContract(VyperContract):
+    def __init__(self, interface_t, address, created_from=None, env=None):
+        if env is None:
+            env = Env.get_singleton()
+        self.env = env
+
+        self.address = to_checksum_address(address)
+
+        self.created_from = created_from
+
+        self._interface_t = interface_t
+
+        for fn_name, func_t in interface_t.members.items():
+            if not isinstance(func_t, ContractFunctionT):
+                continue
+            setattr(self, fn_name, ABIFunction(func_t, self))
+
+        self._source_map = {"pc_pos_map": {}}  # override
+
+    @property
+    def _name(self):
+        return self._interface_t._id
+
+    @property
+    def deployer(self):
+        return ABIContractFactory(self._interface_t)
+
+    def __repr__(self):
+        ret = f"<{self._name} interface at {to_checksum_address(self.address)}>"
+
+        if self.created_from is not None:
+            ret += f" (created by {self.created_from})"
+
+        return ret
+
+    # OVERRIDE
+    @cached_property
+    def event_for(self):
+        return {e.event_id: e for e in self._interface_t.events.values()}
+
+
+# name Factory instead of Deployer because it doesn't actually do any
+# contract deployment.
+class ABIContractFactory:
+    def __init__(self, interface_t):
+        self._interface_t = interface_t
+
+    @property
+    def _name(self):
+        return self._interface_t._id
+
+    @classmethod
+    def from_abi_dict(cls, abi, name=None):
+        if name is None:
+            name = "<anonymous contract>"
+        return cls(InterfaceT.from_json_abi(name, abi))
+
+    def at(self, address) -> ABIContract:
+        address = to_checksum_address(address)
+
+        ret = ABIContract(self._interface_t, address)
+
+        ret.env.register_contract(address, ret)
+
+        return ret
+
+
+class ABIFunction(VyperFunction):
+    def __init__(self, func_t, contract):
+        self.contract = contract
+        self.env = contract.env
+        self._func_t = func_t
+
+    def __repr__(self):
+        return f"{self.contract.name}.{self.fn_ast.name}"
+
+    # OVERRIDE
+    @property
+    def func_t(self):
+        return self._func_t
+
+    # OVERRIDE
+    @cached_property
+    def _source_map(self):
+        return {"pc_pos_map": {}}
 
 
 class _InjectVyperFunction(VyperFunction):
