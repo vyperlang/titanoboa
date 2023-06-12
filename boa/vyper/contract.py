@@ -883,13 +883,22 @@ class VyperFunction:
         return _method_id, args_abi_type
 
     def _prepare_calldata(self, *args, **kwargs):
-        if not self.func_t.n_positional_args <= len(args) <= self.func_t.n_total_args:
-            raise Exception(f"bad args to {self}")
+        n_total_args = self.func_t.n_total_args
+        n_pos_args = self.func_t.n_positional_args
+
+        if not n_pos_args <= len(args) <= n_total_args:
+            expectation_str = f"expected between {n_pos_args} and {n_total_args}"
+            if n_pos_args == n_total_args:
+                expectation_str = f"expected {n_total_args}"
+            raise Exception(
+                f"bad args to `{repr(self.func_t)}` "
+                f"({expectation_str}, got {len(args)})"
+            )
 
         # align the kwargs with the signature
         # sig_kwargs = self.func_t.default_args[: len(kwargs)]
 
-        total_non_base_args = len(kwargs) + len(args) - self.func_t.n_positional_args
+        total_non_base_args = len(kwargs) + len(args) - n_pos_args
         # allow things with `.address` to be encode-able
         args = [getattr(arg, "address", arg) for arg in args]
 
