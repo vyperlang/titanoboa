@@ -291,11 +291,8 @@ class BrowserSigner:
         comm.on_msg(self._on_msg(comm))
 
         comm.send({"transaction_data": tx_data, "account": self.address})
-        print("waiting.")
 
         response = comm.poll()
-
-        print(response)
 
         # clean response
         def try_cast_int(s):
