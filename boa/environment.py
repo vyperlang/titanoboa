@@ -275,16 +275,19 @@ class Env:
         self._contracts = {}
         self._code_registry = {}
 
-        self._init_vm()
-
         self._profiled_contracts = {}
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
 
+        self.sha3_trace = {}
+        self.sstore_trace = {}
+
+        self._init_vm()
+
     def get_gas_price(self):
         return self._gas_price or 0
 
-    def _init_vm(self):
+    def _init_vm(self, reset_traces=True):
         self.vm = self.chain.get_vm()
         env = self
 
@@ -346,19 +349,23 @@ class Env:
 
         self.vm.state.computation_class = c
 
+        # we usually want to reset the trace data structures
+        # but sometimes don't, give caller the option.
+        if reset_traces:
+            self.sha3_trace = {}
+            self.sstore_trace = {}
+
         # patch in tracing opcodes
-        self.sha3_trace = {}
-        self.sstore_trace = {}
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.sha3_trace)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.sstore_trace)
 
         self.vm.patch = VMPatcher(self.vm)
 
-    def fork(self, url, **kwargs):
+    def fork(self, url, reset_traces=True, **kwargs):
         kwargs["url"] = url
         AccountDBFork._rpc_init_kwargs = kwargs
         self.vm.__class__._state_class.account_db_class = AccountDBFork
-        self._init_vm()
+        self._init_vm(reset_traces=reset_traces)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)

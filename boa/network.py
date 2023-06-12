@@ -199,7 +199,8 @@ class NetworkEnv(Env):
 
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state
-        super().fork(self._rpc._rpc_url, block_identifier=block_identifier)
+        # but use reset_traces=False to help with storage dumps
+        super().fork(self._rpc._rpc_url, reset_traces=False, block_identifier=block_identifier)
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = _fixup_dict(
