@@ -5,6 +5,7 @@ from vyper.semantics.types import (
     BytesM_T,
     DArrayT,
     IntegerT,
+    InterfaceT,
     SArrayT,
     StringT,
     _BytestringT,
@@ -48,7 +49,7 @@ def decode_vyper_object(mem, typ):
     if isinstance(typ, BytesM_T):
         # TODO tag return value like `vyper_object` does
         return mem[: typ.m_bits].tobytes()
-    if isinstance(typ, AddressT):
+    if isinstance(typ, (AddressT, InterfaceT)):
         return to_checksum_address(mem[12:32].tobytes())
     if isinstance(typ, BoolT):
         return bool.from_bytes(mem[31:32], "big")
@@ -80,4 +81,4 @@ def decode_vyper_object(mem, typ):
             ofst += n
         return ret
 
-    return "unimplemented decoder for `{typ}`"
+    return f"unimplemented decoder for `{typ}`"
