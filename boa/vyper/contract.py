@@ -258,7 +258,7 @@ def _handle_child_trace(computation, env, return_trace):
     if child_obj is None:
         child_trace = trace_for_unknown_contract(child, env)
     else:
-        child_trace = child_obj.vyper_stack_trace(child)
+        child_trace = child_obj.stack_trace(child)
     return StackTrace(child_trace + return_trace)
 
 
@@ -670,13 +670,13 @@ class VyperContract(_BaseContract):
 
     def handle_error(self, computation):
         try:
-            raise BoaError(self.vyper_stack_trace(computation))
+            raise BoaError(self.stack_trace(computation))
         except BoaError as b:
             # modify the error so the traceback starts in userland.
             # inspired by answers in https://stackoverflow.com/q/1603940/
             raise strip_internal_frames(b) from None
 
-    def vyper_stack_trace(self, computation):
+    def stack_trace(self, computation):
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation.code)
         if error_detail not in EXTERNAL_CALL_ERRORS:
@@ -971,12 +971,34 @@ class ABIContract(VyperContract):
 
         self._interface_t = interface_t
 
-        for fn_name, func_t in interface_t.members.items():
-            if not isinstance(func_t, ContractFunctionT):
-                continue
-            setattr(self, fn_name, ABIFunction(func_t, self))
+        for func_t in self._functions:
+            setattr(self, func_t.name, ABIFunction(func_t, self))
 
         self._source_map = {"pc_pos_map": {}}  # override
+
+    @cached_property
+    def _functions(self):
+        return [
+            f
+            for f in self._interface_t.members.values()
+            if isinstance(f, ContractFunctionT)
+        ]
+
+    @cached_property
+    def method_id_map(self):
+        ret = {}
+        for func_t in self._functions:
+            for abi_sig, method_id_int in func_t.method_ids.items():
+                method_id_bytes = method_id_int.to_bytes(4, "big")
+                assert method_id_bytes not in ret  # vyper guarantees unique method ids
+                ret[method_id_bytes] = abi_sig
+        return ret
+
+    def stack_trace(self, computation):
+        calldata_method_id = bytes(computation.msg.data[:4])
+        abi_sig = self.method_id_map[calldata_method_id]
+        ret = StackTrace([f"  (unknown location in {self}.{abi_sig})"])
+        return _handle_child_trace(computation, self.env, ret)
 
     @property
     def _name(self):
