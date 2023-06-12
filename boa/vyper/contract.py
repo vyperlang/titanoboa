@@ -1033,7 +1033,7 @@ class ABIFunction(VyperFunction):
         self._func_t = func_t
 
     def __repr__(self):
-        return f"{self.contract.name}.{self.fn_ast.name}"
+        return f"{self.contract._name}.{self._func_t.name}"
 
     # OVERRIDE
     @property
