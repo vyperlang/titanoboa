@@ -167,6 +167,9 @@ class NetworkEnv(Env):
         return create_address, trace.returndata_bytes
 
     def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
+        if tx_hash in self.deploy_logger.receipts:
+            return self.deploy_logger[tx_hash]
+
         start = time.time()
         while True:
             receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
@@ -205,12 +208,21 @@ class NetworkEnv(Env):
             self._rpc._rpc_url, reset_traces=False, block_identifier=block_identifier
         )
 
+    @property
+    def in_progress(self):
+        return self._in_progress_tx_hash is not None
+
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
+        # what if the second try starts with different state than the first try?
+        # then the tx_data wouldn't be the same.
+        if self._in_progress:
+            return self._continue_from(self._in_progress_tx_hash)
+
         tx_data = _fixup_dict(
             {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         )
         tx_data["gasPrice"] = self.hex_gas_price()
-        tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
+        tx_data["gas"] = gas or self._rpc.fetch("eth_estimateGas", [tx_data])
         tx_data["nonce"] = self._get_nonce(from_)
 
         if from_ not in self._accounts:
@@ -229,12 +241,17 @@ class NetworkEnv(Env):
             # we just have to call send_transaction and pray for the best
             tx_hash = account.send_transaction(tx_data)["hash"]
 
+        self.deploy_logger.add_tx_hash(tx_hash)
+
         # TODO real logging
         print(f"tx broadcasted: {tx_hash}")
 
+    def _continue_from(self, tx_hash):
         receipt, trace = self._wait_for_tx_trace(tx_hash)
 
         print(f"{tx_hash} mined in block {receipt['blockHash']}!")
+
+        self.deploy_logger.add_receipt(tx_hash, receipt)
 
         # the block was mined, reset state
         self._reset_fork(block_identifier=receipt["blockNumber"])
