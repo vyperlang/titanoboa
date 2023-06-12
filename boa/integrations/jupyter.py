@@ -1,32 +1,20 @@
-from concurrent.futures import Future
-from typing import Any
-import contextlib
-from inspect import isawaitable, iscoroutinefunction
 import asyncio
-import threading
-import nest_asyncio
-nest_asyncio.apply()
-
+import contextlib
 import sys
-
-
-import time
+from inspect import isawaitable, iscoroutinefunction
+from typing import Any
 
 import ipykernel.comm
 import IPython.display as frontend
-from jupyter_core.utils import run_sync
-
-from eth_account import Account
-from eth_account._utils.signing import encode_transaction,serializable_unsigned_transaction_from_dict
+import nest_asyncio
 from eth_utils import to_checksum_address
-
-from boa.rpc import to_bytes, to_int, to_hex
 
 ZMQ_POLLOUT = 2  # zmq.POLLOUT without zmq dependency
 
+nest_asyncio.apply()
 
-
-js = frontend.Javascript("""
+js = frontend.Javascript(
+    """
 require.config({
     paths: {
         //ethers: "https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min"
@@ -91,9 +79,11 @@ Jupyter.notebook.kernel.comm_manager.register_target("test_comm", function(comm,
         }, 350);
     });
 });
-""")
+"""
+)
 
 frontend.display(js)
+
 
 # adapted from:
 # https://github.com/Kirill888/jupyter-ui-poll/blob/cb3fa2dbcb75/jupyter_ui_poll/_poll.py
@@ -107,7 +97,7 @@ class _UIComm(ipykernel.comm.Comm):
         self._future = asyncio.futures.Future()
 
         if shell is None:
-            shell = get_ipython()
+            shell = get_ipython()  # noqa: F821
         kernel = shell.kernel
 
         self._shell = shell
@@ -135,7 +125,9 @@ class _UIComm(ipykernel.comm.Comm):
 
     def _restore(self):
         if self._backup_execute_request is not None:
-            self._kernel.shell_handlers["execute_request"] = self._backup_execute_request
+            self._kernel.shell_handlers[
+                "execute_request"
+            ] = self._backup_execute_request
             self._backup_execute_request = None
 
     def _reset_parent(self):
@@ -153,14 +145,11 @@ class _UIComm(ipykernel.comm.Comm):
         sys.stdout.flush()
         sys.stderr.flush()
 
-
     async def _replay(self):
         k = self._kernel
         self._restore()
 
-        shell_stream = getattr(
-            k, "shell_stream", None
-        )  # ipykernel 6 vs 5 differences
+        shell_stream = getattr(k, "shell_stream", None)  # ipykernel 6 vs 5 differences
 
         for stream, ident, parent in self._suspended_events:
             k.set_parent(ident, parent)
@@ -184,14 +173,12 @@ class _UIComm(ipykernel.comm.Comm):
 
                 await asyncio.sleep(0.001)
 
-
     async def do_one_iteration(self):
         try:
             rr = self._kernel.do_one_iteration()
-            cond = isawaitable(rr)
             if isawaitable(rr):  # 6+
                 await rr
-        #except Exception:  # pylint: disable=broad-except
+        # except Exception:  # pylint: disable=broad-except
         #    # it's probably a bug in ipykernel,
         #    # .do_one_iteration() should not throw
         #    return
@@ -216,10 +203,9 @@ class _UIComm(ipykernel.comm.Comm):
 
             await self.do_one_iteration()
 
-
     @staticmethod
     @contextlib.contextmanager
-    def _preempt_current_task(loop = None):
+    def _preempt_current_task(loop=None):
         # use asyncio internals; suspend current task to avoid race conditions
         if loop is None:
             loop = asyncio.get_running_loop()
@@ -234,9 +220,9 @@ class _UIComm(ipykernel.comm.Comm):
             else:
                 asyncio.tasks._current_tasks.pop(loop, None)
 
-
     def poll(self):
         return self._loop.run_until_complete(self._poll_async())
+
 
 # a test function
 def foo():
@@ -251,6 +237,7 @@ def foo():
     response = comm.poll()
 
     return response
+
 
 class BrowserSigner:
     def __init__(self, address=None):
@@ -267,7 +254,10 @@ class BrowserSigner:
         result_address = to_checksum_address(res["address"])
 
         if result_address != address and address is not None:
-            raise ValueError(f"signer returned by RPC is not what we wanted! expected {address}, got {result_address}")
+            raise ValueError(
+                "signer returned by RPC is not what we wanted! "
+                f"expected {address}, got {result_address}"
+            )
 
         self.address = result_address
 

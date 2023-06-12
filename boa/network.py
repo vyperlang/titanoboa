@@ -7,7 +7,7 @@ from eth_account import Account
 from eth_utils import to_canonical_address, to_checksum_address
 
 from boa.environment import Env
-from boa.rpc import EthereumRPC, RPCError, to_hex, to_int, to_bytes
+from boa.rpc import EthereumRPC, RPCError, to_bytes, to_hex, to_int
 
 
 class TraceObject:
@@ -44,6 +44,7 @@ class NetworkEnv(Env):
     It runs non-mutable (view or pure) functions via eth_call,
     mutable functions and contract creation via eth_sendRawTransaction.
     """
+
     def __init__(self, rpc_url, accounts=None):
         super().__init__()
 
@@ -200,7 +201,9 @@ class NetworkEnv(Env):
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state
         # but use reset_traces=False to help with storage dumps
-        super().fork(self._rpc._rpc_url, reset_traces=False, block_identifier=block_identifier)
+        super().fork(
+            self._rpc._rpc_url, reset_traces=False, block_identifier=block_identifier
+        )
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = _fixup_dict(
