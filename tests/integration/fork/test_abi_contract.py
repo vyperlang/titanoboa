@@ -1,9 +1,11 @@
+import hypothesis.strategies as st
 import pytest
+from hypothesis import given
 
 import boa
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def crvusd(get_filepath):
     abi_path = get_filepath("crvusd_abi.json")
 
@@ -20,16 +22,29 @@ def test_invariants(crvusd):
     assert crvusd.totalSupply() == 260000000000000000000000000
 
 
-def test_balances(crvusd):
-    # randomly grabbed from:
-    # https://etherscan.io/token/0xf939e0a03fb07f59a73314e73794be0e57ac1b4e#balances
-    balances = {
-        "0x37417B2238AA52D0DD2D6252d989E728e8f706e4": 1190015011947636310265723,
-        "0x3FAAd2238ab2C50a4BD8Fb496b24CddD2fE6CeB4": 30045280884767179302599,
-    }
+# randomly grabbed from:
+# https://etherscan.io/token/0xf939e0a03fb07f59a73314e73794be0e57ac1b4e#balances
+balances = {
+    "0x37417B2238AA52D0DD2D6252d989E728e8f706e4": 1190015011947636310265723,
+    "0x3FAAd2238ab2C50a4BD8Fb496b24CddD2fE6CeB4": 30045280884767179302599,
+}
 
+
+def test_balances(crvusd):
     for addr, balance in balances.items():
         assert crvusd.balanceOf(addr) == balance
+
+
+@given(n=st.integers(min_value=0, max_value=30045280884767179302599))
+def test_fork_write(crvusd, n):
+    # test we can mutate the fork state
+    a = "0x37417B2238AA52D0DD2D6252d989E728e8f706e4"
+    b = "0x3FAAd2238ab2C50a4BD8Fb496b24CddD2fE6CeB4"
+    with boa.env.prank(a):
+        crvusd.transfer(b, n)
+
+    assert crvusd.balanceOf(a) == balances[a] - n
+    assert crvusd.balanceOf(b) == balances[b] + n
 
 
 def test_abi_stack_trace(crvusd):
