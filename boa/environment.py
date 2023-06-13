@@ -8,6 +8,7 @@ import warnings
 from typing import Any, Iterator, Optional, Union
 
 import eth.constants as constants
+import eth.exceptions
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
@@ -287,6 +288,18 @@ class Env:
     def get_gas_price(self):
         return self._gas_price or 0
 
+    def _restore_journal_state_from_computation(self, computation):
+        db = self.vm.state._account_db
+        (
+            (
+                db._journaldb,
+                db._journaltrie,
+                db._journal_accessed_state,
+                db._account_cache,
+                db._account_stores,
+            )
+        ) = computation._restore_state
+
     def _init_vm(self, reset_traces=True):
         self.vm = self.chain.get_vm()
         env = self
@@ -323,6 +336,63 @@ class Env:
                 super().add_child_computation(child_computation)
                 # track PCs of child calls for profiling purposes
                 self._child_pcs.append(self.code.program_counter)
+
+            @classmethod
+            def apply_message(cls, state, message, tx_ctx):
+                snapshot = state.snapshot()
+
+                STACK_DEPTH_LIMIT = 1024
+                if message.depth > STACK_DEPTH_LIMIT:
+                    raise eth.exceptions.StackDepthLimit("Stack depth limit reached")
+
+                if message.should_transfer_value and message.value:
+                    sender_balance = state.get_balance(message.sender)
+
+                    if sender_balance < message.value:
+                        raise eth.exceptions.InsufficientFunds(
+                            f"Insufficient funds: {sender_balance} < {message.value}"
+                        )
+
+                    state.delta_balance(message.sender, -1 * message.value)
+                    state.delta_balance(message.storage_address, message.value)
+
+                state.touch_account(message.storage_address)
+
+                computation = cls.apply_computation(state, message, tx_ctx)
+
+                db = state._account_db
+                import copy
+                import copyreg
+                import pickle
+
+                import lru
+
+                def pickle_lru(lru_obj):
+                    return (
+                        lru.LRU,
+                        (lru_obj.get_size(),),
+                        None,
+                        None,
+                        iter(lru_obj.items()),
+                    )
+
+                copyreg.pickle(lru.LRU, pickle_lru)
+
+                computation._restore_state = copy.deepcopy(
+                    (
+                        db._journaldb,
+                        db._journaltrie,
+                        db._journal_accessed_state,
+                        db._account_cache,
+                        db._account_stores,
+                    )
+                )
+                if computation.is_error:
+                    state.revert(snapshot)
+                else:
+                    state.commit(snapshot)
+
+                return computation
 
             # hijack creations to automatically generate blueprints
             @classmethod
@@ -510,7 +580,7 @@ class Env:
         if c.is_error:
             raise c.error
 
-        return target_address, c.output
+        return target_address, c.output, c
 
     def execute_code(
         self,

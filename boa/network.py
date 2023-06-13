@@ -139,7 +139,7 @@ class NetworkEnv(Env):
 
     # OVERRIDES
     def deploy_code(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
-        local_address, local_bytecode = super().deploy_code(
+        local_address, local_bytecode, computation = super().deploy_code(
             sender=sender, gas=gas, value=value, bytecode=bytecode
         )
         if trim_dict(kwargs):
@@ -164,7 +164,7 @@ class NetworkEnv(Env):
         # TODO get contract info in here
         print(f"contract deployed at {to_checksum_address(create_address)}")
 
-        return create_address, trace.returndata_bytes
+        return create_address, trace.returndata_bytes, computation
 
     def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
         start = time.time()

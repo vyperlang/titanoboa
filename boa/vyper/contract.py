@@ -123,7 +123,7 @@ class VyperBlueprint(_BaseContract):
 
         deploy_bytecode += blueprint_bytecode
 
-        addr, self.bytecode = self.env.deploy_code(
+        addr, self.bytecode, self._computation = self.env.deploy_code(
             bytecode=deploy_bytecode, override_address=override_address
         )
 
@@ -452,6 +452,10 @@ class VyperContract(_BaseContract):
         if "__init__" in external_fns:
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
+        self._eval_cache = lrudict(0x1000)
+        self._source_map = None
+        self._computation = None
+
         if skip_initcode:
             self.address = to_checksum_address(override_address)
         else:
@@ -469,10 +473,6 @@ class VyperContract(_BaseContract):
 
         self._storage = StorageModel(self)
 
-        self._eval_cache = lrudict(0x1000)
-        self._source_map = None
-        self._computation = None
-
         self.env.register_contract(self.address, self)
 
     def _run_init(self, *args, override_address=None):
@@ -481,7 +481,7 @@ class VyperContract(_BaseContract):
             encoded_args = self._ctor._prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
-        addr, self.bytecode = self.env.deploy_code(
+        addr, self.bytecode, self._computation = self.env.deploy_code(
             bytecode=initcode, override_address=override_address
         )
         return to_checksum_address(addr)
