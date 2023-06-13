@@ -676,7 +676,8 @@ class VyperContract(_BaseContract):
             # inspired by answers in https://stackoverflow.com/q/1603940/
             raise strip_internal_frames(b) from None
 
-    def stack_trace(self, computation):
+    def stack_trace(self, computation=None):
+        computation = computation or self._computation
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation.code)
         if error_detail not in EXTERNAL_CALL_ERRORS:
@@ -994,7 +995,8 @@ class ABIContract(VyperContract):
                 ret[method_id_bytes] = abi_sig
         return ret
 
-    def stack_trace(self, computation):
+    def stack_trace(self, computation=None):
+        computation = computation or self._computation
         calldata_method_id = bytes(computation.msg.data[:4])
         abi_sig = self.method_id_map[calldata_method_id]
         ret = StackTrace([f"  (unknown location in {self}.{abi_sig})"])
@@ -1042,6 +1044,13 @@ class ABIContractFactory:
         address = to_checksum_address(address)
 
         ret = ABIContract(self._interface_t, address)
+
+        bytecode = ret.env.vm.state.get_code(to_canonical_address(address))
+        if bytecode == b"":
+            warnings.warn(
+                "requested {ret} but there is no bytecode at that address!",
+                stacklevel=2,
+            )
 
         ret.env.register_contract(address, ret)
 

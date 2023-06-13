@@ -11,8 +11,9 @@ lint:
 build:
 	pip install .
 
+# run tests without forked tests (which require access to a node)
 test:
-	pytest -n0 tests/ --ignore=tests/unitary/fork/ --ignore=tests/unitary/network/
+	pytest tests/ --ignore=tests/integration/fork/ --ignore=tests/integration/network/
 
 # note: for pypi upload,
 # rm -r titanoboa.egg-info/ dist/
