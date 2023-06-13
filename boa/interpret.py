@@ -1,7 +1,6 @@
 import json
 import textwrap
 from pathlib import Path
-from typing import Optional, Union
 
 import vyper
 from vyper.cli.vyper_compile import get_interface_codes
@@ -16,7 +15,7 @@ from boa.vyper.contract import (
     VyperDeployer,
 )
 
-_Contract = Union[VyperContract, VyperBlueprint]
+_Contract = VyperContract | VyperBlueprint
 
 
 _disk_cache = None
@@ -71,19 +70,19 @@ def loads(source_code, *args, as_blueprint=False, name=None, **kwargs):
         return d.deploy(*args, **kwargs)
 
 
-def load_abi(filename: str, *args, name=None, **kwargs) -> ABIContractFactory:
+def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     if name is None:
         name = filename
     with open(filename) as fp:
         return loads_abi(fp.read(), *args, name=name, **kwargs)
 
 
-def loads_abi(json_str: str, *args, name=None, **kwargs) -> ABIContractFactory:
+def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
 
 
 def loads_partial(
-    source_code: str, name: Optional[str] = None, dedent: bool = True
+    source_code: str, name: str = None, dedent: bool = True
 ) -> VyperDeployer:
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
     if dedent:

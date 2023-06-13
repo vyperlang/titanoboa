@@ -133,7 +133,7 @@ class VyperBlueprint(_BaseContract):
 
     @cached_property
     def deployer(self):
-        return VyperDeployer(self.compiler_data, env=self.env)
+        return VyperDeployer(self.compiler_data)
 
 
 class FrameDetail(dict):

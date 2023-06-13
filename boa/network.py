@@ -59,20 +59,20 @@ class NetworkEnv(Env):
         self._gas_price = None
 
     def add_account(self, account: Account, force_eoa=False):
-        self._accounts[account.address] = account
+        self._accounts[account.address] = account  # type: ignore
         if self.eoa is None or force_eoa:
-            self.eoa = account.address
+            self.eoa = account.address  # type: ignore
 
-    def set_eoa(self, eoa: Account):
+    def set_eoa(self, eoa: Account) -> None:
         self.add_account(eoa, force_eoa=True)
 
     # overrides
-    def get_gas_price(self):
+    def get_gas_price(self) -> int:
         if self._gas_price is not None:
             return self._gas_price
         return to_int(self._rpc.fetch("eth_gasPrice", []))
 
-    def hex_gas_price(self):
+    def hex_gas_price(self) -> str:
         return to_hex(self.get_gas_price())
 
     def _check_sender(self, address):

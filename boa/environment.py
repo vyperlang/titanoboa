@@ -466,7 +466,7 @@ class Env:
         return ret
 
     # helper fn
-    def _get_sender(self, sender=None):
+    def _get_sender(self, sender=None) -> Address:
         if sender is None:
             sender = self.eoa
         return _addr(sender)
@@ -545,7 +545,7 @@ class Env:
             to=to,
             gas=gas,
             value=value,
-            code=bytecode,
+            code=bytecode,  # type: ignore
             data=data,
             is_static=is_static,
         )
