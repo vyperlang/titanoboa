@@ -10,8 +10,7 @@ from boa.environment import Env
 @pytest.fixture(scope="package", autouse=True)
 def boa_env():
     with boa.swap_env(Env()):
-        alchemy_api_key = os.environ["ALCHEMY_MAINNET_API_KEY"]
-        ALCHEMY_URI = f"https://eth-mainnet.g.alchemy.com/v2/{alchemy_api_key}"
+        fork_uri = os.environ.get("MAINNET_ENDPOINT", "http://localhost:8545")
         blkid = 17467922  # some block we know the state of
-        boa.env.fork(ALCHEMY_URI, block_identifier=blkid)
+        boa.env.fork(fork_uri, block_identifier=blkid)
         yield
