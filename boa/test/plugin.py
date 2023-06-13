@@ -72,6 +72,8 @@ def pytest_runtest_call(item: pytest.Item) -> Generator:
         else:
             yield
 
+def pytest_enter_pdb(config, pdb):
+    boa.env._restore_journal_state_from_computation()
 
 def pytest_sessionfinish(session, exitstatus):
     if boa.env._cached_call_profiles:

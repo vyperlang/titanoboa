@@ -288,7 +288,8 @@ class Env:
     def get_gas_price(self):
         return self._gas_price or 0
 
-    def _restore_journal_state_from_computation(self, computation):
+    def _restore_journal_state_from_computation(self, computation=None):
+        computation = computation or self._computation
         db = self.vm.state._account_db
         (
             (
@@ -577,6 +578,8 @@ class Env:
             self.vm.state, msg, tx_ctx
         )
 
+        self._computation = c
+
         if c.is_error:
             raise c.error
 
@@ -625,7 +628,9 @@ class Env:
         msg._contract = contract  # type: ignore
         origin = sender  # XXX: consider making this parametrizable
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
-        return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
+        ret = self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
+        self._computation = ret
+        return ret
 
     # function to time travel
     def time_travel(
