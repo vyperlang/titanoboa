@@ -33,6 +33,17 @@ def enable_pyevm_verbose_logging():
     setup_DEBUG2_logging()
     logger.setLevel("DEBUG2")
 
+import copy
+import copyreg
+import pickle
+
+import lru
+
+def pickle_lru(lru_obj):
+    return ( lru.LRU, (lru_obj.get_size(),), None, None, iter(lru_obj.items()),)
+
+copyreg.pickle(lru.LRU, pickle_lru)
+
 
 class VMPatcher:
     _exc_patchables = {
@@ -362,22 +373,6 @@ class Env:
                 computation = cls.apply_computation(state, message, tx_ctx)
 
                 db = state._account_db
-                import copy
-                import copyreg
-                import pickle
-
-                import lru
-
-                def pickle_lru(lru_obj):
-                    return (
-                        lru.LRU,
-                        (lru_obj.get_size(),),
-                        None,
-                        None,
-                        iter(lru_obj.items()),
-                    )
-
-                copyreg.pickle(lru.LRU, pickle_lru)
 
                 computation._restore_state = copy.deepcopy(
                     (
