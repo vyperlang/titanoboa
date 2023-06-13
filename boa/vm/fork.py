@@ -32,7 +32,7 @@ class CachingRPC(EthereumRPC):
         super().__init__(url)
 
         # (default to memory db plyvel not found or cache_file is None)
-        self._db = MemoryDB(lrudict(1024 * 1024))
+        self._init_mem_db()
         if cache_file is not None:
             try:
                 cache_file = os.path.expanduser(cache_file)
@@ -48,6 +48,9 @@ class CachingRPC(EthereumRPC):
     # reduces fork time after the first fork.
     _loaded: dict[tuple[str, str], "CachingRPC"] = {}
     _pid: int = os.getpid()  # so we can detect if our fds are bad
+
+    def _init_mem_db(self):
+        self._db = MemoryDB(lrudict(1024 * 1024))
 
     @classmethod
     def get_rpc(cls, url, cache_file=DEFAULT_CACHE_DIR):

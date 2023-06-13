@@ -28,7 +28,13 @@ jobs:
           pip install -r dev-requirements.txt
           pip install .
 
-      - name: Run Tests
-        run: python -m pytest -n auto
+      - name: Run Tests (except those which require anvil)
+        run: pytest -n auto --ignore tests/integration/network
         env:
           MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run Networked Tests against anvil
+        run: pytest -n 0 tests/integration/network

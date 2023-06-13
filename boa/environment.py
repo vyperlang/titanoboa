@@ -469,6 +469,8 @@ class Env:
     def _get_sender(self, sender=None) -> Address:
         if sender is None:
             sender = self.eoa
+        if self.eoa is None:
+            raise ValueError(f"{self}.eoa not defined!")
         return _addr(sender)
 
     def deploy_code(

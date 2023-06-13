@@ -1,4 +1,5 @@
 # an Environment which interacts with a real (prod or test) chain
+import contextlib
 import time
 import warnings
 from functools import cached_property
@@ -38,6 +39,10 @@ def _fixup_dict(kv):
     return {k: to_hex(v) for (k, v) in trim_dict(kv).items()}
 
 
+class _EstimateGasFailed(Exception):
+    pass
+
+
 class NetworkEnv(Env):
     """
     An Env object which can be swapped in via `boa.set_env()`.
@@ -57,6 +62,31 @@ class NetworkEnv(Env):
         self.eoa = None
 
         self._gas_price = None
+
+    @cached_property
+    def _rpc_has_snapshot(self):
+        try:
+            snapshot_id = self._rpc.fetch("evm_snapshot", [])
+            self._rpc.fetch("evm_revert", [snapshot_id])
+            return True
+        except RPCError:
+            return False
+
+    # OVERRIDES
+    @contextlib.contextmanager
+    def anchor(self):
+        if not self._rpc_has_snapshot:
+            raise RuntimeError("RPC does not have `evm_snapshot` capability!")
+        try:
+            blkid = self.vm.state._account_db._block_id
+            snapshot_id = self._rpc.fetch("evm_snapshot", [])
+            yield
+            # note we cannot call super.anchor() because vm/accountdb fork
+            # state is reset after every txn.
+        finally:
+            self._rpc.fetch("evm_revert", [snapshot_id])
+            # wipe forked state
+            self._reset_fork(blkid)
 
     def add_account(self, account: Account, force_eoa=False):
         self._accounts[account.address] = account  # type: ignore
@@ -108,9 +138,19 @@ class NetworkEnv(Env):
         data = to_hex(data)
 
         if is_modifying:
-            receipt, trace = self._send_txn(
-                from_=sender, to=to_address, value=value, gas=gas, data=data
-            )
+            try:
+                receipt, trace = self._send_txn(
+                    from_=sender, to=to_address, value=value, gas=gas, data=data
+                )
+            except _EstimateGasFailed:
+                # no need to actually run the txn.
+                # caller will decide what to do with the error - probably revert
+
+                # if not computation.is_error, either a bug in boa
+                # or out of sync with node.
+                assert computation.is_error
+                return computation
+
             output = trace.returndata_bytes
             # gas_used = to_int(receipt["gasUsed"])
 
@@ -150,6 +190,7 @@ class NetworkEnv(Env):
         receipt, trace = self._send_txn(
             from_=sender, value=value, gas=gas, data=bytecode
         )
+
         create_address = to_canonical_address(receipt["contractAddress"])
 
         if local_bytecode != trace.returndata_bytes:
@@ -202,20 +243,31 @@ class NetworkEnv(Env):
         # use "latest" to make sure we are forking with up-to-date state
         # but use reset_traces=False to help with storage dumps
         super().fork(
-            self._rpc._rpc_url, reset_traces=False, block_identifier=block_identifier
+            self._rpc._rpc_url,
+            reset_traces=False,
+            block_identifier=block_identifier,
+            cache_file=None,
         )
+        self.vm.state._account_db._rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = _fixup_dict(
             {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         )
         tx_data["gasPrice"] = self.hex_gas_price()
-        tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
+
         tx_data["nonce"] = self._get_nonce(from_)
+
+        try:
+            tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
+        except RPCError as e:
+            if e.code == 3:
+                # execution failed at estimateGas, probably the txn reverted
+                raise _EstimateGasFailed()
+            raise e from e
 
         if from_ not in self._accounts:
             raise ValueError(f"Account not available: {from_}")
-
         account = self._accounts[from_]
         if hasattr(account, "sign_transaction"):
             signed = account.sign_transaction(tx_data)

@@ -7,8 +7,9 @@ from boa.environment import Env
 
 
 # run all tests with this forked environment
+# called as fixture for its side effects
 @pytest.fixture(scope="package", autouse=True)
-def boa_env():
+def forked_env():
     with boa.swap_env(Env()):
         fork_uri = os.environ.get("MAINNET_ENDPOINT", "http://localhost:8545")
         blkid = 17467922  # some block we know the state of
