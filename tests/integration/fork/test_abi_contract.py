@@ -13,6 +13,20 @@ def crvusd(get_filepath):
 
     return abi.at("0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E")
 
+@pytest.fixture(scope="module")
+def tricrypto(get_filepath):
+    abi_path = get_filepath("tricrypto_abi.json")
+
+    abi = boa.load_abi(abi_path)
+
+    return abi.at("0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B")
+
+def test_tricrypto(tricrypto):
+    assert tricrypto.fee_receiver() == "0xeCb456EA5365865EbAb8a2661B0c503410e9B347"
+    assert tricrypto.get_virtual_price() == 1002646248101745739
+    assert tricrypto.gamma() == 11809167828997
+    assert tricrypto.fee() == 3704162
+    # TODO: test the overloaded functions
 
 def test_invariants(crvusd):
     assert crvusd.decimals() == 18

@@ -28,7 +28,7 @@ from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.semantics.types import AddressT, HashMapT, InterfaceT, TupleT
+from vyper.semantics.types import AddressT, HashMapT, InterfaceT, TupleT, EventT
 from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import method_id
 
@@ -961,29 +961,22 @@ class VyperInternalFunction(VyperFunction):
 # and have both BaseContract => InterfaceContract
 # and separately BaseContract => VyperContract
 class ABIContract(VyperContract):
-    def __init__(self, interface_t, address, created_from=None, env=None):
+    def __init__(self, name, functions, events, address, created_from=None, env=None):
         if env is None:
             env = Env.get_singleton()
         self.env = env
 
-        self.address = to_checksum_address(address)
-
-        self.created_from = created_from
-
-        self._interface_t = interface_t
+        self._name = name
+        self._events = events
+        self._functions = functions
 
         for func_t in self._functions:
             setattr(self, func_t.name, ABIFunction(func_t, self))
 
-        self._source_map = {"pc_pos_map": {}}  # override
+        self.address = to_checksum_address(address)
+        self.created_from = created_from
 
-    @cached_property
-    def _functions(self):
-        return [
-            f
-            for f in self._interface_t.members.values()
-            if isinstance(f, ContractFunctionT)
-        ]
+        self._source_map = {"pc_pos_map": {}}  # override
 
     @cached_property
     def method_id_map(self):
@@ -1003,12 +996,8 @@ class ABIContract(VyperContract):
         return _handle_child_trace(computation, self.env, ret)
 
     @property
-    def _name(self):
-        return self._interface_t._id
-
-    @property
     def deployer(self):
-        return ABIContractFactory(self._interface_t)
+        return ABIContractFactory(self._name, self._functions, self._events)
 
     def __repr__(self):
         ret = f"<{self._name} interface at {to_checksum_address(self.address)}>"
@@ -1021,29 +1010,32 @@ class ABIContract(VyperContract):
     # OVERRIDE
     @cached_property
     def event_for(self):
-        return {e.event_id: e for e in self._interface_t.events.values()}
+        return {e.event_id: e for e in self._events}
 
 
 # name Factory instead of Deployer because it doesn't actually do any
 # contract deployment.
 class ABIContractFactory:
-    def __init__(self, interface_t):
-        self._interface_t = interface_t
-
-    @property
-    def _name(self):
-        return self._interface_t._id
+    def __init__(self, name, functions, events):
+        self._name = name
+        self._functions = functions
+        self._events = events
 
     @classmethod
     def from_abi_dict(cls, abi, name=None):
         if name is None:
             name = "<anonymous contract>"
-        return cls(InterfaceT.from_json_abi(name, abi))
+
+        functions = [ContractFunctionT.from_abi(i) for i in abi if i.get("type") == "function"]
+
+        events = [EventT.from_abi(i) for i in abi if i.get("type") == "event"]
+
+        return cls(name, functions, events)
 
     def at(self, address) -> ABIContract:
         address = to_checksum_address(address)
 
-        ret = ABIContract(self._interface_t, address)
+        ret = ABIContract(self._name, self._functions, self._events, address)
 
         bytecode = ret.env.vm.state.get_code(to_canonical_address(address))
         if bytecode == b"":
