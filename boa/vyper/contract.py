@@ -28,7 +28,7 @@ from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.semantics.types import AddressT, HashMapT, InterfaceT, TupleT, EventT
+from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT
 from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import method_id
 
@@ -1026,7 +1026,9 @@ class ABIContractFactory:
         if name is None:
             name = "<anonymous contract>"
 
-        functions = [ContractFunctionT.from_abi(i) for i in abi if i.get("type") == "function"]
+        functions = [
+            ContractFunctionT.from_abi(i) for i in abi if i.get("type") == "function"
+        ]
 
         events = [EventT.from_abi(i) for i in abi if i.get("type") == "event"]
 
