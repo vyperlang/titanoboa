@@ -5,6 +5,7 @@ from boa.debugger import BoaDebug
 from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
 from boa.interpret import BoaError, load, load_abi, load_partial, loads, loads_abi, loads_partial
 from boa.precompile import precompile
+from boa.test.strategies import fuzz
 from boa.vyper.contract import check_boa_error_matches
 
 # turn off tracebacks if we are in repl

@@ -4,9 +4,12 @@ from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
 from eth_abi.grammar import BasicType, TupleType, parse
 from eth_utils import to_checksum_address
+from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
 from hypothesis.strategies._internal.deferred import DeferredStrategy
+
+from boa.vyper.contract import VyperFunction
 
 # hypothesis fuzzing strategies, adapted from brownie 0.19.2 (86258c7bd)
 # in the future these may be superseded by eth-stdlib.
@@ -165,6 +168,7 @@ def _tuple_strategy(abi_type: TupleType) -> SearchStrategy:
     return st.tuples(*strategies)
 
 
+# XXX: maybe rename to `abi`
 def strategy(type_str: str, **kwargs: Any) -> SearchStrategy:
     type_str = TYPE_STR_TRANSLATIONS.get(type_str, type_str)
     if type_str == "fixed168x10":
@@ -189,3 +193,19 @@ def strategy(type_str: str, **kwargs: Any) -> SearchStrategy:
         return _bytes_strategy(abi_type, **kwargs)
 
     raise ValueError(f"No strategy available for type: {type_str}")
+
+
+# XXX: is this the right module for me?
+def fuzz(fn: VyperFunction):
+    # usage:
+    # @boa.fuzz(contract.function)
+    # def f(arg_a, arg_b, arg_c):
+    #     ...
+    # f()
+    # TODO how to test default values for overloaded functions?
+    # or maybe just leave that to the user.
+    strategies = {
+        arg.name: strategy(arg.typ.canonical_abi_type) for arg in fn.func_t.arguments
+    }
+
+    return given(**strategies)
