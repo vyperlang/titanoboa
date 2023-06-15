@@ -34,6 +34,7 @@ from vyper.utils import method_id
 
 from boa.environment import AddressType, Env, to_int
 from boa.profiling import LineProfile, cache_gas_used_for_computation
+from boa.util.erc20 import ABI as erc20_abi
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
@@ -1049,6 +1050,10 @@ class ABIContractFactory:
         ret.env.register_contract(address, ret)
 
         return ret
+
+
+def erc20(name: str, address: str) -> ABIContract:
+    return ABIContractFactory.from_abi_dict(erc20_abi, name).at(address)
 
 
 class ABIFunction(VyperFunction):

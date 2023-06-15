@@ -109,7 +109,11 @@ class NetworkEnv(Env):
 
     def get_fee_info(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
-        reqs = [("eth_getBlockByNumber", ["pending", False]), ("eth_maxPriorityFeePerGas", []), ("eth_chainId", [])]
+        reqs = [
+            ("eth_getBlockByNumber", ["pending", False]),
+            ("eth_maxPriorityFeePerGas", []),
+            ("eth_chainId", []),
+        ]
         block_info, max_priority_fee, chain_id = self._rpc.fetch_multi(reqs)
         base_fee = block_info["baseFeePerGas"]
         max_fee = to_hex(to_int(base_fee) + to_int(max_priority_fee))
@@ -167,7 +171,9 @@ class NetworkEnv(Env):
             # the node reverted but we didn't. consider this an unrecoverable
             # error and bail out
             if trace.is_error and not computation.is_error:
-                raise RuntimeError(f"panic: local computation succeeded but node didnt: {result}")
+                raise RuntimeError(
+                    f"panic: local computation succeeded but node didnt: {result}"
+                )
 
         else:
             args = _fixup_dict(
@@ -184,7 +190,6 @@ class NetworkEnv(Env):
             # we don't need to do the check for computation.is_error
             # because if the eth_call failed it would have just raised
             # an actual RPC error
-
 
         # returndata not the same. this means either a bug in
         # titanoboa/py-evm or more likely, state got out of sync.
