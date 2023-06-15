@@ -29,7 +29,6 @@ def raise_exception(t: uint256):
 STARTING_SUPPLY = 100
 
 
-
 @pytest.fixture(scope="module")
 def simple_contract():
     return boa.loads(code, STARTING_SUPPLY)
@@ -55,5 +54,6 @@ def test_update_total_supply(simple_contract, amount):
 def test_raise_exception(simple_contract, amount):
     with boa.reverts("oh no!"):
         simple_contract.raise_exception(amount)
+
 
 # XXX: probably want to test deployment revert behavior
