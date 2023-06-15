@@ -3,6 +3,7 @@ import contextlib
 import time
 import warnings
 from functools import cached_property
+from math import ceil
 
 from eth_account import Account
 from eth_utils import to_canonical_address, to_checksum_address
@@ -107,6 +108,14 @@ class NetworkEnv(Env):
             return self._gas_price
         return to_int(self._rpc.fetch("eth_gasPrice", []))
 
+    # when calculating the base fee, the number of blocks N ahead
+    # to compute a cap for the Nth block.
+    # defaults to 0 (no blocks ahead, just use pending block's baseFee)
+    # but can be tweaked if you get errors like
+    # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
+
+    BASE_FEE_ESTIMATOR_CONSTANT = 0
+
     def get_fee_info(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
         reqs = [
@@ -116,8 +125,15 @@ class NetworkEnv(Env):
         ]
         block_info, max_priority_fee, chain_id = self._rpc.fetch_multi(reqs)
         base_fee = block_info["baseFeePerGas"]
-        max_fee = to_hex(to_int(base_fee) + to_int(max_priority_fee))
-        return base_fee, max_priority_fee, max_fee, chain_id
+
+        # Each block increases the base fee by 1/8 at most.
+        # here we have the next block's base fee, compute a cap for the
+        # next N blocks here.
+        blocks_ahead = self.BASE_FEE_ESTIMATOR_CONSTANT
+        base_fee_estimate = ceil(to_int(base_fee) * (9 / 8) ** blocks_ahead)
+
+        max_fee = to_hex(base_fee_estimate + to_int(max_priority_fee))
+        return to_hex(base_fee_estimate), max_priority_fee, max_fee, chain_id
 
     def _check_sender(self, address):
         if address is None:
@@ -226,7 +242,7 @@ class NetworkEnv(Env):
             # not sure what to do about this, for now just complain
             warnings.warn(
                 "local fork did not match node! this likely indicates a bug in titanoboa!",
-                stacklevel=2,
+                stacklevel=1,
             )
         if local_address != create_address:
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")

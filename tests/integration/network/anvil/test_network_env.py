@@ -54,3 +54,6 @@ def test_update_total_supply(simple_contract, t):
 def test_raise_exception(simple_contract, t):
     with boa.reverts("oh no!"):
         simple_contract.raise_exception(t)
+
+
+# XXX: probably want to test deployment revert behavior
