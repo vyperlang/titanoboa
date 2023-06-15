@@ -171,9 +171,8 @@ class NetworkEnv(Env):
             # the node reverted but we didn't. consider this an unrecoverable
             # error and bail out
             if trace.is_error and not computation.is_error:
-                # TODO: what to show here in place of `result`?
                 raise RuntimeError(
-                    "panic: local computation succeeded but node didnt: {result}"
+                    f"panic: local computation succeeded but node didnt: {trace}"
                 )
 
         else:
