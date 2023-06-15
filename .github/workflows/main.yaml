@@ -28,16 +28,11 @@ jobs:
           pip install -r dev-requirements.txt
           pip install .
 
-      - name: Run Tests (except anvil and sepolia)
-        run: |
-          pytest -n auto \
-            --ignore tests/integration/network/anvil \
-            --ignore tests/integration/network/sepolia \
-            tests/
-        env:
-          MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+      - name: Run Unit Tests
+        run: pytest -n auto tests/unitary/
 
   integration:
+    runs-on: ubuntu-latest
     # only run in single process, so there is no contention for sepolia tx nonce
     steps:
       - uses: actions/checkout@v2
@@ -56,12 +51,18 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      # XXX: are these actually unit tests?
+      - name: Run Fork Mode Tests
+        run: pytest -n auto tests/integration/fork/
+        env:
+          MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+
       - name: Run Networked Tests against anvil
         # run separately to clarify its dependency on outside binary
         run: pytest -n auto tests/integration/network/anvil/
 
       - name: Run Sepolia Tests
-        # run separately to disable xdist, otherwise they can contend for tx nonce
+        # disable xdist, otherwise they can contend for tx nonce
         run: pytest -n 0 tests/integration/network/sepolia/
         env:
           SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
