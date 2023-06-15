@@ -20,15 +20,20 @@ class TraceObject:
         # per debug_traceTransaction, construct a fake computation.
         # hardhat/anvil only give structLogs, alchemy only gives callTracer.
         if "structLogs" in self.raw_trace:
-            returndata = self.raw_trace["returnValue"]
+            return self.raw_trace["returnValue"]
         else:
-            returndata = self.raw_trace.get("output")
-
-        return returndata
+            return self.raw_trace.get("output", "0x")
 
     @cached_property
     def returndata_bytes(self):
         return to_bytes(self.returndata)
+
+    @cached_property
+    def is_error(self):
+        if "structLogs" in self.raw_trace:
+            return self.raw_trace["failed"]
+        else:
+            return "error" in self.raw_trace
 
 
 def trim_dict(kv):
@@ -159,6 +164,11 @@ class NetworkEnv(Env):
             output = trace.returndata_bytes
             # gas_used = to_int(receipt["gasUsed"])
 
+            # the node reverted but we didn't. consider this an unrecoverable
+            # error and bail out
+            if trace.is_error and not computation.is_error:
+                raise RuntimeError(f"panic: local computation succeeded but node didnt: {result}")
+
         else:
             args = _fixup_dict(
                 {
@@ -171,14 +181,23 @@ class NetworkEnv(Env):
             )
             returnvalue = self._rpc.fetch("eth_call", [args, "latest"])
             output = to_bytes(returnvalue)
-            # gas_used = to_int(self._rpc.fetch("eth_estimateGas", [args, "latest"]))
+            # we don't need to do the check for computation.is_error
+            # because if the eth_call failed it would have just raised
+            # an actual RPC error
 
+
+        # returndata not the same. this means either a bug in
+        # titanoboa/py-evm or more likely, state got out of sync.
+        # not the greatest, but we will just patch the returndata and
+        # pretend nothing happened (which is not really a problem unless
+        # the caller wants to inspect the trace or memory).
         if computation.output != output:
-            # not sure what to do about this, for now just complain
             warnings.warn(
                 "local fork did not match node! this likely indicates a bug in titanoboa!",
                 stacklevel=2,
             )
+            # just return whatever the node had.
+            computation.output = output
 
         return computation
 
