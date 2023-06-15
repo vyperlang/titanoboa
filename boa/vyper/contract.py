@@ -1030,6 +1030,17 @@ class ABIContractFactory:
             ContractFunctionT.from_abi(i) for i in abi if i.get("type") == "function"
         ]
 
+        # warn on functions with same name
+        _tmp = set()
+        for f in functions:
+            if f.name in _tmp:
+                warnings.warn(
+                    f"{name} overloads {f.name}! overloaded methods "
+                    "might not work correctly at this time",
+                    stacklevel=1,
+                )
+            _tmp.add(f.name)
+
         events = [EventT.from_abi(i) for i in abi if i.get("type") == "event"]
 
         return cls(name, functions, events)
