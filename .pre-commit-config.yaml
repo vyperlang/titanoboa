@@ -14,6 +14,7 @@ repos:
         args:
           - -C
           - --target-version=py38
+          - --line-length=88
   - repo: https://github.com/PyCQA/flake8
     rev: 3.9.2
     hooks:
@@ -22,6 +23,7 @@ repos:
     rev: v5.10.1
     hooks:
       - id: isort
+        args: ["--profile", "black", --line-length=88]
 
 default_language_version:
   python: python3.10

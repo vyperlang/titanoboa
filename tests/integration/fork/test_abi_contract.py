@@ -24,9 +24,7 @@ def tricrypto(get_filepath):
 
 
 def test_erc20_abi():
-    usdc = boa.vyper.contract.erc20(
-        name="USDC", address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-    )
+    usdc = boa.interfaces.ERC20.at("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
     usdc.totalSupply() == 26597448818273574
 
 
