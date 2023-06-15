@@ -5,6 +5,9 @@ import boa
 import boa.test.strategies as vy
 from boa.network import NetworkEnv
 
+# boa.env.anchor() does not work in prod environment
+pytestmark = pytest.mark.ignore_isolation
+
 code = """
 totalSupply: public(uint256)
 balances: HashMap[address, uint256]
@@ -26,6 +29,7 @@ def raise_exception(t: uint256):
 STARTING_SUPPLY = 100
 
 
+
 @pytest.fixture(scope="module")
 def simple_contract():
     return boa.loads(code, STARTING_SUPPLY)
@@ -40,19 +44,16 @@ def test_total_supply(simple_contract):
     assert simple_contract.totalSupply() == STARTING_SUPPLY
 
 
-@settings(max_examples=100, deadline=None)
-@given(vy.strategy("uint16"))
-def test_update_total_supply(simple_contract, t):
+@pytest.mark.parametrize("amount", [0, 1, 100])
+def test_update_total_supply(simple_contract, amount):
     orig_supply = simple_contract.totalSupply()
-    assert orig_supply == STARTING_SUPPLY  # test isolation in fork
-    simple_contract.update_total_supply(t)
-    assert simple_contract.totalSupply() == orig_supply + t
+    simple_contract.update_total_supply(amount)
+    assert simple_contract.totalSupply() == orig_supply + amount
 
 
-@settings(max_examples=1, deadline=None)
-@given(vy.strategy("uint256"))
-def test_raise_exception(simple_contract, t):
+@pytest.mark.parametrize("amount", [0, 1, 100])
+def test_raise_exception(simple_contract, amount):
     with boa.reverts("oh no!"):
-        simple_contract.raise_exception(t)
+        simple_contract.raise_exception(amount)
 
 # XXX: probably want to test deployment revert behavior

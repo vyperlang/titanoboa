@@ -1,3 +1,5 @@
+# tests network mode against local anvil fork
+
 import subprocess
 import sys
 import time

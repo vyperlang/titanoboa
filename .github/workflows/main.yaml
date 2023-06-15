@@ -32,6 +32,8 @@ jobs:
         run: pytest -n auto --ignore tests/integration/network
         env:
           MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+          SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
+          SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
