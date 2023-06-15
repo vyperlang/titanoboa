@@ -29,14 +29,22 @@ jobs:
           pip install .
 
       - name: Run Tests (except those which require anvil)
-        run: pytest -n auto --ignore tests/integration/network
+        run: |
+          pytest -n auto \
+            --ignore tests/integration/network/anvil \
+            --ignore tests/integration/network/sepolia
         env:
           MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
-          SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
-          SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Run Networked Tests against anvil
         run: pytest -n auto tests/integration/network
+
+      - name: Run Sepolia Tests
+        # disable xdist, otherwise they can contend for tx nonce
+        run: pytest -n 0 tests/integration/sepolia
+        env:
+          SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
+          SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
