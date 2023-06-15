@@ -32,7 +32,8 @@ jobs:
         run: |
           pytest -n auto \
             --ignore tests/integration/network/anvil \
-            --ignore tests/integration/network/sepolia
+            --ignore tests/integration/network/sepolia \
+            tests/
         env:
           MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
 
@@ -40,11 +41,11 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Run Networked Tests against anvil
-        run: pytest -n auto tests/integration/network
+        run: pytest -n auto tests/integration/network/anvil/
 
       - name: Run Sepolia Tests
         # disable xdist, otherwise they can contend for tx nonce
-        run: pytest -n 0 tests/integration/sepolia
+        run: pytest -n 0 tests/integration/network/sepolia/
         env:
           SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
           SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
