@@ -315,7 +315,7 @@ class ERC721(ERCToken):
             {
                 "indexed": true,
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -464,7 +464,7 @@ class ERC721(ERCToken):
             "inputs": [
             {
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -487,7 +487,7 @@ class ERC721(ERCToken):
             "inputs": [
             {
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -584,7 +584,7 @@ class ERC721(ERCToken):
             "inputs": [
             {
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -608,6 +608,9 @@ class ERC721(ERCToken):
     )
 
 
+# The ERC1155 class will trigger:
+# vyper.exceptions.UnknownType: ABI type has an invalid length: address[]
+# ignoring for now
 class ERC1155(ERCToken):
     abi = json.loads(
         """
@@ -649,7 +652,7 @@ class ERC1155(ERCToken):
             {
                 "indexed": true,
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -686,7 +689,7 @@ class ERC1155(ERCToken):
             {
                 "indexed": true,
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -806,7 +809,7 @@ class ERC1155(ERCToken):
             "inputs": [
             {
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -839,7 +842,7 @@ class ERC1155(ERCToken):
             "inputs": [
             {
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -995,7 +998,7 @@ class ERC4626(ERCToken):
             {
                 "indexed": true,
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
@@ -1491,7 +1494,7 @@ class ERC4626(ERCToken):
             "inputs": [
             {
                 "internalType": "address",
-                "name": "from",
+                "name": "_from",
                 "type": "address"
             },
             {
