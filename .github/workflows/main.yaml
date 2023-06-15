@@ -39,4 +39,4 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Run Networked Tests against anvil
-        run: pytest -n 0 tests/integration/network
+        run: pytest -n auto tests/integration/network
