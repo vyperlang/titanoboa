@@ -1,8 +1,6 @@
 import pytest
-from hypothesis import given, settings
 
 import boa
-import boa.test.strategies as vy
 from boa.network import NetworkEnv
 
 # boa.env.anchor() does not work in prod environment

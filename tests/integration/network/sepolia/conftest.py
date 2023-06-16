@@ -1,12 +1,8 @@
 # tests network mode against sepolia
 
 import os
-import subprocess
-import sys
-import time
 
 import pytest
-import requests
 from eth_account import Account
 
 import boa
