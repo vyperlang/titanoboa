@@ -156,14 +156,12 @@ class TracingCodeStream(CodeStream):
         "invalid_positions",
         "valid_positions",
         "program_counter",
-        "_contract",
     ]
 
     def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._trace = []  # trace of opcodes that were run
         self.program_counter = start_pc  # configurable start PC
-        self._contract = contract  # for coverage
         self._fake_codesize = fake_codesize  # what CODESIZE returns
 
     def __iter__(self) -> Iterator[int]:
@@ -261,6 +259,7 @@ class SstoreTracer:
 class Env:
     _singleton = None
     _initial_address_counter = 100
+    _coverage_enabled = False
 
     def __init__(self):
         self.chain = _make_chain()
@@ -301,12 +300,8 @@ class Env:
                 # super() hardcodes CodeStream into the ctor
                 # so we have to override it here
                 super().__init__(*args, **kwargs)
-                contract = env._contracts.get(
-                    to_checksum_address(self.msg.storage_address)
-                )
                 self.code = TracingCodeStream(
                     self.code._raw_code_bytes,
-                    contract=contract,
                     fake_codesize=getattr(self.msg, "_fake_codesize", None),
                     start_pc=getattr(self.msg, "_start_pc", 0),
                 )
@@ -564,7 +559,21 @@ class Env:
         msg._contract = contract  # type: ignore
         origin = sender  # XXX: consider making this parametrizable
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
-        return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
+        ret = self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
+
+        if self._coverage_enabled:
+            self._hook_trace_computation(ret, contract)
+
+        return ret
+
+    def _hook_trace_computation(self, computation, contract=None):
+        # XXX perf: don't trace if contract is None
+        for _pc in computation.code._trace:
+            # loop over pc so that it is available when coverage hooks into it
+            pass
+        for child in computation.children:
+            child_contract = self.lookup_contract(child.msg.code_address)
+            self._hook_trace_computation(computation, child_contract)
 
     # function to time travel
     def time_travel(
