@@ -55,26 +55,35 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
 class VyperDeployer:
-    def __init__(self, compiler_data):
+    def __init__(self, compiler_data, filename=None):
         self.compiler_data = compiler_data
 
         # force compilation so that if there are any errors in the contract,
         # we fail at load rather than at deploy time.
         _ = compiler_data.bytecode
 
+        self.filename = filename
+
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
 
     def deploy(self, *args, **kwargs):
-        return VyperContract(self.compiler_data, *args, **kwargs)
+        return VyperContract(
+            self.compiler_data, *args, filename=self.filename, **kwargs
+        )
 
     def deploy_as_blueprint(self, *args, **kwargs):
-        return VyperBlueprint(self.compiler_data, *args, **kwargs)
+        return VyperBlueprint(
+            self.compiler_data, *args, filename=self.filename, **kwargs
+        )
 
     def at(self, address: AddressType) -> "VyperContract":
         address = to_checksum_address(address)
         ret = VyperContract(
-            self.compiler_data, override_address=address, skip_initcode=True
+            self.compiler_data,
+            override_address=address,
+            skip_initcode=True,
+            filename=self.filename,
         )
         vm = ret.env.vm
         bytecode = vm.state.get_code(to_canonical_address(address))
@@ -88,13 +97,15 @@ class VyperDeployer:
 
 # a few lines of shared code between VyperBlueprint and VyperContract
 class _BaseContract:
-    def __init__(self, compiler_data, env=None):
+    def __init__(self, compiler_data, env=None, filename=None):
         self.compiler_data = compiler_data
 
         if env is None:
             env = Env.get_singleton()
 
         self.env = env
+
+        self.filename = filename
 
 
 # create a blueprint for use with `create_from_blueprint`.
@@ -107,10 +118,11 @@ class VyperBlueprint(_BaseContract):
         env=None,
         override_address=None,
         blueprint_preamble=b"\xFE\x71\x00",
+        filename=None,
     ):
         # note slight code duplication with VyperContract ctor,
         # maybe use common base class?
-        super().__init__(compiler_data, env)
+        super().__init__(compiler_data, env, filename)
 
         if blueprint_preamble is None:
             blueprint_preamble = b""
@@ -133,7 +145,7 @@ class VyperBlueprint(_BaseContract):
 
     @cached_property
     def deployer(self):
-        return VyperDeployer(self.compiler_data)
+        return VyperDeployer(self.compiler_data, filename=self.filename)
 
 
 class FrameDetail(dict):
@@ -435,8 +447,9 @@ class VyperContract(_BaseContract):
         # whether or not to skip constructor
         skip_initcode=False,
         created_from=None,
+        filename=None,
     ):
-        super().__init__(compiler_data, env)
+        super().__init__(compiler_data, env, filename)
 
         self.created_from = created_from
 
@@ -516,7 +529,7 @@ class VyperContract(_BaseContract):
 
     @cached_property
     def deployer(self):
-        return VyperDeployer(self.compiler_data, env=self.env)
+        return VyperDeployer(self.compiler_data, env=self.env, filename=self.filename)
 
     # is this actually useful?
     def at(self, address):
@@ -689,6 +702,7 @@ class VyperContract(_BaseContract):
         ret = LineProfile.from_single(self, computation)
         for child in computation.children:
             child_obj = self.env.lookup_contract(child.msg.code_address)
+            # TODO: child obj is opaque contract that calls back into known contract
             if child_obj is not None:
                 ret.merge(child_obj.line_profile(child))
         return ret

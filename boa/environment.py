@@ -156,12 +156,14 @@ class TracingCodeStream(CodeStream):
         "invalid_positions",
         "valid_positions",
         "program_counter",
+        "_contract",
     ]
 
-    def __init__(self, *args, start_pc=0, fake_codesize=None, **kwargs):
+    def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._trace = []  # trace of opcodes that were run
         self.program_counter = start_pc  # configurable start PC
+        self._contract = contract  # for coverage
         self._fake_codesize = fake_codesize  # what CODESIZE returns
 
     def __iter__(self) -> Iterator[int]:
@@ -278,6 +280,7 @@ class Env:
         self._profiled_contracts = {}
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
+        self._coverage_data = {}
 
         self.sha3_trace = {}
         self.sstore_trace = {}
@@ -298,8 +301,12 @@ class Env:
                 # super() hardcodes CodeStream into the ctor
                 # so we have to override it here
                 super().__init__(*args, **kwargs)
+                contract = env._contracts.get(
+                    to_checksum_address(self.msg.storage_address)
+                )
                 self.code = TracingCodeStream(
                     self.code._raw_code_bytes,
+                    contract=contract,
                     fake_codesize=getattr(self.msg, "_fake_codesize", None),
                     start_pc=getattr(self.msg, "_start_pc", 0),
                 )
