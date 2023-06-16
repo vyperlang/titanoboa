@@ -1,4 +1,23 @@
-"""The titanoboa coverage plugin."""
+"""
+The titanoboa coverage plugin.
+Usage: add the following to `.coveragerc`
+```
+[run]
+plugins = boa.coverage
+```
+(for more information see https://coverage.readthedocs.io/en/latest/config.html)
+
+Then, run with `coverage run ...`
+
+With `pytest-cov`, it can be invoked in either of two ways,
+`coverage run -m pytest ...`
+or,
+`pytest --cov=<report_directory>/ ...`
+
+Coverage is experimental and there may be odd corner cases! If so,
+please report them on github or in the discord.
+"""
+
 
 from functools import cached_property
 
