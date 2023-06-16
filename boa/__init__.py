@@ -16,7 +16,6 @@ if hasattr(sys, "ps1"):
 
 env = Env.get_singleton()
 
-
 @contextlib.contextmanager
 def swap_env(new_env):
     old_env = env

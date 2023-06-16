@@ -3,7 +3,9 @@ from typing import Generator
 
 import hypothesis
 import pytest
+import coverage
 
+from boa.coverage import TitanoboaPlugin
 import boa
 from boa.profiling import get_call_profile_table, get_line_profile_table
 from boa.vm.gas_meters import ProfilingGasMeter
@@ -82,3 +84,7 @@ def pytest_sessionfinish(session, exitstatus):
         console = Console(file=sys.stdout)
         console.print(get_call_profile_table(boa.env))
         console.print(get_line_profile_table(boa.env))
+
+
+def coverage_init(reg, options):
+    reg.add_file_tracer(TitanoboaPlugin())

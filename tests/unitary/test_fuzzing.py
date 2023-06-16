@@ -21,7 +21,7 @@ def overloaded(a: uint256, b: bool = True) -> uint256:
 
 @pytest.fixture(scope="module")
 def contract():
-    return boa.loads(code)
+    return boa.loads(code, filename="MyFuzzContract.vy")
 
 
 def test_identity(contract):

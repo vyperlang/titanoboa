@@ -59,11 +59,11 @@ def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
     if "name" in kwargs:
         name = kwargs.pop("name")
     with open(filename) as f:
-        return loads(f.read(), *args, name=name, **kwargs)
+        return loads(f.read(), *args, name=name, **kwargs, filename=filename)
 
 
-def loads(source_code, *args, as_blueprint=False, name=None, **kwargs):
-    d = loads_partial(source_code, name)
+def loads(source_code, *args, as_blueprint=False, name=None, filename=None, **kwargs):
+    d = loads_partial(source_code, name, filename=filename)
     if as_blueprint:
         return d.deploy_as_blueprint(**kwargs)
     else:
@@ -82,18 +82,18 @@ def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFa
 
 
 def loads_partial(
-    source_code: str, name: str = None, dedent: bool = True
+    source_code: str, name: str = None, filename: str = None, dedent: bool = True
 ) -> VyperDeployer:
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
     if dedent:
         source_code = textwrap.dedent(source_code)
     data = compiler_data(source_code, name)
-    return VyperDeployer(data)
+    return VyperDeployer(data, filename=filename)
 
 
 def load_partial(filename: str) -> VyperDeployer:  # type: ignore
     with open(filename) as f:
-        return loads_partial(f.read(), name=filename)
+        return loads_partial(f.read(), name=filename, filename=filename)
 
 
 __all__ = ["BoaError"]
