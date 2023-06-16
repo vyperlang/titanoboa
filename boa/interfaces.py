@@ -1,34 +1,8 @@
-import json
-
-from vyper.semantics.types import EventT
-from vyper.semantics.types.function import ContractFunctionT
-
+from boa.interpret import loads_abi
 from boa.vyper.contract import ABIContractFactory
 
-
-class ERCToken(ABIContractFactory):
-    abi = []
-
-    def __init__(self, token_name):
-        functions = [
-            ContractFunctionT.from_abi(i)
-            for i in self.abi
-            if i.get("type") == "function"
-        ]
-
-        events = [EventT.from_abi(i) for i in self.abi if i.get("type") == "event"]
-
-        super().__init__(token_name, functions, events)
-
-    @classmethod
-    def at(cls, address):
-        token_instance = cls(cls.__name__)
-        return super(ERCToken, token_instance).at(address)
-
-
-class ERC20(ERCToken):
-    abi = json.loads(
-        """
+ERC20: ABIContractFactory = loads_abi(
+    json_str="""
     [
         {
             "constant": true,
@@ -251,13 +225,12 @@ class ERC20(ERCToken):
             "type": "event"
         }
     ]
-    """
-    )
+    """,
+    name="ERC20",
+)
 
-
-class ERC721(ERCToken):
-    abi = json.loads(
-        """
+ERC721: ABIContractFactory = loads_abi(
+    json_str="""
     [
         {
             "anonymous": false,
@@ -604,337 +577,13 @@ class ERC721(ERCToken):
             "type": "function"
         }
     ]
-    """
-    )
+    """,
+    name="ERC721",
+)
 
 
-# The ERC1155 class will trigger:
-# vyper.exceptions.UnknownType: ABI type has an invalid length: address[]
-# ignoring for now
-class ERC1155(ERCToken):
-    abi = json.loads(
-        """
-    [
-        {
-            "anonymous": false,
-            "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "account",
-                "type": "address"
-            },
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "operator",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "bool",
-                "name": "approved",
-                "type": "bool"
-            }
-            ],
-            "name": "ApprovalForAll",
-            "type": "event"
-        },
-        {
-            "anonymous": false,
-            "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "operator",
-                "type": "address"
-            },
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "_from",
-                "type": "address"
-            },
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "to",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256[]",
-                "name": "ids",
-                "type": "uint256[]"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256[]",
-                "name": "values",
-                "type": "uint256[]"
-            }
-            ],
-            "name": "TransferBatch",
-            "type": "event"
-        },
-        {
-            "anonymous": false,
-            "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "operator",
-                "type": "address"
-            },
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "_from",
-                "type": "address"
-            },
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "to",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "id",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "value",
-                "type": "uint256"
-            }
-            ],
-            "name": "TransferSingle",
-            "type": "event"
-        },
-        {
-            "anonymous": false,
-            "inputs": [
-            {
-                "indexed": false,
-                "internalType": "string",
-                "name": "value",
-                "type": "string"
-            },
-            {
-                "indexed": true,
-                "internalType": "uint256",
-                "name": "id",
-                "type": "uint256"
-            }
-            ],
-            "name": "URI",
-            "type": "event"
-        },
-        {
-            "inputs": [
-            {
-                "internalType": "address",
-                "name": "account",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "id",
-                "type": "uint256"
-            }
-            ],
-            "name": "balanceOf",
-            "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-            ],
-            "stateMutability": "view",
-            "type": "function"
-        },
-        {
-            "inputs": [
-            {
-                "internalType": "address[]",
-                "name": "accounts",
-                "type": "address[]"
-            },
-            {
-                "internalType": "uint256[]",
-                "name": "ids",
-                "type": "uint256[]"
-            }
-            ],
-            "name": "balanceOfBatch",
-            "outputs": [
-            {
-                "internalType": "uint256[]",
-                "name": "",
-                "type": "uint256[]"
-            }
-            ],
-            "stateMutability": "view",
-            "type": "function"
-        },
-        {
-            "inputs": [
-            {
-                "internalType": "address",
-                "name": "account",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "operator",
-                "type": "address"
-            }
-            ],
-            "name": "isApprovedForAll",
-            "outputs": [
-            {
-                "internalType": "bool",
-                "name": "",
-                "type": "bool"
-            }
-            ],
-            "stateMutability": "view",
-            "type": "function"
-        },
-        {
-            "inputs": [
-            {
-                "internalType": "address",
-                "name": "_from",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "to",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256[]",
-                "name": "ids",
-                "type": "uint256[]"
-            },
-            {
-                "internalType": "uint256[]",
-                "name": "amounts",
-                "type": "uint256[]"
-            },
-            {
-                "internalType": "bytes",
-                "name": "data",
-                "type": "bytes"
-            }
-            ],
-            "name": "safeBatchTransferFrom",
-            "outputs": [],
-            "stateMutability": "nonpayable",
-            "type": "function"
-        },
-        {
-            "inputs": [
-            {
-                "internalType": "address",
-                "name": "_from",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "to",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "id",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            },
-            {
-                "internalType": "bytes",
-                "name": "data",
-                "type": "bytes"
-            }
-            ],
-            "name": "safeTransferFrom",
-            "outputs": [],
-            "stateMutability": "nonpayable",
-            "type": "function"
-        },
-        {
-            "inputs": [
-            {
-                "internalType": "address",
-                "name": "operator",
-                "type": "address"
-            },
-            {
-                "internalType": "bool",
-                "name": "approved",
-                "type": "bool"
-            }
-            ],
-            "name": "setApprovalForAll",
-            "outputs": [],
-            "stateMutability": "nonpayable",
-            "type": "function"
-        },
-        {
-            "inputs": [
-            {
-                "internalType": "bytes4",
-                "name": "interfaceId",
-                "type": "bytes4"
-            }
-            ],
-            "name": "supportsInterface",
-            "outputs": [
-            {
-                "internalType": "bool",
-                "name": "",
-                "type": "bool"
-            }
-            ],
-            "stateMutability": "view",
-            "type": "function"
-        },
-        {
-            "inputs": [
-            {
-                "internalType": "uint256",
-                "name": "id",
-                "type": "uint256"
-            }
-            ],
-            "name": "uri",
-            "outputs": [
-            {
-                "internalType": "string",
-                "name": "",
-                "type": "string"
-            }
-            ],
-            "stateMutability": "view",
-            "type": "function"
-        }
-    ]
-    """
-    )
-
-
-class ERC4626(ERCToken):
-    abi = json.loads(
-        """
+ERC4626: ABIContractFactory = loads_abi(
+    json_str="""
     [
         {
             "anonymous": false,
@@ -1549,5 +1198,6 @@ class ERC4626(ERCToken):
             "type": "function"
         }
     ]
-    """
-    )
+    """,
+    name="ERC4626",
+)
