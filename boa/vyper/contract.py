@@ -1045,15 +1045,12 @@ class ABIContractFactory:
 
         return cls(name, functions, events)
 
-    def at(self, address, name=None) -> ABIContract:
+    def at(self, address) -> ABIContract:
+
         address = to_checksum_address(address)
-
-        if self._name == "<anonymous contract>" and name is not None:
-            self._name = name
-
         ret = ABIContract(self._name, self._functions, self._events, address)
-
         bytecode = ret.env.vm.state.get_code(to_canonical_address(address))
+
         if bytecode == b"":
             warnings.warn(
                 "requested {ret} but there is no bytecode at that address!",
