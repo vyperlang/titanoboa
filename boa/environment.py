@@ -322,10 +322,10 @@ class computation_template:
         print("FAST MODE")
         err = None
         with cls(state, msg, tx_ctx) as computation:
-            eval_ctx = EvalContext(computation)
             print(contract.ir_executor)
+            eval_ctx = EvalContext(contract.ir_executor, computation)
             try:
-                contract.ir_executor.eval(eval_ctx)
+                eval_ctx.run()
             except Exception as e:
                 # grab the exception to raise later -
                 # unclear why this is getting swallowed by py-evm.
