@@ -7,6 +7,7 @@ import sys
 
 from eth._utils.numeric import ceil32
 from eth.exceptions import Revert
+from eth.vm.memory import Memory
 
 from vyper.evm.opcodes import OPCODES
 import vyper.ir.optimizer
@@ -47,7 +48,8 @@ class EvalContext:
     call_frames: List[List[Any]] = field(default_factory=list)
 
     def __post_init__(self):
-        self._allocate_call_frame([], self.ir_executor._max_var_height)
+        self.computation._memory = FastMem()
+        self._allocate_local_frame([], self.ir_executor._max_var_height)
 
     def run(self):
         #print("ENTER", self.call_frames)
@@ -58,7 +60,9 @@ class EvalContext:
     def local_vars(self):
         return self.call_frames[-1]
 
-    def _allocate_call_frame(self, arglist, max_var_height):
+    def _allocate_local_frame(self, arglist, max_var_height):
+        # pre-allocate variable slots so we don't waste time with append/pop.
+
         # a sentinel which will cause an exception if somebody tries to use it by accident
         oob_int = "uh oh!"
         required_dummies = max_var_height + 1 - len(arglist)
@@ -67,19 +71,10 @@ class EvalContext:
         self.call_frames.append(frame_vars)
 
     @contextlib.contextmanager
-    def allocate_call_frame(self, arglist, max_var_height):
-        self._allocate_call_frame(arglist, max_var_height)
+    def allocate_local_frame(self, arglist, max_var_height):
+        self._allocate_local_frame(arglist, max_var_height)
         yield
         self.call_frames.pop()
-    #@contextlib.contextmanager
-    #def variables(self, var_list):
-    #    for var in var_list:
-    #        self.local_vars.append(var)
-#
-#        yield
-#
-#        for var in var_list:
-#            self.local_vars.pop()
 
     def goto(self, compile_ctx, label, arglist):
         if label == "returnpc":  # i.e. exitsub
@@ -134,9 +129,10 @@ class IRBaseExecutor:
 
 @dataclass
 class FrameInfo:
-    de_bruijn_index: int = 0
-    max_db_index: int = 0
+    current_slot: int = 0  # basically the de bruijn index
     slots: Dict[str, int] = field(default_factory=lambda: {})
+    # record the largest slot we see, so we know how many local vars to allocate
+    max_slot: int = 0
 
 @dataclass
 class CompileContext:
@@ -160,14 +156,14 @@ class CompileContext:
         frame = self.frames[-1]
         for varname in vars_list:
             shadowed[varname] = frame.slots.get(varname)
-            frame.slots[varname] = frame.de_bruijn_index
-            frame.de_bruijn_index += 1
-        frame.max_db_index = max(frame.max_db_index, frame.de_bruijn_index)
+            frame.slots[varname] = frame.current_slot
+            frame.current_slot += 1
+        frame.max_slot = max(frame.max_slot, frame.current_slot)
 
         yield
 
         for varname in vars_list:
-            frame.de_bruijn_index -= 1
+            frame.current_slot -= 1
             if shadowed[varname] is None:
                 del frame.slots[varname]
             else:
@@ -273,28 +269,60 @@ class VariableExecutor:
 
 # most memory is aligned. treat it as list of ints, and provide mocking
 # for instructions which access it in the slow way
-class FastMem:
+class FastMem(Memory):
+    __slots__ = ("mem_cache", "_bytes", "needs_writeback")
     def __init__(self):
-        self.mem = []
-        self.mem_bytes = bytearray()
+        self.mem_cache = []  # cached words
 
-    def __len__(self):
-        # return len in bytes
-        return len(self.mem) * 32
+        self.needs_writeback = set()  #
+
+        super().__init__()
+
+    _DIRTY = object()
 
     def extend(self, start_position, size_bytes):
-        new_size_words = ceil32(start_position + size) // 32
-        size_difference = new_size_words - len(self.mem)
-        self.mem.extend([0] * size_difference)
+        # i.e. ceil32(len(self)) // 32
+        new_size = (start_position + size_bytes + 31) // 32
+        if (size_difference := new_size - len(self.mem_cache)) > 0:
+            self.mem_cache.extend([self._DIRTY] * size_difference)
+            super().extend(start_position, size_bytes)
+
 
     def read_word(self, start_position):
         if start_position % 32 == 0:
-            return self.mem[start_position // 32]
+            if (ret := self.mem_cache[start_position // 32]) is not self._DIRTY:
+                return ret
 
-        return _to_int(self.read_bytes(start_position, 32))
+        ret = _to_int(self.read_bytes(start_position, 32))
+        self.mem_cache[start_position // 32] = ret
+        return ret
 
     def read_bytes(self, start_position, size):
-        pass
+        start = start_position // 32
+        end = ceil32(start_position + size) // 32
+        for ix in range(start, end):
+            if ix in self.needs_writeback:
+                super().write(ix * 32, 32, _to_bytes(self.mem_cache[ix]))
+                self.needs_writeback.remove(ix)
+
+        return super().read_bytes(start_position, size)
+
+    def write_word(self, start_position, int_val):
+        if start_position % 32 == 0:
+            self.mem_cache[start_position // 32] = int_val
+
+        self.needs_writeback.add(start_position // 32)
+
+        # bypass cache dirtying
+        #super().write(start_position, 32, _to_bytes(int_val))
+
+    def write(self, start_position, size, value):
+        start = start_position // 32
+        end = (start_position + size + 31) // 32
+        for i in range(start, end):
+            self.mem_cache[i] = self._DIRTY
+        super().write(start_position, size, value)
+
 
 MAX_UINT256 = 2** 256 - 1
 
@@ -348,17 +376,19 @@ class MLoad(IRExecutor):
     def eval(self, context):
         ptr = _to_int(self.args[0].eval(context))
         context.computation._memory.extend(ptr, 32)
-        return context.computation._memory.read_bytes(ptr, 32)
+        #return context.computation._memory.read_bytes(ptr, 32)
+        return context.computation._memory.read_word(ptr)
 
 @executor
 class MStore(IRExecutor):
     _name = "mstore"
 
     def eval(self, context):
-        val = _to_bytes(self.args[1].eval(context))
+        val = _to_int(self.args[1].eval(context))
         ptr = _to_int(self.args[0].eval(context))
         context.computation._memory.extend(ptr, 32)
-        context.computation._memory.write(ptr, 32, val)
+        #context.computation._memory.write(ptr, 32, val)
+        context.computation._memory.write_word(ptr, val)
  
 
 @executor
@@ -522,7 +552,7 @@ class Label(IRExecutor):
             with self.compile_ctx.variables(var_list):
                 self.body = self.body.analyze()
 
-            self._max_var_height = frame_info.max_db_index
+            self._max_var_height = frame_info.max_slot
 
         print(self._name, self.labelname, self._max_var_height)
         return self
@@ -533,7 +563,7 @@ class Label(IRExecutor):
 
     def execute_subroutine(self, context, *args):
         assert len(args) == len(self.var_list), (self.labelname, [x for x in args], self.var_list)
-        with context.allocate_call_frame(args, self._max_var_height):
+        with context.allocate_local_frame(args, self._max_var_height):
             self.body.eval(context)
 
 @executor
@@ -565,7 +595,7 @@ class With(IRExecutor):
 def executor_from_ir(ir_node, opcode_impls: Dict[int, Any]) -> Any:
     ret = _executor_from_ir(ir_node, opcode_impls, CompileContext({}))
     ret = ret.analyze()
-    ret._max_var_height = ret.compile_ctx.frames[0].max_db_index
+    ret._max_var_height = ret.compile_ctx.frames[0].max_slot
     return ret
 
 def _executor_from_ir(ir_node, opcode_impls, compile_ctx) -> Any:
