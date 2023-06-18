@@ -38,6 +38,7 @@ from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vyper import _METHOD_ID_VAR
+from boa.vyper.ir_executor import executor_from_ir
 from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
     _compile_vyper_function,
@@ -776,6 +777,12 @@ class VyperContract(_BaseContract):
             self.unoptimized_assembly, insert_vyper_signature=True
         )
         return s + self.data_section
+
+    @cached_property
+    def ir_executor(self):
+        ir = self.compiler_data.ir_runtime
+        opcode_impls = self.env.vm.state.computation_class.opcodes
+        return executor_from_ir(ir, opcode_impls)
 
     @contextlib.contextmanager
     def _anchor_source_map(self, source_map):
