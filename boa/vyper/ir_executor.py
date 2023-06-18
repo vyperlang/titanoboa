@@ -1,30 +1,27 @@
+import contextlib
+import re
 from dataclasses import dataclass, field
 from functools import cached_property
-import contextlib
-from typing import Any, Dict, List, Union
-import re
-import sys
+from typing import Any, Optional
 
-from eth._utils.numeric import ceil32
+import vyper.ir.optimizer
 from eth.exceptions import Revert
 from eth.vm.memory import Memory
-
 from vyper.evm.opcodes import OPCODES
-import vyper.ir.optimizer
+from vyper.utils import unsigned_to_signed
+
 
 def debug(*args, **kwargs):
-    pass
-
-def _debug(*args, **kwargs):
     print(*args, **kwargs)
 
-if False:
-    debug = _debug
+
+def ceil32(x):
+    return (x + 31) & ~31
+
 
 @dataclass
 class OpcodeInfo:
     # model of an opcode from vyper.evm.opcodes
-
     opcode: int  # opcode number ex. 0x01 for ADD
     consumes: int  # number of stack items this consumes
     produces: int  # number of stack items this produces, must be 0 or 1
@@ -40,21 +37,23 @@ class OpcodeInfo:
         return cls(opcode, consumes, produces, gas_estimate)
 
 
-#@dataclass(slots=True)
-@dataclass
+@dataclass(slots=True)
 class EvalContext:
-    ir_executor: Any  # IRBaseExecutor
+    ir_executor: "IRBaseExecutor"
     computation: Any  # ComputationAPI
-    call_frames: List[List[Any]] = field(default_factory=list)
+    call_frames: list[list[Any]] = field(default_factory=list)
 
     def __post_init__(self):
         self.computation._memory = FastMem()
-        self._allocate_local_frame([], self.ir_executor._max_var_height)
 
     def run(self):
-        #print("ENTER", self.call_frames)
-        self.ir_executor.eval(self)
-        return self.computation
+        try:
+            self._allocate_local_frame([], self.ir_executor._max_var_height)
+            self.ir_executor.eval(self)
+            return self.computation
+        finally:
+            # clear all state
+            self.call_frames = []
 
     @property
     def local_vars(self):
@@ -63,11 +62,14 @@ class EvalContext:
     def _allocate_local_frame(self, arglist, max_var_height):
         # pre-allocate variable slots so we don't waste time with append/pop.
 
-        # a sentinel which will cause an exception if somebody tries to use it by accident
-        oob_int = "uh oh!"
         required_dummies = max_var_height + 1 - len(arglist)
+
         frame_vars = list(arglist)
-        frame_vars.extend([oob_int] * required_dummies)
+
+        # a sentinel which will cause an exception if somebody tries to use it by accident
+        dummy = "uh oh!"
+        frame_vars.extend([dummy] * required_dummies)
+
         self.call_frames.append(frame_vars)
 
     @contextlib.contextmanager
@@ -77,67 +79,26 @@ class EvalContext:
         self.call_frames.pop()
 
     def goto(self, compile_ctx, label, arglist):
-        if label == "returnpc":  # i.e. exitsub
+        # special case to handle how vyper returns from subroutines
+        if label == "returnpc":
             return
 
         compile_ctx.labels[label].execute_subroutine(self, *arglist)
 
 
-class IRBaseExecutor:
-    __slots__ = ("args","compile_ctx")
-
-    def __init__(self, compile_ctx, *args):
-        self.args = args
-        self.compile_ctx = compile_ctx
-
-    @cached_property
-    def name(self):
-        return self._name
-
-    def __repr__(self):
-        ret = self.name + "("
-
-        show = lambda s: s if isinstance(s, str) else hex(s) if isinstance(s, int) else repr(s)
-        arg_reprs = [show(arg) for arg in self.args]
-        arg_reprs = [x.replace("\n", "\n  ") for x in arg_reprs]
-        ret += ",\n  ".join(arg_reprs)
-        ret += ")"
-
-        has_inner_newlines = any("\n" in t for t in arg_reprs)
-        output_on_one_line = re.sub(r",\n *", ", ", ret).replace("\n", "")
-
-        should_output_single_line = len(output_on_one_line) < 80 and not has_inner_newlines
-
-        if should_output_single_line:
-            return output_on_one_line
-        else:
-            return ret
-
-    def eval(self, context):
-        #debug("ENTER", self.name)
-        args = self._eval_args(context)
-        return self._impl(context, *args)
-
-    def _eval_args(self, context):
-        ret = [arg.eval(context) for arg in reversed(self.args)]
-        ret.reverse()
-        return ret
-
-    def analyze(self):
-        self.args = [arg.analyze() for arg in self.args]
-        return self
-
 @dataclass
 class FrameInfo:
     current_slot: int = 0  # basically the de bruijn index
-    slots: Dict[str, int] = field(default_factory=lambda: {})
+    slots: dict[str, int] = field(default_factory=lambda: {})
+
     # record the largest slot we see, so we know how many local vars to allocate
     max_slot: int = 0
 
+
 @dataclass
 class CompileContext:
-    labels: Dict[str, IRBaseExecutor]
-    frames: List[FrameInfo] = field(default_factory=lambda: [FrameInfo()])
+    labels: dict[str, "IRBaseExecutor"]
+    frames: list[FrameInfo] = field(default_factory=lambda: [FrameInfo()])
 
     @property
     def local_vars(self):
@@ -152,6 +113,8 @@ class CompileContext:
 
     @contextlib.contextmanager
     def variables(self, vars_list):
+        # allocate variables in vars_list, assigning them each
+        # a new slot.
         shadowed = {}
         frame = self.frames[-1]
         for varname in vars_list:
@@ -169,6 +132,54 @@ class CompileContext:
             else:
                 frame.slots[varname] = shadowed[varname]
 
+
+class IRBaseExecutor:
+    __slots__ = ("args", "compile_ctx")
+
+    def __init__(self, compile_ctx, *args):
+        self.args = args
+        self.compile_ctx = compile_ctx
+
+    @cached_property
+    def name(self):
+        return self._name
+
+    def __repr__(self):
+        ret = self.name + "("
+
+        def show(s):
+            return hex(s) if isinstance(s, int) else repr(s)
+
+        arg_reprs = [show(arg) for arg in self.args]
+        arg_reprs = [x.replace("\n", "\n  ") for x in arg_reprs]
+        ret += ",\n  ".join(arg_reprs)
+        ret += ")"
+
+        has_inner_newlines = any("\n" in t for t in arg_reprs)
+        one_line_output = re.sub(r",\n *", ", ", ret).replace("\n", "")
+
+        should_one_line = len(one_line_output) < 80 and not has_inner_newlines
+
+        if should_one_line:
+            return one_line_output
+        else:
+            return ret
+
+    def eval(self, context):
+        # debug("ENTER", self.name)
+        args = self._eval_args(context)
+        return self._impl(context, *args)
+
+    def _eval_args(self, context):
+        ret = [arg.eval(context) for arg in reversed(self.args)]
+        ret.reverse()
+        return ret
+
+    def analyze(self):
+        self.args = [arg.analyze() for arg in self.args]
+        return self
+
+
 @dataclass(slots=True)
 class IntExecutor:
     _int_value: int
@@ -182,6 +193,7 @@ class IntExecutor:
     def analyze(self):
         return self
 
+
 @dataclass(slots=True)
 class StringExecutor:
     _str_value: str
@@ -191,8 +203,8 @@ class StringExecutor:
         return repr(self._str_value)
 
     def analyze(self):
-        de_bruijn_index = self.compile_ctx.local_vars[self._str_value]
-        return VariableExecutor(self._str_value, de_bruijn_index)
+        slot = self.compile_ctx.local_vars[self._str_value]
+        return VariableExecutor(self._str_value, slot)
 
 
 # an IR executor for evm opcodes which dispatches into py-evm
@@ -208,16 +220,16 @@ class OpcodeIRExecutor(IRBaseExecutor):
         return self.opcode_info.produces
 
     def eval(self, context):
-        #debug("ENTER", self.name)
+        # debug("ENTER", self.name)
         evaled_args = self._eval_args(context)
-        #debug(self.name,"args.", evaled_args)
+        # debug(self.name,"args.", evaled_args)
         computation = context.computation
         for arg in reversed(evaled_args):
             if isinstance(arg, int):
                 computation.stack_push_int(arg)
             elif isinstance(arg, bytes):
                 computation.stack_push_bytes(arg)
-            #elif isinstance(arg, str) and arg.startswith("_sym_"):
+            # elif isinstance(arg, str) and arg.startswith("_sym_"):
             #    # it's a returnpc for a function
             #    pass
             else:
@@ -231,12 +243,15 @@ class OpcodeIRExecutor(IRBaseExecutor):
 
 _executors = {}
 
+
 # decorator to register an executor class in the _executors dict.
 def executor(cls):
     _executors[cls._name] = cls
     return cls
 
-StackItem = Union[int, bytes]
+
+StackItem = int | bytes
+
 
 def _to_int(stack_item: StackItem) -> int:
     if isinstance(stack_item, int):
@@ -263,6 +278,9 @@ class VariableExecutor:
     varname: str
     var_slot: int
 
+    def __repr__(self):
+        return f"var({self.varname})"
+
     def eval(self, context):
         return context.local_vars[self.var_slot]
 
@@ -271,6 +289,7 @@ class VariableExecutor:
 # for instructions which access it in the slow way
 class FastMem(Memory):
     __slots__ = ("mem_cache", "_bytes", "needs_writeback")
+
     def __init__(self):
         self.mem_cache = []  # cached words
 
@@ -286,7 +305,6 @@ class FastMem(Memory):
         if (size_difference := new_size - len(self.mem_cache)) > 0:
             self.mem_cache.extend([self._DIRTY] * size_difference)
             super().extend(start_position, size_bytes)
-
 
     def read_word(self, start_position):
         if start_position % 32 == 0:
@@ -314,7 +332,7 @@ class FastMem(Memory):
         self.needs_writeback.add(start_position // 32)
 
         # bypass cache dirtying
-        #super().write(start_position, 32, _to_bytes(int_val))
+        # super().write(start_position, 32, _to_bytes(int_val))
 
     def write(self, start_position, size, value):
         start = start_position // 32
@@ -324,20 +342,21 @@ class FastMem(Memory):
         super().write(start_position, size, value)
 
 
-MAX_UINT256 = 2** 256 - 1
+MAX_UINT256 = 2**256 - 1
+
 
 class IRExecutor(IRBaseExecutor):
-    _sig = None
+    _sig = Optional[tuple]
     _max_var_height = None
 
     def eval(self, context):
-        #debug("ENTER", self.name)
+        # debug("ENTER", self.name)
         args = self._eval_args(context)
         if self.sig_mapper:
             assert len(args) == len(self.sig_mapper)
             args = (mapper(arg) for (mapper, arg) in zip(self.sig_mapper, args))
         ret = self._impl(context, *args)
-        #debug(f"({self.name} returning {ret})")
+        # debug(f"({self.name} returning {ret})")
         return ret
 
     @cached_property
@@ -349,13 +368,14 @@ class UnsignedBinopExecutor(IRExecutor):
     __slots__ = ("_name", "_op")
 
     def eval(self, context):
-        #print("ENTER",self._name,self.args)
+        # debug("ENTER",self._name,self.args)
         x, y = self.args
         # note: eval in reverse order.
         y = _to_int(y.eval(context))
         x = _to_int(x.eval(context))
         return _wrap256(self._op(x, y))
- 
+
+
 class SignedBinopExecutor(UnsignedBinopExecutor):
     def eval(self, context):
         x, y = self.args
@@ -363,11 +383,15 @@ class SignedBinopExecutor(UnsignedBinopExecutor):
         y = unsigned_to_signed(_to_int(y.eval(context), 256, strict=True))
         x = unsigned_to_signed(_to_int(x.eval(context), 256, strict=True))
         return _wrap256(self._op(x, y))
- 
+
+
 # just use routines from vyper optimizer
 for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
     base = UnsignedBinopExecutor if unsigned else SignedBinopExecutor
-    _executors[opname] = type(opname.capitalize(), (base,), {"_op": op, "_name": opname})
+    _executors[opname] = type(
+        opname.capitalize(), (base,), {"_op": op, "_name": opname}
+    )
+
 
 @executor
 class MLoad(IRExecutor):
@@ -376,8 +400,9 @@ class MLoad(IRExecutor):
     def eval(self, context):
         ptr = _to_int(self.args[0].eval(context))
         context.computation._memory.extend(ptr, 32)
-        #return context.computation._memory.read_bytes(ptr, 32)
+        # return context.computation._memory.read_bytes(ptr, 32)
         return context.computation._memory.read_word(ptr)
+
 
 @executor
 class MStore(IRExecutor):
@@ -387,9 +412,9 @@ class MStore(IRExecutor):
         val = _to_int(self.args[1].eval(context))
         ptr = _to_int(self.args[0].eval(context))
         context.computation._memory.extend(ptr, 32)
-        #context.computation._memory.write(ptr, 32, val)
+        # context.computation._memory.write(ptr, 32, val)
         context.computation._memory.write_word(ptr, val)
- 
+
 
 @executor
 class Ceil32(IRExecutor):
@@ -397,10 +422,10 @@ class Ceil32(IRExecutor):
     _sig = (int,)
 
     def _impl(self, context, x):
-        return eth._utils.numeric.ceil32(x)
+        return ceil32(x)
 
 
-#@executor
+# @executor
 class DLoad(IRExecutor):
     _name = "dload"
     _sig = (int,)
@@ -408,10 +433,12 @@ class DLoad(IRExecutor):
     def _impl(self, context, ptr):
         raise RuntimeError("unimplemented")
 
-#@executor
+
+# @executor
 class DLoadBytes(IRExecutor):
     _name = "dloadbytes"
-    sig = (int,int,int)
+    sig = (int, int, int)
+
     def _impl(self, context, dst, src, size):
         raise RuntimeError("unimplemented")
 
@@ -423,25 +450,25 @@ class Pass(IRExecutor):
     def eval(self, context):
         pass
 
+
 @executor
 class Seq(IRExecutor):
     _name = "seq"
 
     def eval(self, context):
-        #debug("ENTER", self.name)
-
+        lastval = None
         for arg in self.args:
             lastval = arg.eval(context)
-            #debug(self.name,"evaled",lastval)
 
         return lastval
+
 
 @executor
 class Repeat(IRExecutor):
     _name = "repeat"
 
     def eval(self, context):
-        #debug("ENTER", self.name)
+        # debug("ENTER", self.name)
 
         i_var, start, rounds, rounds_bound, body = self.args
 
@@ -452,7 +479,6 @@ class Repeat(IRExecutor):
         for i in range(start, start + rounds):
             context.local_vars[i_var.var_slot] = i
             body.eval(context)
-
 
     def analyze(self):
         i_name, start, rounds, rounds_bound, body = self.args
@@ -471,7 +497,7 @@ class If(IRExecutor):
 
     # override `eval()` so we can get the correct lazy behavior
     def eval(self, context):
-        #debug("ENTER", self.name)
+        # debug("ENTER", self.name)
         try:
             test, body, orelse = self.args
         except ValueError:
@@ -498,6 +524,7 @@ class Assert(IRExecutor):
             context.computation.output = b""
             raise Revert(b"")
 
+
 @executor
 class VarList(IRExecutor):
     _name = "var_list"
@@ -510,7 +537,7 @@ class Goto(IRExecutor):
     def get_label(self):
         label = self.args[0]._str_value
         if label.startswith("_sym_"):
-            label = label[len("_sym_"):]
+            label = label[len("_sym_") :]
         return label
 
     def analyze(self):
@@ -519,7 +546,7 @@ class Goto(IRExecutor):
         return self
 
     def eval(self, context):
-        #debug("ENTER", self.name)
+        # debug("ENTER", self.name)
         label = self.get_label()
         args = reversed([arg.eval(context) for arg in reversed(self.args[1:])])
         context.goto(self.compile_ctx, label, args)
@@ -554,17 +581,19 @@ class Label(IRExecutor):
 
             self._max_var_height = frame_info.max_slot
 
-        print(self._name, self.labelname, self._max_var_height)
+        # debug(self._name, self.labelname, self._max_var_height)
         return self
 
     def eval(self, context):
-        #debug("ENTER", self.name)
+        # debug("ENTER", self.name)
         pass
 
     def execute_subroutine(self, context, *args):
-        assert len(args) == len(self.var_list), (self.labelname, [x for x in args], self.var_list)
+        assert len(args) == len(self.var_list), (list(args), self.var_list)
+
         with context.allocate_local_frame(args, self._max_var_height):
             self.body.eval(context)
+
 
 @executor
 class With(IRExecutor):
@@ -592,18 +621,20 @@ class With(IRExecutor):
 
         return ret
 
-def executor_from_ir(ir_node, opcode_impls: Dict[int, Any]) -> Any:
+
+def executor_from_ir(ir_node, opcode_impls: dict[int, Any]) -> Any:
     ret = _executor_from_ir(ir_node, opcode_impls, CompileContext({}))
     ret = ret.analyze()
     ret._max_var_height = ret.compile_ctx.frames[0].max_slot
     return ret
+
 
 def _executor_from_ir(ir_node, opcode_impls, compile_ctx) -> Any:
     instr = ir_node.value
     if isinstance(instr, int):
         return IntExecutor(instr)
 
-    args = (_executor_from_ir(arg, opcode_impls, compile_ctx) for arg in ir_node.args)
+    args = [_executor_from_ir(arg, opcode_impls, compile_ctx) for arg in ir_node.args]
 
     if instr in _executors:
         return _executors[instr](compile_ctx, *args)

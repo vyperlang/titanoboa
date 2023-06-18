@@ -38,7 +38,6 @@ from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vyper import _METHOD_ID_VAR
-from boa.vyper.ir_executor import executor_from_ir
 from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
     _compile_vyper_function,
@@ -47,6 +46,7 @@ from boa.vyper.compiler_utils import (
 )
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 from boa.vyper.event import Event, RawEvent
+from boa.vyper.ir_executor import executor_from_ir
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
