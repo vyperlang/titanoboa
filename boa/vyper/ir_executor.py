@@ -39,32 +39,53 @@ class OpcodeInfo:
         return cls(opcode, consumes, produces, gas_estimate)
 
 
-@dataclass(slots=True)
+#@dataclass(slots=True)
+@dataclass
 class EvalContext:
+    ir_executor: Any  # IRBaseExecutor
     computation: Any  # ComputationAPI
-    call_frames: List[List[Any]] = field(default_factory=lambda: [[]])
+    call_frames: List[List[Any]] = field(default_factory=list)
+
+    def __post_init__(self):
+        self._allocate_call_frame([], self.ir_executor._max_var_height)
+
+    def run(self):
+        #print("ENTER", self.call_frames)
+        self.ir_executor.eval(self)
+        return self.computation
 
     @property
     def local_vars(self):
         return self.call_frames[-1]
 
+    def _allocate_call_frame(self, arglist, max_var_height):
+        # a sentinel which will cause an exception if somebody tries to use it by accident
+        oob_int = "uh oh!"
+        required_dummies = max_var_height + 1 - len(arglist)
+        frame_vars = list(arglist)
+        frame_vars.extend([oob_int] * required_dummies)
+        self.call_frames.append(frame_vars)
+
     @contextlib.contextmanager
-    def variables(self, var_list):
-        for var in var_list:
-            self.local_vars.append(var)
-
+    def allocate_call_frame(self, arglist, max_var_height):
+        self._allocate_call_frame(arglist, max_var_height)
         yield
-
-        for var in var_list:
-            self.local_vars.pop()
+        self.call_frames.pop()
+    #@contextlib.contextmanager
+    #def variables(self, var_list):
+    #    for var in var_list:
+    #        self.local_vars.append(var)
+#
+#        yield
+#
+#        for var in var_list:
+#            self.local_vars.pop()
 
     def goto(self, compile_ctx, label, arglist):
         if label == "returnpc":  # i.e. exitsub
             return
 
-        self.call_frames.append([])
         compile_ctx.labels[label].execute_subroutine(self, *arglist)
-        self.call_frames.pop()
 
 
 class IRBaseExecutor:
@@ -111,41 +132,46 @@ class IRBaseExecutor:
         self.args = [arg.analyze() for arg in self.args]
         return self
 
+@dataclass
+class FrameInfo:
+    de_bruijn_index: int = 0
+    max_db_index: int = 0
+    slots: Dict[str, int] = field(default_factory=lambda: {})
 
 @dataclass
 class CompileContext:
     labels: Dict[str, IRBaseExecutor]
-    de_bruijn_indexes: List[int] = field(default_factory=lambda:[0])
-    var_slot_mappings: List[Dict[str, int]] = field(default_factory=lambda:[{}])
+    frames: List[FrameInfo] = field(default_factory=lambda: [FrameInfo()])
 
     @property
     def local_vars(self):
-        return self.var_slot_mappings[-1]
+        return self.frames[-1].slots
 
     @contextlib.contextmanager
     def allocate_local_frame(self):
-        self.var_slot_mappings.append({})
-        self.de_bruijn_indexes.append(0)
-        yield
-        self.de_bruijn_indexes.pop()
-        self.var_slot_mappings.pop()
+        frame = FrameInfo()
+        self.frames.append(frame)
+        yield frame
+        self.frames.pop()
 
     @contextlib.contextmanager
     def variables(self, vars_list):
         shadowed = {}
+        frame = self.frames[-1]
         for varname in vars_list:
-            shadowed[varname] = self.local_vars.get(varname)
-            self.local_vars[varname] = self.de_bruijn_indexes[-1]
-            self.de_bruijn_indexes[-1] += 1
+            shadowed[varname] = frame.slots.get(varname)
+            frame.slots[varname] = frame.de_bruijn_index
+            frame.de_bruijn_index += 1
+        frame.max_db_index = max(frame.max_db_index, frame.de_bruijn_index)
 
         yield
 
         for varname in vars_list:
-            self.de_bruijn_indexes[-1] -= 1
+            frame.de_bruijn_index -= 1
             if shadowed[varname] is None:
-                del self.local_vars[varname]
+                del frame.slots[varname]
             else:
-                self.local_vars[varname] = shadowed[varname]
+                frame.slots[varname] = shadowed[varname]
 
 @dataclass(slots=True)
 class IntExecutor:
@@ -274,6 +300,7 @@ MAX_UINT256 = 2** 256 - 1
 
 class IRExecutor(IRBaseExecutor):
     _sig = None
+    _max_var_height = None
 
     def eval(self, context):
         #debug("ENTER", self.name)
@@ -386,17 +413,15 @@ class Repeat(IRExecutor):
     def eval(self, context):
         #debug("ENTER", self.name)
 
-        _, start, rounds, rounds_bound, body = self.args
+        i_var, start, rounds, rounds_bound, body = self.args
 
         start = start.eval(context)
         rounds = rounds.eval(context)
         assert rounds <= rounds_bound._int_value
 
-        with context.variables([-1]):
-            i_slot = len(context.local_vars) - 1
-            for i in range(start, start + rounds):
-                context.local_vars[i_slot] = i
-                body.eval(context)
+        for i in range(start, start + rounds):
+            context.local_vars[i_var.var_slot] = i
+            body.eval(context)
 
 
     def analyze(self):
@@ -404,8 +429,9 @@ class Repeat(IRExecutor):
         start = start.analyze()
         rounds = rounds.analyze()
         with self.compile_ctx.variables([i_name._str_value]):
+            i_var = i_name.analyze()
             body = body.analyze()
-        self.args = i_name, start, rounds, rounds_bound, body
+        self.args = i_var, start, rounds, rounds_bound, body
         return self
 
 
@@ -491,11 +517,14 @@ class Label(IRExecutor):
         compile_ctx.labels[name._str_value] = self
 
     def analyze(self):
-        with self.compile_ctx.allocate_local_frame():
+        with self.compile_ctx.allocate_local_frame() as frame_info:
             var_list = [var._str_value for var in self.var_list]
             with self.compile_ctx.variables(var_list):
                 self.body = self.body.analyze()
 
+            self._max_var_height = frame_info.max_db_index
+
+        print(self._name, self.labelname, self._max_var_height)
         return self
 
     def eval(self, context):
@@ -504,7 +533,7 @@ class Label(IRExecutor):
 
     def execute_subroutine(self, context, *args):
         assert len(args) == len(self.var_list), (self.labelname, [x for x in args], self.var_list)
-        with context.variables(args):
+        with context.allocate_call_frame(args, self._max_var_height):
             self.body.eval(context)
 
 @executor
@@ -528,16 +557,16 @@ class With(IRExecutor):
         variable, val, body = self.args
 
         val = val.eval(context)
-
-        with context.variables([val]):
-            #assert len(context.local_vars) == variable.var_slot + 1 # sanity check
-            ret = body.eval(context)
+        context.local_vars[variable.var_slot] = val
+        ret = body.eval(context)
 
         return ret
 
 def executor_from_ir(ir_node, opcode_impls: Dict[int, Any]) -> Any:
     ret = _executor_from_ir(ir_node, opcode_impls, CompileContext({}))
-    return ret.analyze()
+    ret = ret.analyze()
+    ret._max_var_height = ret.compile_ctx.frames[0].max_db_index
+    return ret
 
 def _executor_from_ir(ir_node, opcode_impls, compile_ctx) -> Any:
     instr = ir_node.value
