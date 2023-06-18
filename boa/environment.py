@@ -323,22 +323,12 @@ class computation_template:
         err = None
         with cls(state, msg, tx_ctx) as computation:
             print("FAST MODE")
-            print(contract.ir_executor)
+            #print(contract.ir_executor)
             eval_ctx = EvalContext(contract.ir_executor, computation)
             try:
                 eval_ctx.run()
-            except Exception as e:
-                # grab the exception to raise later -
-                # unclear why this is getting swallowed by py-evm.
-                # print(e)
-                err = e
-
-        from eth.exceptions import Halt, VMError
-
-        if err is not None and not isinstance(err, (Halt, VMError)):
-            # if err is not None:
-            raise err
-        return computation
+            finally:
+                return computation
 
 
 # wrapper class around py-evm which provides a "contract-centric" API
