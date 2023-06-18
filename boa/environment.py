@@ -5,7 +5,7 @@ import contextlib
 import logging
 import sys
 import warnings
-from typing import Any, Iterator, Optional, Union, Tuple
+from typing import Any, Iterator, Optional, Tuple, Union
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -255,6 +255,7 @@ class SstoreTracer:
 
 # ### End section: sha3 tracing
 
+
 # py-evm uses class instantiaters which need to be classes
 # instead of like factories or other easier to use architectures -
 # `computation_template` is a class which can be constructed dynamically
@@ -302,26 +303,26 @@ class computation_template:
 
         if is_eip1167_contract(bytecode):
             contract_address = extract_eip1167_address(bytecode)
-            bytecode = self.vm.state.get_code(contract_address)
+            bytecode = cls.env.vm.state.get_code(contract_address)
 
         if bytecode in cls.env._code_registry:
-            target = self._code_registry[bytecode].deployer.at(contract_address)
+            target = cls.env._code_registry[bytecode].deployer.at(contract_address)
             target.created_from = to_checksum_address(msg.sender)
-            env.register_contract(contract_address, target)
+            cls.env.register_contract(contract_address, target)
 
         return computation
 
     @classmethod
-    def apply_computation(cls, state , msg , tx_ctx):
+    def apply_computation(cls, state, msg, tx_ctx):
         addr = msg.code_address
         contract = cls.env.lookup_contract(addr) if addr else None
-        if contract is None or False:
+        if contract is None or not cls.env._enable_fast_mode:
             print("SLOW MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
-        print("FAST MODE")
         err = None
         with cls(state, msg, tx_ctx) as computation:
+            print("FAST MODE")
             print(contract.ir_executor)
             eval_ctx = EvalContext(contract.ir_executor, computation)
             try:
@@ -329,12 +330,13 @@ class computation_template:
             except Exception as e:
                 # grab the exception to raise later -
                 # unclear why this is getting swallowed by py-evm.
-                #print(e)
+                # print(e)
                 err = e
 
-        from eth.exceptions import VMError, Halt
+        from eth.exceptions import Halt, VMError
+
         if err is not None and not isinstance(err, (Halt, VMError)):
-        #if err is not None:
+            # if err is not None:
             raise err
         return computation
 
@@ -344,6 +346,7 @@ class Env:
     _singleton = None
     _initial_address_counter = 100
     _coverage_enabled = False
+    _enable_fast_mode = False
 
     def __init__(self):
         self.chain = _make_chain()
@@ -375,9 +378,12 @@ class Env:
 
     def _init_vm(self, reset_traces=True):
         self.vm = self.chain.get_vm()
-        env = self
 
-        c = type("TitanoboaComputation", (computation_template, self.vm.state.computation_class), {"env": self})
+        c = type(
+            "TitanoboaComputation",
+            (computation_template, self.vm.state.computation_class),
+            {"env": self},
+        )
 
         self.vm.state.computation_class = c
 

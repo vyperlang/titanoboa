@@ -16,7 +16,7 @@ classifiers = ["Topic :: Software Development"]
 # Requirements
 dependencies = [
     "vyper >= 0.3.8",
-    "git+https://github.com/charles-cooper/eth-stdlib/pycryptodome.git",
+    "eth-stdlib @ git+https://github.com/charles-cooper/eth-stdlib.git@pycryptodome",
     "eth-abi",
     "py-evm>=0.7.0a2",
     "eth-typing",
