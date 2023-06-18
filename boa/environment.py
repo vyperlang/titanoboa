@@ -315,7 +315,7 @@ class computation_template:
     def apply_computation(cls, state , msg , tx_ctx):
         addr = msg.code_address
         contract = cls.env.lookup_contract(addr) if addr else None
-        if contract is None or True:
+        if contract is None or False:
             print("SLOW MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
