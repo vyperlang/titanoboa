@@ -5,7 +5,7 @@ import contextlib
 import logging
 import sys
 import warnings
-from typing import Any, Iterator, Optional, Union
+from typing import Any, Iterator, Optional, Union, Tuple
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -24,6 +24,7 @@ from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_ad
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
+from boa.vyper.ir_executor import EvalContext
 
 
 def enable_pyevm_verbose_logging():
@@ -254,6 +255,89 @@ class SstoreTracer:
 
 # ### End section: sha3 tracing
 
+# py-evm uses class instantiaters which need to be classes
+# instead of like factories or other easier to use architectures -
+# `computation_template` is a class which can be constructed dynamically
+class computation_template:
+    _gas_meter_class = GasMeter
+
+    def __init__(self, *args, **kwargs):
+        # super() hardcodes CodeStream into the ctor
+        # so we have to override it here
+        super().__init__(*args, **kwargs)
+        self.code = TracingCodeStream(
+            self.code._raw_code_bytes,
+            fake_codesize=getattr(self.msg, "_fake_codesize", None),
+            start_pc=getattr(self.msg, "_start_pc", 0),
+        )
+        global _precompiles
+        # copy so as not to mess with class state
+        self._precompiles = self._precompiles.copy()
+        self._precompiles.update(_precompiles)
+
+        global _opcode_overrides
+        # copy so as not to mess with class state
+        self.opcodes = self.opcodes.copy()
+        self.opcodes.update(_opcode_overrides)
+
+        self._gas_meter = self._gas_meter_class(self.msg.gas)
+        if hasattr(self._gas_meter, "_set_code"):
+            self._gas_meter._set_code(self.code)
+
+        self._child_pcs = []
+
+    def add_child_computation(self, child_computation):
+        super().add_child_computation(child_computation)
+        # track PCs of child calls for profiling purposes
+        self._child_pcs.append(self.code.program_counter)
+
+    # hijack creations to automatically generate blueprints
+    @classmethod
+    def apply_create_message(cls, state, msg, tx_ctx):
+        computation = super().apply_create_message(state, msg, tx_ctx)
+
+        bytecode = msg.code
+        # cf. eth/vm/logic/system/Create* opcodes
+        contract_address = msg.storage_address
+
+        if is_eip1167_contract(bytecode):
+            contract_address = extract_eip1167_address(bytecode)
+            bytecode = self.vm.state.get_code(contract_address)
+
+        if bytecode in cls.env._code_registry:
+            target = self._code_registry[bytecode].deployer.at(contract_address)
+            target.created_from = to_checksum_address(msg.sender)
+            env.register_contract(contract_address, target)
+
+        return computation
+
+    @classmethod
+    def apply_computation(cls, state , msg , tx_ctx):
+        addr = msg.code_address
+        contract = cls.env.lookup_contract(addr) if addr else None
+        if contract is None or True:
+            print("SLOW MODE")
+            return super().apply_computation(state, msg, tx_ctx)
+
+        print("FAST MODE")
+        err = None
+        with cls(state, msg, tx_ctx) as computation:
+            eval_ctx = EvalContext(computation)
+            print(contract.ir_executor)
+            try:
+                contract.ir_executor.eval(eval_ctx)
+            except Exception as e:
+                # grab the exception to raise later -
+                # unclear why this is getting swallowed by py-evm.
+                #print(e)
+                err = e
+
+        from eth.exceptions import VMError, Halt
+        if err is not None and not isinstance(err, (Halt, VMError)):
+        #if err is not None:
+            raise err
+        return computation
+
 
 # wrapper class around py-evm which provides a "contract-centric" API
 class Env:
@@ -293,61 +377,7 @@ class Env:
         self.vm = self.chain.get_vm()
         env = self
 
-        class OpcodeTracingComputation(self.vm.state.computation_class):
-            _gas_meter_class = GasMeter
-
-            def __init__(self, *args, **kwargs):
-                # super() hardcodes CodeStream into the ctor
-                # so we have to override it here
-                super().__init__(*args, **kwargs)
-                self.code = TracingCodeStream(
-                    self.code._raw_code_bytes,
-                    fake_codesize=getattr(self.msg, "_fake_codesize", None),
-                    start_pc=getattr(self.msg, "_start_pc", 0),
-                )
-                global _precompiles
-                # copy so as not to mess with class state
-                self._precompiles = self._precompiles.copy()
-                self._precompiles.update(_precompiles)
-
-                global _opcode_overrides
-                # copy so as not to mess with class state
-                self.opcodes = self.opcodes.copy()
-                self.opcodes.update(_opcode_overrides)
-
-                self._gas_meter = self._gas_meter_class(self.msg.gas)
-                if hasattr(self._gas_meter, "_set_code"):
-                    self._gas_meter._set_code(self.code)
-
-                self._child_pcs = []
-
-            def add_child_computation(self, child_computation):
-                super().add_child_computation(child_computation)
-                # track PCs of child calls for profiling purposes
-                self._child_pcs.append(self.code.program_counter)
-
-            # hijack creations to automatically generate blueprints
-            @classmethod
-            def apply_create_message(cls, state, msg, tx_ctx):
-                computation = super().apply_create_message(state, msg, tx_ctx)
-
-                bytecode = msg.code
-                # cf. eth/vm/logic/system/Create* opcodes
-                contract_address = msg.storage_address
-
-                if is_eip1167_contract(bytecode):
-                    contract_address = extract_eip1167_address(bytecode)
-                    bytecode = self.vm.state.get_code(contract_address)
-
-                if bytecode in self._code_registry:
-                    target = self._code_registry[bytecode].deployer.at(contract_address)
-                    target.created_from = to_checksum_address(msg.sender)
-                    env.register_contract(contract_address, target)
-
-                return computation
-
-        # TODO make metering toggle-able
-        c = OpcodeTracingComputation
+        c = type("TitanoboaComputation", (computation_template, self.vm.state.computation_class), {"env": self})
 
         self.vm.state.computation_class = c
 
@@ -405,18 +435,19 @@ class Env:
         return self.vm.state.get_balance(to_canonical_address(addr))
 
     def register_contract(self, address, obj):
-        self._contracts[to_checksum_address(address)] = obj
+        addr = to_canonical_address(address)
+        self._contracts[addr] = obj
 
         # also register it in the registry for
         # create_minimal_proxy_to and create_copy_of
-        bytecode = self.vm.state.get_code(to_canonical_address(address))
+        bytecode = self.vm.state.get_code(addr)
         self._code_registry[bytecode] = obj
 
     def register_blueprint(self, bytecode, obj):
         self._code_registry[bytecode] = obj
 
     def lookup_contract(self, address):
-        return self._contracts.get(to_checksum_address(address))
+        return self._contracts.get(to_canonical_address(address))
 
     def alias(self, address, name):
         self._aliases[to_checksum_address(address)] = name
@@ -484,7 +515,7 @@ class Env:
         start_pc: int = 0,
         # override the target address:
         override_address: Optional[AddressType] = None,
-    ) -> tuple[AddressType, bytes]:
+    ) -> Tuple[AddressType, bytes]:
         if gas is None:
             gas = self.vm.state.gas_limit
         sender = self._get_sender(sender)
@@ -559,6 +590,7 @@ class Env:
         msg._contract = contract  # type: ignore
         origin = sender  # XXX: consider making this parametrizable
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
+
         ret = self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
         if self._coverage_enabled:
