@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from functools import cached_property
+import contextlib
 from typing import Any, Dict, List, Union
 import re
 import sys
@@ -41,26 +42,37 @@ class OpcodeInfo:
 @dataclass(slots=True)
 class EvalContext:
     computation: Any  # ComputationAPI
-    call_frames: List[Dict[str, int]] = field(default_factory=lambda: [{}])
+    call_frames: List[List[Any]] = field(default_factory=lambda: [[]])
 
     @property
     def local_vars(self):
         return self.call_frames[-1]
 
+    @contextlib.contextmanager
+    def variables(self, var_list):
+        for var in var_list:
+            self.local_vars.append(var)
+
+        yield
+
+        for var in var_list:
+            self.local_vars.pop()
+
     def goto(self, compile_ctx, label, arglist):
         if label == "returnpc":  # i.e. exitsub
             return
 
-        self.call_frames.append({})
+        self.call_frames.append([])
         compile_ctx.labels[label].execute_subroutine(self, *arglist)
         self.call_frames.pop()
 
 
 class IRBaseExecutor:
-    __slots__ = ("args",)
+    __slots__ = ("args","compile_ctx")
 
-    def __init__(self, *args):
+    def __init__(self, compile_ctx, *args):
         self.args = args
+        self.compile_ctx = compile_ctx
 
     @cached_property
     def name(self):
@@ -95,6 +107,45 @@ class IRBaseExecutor:
         ret.reverse()
         return ret
 
+    def analyze(self):
+        self.args = [arg.analyze() for arg in self.args]
+        return self
+
+
+@dataclass
+class CompileContext:
+    labels: Dict[str, IRBaseExecutor]
+    de_bruijn_indexes: List[int] = field(default_factory=lambda:[0])
+    var_slot_mappings: List[Dict[str, int]] = field(default_factory=lambda:[{}])
+
+    @property
+    def local_vars(self):
+        return self.var_slot_mappings[-1]
+
+    @contextlib.contextmanager
+    def allocate_local_frame(self):
+        self.var_slot_mappings.append({})
+        self.de_bruijn_indexes.append(0)
+        yield
+        self.de_bruijn_indexes.pop()
+        self.var_slot_mappings.pop()
+
+    @contextlib.contextmanager
+    def variables(self, vars_list):
+        shadowed = {}
+        for varname in vars_list:
+            shadowed[varname] = self.local_vars.get(varname)
+            self.local_vars[varname] = self.de_bruijn_indexes[-1]
+            self.de_bruijn_indexes[-1] += 1
+
+        yield
+
+        for varname in vars_list:
+            self.de_bruijn_indexes[-1] -= 1
+            if shadowed[varname] is None:
+                del self.local_vars[varname]
+            else:
+                self.local_vars[varname] = shadowed[varname]
 
 @dataclass(slots=True)
 class IntExecutor:
@@ -106,15 +157,21 @@ class IntExecutor:
     def eval(self, context):
         return self._int_value
 
+    def analyze(self):
+        return self
+
 @dataclass(slots=True)
 class StringExecutor:
     _str_value: str
+    compile_ctx: CompileContext
 
     def __repr__(self):
         return repr(self._str_value)
 
-    def eval(self, context):
-        return context.local_vars[self._str_value]
+    def analyze(self):
+        de_bruijn_index = self.compile_ctx.local_vars[self._str_value]
+        return VariableExecutor(self._str_value, de_bruijn_index)
+
 
 # an IR executor for evm opcodes which dispatches into py-evm
 class OpcodeIRExecutor(IRBaseExecutor):
@@ -180,16 +237,12 @@ def _as_signed(x):
 
 
 @dataclass(slots=True)
-class VariableReference:
+class VariableExecutor:
     varname: str
     var_slot: int
 
-
-@dataclass
-class CompileContext:
-    labels: Dict[str, IRBaseExecutor]
-    #n_variable_slots: int = 0
-    #varnames: Dict[str, VariableReference]
+    def eval(self, context):
+        return context.local_vars[self.var_slot]
 
 
 # most memory is aligned. treat it as list of ints, and provide mocking
@@ -220,13 +273,7 @@ class FastMem:
 MAX_UINT256 = 2** 256 - 1
 
 class IRExecutor(IRBaseExecutor):
-    __slots__ = ("args", "compile_ctx")
-
     _sig = None
-
-    def __init__(self, compile_ctx, *args):
-        self.compile_ctx = compile_ctx
-        super().__init__(*args)
 
     def eval(self, context):
         #debug("ENTER", self.name)
@@ -247,6 +294,7 @@ class UnsignedBinopExecutor(IRExecutor):
     __slots__ = ("_name", "_op")
 
     def eval(self, context):
+        #print("ENTER",self._name,self.args)
         x, y = self.args
         # note: eval in reverse order.
         y = _to_int(y.eval(context))
@@ -338,20 +386,27 @@ class Repeat(IRExecutor):
     def eval(self, context):
         #debug("ENTER", self.name)
 
-        i_name, start, rounds, rounds_bound, body = self.args
+        _, start, rounds, rounds_bound, body = self.args
 
         start = start.eval(context)
         rounds = rounds.eval(context)
         assert rounds <= rounds_bound._int_value
 
-        i_name = i_name._str_value
-        assert i_name not in context.local_vars
+        with context.variables([-1]):
+            i_slot = len(context.local_vars) - 1
+            for i in range(start, start + rounds):
+                context.local_vars[i_slot] = i
+                body.eval(context)
 
-        for i in range(start, start + rounds):
-            context.local_vars[i_name] = i
-            body.eval(context)
 
-        del context.local_vars[i_name]
+    def analyze(self):
+        i_name, start, rounds, rounds_bound, body = self.args
+        start = start.analyze()
+        rounds = rounds.analyze()
+        with self.compile_ctx.variables([i_name._str_value]):
+            body = body.analyze()
+        self.args = i_name, start, rounds, rounds_bound, body
+        return self
 
 
 @executor
@@ -402,6 +457,11 @@ class Goto(IRExecutor):
             label = label[len("_sym_"):]
         return label
 
+    def analyze(self):
+        for arg in self.args[1:]:
+            arg = arg.analyze()
+        return self
+
     def eval(self, context):
         #debug("ENTER", self.name)
         label = self.get_label()
@@ -430,16 +490,22 @@ class Label(IRExecutor):
 
         compile_ctx.labels[name._str_value] = self
 
+    def analyze(self):
+        with self.compile_ctx.allocate_local_frame():
+            var_list = [var._str_value for var in self.var_list]
+            with self.compile_ctx.variables(var_list):
+                self.body = self.body.analyze()
+
+        return self
+
     def eval(self, context):
         #debug("ENTER", self.name)
         pass
 
     def execute_subroutine(self, context, *args):
         assert len(args) == len(self.var_list), (self.labelname, [x for x in args], self.var_list)
-        for varname, val in zip(self.var_list, args):
-            context.local_vars[varname._str_value] = val
-
-        self.body.eval(context)
+        with context.variables(args):
+            self.body.eval(context)
 
 @executor
 class With(IRExecutor):
@@ -448,39 +514,37 @@ class With(IRExecutor):
     # accessing local vars is a hotspot, so we translate varnames
     # to slots at compile time (something like de-bruijn index) to
     # save some dictionary accesses.
-    #def __init__(self, compile_ctx, varname, val, body):
+    def analyze(self):
+        varname = self.args[0]._str_value
+        val = self.args[1].analyze()  # analyze before shadowing
+        with self.compile_ctx.variables([varname]):
+            variable = self.args[0].analyze()  # analyze for debugging
+            body = self.args[2].analyze()
+            self.args = (variable, val, body)
+
+        return self
 
     def eval(self, context):
-        #debug("ENTER", self.name)
-        varname, val, body = self.args
-        varname = varname._str_value
-        #_, val, body = self.args
-        #varname = self.varname
+        variable, val, body = self.args
 
         val = val.eval(context)
 
-        shadowed = context.local_vars.pop(varname, None)
-
-        context.local_vars[varname] = val
-
-        ret = body.eval(context)
-
-        if shadowed is not None:
-            context.local_vars[varname] = shadowed
-        else:
-            del context.local_vars[varname]
+        with context.variables([val]):
+            #assert len(context.local_vars) == variable.var_slot + 1 # sanity check
+            ret = body.eval(context)
 
         return ret
 
-def executor_from_ir(ir_node, opcode_impls: Dict[int, Any], compile_ctx = None) -> Any:
+def executor_from_ir(ir_node, opcode_impls: Dict[int, Any]) -> Any:
+    ret = _executor_from_ir(ir_node, opcode_impls, CompileContext({}))
+    return ret.analyze()
+
+def _executor_from_ir(ir_node, opcode_impls, compile_ctx) -> Any:
     instr = ir_node.value
     if isinstance(instr, int):
         return IntExecutor(instr)
 
-    if compile_ctx is None:
-        compile_ctx = CompileContext({})
-
-    args = (executor_from_ir(arg, opcode_impls, compile_ctx) for arg in ir_node.args)
+    args = (_executor_from_ir(arg, opcode_impls, compile_ctx) for arg in ir_node.args)
 
     if instr in _executors:
         return _executors[instr](compile_ctx, *args)
@@ -488,7 +552,7 @@ def executor_from_ir(ir_node, opcode_impls: Dict[int, Any], compile_ctx = None) 
     if instr.upper() in OPCODES:
         opcode_info = OpcodeInfo.from_opcode_info(OPCODES[instr.upper()])
         opcode_impl = opcode_impls[opcode_info.opcode]
-        return OpcodeIRExecutor(instr, opcode_impl, opcode_info, *args)
+        return OpcodeIRExecutor(instr, opcode_impl, opcode_info, compile_ctx, *args)
 
     assert len(ir_node.args) == 0, ir_node
-    return StringExecutor(instr)
+    return StringExecutor(instr, compile_ctx)
