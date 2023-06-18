@@ -212,7 +212,7 @@ class OpcodeIRExecutor(IRBaseExecutor):
     def __init__(self, name, opcode_impl, opcode_info, *args):
         self.opcode_impl = opcode_impl  # py-evm OpcodeAPI
         self.opcode_info: OpcodeInfo = opcode_info  # info from vyper.evm.opcodes
-        self._name = "__" + name + "__"
+        self._name = "__" + name + "__"  # to differentiate from implemented codes
         super().__init__(*args)
 
     @cached_property
@@ -221,17 +221,13 @@ class OpcodeIRExecutor(IRBaseExecutor):
 
     def eval(self, context):
         # debug("ENTER", self.name)
-        evaled_args = self._eval_args(context)
-        # debug(self.name,"args.", evaled_args)
         computation = context.computation
-        for arg in reversed(evaled_args):
+        for arg0 in reversed(self.args):
+            arg = arg0.eval(context)
             if isinstance(arg, int):
                 computation.stack_push_int(arg)
             elif isinstance(arg, bytes):
                 computation.stack_push_bytes(arg)
-            # elif isinstance(arg, str) and arg.startswith("_sym_"):
-            #    # it's a returnpc for a function
-            #    pass
             else:
                 raise RuntimeError(f"Not a stack item. {type(arg)} {arg}")
 
@@ -291,9 +287,12 @@ class FastMem(Memory):
     __slots__ = ("mem_cache", "_bytes", "needs_writeback")
 
     def __init__(self):
+        # XXX: check if this would be faster as dict?
         self.mem_cache = []  # cached words
 
-        self.needs_writeback = set()  #
+        # words which are in the cache but have not been written
+        # to the backing bytes
+        self.needs_writeback = set()
 
         super().__init__()
 
@@ -342,13 +341,13 @@ class FastMem(Memory):
         super().write(start_position, size, value)
 
 
-MAX_UINT256 = 2**256 - 1
-
-
 class IRExecutor(IRBaseExecutor):
     _sig = Optional[tuple]
     _max_var_height = None
 
+    # a default eval implementation which is not super fast
+    # but makes it convenient to implement executors.
+    # for max perf, inline arg casting as in UnsignedBinopExecutor
     def eval(self, context):
         # debug("ENTER", self.name)
         args = self._eval_args(context)
@@ -385,12 +384,11 @@ class SignedBinopExecutor(UnsignedBinopExecutor):
         return _wrap256(self._op(x, y))
 
 
-# just use routines from vyper optimizer
+# for binops, just use routines from vyper optimizer
 for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
     base = UnsignedBinopExecutor if unsigned else SignedBinopExecutor
-    _executors[opname] = type(
-        opname.capitalize(), (base,), {"_op": op, "_name": opname}
-    )
+    nickname = opname.capitalize()
+    _executors[opname] = type(nickname, (base,), {"_op": op, "_name": opname})
 
 
 @executor
@@ -398,6 +396,7 @@ class MLoad(IRExecutor):
     _name = "mload"
 
     def eval(self, context):
+        # perf hotspot.
         ptr = _to_int(self.args[0].eval(context))
         context.computation._memory.extend(ptr, 32)
         # return context.computation._memory.read_bytes(ptr, 32)
@@ -409,6 +408,7 @@ class MStore(IRExecutor):
     _name = "mstore"
 
     def eval(self, context):
+        # perf hotspot.
         val = _to_int(self.args[1].eval(context))
         ptr = _to_int(self.args[0].eval(context))
         context.computation._memory.extend(ptr, 32)
@@ -469,7 +469,6 @@ class Repeat(IRExecutor):
 
     def eval(self, context):
         # debug("ENTER", self.name)
-
         i_var, start, rounds, rounds_bound, body = self.args
 
         start = start.eval(context)
@@ -482,8 +481,11 @@ class Repeat(IRExecutor):
 
     def analyze(self):
         i_name, start, rounds, rounds_bound, body = self.args
+
+        # analyze start and rounds before shadowing.
         start = start.analyze()
         rounds = rounds.analyze()
+
         with self.compile_ctx.variables([i_name._str_value]):
             i_var = i_name.analyze()
             body = body.analyze()
@@ -534,11 +536,14 @@ class VarList(IRExecutor):
 class Goto(IRExecutor):
     _name = "goto"
 
-    def get_label(self):
-        label = self.args[0]._str_value
-        if label.startswith("_sym_"):
-            label = label[len("_sym_") :]
-        return label
+    @cached_property
+    # figure out the label to jump to, works for both goto and exit_to
+    # (why does vyper generate them differently? XXX fix in vyper)
+    def label(self):
+        ret = self.args[0]._str_value
+        if ret.startswith("_sym_"):
+            ret = ret[len("_sym_") :]
+        return ret
 
     def analyze(self):
         for arg in self.args[1:]:
@@ -547,9 +552,8 @@ class Goto(IRExecutor):
 
     def eval(self, context):
         # debug("ENTER", self.name)
-        label = self.get_label()
         args = reversed([arg.eval(context) for arg in reversed(self.args[1:])])
-        context.goto(self.compile_ctx, label, args)
+        context.goto(self.compile_ctx, self.label, args)
 
 
 @executor
@@ -579,18 +583,16 @@ class Label(IRExecutor):
             with self.compile_ctx.variables(var_list):
                 self.body = self.body.analyze()
 
+            # grab max slot after analysis
             self._max_var_height = frame_info.max_slot
 
-        # debug(self._name, self.labelname, self._max_var_height)
         return self
 
     def eval(self, context):
-        # debug("ENTER", self.name)
-        pass
+        raise RuntimeError("labels should only be jumped into!")
 
     def execute_subroutine(self, context, *args):
-        assert len(args) == len(self.var_list), (list(args), self.var_list)
-
+        # assert len(args) == len(self.var_list), (list(args), self.var_list)
         with context.allocate_local_frame(args, self._max_var_height):
             self.body.eval(context)
 
@@ -605,9 +607,11 @@ class With(IRExecutor):
     def analyze(self):
         varname = self.args[0]._str_value
         val = self.args[1].analyze()  # analyze before shadowing
+
         with self.compile_ctx.variables([varname]):
-            variable = self.args[0].analyze()  # analyze for debugging
+            variable = self.args[0].analyze()
             body = self.args[2].analyze()
+
             self.args = (variable, val, body)
 
         return self
@@ -645,4 +649,5 @@ def _executor_from_ir(ir_node, opcode_impls, compile_ctx) -> Any:
         return OpcodeIRExecutor(instr, opcode_impl, opcode_info, compile_ctx, *args)
 
     assert len(ir_node.args) == 0, ir_node
+    assert isinstance(ir_node.value, str)
     return StringExecutor(instr, compile_ctx)
