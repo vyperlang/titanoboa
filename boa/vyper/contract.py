@@ -47,6 +47,7 @@ from boa.vyper.compiler_utils import (
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 from boa.vyper.event import Event, RawEvent
 from boa.vyper.ir_executor import executor_from_ir
+from boa.vyper.ir_compiler import executor_from_ir as compiler_from_ir
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -783,6 +784,12 @@ class VyperContract(_BaseContract):
         ir = self.compiler_data.ir_runtime
         opcode_impls = self.env.vm.state.computation_class.opcodes
         return executor_from_ir(ir, opcode_impls)
+
+    @cached_property
+    def ir_compiler(self):
+        ir = self.compiler_data.ir_runtime
+        return compiler_from_ir(ir, self.compiler_data.contract_name)
+
 
     @contextlib.contextmanager
     def _anchor_source_map(self, source_map):

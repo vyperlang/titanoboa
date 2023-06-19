@@ -6,6 +6,7 @@ import logging
 import sys
 import warnings
 from typing import Any, Iterator, Optional, Tuple, Union
+import traceback
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -323,12 +324,21 @@ class computation_template:
         err = None
         with cls(state, msg, tx_ctx) as computation:
             print("FAST MODE")
-            #print(contract.ir_executor)
+            # print(contract.ir_executor)
             eval_ctx = EvalContext(contract.ir_executor, computation)
             try:
-                eval_ctx.run()
-            finally:
-                return computation
+                #eval_ctx.run()
+                print("ENTER")
+                contract.ir_compiler.exec(eval_ctx)
+            #except PyEVMError as e:
+            #    raise e
+            except Exception as e:
+                err = e
+                traceback.print_exception(e, file=sys.stderr)
+
+        if err is not None:
+            raise err
+        return computation
 
 
 # wrapper class around py-evm which provides a "contract-centric" API
