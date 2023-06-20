@@ -47,7 +47,6 @@ from boa.vyper.compiler_utils import (
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 from boa.vyper.event import Event, RawEvent
 from boa.vyper.ir_executor import executor_from_ir
-from boa.vyper.ir_compiler import executor_from_ir as compiler_from_ir
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -782,14 +781,7 @@ class VyperContract(_BaseContract):
     @cached_property
     def ir_executor(self):
         ir = self.compiler_data.ir_runtime
-        opcode_impls = self.env.vm.state.computation_class.opcodes
-        return executor_from_ir(ir, opcode_impls)
-
-    @cached_property
-    def ir_compiler(self):
-        ir = self.compiler_data.ir_runtime
-        return compiler_from_ir(ir, self.compiler_data.contract_name)
-
+        return executor_from_ir(ir, self.compiler_data)
 
     @contextlib.contextmanager
     def _anchor_source_map(self, source_map):
@@ -870,7 +862,6 @@ class VyperFunction:
 
     @cached_property
     def ir(self):
-        # patch compiler_data to have IR for every function
         global_ctx = self.contract.global_ctx
 
         ir = generate_ir_for_function(self.fn_ast, global_ctx, False)
@@ -928,6 +919,7 @@ class VyperFunction:
         # sig_kwargs = self.func_t.default_args[: len(kwargs)]
 
         total_non_base_args = len(kwargs) + len(args) - n_pos_args
+
         # allow things with `.address` to be encode-able
         args = [getattr(arg, "address", arg) for arg in args]
 

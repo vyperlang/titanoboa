@@ -4,18 +4,18 @@
 import contextlib
 import logging
 import sys
+import traceback
 import warnings
 from typing import Any, Iterator, Optional, Tuple, Union
-import traceback
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
-from eth.exceptions import Halt, VMError
 from eth.chains.mainnet import MainnetChain
 from eth.codecs import abi
 from eth.db.atomic import AtomicDB
+from eth.exceptions import Halt, VMError
 from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
@@ -24,9 +24,9 @@ from eth_typing import Address
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
+from boa.vm.fast_mem import FastMem
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
-from boa.vyper.ir_executor import EvalContext
 
 
 def enable_pyevm_verbose_logging():
@@ -264,8 +264,8 @@ _LUDICROUS = 2
 
 # py-evm uses class instantiaters which need to be classes
 # instead of like factories or other easier to use architectures -
-# `computation_template` is a class which can be constructed dynamically
-class computation_template:
+# `titanoboa_computation` is a class which can be constructed dynamically
+class titanoboa_computation:
     _gas_meter_class = GasMeter
 
     def __init__(self, *args, **kwargs):
@@ -323,30 +323,23 @@ class computation_template:
         addr = msg.code_address
         contract = cls.env.lookup_contract(addr) if addr else None
         if contract is None or cls.env._speed == _SLOW:
-            #print("REGULAR MODE")
+            # print("REGULAR MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
         err = None
         with cls(state, msg, tx_ctx) as computation:
-            # print(contract.ir_executor)
-            eval_ctx = EvalContext(contract.ir_executor, computation)
             try:
-                if cls.env._speed == _FAST:
-                    #print("FAST MODE")
-                    eval_ctx.run()
-                else:  # LUDICROUS
-                    #print("LUDICROUS SPEED")
-                    contract.ir_compiler.exec(eval_ctx)
+                # print("LUDICROUS MODE")
+                contract.ir_executor.exec(computation)
             except (Halt, VMError):
                 pass
             except Exception as e:
                 # grab the exception to raise later -
                 # unclear why this is getting swallowed by py-evm.
-               # print(e)
+                # print(e)
                 err = e
 
         if err is not None:
-            # if err is not None:
             raise err
         return computation
 
@@ -391,7 +384,7 @@ class Env:
 
         c = type(
             "TitanoboaComputation",
-            (computation_template, self.vm.state.computation_class),
+            (titanoboa_computation, self.vm.state.computation_class),
             {"env": self},
         )
 

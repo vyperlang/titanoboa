@@ -3,13 +3,14 @@ import inspect
 import textwrap
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any, Optional
 from pathlib import PurePath
+from typing import Any, Optional
 
 import vyper.ir.optimizer
 from eth.exceptions import Revert
+from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
-from vyper.utils import unsigned_to_signed, mkalphanum
+from vyper.utils import mkalphanum, unsigned_to_signed
 
 from boa.vm.fast_mem import FastMem
 from boa.vm.utils import to_bytes, to_int
@@ -40,9 +41,6 @@ class PythonBuilder:
     def get_output(self):
         return "\n".join(line.show() for line in self.lines)
 
-    def get_code(self, filename):
-        return compile(self.get_output())
-
     @contextlib.contextmanager
     def block(self, entry):
         self.append(entry + ":")
@@ -63,9 +61,11 @@ _global_id = 0
 
 @dataclass
 class CompileContext:
-    contract_path: Optional[str] = ""
+    # include CompilerData - we need this to get immutable section size
+    vyper_compiler_data: CompilerData
     uuid: str = field(init=False)
     labels: dict[str, "IRExecutor"] = field(default_factory=dict)
+    unique_symbols: set[str] = field(default_factory=set)
     frames: list[FrameInfo] = field(default_factory=lambda: [FrameInfo()])
     builder: PythonBuilder = field(default_factory=PythonBuilder)
 
@@ -75,18 +75,28 @@ class CompileContext:
         self.uuid = str(_global_id)
         _global_id += 1
 
-
     @property
     def local_vars(self):
         return self.frames[-1].slots
 
     @cached_property
     def contract_name(self):
-        return mkalphanum(PurePath(self.contract_path).name)
+        return mkalphanum(PurePath(self.vyper_compiler_data.contract_name).name)
 
     def translate_label(self, label):
         return f"{label}_{self.contract_name}_{self.uuid}"
 
+    def add_unique_symbol(self, symbol):
+        if symbol in self.unique_symbols:
+            raise ValueError(
+                "duplicated symbol {symbol}, this is likely a bug in vyper!"
+            )
+        self.unique_symbols.add(symbol)
+
+    def add_label(self, labelname, executor):
+        if labelname in self.labels:
+            raise ValueError("duplicated label: {labelname}")
+        self.labels[labelname] = executor
 
     @contextlib.contextmanager
     def allocate_local_frame(self):
@@ -122,30 +132,40 @@ StackItem = int | bytes
 mapper = {int: "to_int", bytes: "to_bytes", StackItem: ""}
 
 
+class ExecutionContext:
+    __slots__ = "computation"
+
+    def __init__(self, computation):
+        self.computation = computation
+
+
 class IRExecutor:
-    __slots__ = ("args", "compile_ctx")
+    __slots__ = ("args", "compile_ctx", "_exec", "ir_node")
 
     # the type produced when executing this node
     _type: Optional[type] = None  # | int | bytes
 
-    def __init__(self, compile_ctx, *args):
+    def __init__(self, ir_node, compile_ctx, *args):
+        self.ir_node = ir_node
         self.args = args
         self.compile_ctx = compile_ctx
-        self.py_bytecode = None
-
-    def get_output(self):
-        return self.builder.get_output()
 
     @cached_property
     def name(self):
         return self._name
 
     def _compile_args(self, argnames):
-        assert len(self.args) == len(argnames) == len(self._sig), (self.args, argnames, self._sig)
+        assert len(self.args) == len(argnames) == len(self._sig), (
+            type(self),
+            self.args,
+            argnames,
+            self._sig,
+            self.ir_node,
+        )
         for out, arg, typ in reversed(list(zip(argnames, self.args, self._sig))):
             arg.compile(out=out, out_typ=typ)
 
-    @property
+    @cached_property
     def builder(self):
         return self.compile_ctx.builder
 
@@ -164,6 +184,9 @@ class IRExecutor:
 
         self._compile_args(argnames)
 
+        if hasattr(self, "_name"):
+            self.builder.append(f"# {self.name}")
+
         res = self._compile(*argnames)
 
         if res is None:
@@ -171,6 +194,8 @@ class IRExecutor:
             return
 
         if out is not None:
+            # squash F401 lint complaint about import
+            _ = to_int, to_bytes
             if self._type != out_typ:
                 res = f"{mapper[out_typ]}({res})"
             self.builder.append(f"{out} = {res}")
@@ -185,6 +210,7 @@ class IRExecutor:
 
         main_name = self.compile_ctx.translate_label("main")
         with self.builder.block(f"def {main_name}(CTX)"):
+            self.builder.append("VM = CTX.computation")
             self.compile()
 
         for func in self.compile_ctx.labels.values():
@@ -196,8 +222,9 @@ class IRExecutor:
 
         self._exec = globals()[main_name]
 
-    def exec(self, execution_ctx):
-        execution_ctx.computation._memory = FastMem()
+    def exec(self, computation):
+        computation._memory = FastMem()
+        execution_ctx = ExecutionContext(computation)
         self._exec(execution_ctx)
 
 
@@ -256,7 +283,7 @@ class VariableExecutor(IRExecutor):
 
     def __repr__(self):
         return f"var({self.varname})"
-      
+
     @cached_property
     def out_name(self):
         slot = self.var_slot
@@ -265,8 +292,12 @@ class VariableExecutor(IRExecutor):
             ret += f"_{slot}"
         return ret
 
+    def analyze(self):
+        raise RuntimeError("Should not appear during analysis!")
+
     def _compile(self):
         return self.out_name
+
 
 @dataclass
 class OpcodeInfo:
@@ -287,10 +318,16 @@ class OpcodeInfo:
         opcode, consumes, produces, gas_estimate = opcode_info
         return cls(mnemonic, opcode, consumes, produces, gas_estimate)
 
+    @classmethod
+    def from_mnemonic(cls, mnemonic):
+        mnemonic = mnemonic.upper()
+        return cls.from_opcode_info(mnemonic, OPCODES[mnemonic])
+
 
 # an executor for evm opcodes which dispatches into py-evm
 class OpcodeIRExecutor(IRExecutor):
     _type: type = StackItem
+
     def __init__(self, name, opcode_info, *args):
         self.opcode_info: OpcodeInfo = opcode_info
 
@@ -298,6 +335,10 @@ class OpcodeIRExecutor(IRExecutor):
         self._name = "__" + name + "__"
 
         super().__init__(*args)
+
+    def __repr__(self):
+        args = ",".join(repr(arg) for arg in self.args)
+        return f"{self.name}({args})"
 
     @cached_property
     def _sig(self):
@@ -312,18 +353,13 @@ class OpcodeIRExecutor(IRExecutor):
         return tuple(mkargname(i) for i in range(self.opcode_info.consumes))
 
     def _compile(self, *args):
-        opcode = hex(self.opcode_info.opcode)
         for arg in reversed(args):
-            self.builder.append(f"CTX.computation.stack_push_int({arg})")
+            self.builder.append(f"VM.stack_push_int({arg})")
 
-        self.builder.extend(
-            f"""
-        # {self._name}
-        CTX.computation.opcodes[{opcode}].__call__(CTX.computation)
-        """
-        )
+        opcode = hex(self.opcode_info.opcode)
+        self.builder.append(f"VM.opcodes[{opcode}].__call__(CTX.computation)")
         if self.opcode_info.produces:
-            return "CTX.computation.stack_pop1_any()"
+            return "VM.stack_pop1_any()"
 
 
 _executors = {}
@@ -381,8 +417,8 @@ class MLoad(IRExecutor):
     _type: type = int
 
     def _compile(self, ptr):
-        self.builder.append(f"CTX.computation._memory.extend({ptr}, 32)")
-        return f"CTX.computation._memory.read_word({ptr})"
+        self.builder.append(f"VM._memory.extend({ptr}, 32)")
+        return f"VM._memory.read_word({ptr})"
 
 
 @executor
@@ -393,10 +429,100 @@ class MStore(IRExecutor):
     def _compile(self, ptr, val):
         self.builder.extend(
             f"""
-        CTX.computation._memory.extend({ptr}, 32)
-        CTX.computation._memory.write_word({ptr}, {val})
+        VM._memory.extend({ptr}, 32)
+        VM._memory.write_word({ptr}, {val})
         """
         )
+
+
+class _CodeLoader(IRExecutor):
+    @cached_property
+    def runtime_code_size(self):
+        return self.compiler_data.global_ctx.immutable_section_bytes
+
+
+@executor
+class DLoad(_CodeLoader):
+    _name = "dload"
+    _sig = (int,)
+    _type: type = bytes
+
+    def _compile(self, ptr):
+        self.builder.extend(
+            f"""
+        code_start_position = {ptr} + {self.runtime_code_size}
+
+        with VM.code.seek(code_start_position):
+            ret = VM.code.read(32)
+
+        return ret.ljust(size, b"\x00")
+        """
+        )
+
+
+@executor
+class DLoadBytes(_CodeLoader):
+    _name = "dloadbytes"
+    _sig = (int, int, int)
+
+    def _compile(self, dst, src, size):
+        # adapted from py-evm codecopy, but without gas metering and
+        # mess with the start position
+        self.builder.extend(
+            f"""
+        code_start_position = {src} + {self.runtime_code_size}
+        VM.extend_memory({dst}, {size})
+
+        with VM.code.seek(code_start_position):
+            code_bytes = VM.code.read({size})
+
+        padded_code_bytes = code_bytes.ljust(size, b"\x00")
+
+        VM.memory_write({dst}, {size}, padded_code_bytes)
+        """
+        )
+
+
+# we call into py-evm for sha3_32 and sha3_64 to allow tracing to still work
+class _Sha3_N(IRExecutor):
+    _type: type = bytes
+
+    @cached_property
+    def _argnames(self):
+        return tuple(f"{self.name}.arg{i}" for i in range(len(self._sig)))
+
+    def _compile(self, *args):
+        assert self.N > 0 and self.N % 32 == 0
+        opcode_info = OpcodeInfo.from_mnemonic("SHA3")
+        self.builder.append(f"VM.extend_memory(0, {self.N})")
+        for i, val in enumerate(args):
+            self.builder.append(f"VM.memory_write({i*32}, 32, {val})")
+
+        sha3 = hex(opcode_info.opcode)
+        self.builder.extend(
+            f"""
+        VM.stack_push_int({self.N})
+        VM.stack_push_int(0)
+        VM.opcodes[{sha3}].__call__(VM)
+        """
+        )
+        return "VM.stack_pop1_any()"
+
+
+@executor
+class Sha3_64(_Sha3_N):
+    _name = "sha3_64"
+    _sig = (bytes, bytes)
+    _argnames = ("sha3_64_arg0", "sha3_64_arg1")
+    N = 64
+
+
+@executor
+class Sha3_32(_Sha3_N):
+    _name = "sha3_32"
+    _sig = (bytes,)
+    _argnames = ("sha3_32_arg0",)
+    N = 32
 
 
 @executor
@@ -408,6 +534,7 @@ class Ceil32(IRExecutor):
     def _compile(self, x):
         return f"({x} + 31) & 31"
 
+
 @executor
 class IsZero(IRExecutor):
     _name = "iszero"
@@ -416,23 +543,6 @@ class IsZero(IRExecutor):
 
     def _compile(self, x):
         return f"({x} == 0)"
-
-
-# @executor
-class DLoad(IRExecutor):
-    _name = "dload"
-    _sig = (int,)
-
-    def _impl(self, context, ptr):
-        raise RuntimeError("unimplemented")
-
-
-# @executor
-class DLoadBytes(IRExecutor):
-    _name = "dloadbytes"
-
-    def _impl(self, context, dst, src, size):
-        raise RuntimeError("unimplemented")
 
 
 @executor
@@ -472,7 +582,7 @@ class Repeat(IRExecutor):
         rounds_bound.compile("rounds_bound", out_typ=int)
         end = "start + rounds"
 
-        self.builder.append(f"assert rounds <= rounds_bound")
+        self.builder.append("assert rounds <= rounds_bound")
         with self.builder.block(f"for {i_var.out_name} in range(start, {end})"):
             body.compile()
 
@@ -522,7 +632,7 @@ class Assert(IRExecutor):
         self.builder.extend(
             """
         if not bool(test):
-            CTX.computation.output = b""
+            VM.output = b""
             raise Revert(b"")
         """
         )
@@ -539,22 +649,46 @@ class Goto(IRExecutor):
 
     def analyze(self):
         self.label = self.args[0]._str_value
+        # exit_to labels weird, fixed in GH vyper#3488
         if self.label.startswith("_sym_"):
-            self.label = self.label[len("_sym_"):]
+            self.label = self.label[len("_sym_") :]
 
+        # just get the parameters, leaving the label in self.args
+        # messes with downstream machinery which tries to analyze the label.
+        runtime_args = []
         for arg in self.args[1:]:
-            arg = arg.analyze()
+            if isinstance(arg, StringExecutor):
+                argval = arg._str_value
+                # GH vyper#3488
+                if argval == "return_pc":
+                    continue
+                # calling convention wants to push the return pc since evm
+                # has no subroutines, we are using python function call
+                # machinery so we don't need to worry about that.
+                if argval.startswith("_sym_"):
+                    continue
 
-        self.args = self.args[1:]
+            runtime_args.append(arg.analyze())
+
+        self.args = runtime_args
 
         return self
 
     @cached_property
+    def is_return_stmt(self):
+        # i.e. we are exiting a subroutine
+        return self.label == "return_pc"
+
+    @cached_property
     def _argnames(self):
+        if self.is_return_stmt:
+            return ()
         return self.compile_ctx.labels[self.label].analyzed_param_names
 
     @cached_property
     def _type(self):
+        if self.is_return_stmt:
+            return None
         return self.compile_ctx.labels[self.label]._type
 
     @cached_property
@@ -565,9 +699,8 @@ class Goto(IRExecutor):
     def _compile(self, *args):
         label = self.label
 
-        if label == "returnpc":
-            # i.e. exitsub
-            assert len(args) == 0
+        if self.is_return_stmt:
+            assert len(self.args) == 0
             self.builder.append("return")
             return
 
@@ -589,31 +722,27 @@ class ExitTo(Goto):
 class Label(IRExecutor):
     _name = "label"
 
-    def __init__(self, compile_ctx, *args):
-        self.compile_ctx = compile_ctx
-
-        name, var_list, body = args
-
-        self.var_list = var_list
-        self.body = body
-        self.labelname = name._str_value
-
-        if name._str_value in compile_ctx.labels:
-            raise ValueError("duplicated label: {name._str_value}")
-        compile_ctx.labels[name._str_value] = self
-
     @cached_property
     def analyzed_param_names(self):
-        return [param.out_name for param in self.var_list.args]
+        _, var_list, _ = self.args
+        return [x.out_name for x in var_list.args if x.varname != "return_pc"]
 
     def analyze(self):
-        with self.compile_ctx.allocate_local_frame():
-            params = [param._str_value for param in self.var_list.args]
-            with self.compile_ctx.variables(params):
-                self.var_list = self.var_list.analyze()
-                self.body = self.body.analyze()
+        name, var_list, body = self.args
 
-        self._type = self.body._type
+        self.labelname = name._str_value
+
+        self.compile_ctx.add_label(self.labelname, self)
+
+        with self.compile_ctx.allocate_local_frame():
+            params = [param._str_value for param in var_list.args]
+            with self.compile_ctx.variables(params):
+                var_list = var_list.analyze()
+                body = body.analyze()
+
+        self.args = name, var_list, body
+
+        self._type = body._type
 
         return self
 
@@ -621,9 +750,26 @@ class Label(IRExecutor):
         pass
 
     def compile_func(self):
+        _, _, body = self.args
         params_str = ", ".join(["CTX"] + self.analyzed_param_names)
         with self.builder.block(f"def {self.labelname}({params_str})"):
-            self.body.compile()
+            self.builder.append("VM = CTX.computation")
+            body.compile()
+
+
+@executor
+class UniqueSymbol(IRExecutor):
+    _name = "unique_symbol"
+
+    def analyze(self):
+        # we don't really need to do this analysis since vyper should
+        # have done it already, but doesn't hurt to be a little paranoid
+        symbol = self.args[0]._str_value
+        self.compile_ctx.add_unique_symbol(symbol)
+        return self
+
+    def compile(self, **kwargs):
+        pass
 
 
 @executor
@@ -654,8 +800,17 @@ class With(IRExecutor):
         return body.compile(out=out, out_typ=out_typ)
 
 
-def executor_from_ir(ir_node, contract_path = "") -> Any:
-    ret = _executor_from_ir(ir_node, CompileContext(contract_path))
+@executor
+class Set(IRExecutor):
+    _name = "set"
+
+    def compile(self, **kwargs):
+        variable, val = self.args
+        val.compile(out=variable.out_name, out_typ=int)
+
+
+def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
+    ret = _executor_from_ir(ir_node, CompileContext(vyper_compiler_data))
 
     ret = ret.analyze()
     ret.compile_main()
@@ -670,11 +825,11 @@ def _executor_from_ir(ir_node, compile_ctx) -> Any:
     args = [_executor_from_ir(arg, compile_ctx) for arg in ir_node.args]
 
     if instr in _executors:
-        return _executors[instr](compile_ctx, *args)
+        return _executors[instr](ir_node, compile_ctx, *args)
 
     if (mnemonic := instr.upper()) in OPCODES:
-        opcode_info = OpcodeInfo.from_opcode_info(mnemonic, OPCODES[mnemonic])
-        return OpcodeIRExecutor(instr, opcode_info, compile_ctx, *args)
+        opcode_info = OpcodeInfo.from_mnemonic(mnemonic)
+        return OpcodeIRExecutor(instr, opcode_info, ir_node, compile_ctx, *args)
 
     assert len(ir_node.args) == 0, ir_node
     assert isinstance(ir_node.value, str)
