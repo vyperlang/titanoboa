@@ -15,11 +15,6 @@ from boa.vm.fast_mem import FastMem
 from boa.vm.utils import to_bytes, to_int
 
 
-def debug(*args, **kwargs):
-    print(*args, **kwargs)
-
-
-
 @dataclass
 class _Line:
     indentation_level: int
@@ -60,6 +55,7 @@ class PythonBuilder:
 class FrameInfo:
     current_slot: int = 0  # basically the de bruijn index
     slots: dict[str, int] = field(default_factory=lambda: {})
+    types: dict[str, type] = field(default_factory=lambda: {})
 
 
 _global_id = 0
@@ -174,11 +170,8 @@ class IRExecutor:
             assert out is None, (type(self), self, out, argnames)
             return
 
-        #print("ENTER", type(self), self, out, argnames, res)
-        res_typ, res = res
-
         if out is not None:
-            if res_typ != out_typ:
+            if self._type != out_typ:
                 res = f"{mapper[out_typ]}({res})"
             self.builder.append(f"{out} = {res}")
         else:
@@ -212,6 +205,7 @@ class IRExecutor:
 class IntExecutor(IRExecutor):
     compile_ctx: CompileContext
     _int_value: int
+    _type: type = int
 
     def __post_init__(self):
         assert 0 <= self._int_value < 2**256
@@ -224,13 +218,17 @@ class IntExecutor(IRExecutor):
         return self
 
     def _compile(self):
-        return int, repr(self)
+        return repr(self)
 
 
 @dataclass
 class StringExecutor(IRExecutor):
     compile_ctx: CompileContext
     _str_value: str
+
+    @property
+    def _type(self):
+        raise RuntimeError("should have been analyzed!")
 
     def __post_init__(self):
         self.args = self._sig = ()
@@ -249,6 +247,10 @@ class VariableExecutor(IRExecutor):
     varname: str
     var_slot: int
 
+    # optimization assumption: most variables that
+    # will be hotspots need to be ints.
+    _type: type = int
+
     def __post_init__(self):
         self.args = self._sig = ()
 
@@ -264,7 +266,7 @@ class VariableExecutor(IRExecutor):
         return ret
 
     def _compile(self):
-        return StackItem, self.out_name # XXX: figure out type
+        return self.out_name
 
 @dataclass
 class OpcodeInfo:
@@ -288,6 +290,7 @@ class OpcodeInfo:
 
 # an executor for evm opcodes which dispatches into py-evm
 class OpcodeIRExecutor(IRExecutor):
+    _type: type = StackItem
     def __init__(self, name, opcode_info, *args):
         self.opcode_info: OpcodeInfo = opcode_info
 
@@ -298,7 +301,8 @@ class OpcodeIRExecutor(IRExecutor):
 
     @cached_property
     def _sig(self):
-        return tuple(StackItem for _ in range(self.opcode_info.consumes))
+        # TODO figure out the type to avoid calling to_int
+        return tuple(int for _ in range(self.opcode_info.consumes))
 
     @cached_property
     def _argnames(self):
@@ -310,8 +314,7 @@ class OpcodeIRExecutor(IRExecutor):
     def _compile(self, *args):
         opcode = hex(self.opcode_info.opcode)
         for arg in reversed(args):
-            # TODO figure out the type to avoid calling to_int
-            self.builder.append(f"CTX.computation.stack_push_int(to_int({arg}))")
+            self.builder.append(f"CTX.computation.stack_push_int({arg})")
 
         self.builder.extend(
             f"""
@@ -320,7 +323,7 @@ class OpcodeIRExecutor(IRExecutor):
         """
         )
         if self.opcode_info.produces:
-            return StackItem, "CTX.computation.stack_pop1_any()"
+            return "CTX.computation.stack_pop1_any()"
 
 
 _executors = {}
@@ -343,14 +346,14 @@ def _as_signed(x):
 class UnsignedBinopExecutor(IRExecutor):
     __slots__ = ("_name", "_op")
     _sig = int, int
-    _out_type = int
+    _type: type = int
 
     @cached_property
     def funcname(self):
         return self._op.__module__ + "." + self._op.__name__
 
     def _compile(self, x, y):
-        return int, f"_wrap256({self.funcname}({x}, {y}))"
+        return f"_wrap256({self.funcname}({x}, {y}))"
 
 
 class SignedBinopExecutor(UnsignedBinopExecutor):
@@ -361,7 +364,7 @@ class SignedBinopExecutor(UnsignedBinopExecutor):
         y = _as_signed({y}, 256, strict=True))
         """
         )
-        return int, f"_wrap256({self._funcname}(x, y))"
+        return f"_wrap256({self._funcname}(x, y))"
 
 
 # for binops, just use routines from vyper optimizer
@@ -375,10 +378,11 @@ for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
 class MLoad(IRExecutor):
     _name = "mload"
     _sig = (int,)
+    _type: type = int
 
     def _compile(self, ptr):
         self.builder.append(f"CTX.computation._memory.extend({ptr}, 32)")
-        return int, f"CTX.computation._memory.read_word({ptr})"
+        return f"CTX.computation._memory.read_word({ptr})"
 
 
 @executor
@@ -399,18 +403,19 @@ class MStore(IRExecutor):
 class Ceil32(IRExecutor):
     _name = "ceil32"
     _sig = (int,)
+    _type: type = int
 
     def _compile(self, x):
-        return int, f"({x} + 31) & 31"
+        return f"({x} + 31) & 31"
 
 @executor
 class IsZero(IRExecutor):
     _name = "iszero"
     _sig = (int,)
+    _type: type = int
 
     def _compile(self, x):
-        return int, f"{x} == 0"
-
+        return f"({x} == 0)"
 
 
 # @executor
@@ -462,9 +467,9 @@ class Repeat(IRExecutor):
     def compile(self, out=None):
         i_var, start, rounds, rounds_bound, body = self.args
 
-        start.compile("start", int)
-        rounds.compile("rounds", int)
-        rounds_bound.compile("rounds_bound", int)
+        start.compile("start", out_typ=int)
+        rounds.compile("rounds", out_typ=int)
+        rounds_bound.compile("rounds_bound", out_typ=int)
         end = "start + rounds"
 
         self.builder.append(f"assert rounds <= rounds_bound")
@@ -549,8 +554,13 @@ class Goto(IRExecutor):
         return self.compile_ctx.labels[self.label].analyzed_param_names
 
     @cached_property
+    def _type(self):
+        return self.compile_ctx.labels[self.label]._type
+
+    @cached_property
     def _sig(self):
-        return tuple(StackItem for _ in self._argnames)
+        # optimization assumption: they all need to be ints
+        return tuple(int for _ in self._argnames)
 
     def _compile(self, *args):
         label = self.label
@@ -565,8 +575,7 @@ class Goto(IRExecutor):
         assert len(argnames) == len(self.args)
 
         args_str = ", ".join(["CTX"] + argnames)
-        # XXX: figure out type
-        return StackItem, f"{label}({args_str})"
+        return f"{label}({args_str})"
 
 
 @executor
@@ -604,13 +613,14 @@ class Label(IRExecutor):
                 self.var_list = self.var_list.analyze()
                 self.body = self.body.analyze()
 
+        self._type = self.body._type
+
         return self
 
     def compile(self, **kwargs):
         pass
 
     def compile_func(self):
-        print(self.var_list)
         params_str = ", ".join(["CTX"] + self.analyzed_param_names)
         with self.builder.block(f"def {self.labelname}({params_str})"):
             self.body.compile()
@@ -632,12 +642,15 @@ class With(IRExecutor):
 
             self.args = (variable, val, body)
 
+        self._type = body._type
+
         return self
 
     def compile(self, out=None, out_typ=None):
         variable, val, body = self.args
-        # TODO: infer val typ
-        val.compile(out=variable.out_name, out_typ=StackItem)
+        # optimization assumption: most variables that
+        # will be hotspots need to be ints.
+        val.compile(out=variable.out_name, out_typ=int)
         return body.compile(out=out, out_typ=out_typ)
 
 
