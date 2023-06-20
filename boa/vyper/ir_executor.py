@@ -437,8 +437,9 @@ class MStore(IRExecutor):
 
 class _CodeLoader(IRExecutor):
     @cached_property
-    def runtime_code_size(self):
-        return self.compiler_data.global_ctx.immutable_section_bytes
+    def immutables_size(self):
+        compiler_data = self.compile_ctx.vyper_compiler_data
+        return compiler_data.global_ctx.immutable_section_bytes
 
 
 @executor
@@ -448,16 +449,17 @@ class DLoad(_CodeLoader):
     _type: type = bytes
 
     def _compile(self, ptr):
+        assert self.immutables_size > 0
         self.builder.extend(
             f"""
-        code_start_position = {ptr} + {self.runtime_code_size}
+        code_start_position = {ptr} - {self.immutables_size} + len(VM.code)
 
         with VM.code.seek(code_start_position):
             ret = VM.code.read(32)
 
-        return ret.ljust(size, b"\x00")
         """
         )
+        return f"""ret.ljust(32, b"\\x00")"""
 
 
 @executor
@@ -466,17 +468,19 @@ class DLoadBytes(_CodeLoader):
     _sig = (int, int, int)
 
     def _compile(self, dst, src, size):
-        # adapted from py-evm codecopy, but without gas metering and
+        assert self.immutables_size > 0
+
+        # adapted from py-evm codecopy, but without gas metering, then
         # mess with the start position
         self.builder.extend(
             f"""
-        code_start_position = {src} + {self.runtime_code_size}
+        code_start_position = {src} - {self.immutables_size} + len(VM.code)
         VM.extend_memory({dst}, {size})
 
         with VM.code.seek(code_start_position):
             code_bytes = VM.code.read({size})
 
-        padded_code_bytes = code_bytes.ljust(size, b"\x00")
+        padded_code_bytes = code_bytes.ljust(size, b"\\x00")
 
         VM.memory_write({dst}, {size}, padded_code_bytes)
         """

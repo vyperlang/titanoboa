@@ -331,7 +331,7 @@ class titanoboa_computation:
             try:
                 # print("LUDICROUS MODE")
                 contract.ir_executor.exec(computation)
-            except (Halt, VMError):
+            except Halt:
                 pass
             except Exception as e:
                 # grab the exception to raise later -
