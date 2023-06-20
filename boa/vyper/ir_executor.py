@@ -13,7 +13,7 @@ from vyper.evm.opcodes import OPCODES
 from vyper.utils import mkalphanum, unsigned_to_signed
 
 from boa.vm.fast_mem import FastMem
-from boa.vm.utils import to_bytes, to_int
+from boa.vm.utils import to_bytes, to_int, ceil32
 
 
 @dataclass
@@ -68,6 +68,7 @@ class CompileContext:
     unique_symbols: set[str] = field(default_factory=set)
     frames: list[FrameInfo] = field(default_factory=lambda: [FrameInfo()])
     builder: PythonBuilder = field(default_factory=PythonBuilder)
+    var_id: int = -1
 
     def __post_init__(self):
         # use a global bc the generated functions need to be unique
@@ -78,6 +79,11 @@ class CompileContext:
     @property
     def local_vars(self):
         return self.frames[-1].slots
+
+
+    def fresh_var(self, name = ""):
+        self.var_id += 1
+        return f"var_{name}_{self.var_id}"
 
     @cached_property
     def contract_name(self):
@@ -181,6 +187,8 @@ class IRExecutor:
             argnames = inspect.getargs(self._compile.__code__).args
             assert argnames[0] == "self"
             argnames = argnames[1:]
+
+        argnames = [self.compile_ctx.fresh_var(x) for x in argnames]
 
         self._compile_args(argnames)
 
@@ -480,7 +488,7 @@ class DLoadBytes(_CodeLoader):
         with VM.code.seek(code_start_position):
             code_bytes = VM.code.read({size})
 
-        padded_code_bytes = code_bytes.ljust(size, b"\\x00")
+        padded_code_bytes = code_bytes.ljust({size}, b"\\x00")
 
         VM.memory_write({dst}, {size}, padded_code_bytes)
         """
@@ -536,7 +544,7 @@ class Ceil32(IRExecutor):
     _type: type = int
 
     def _compile(self, x):
-        return f"({x} + 31) & 31"
+        return f"ceil32({x})"
 
 
 @executor
@@ -581,13 +589,17 @@ class Repeat(IRExecutor):
     def compile(self, out=None):
         i_var, start, rounds, rounds_bound, body = self.args
 
-        start.compile("start", out_typ=int)
-        rounds.compile("rounds", out_typ=int)
-        rounds_bound.compile("rounds_bound", out_typ=int)
-        end = "start + rounds"
+        startname = self.compile_ctx.fresh_var("start")
+        roundsname = self.compile_ctx.fresh_var("rounds")
+        start.compile(startname, out_typ=int)
+        rounds.compile(roundsname, out_typ=int)
 
-        self.builder.append("assert rounds <= rounds_bound")
-        with self.builder.block(f"for {i_var.out_name} in range(start, {end})"):
+        rounds_bound = rounds_bound._int_value
+
+        end = f"{start} + {rounds}"
+
+        self.builder.append("assert {rounds} <= rounds_bound")
+        with self.builder.block(f"for {i_var.out_name} in range({start}, {end})"):
             body.compile()
 
     def analyze(self):
@@ -616,9 +628,10 @@ class If(IRExecutor):
         else:
             test, body = self.args
 
-        test.compile("test", out_typ=int)
+        testname = self.compile_ctx.fresh_var("test")
+        test.compile(testname, out_typ=int)
 
-        with self.builder.block("if bool(test)"):
+        with self.builder.block(f"if bool({testname})"):
             body.compile(out, out_typ)
 
         if orelse:
@@ -634,8 +647,8 @@ class Assert(IRExecutor):
     def _compile(self, test):
         _ = Revert  # linter does not know we are using `Revert`.
         self.builder.extend(
-            """
-        if not bool(test):
+            f"""
+        if not bool({test}):
             VM.output = b""
             raise Revert(b"")
         """
@@ -711,7 +724,7 @@ class Goto(IRExecutor):
         argnames = self._argnames
         assert len(argnames) == len(self.args)
 
-        args_str = ", ".join(["CTX"] + argnames)
+        args_str = ", ".join(["CTX"] + list(args))
         return f"{label}({args_str})"
 
 
