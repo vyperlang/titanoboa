@@ -323,7 +323,7 @@ class computation_template:
         addr = msg.code_address
         contract = cls.env.lookup_contract(addr) if addr else None
         if contract is None or cls.env._speed == _SLOW:
-            print("SLOW MODE")
+            #print("REGULAR MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
         err = None
@@ -332,10 +332,10 @@ class computation_template:
             eval_ctx = EvalContext(contract.ir_executor, computation)
             try:
                 if cls.env._speed == _FAST:
-                    print("FAST MODE")
+                    #print("FAST MODE")
                     eval_ctx.run()
                 else:  # LUDICROUS
-                    print("LUDICROUS SPEED")
+                    #print("LUDICROUS SPEED")
                     contract.ir_compiler.exec(eval_ctx)
             except (Halt, VMError):
                 pass
