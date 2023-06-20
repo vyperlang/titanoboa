@@ -12,6 +12,7 @@ from vyper.evm.opcodes import OPCODES
 from vyper.utils import unsigned_to_signed, mkalphanum
 
 from boa.vm.fast_mem import FastMem
+from boa.vm.utils import to_bytes, to_int
 
 
 def debug(*args, **kwargs):
@@ -122,13 +123,14 @@ class CompileContext:
 StackItem = int | bytes
 
 
-mapper = {int: "_to_int", bytes: "_to_bytes", StackItem: ""}
+mapper = {int: "to_int", bytes: "to_bytes", StackItem: ""}
 
 
 class IRExecutor:
-    __slots__ = ("args", "compile_ctx")# "exec")
+    __slots__ = ("args", "compile_ctx")
 
-    _out_type: Optional[StackItem] = None
+    # the type produced when executing this node
+    _type: Optional[type] = None  # | int | bytes
 
     def __init__(self, compile_ctx, *args):
         self.args = args
@@ -308,8 +310,8 @@ class OpcodeIRExecutor(IRExecutor):
     def _compile(self, *args):
         opcode = hex(self.opcode_info.opcode)
         for arg in reversed(args):
-            # TODO figure out the type to avoid calling _to_int
-            self.builder.append(f"CTX.computation.stack_push_int(_to_int({arg}))")
+            # TODO figure out the type to avoid calling to_int
+            self.builder.append(f"CTX.computation.stack_push_int(to_int({arg}))")
 
         self.builder.extend(
             f"""
@@ -328,18 +330,6 @@ _executors = {}
 def executor(cls):
     _executors[cls._name] = cls
     return cls
-
-
-def _to_int(stack_item: StackItem) -> int:
-    if isinstance(stack_item, int):
-        return stack_item
-    return int.from_bytes(stack_item, "big")
-
-
-def _to_bytes(stack_item: StackItem) -> bytes:
-    if isinstance(stack_item, bytes):
-        return stack_item
-    return stack_item.to_bytes(32, "big")
 
 
 def _wrap256(x):
@@ -396,7 +386,7 @@ class MStore(IRExecutor):
     _name = "mstore"
     _sig = (int, int)
 
-    def _compile(self, val, ptr):
+    def _compile(self, ptr, val):
         self.builder.extend(
             f"""
         CTX.computation._memory.extend({ptr}, 32)
