@@ -25,7 +25,7 @@ class FastMem(Memory):
 
         # words which are in the cache but have not been written
         # to the backing bytes
-        self.needs_writeback = set()
+        self.needs_writeback = []
 
         super().__init__()
 
@@ -36,6 +36,7 @@ class FastMem(Memory):
         new_size = (start_position + size_bytes + 31) // 32
         if (size_difference := new_size - len(self.mem_cache)) > 0:
             self.mem_cache.extend([self._DIRTY] * size_difference)
+            self.needs_writeback.extend([False] * size_difference)
             super().extend(start_position, size_bytes)
 
     def read_word(self, start_position):
@@ -51,9 +52,9 @@ class FastMem(Memory):
         start = start_position // 32
         end = ceil32(start_position + size) // 32
         for ix in range(start, end):
-            if ix in self.needs_writeback:
+            if self.needs_writeback[ix]:
                 super().write(ix * 32, 32, to_bytes(self.mem_cache[ix]))
-                self.needs_writeback.remove(ix)
+                self.needs_writeback[ix] = False
 
         return super().read_bytes(start_position, size)
 
@@ -61,7 +62,7 @@ class FastMem(Memory):
         if start_position % 32 == 0:
             self.mem_cache[start_position // 32] = int_val
 
-        self.needs_writeback.add(start_position // 32)
+        self.needs_writeback[start_position // 32] = True
 
         # bypass cache dirtying
         # super().write(start_position, 32, to_bytes(int_val))
