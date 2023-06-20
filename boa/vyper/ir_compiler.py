@@ -11,13 +11,12 @@ from eth.exceptions import Revert
 from vyper.evm.opcodes import OPCODES
 from vyper.utils import unsigned_to_signed, mkalphanum
 
+from boa.vm.fast_mem import FastMem
+
 
 def debug(*args, **kwargs):
     print(*args, **kwargs)
 
-
-def ceil32(x):
-    return (x + 31) & ~31
 
 
 @dataclass
@@ -127,7 +126,7 @@ mapper = {int: "_to_int", bytes: "_to_bytes", StackItem: ""}
 
 
 class IRExecutor:
-    __slots__ = ("args", "compile_ctx", "exec")
+    __slots__ = ("args", "compile_ctx")# "exec")
 
     _out_type: Optional[StackItem] = None
 
@@ -199,7 +198,12 @@ class IRExecutor:
 
         py_bytecode = compile(self.builder.get_output(), contract_path, "exec")
         exec(py_bytecode, globals())
-        self.exec = globals()[main_name]
+
+        self._exec = globals()[main_name]
+
+    def exec(self, execution_ctx):
+        execution_ctx.computation._memory = FastMem()
+        self._exec(execution_ctx)
 
 
 @dataclass
@@ -552,7 +556,7 @@ class Goto(IRExecutor):
 
     @cached_property
     def _argnames(self):
-        return self.compile_ctx.labels[self.label].param_names
+        return self.compile_ctx.labels[self.label].analyzed_param_names
 
     @cached_property
     def _sig(self):
@@ -591,7 +595,7 @@ class Label(IRExecutor):
 
         name, var_list, body = args
 
-        self.var_list = var_list.args
+        self.var_list = var_list
         self.body = body
         self.labelname = name._str_value
 
@@ -600,12 +604,14 @@ class Label(IRExecutor):
         compile_ctx.labels[name._str_value] = self
 
     @cached_property
-    def param_names(self):
-        return [param._str_value for param in self.var_list]
+    def analyzed_param_names(self):
+        return [param.out_name for param in self.var_list.args]
 
     def analyze(self):
         with self.compile_ctx.allocate_local_frame():
-            with self.compile_ctx.variables(self.param_names):
+            params = [param._str_value for param in self.var_list.args]
+            with self.compile_ctx.variables(params):
+                self.var_list = self.var_list.analyze()
                 self.body = self.body.analyze()
 
         return self
@@ -615,7 +621,7 @@ class Label(IRExecutor):
 
     def compile_func(self):
         print(self.var_list)
-        params_str = ", ".join(["CTX"] + self.param_names)
+        params_str = ", ".join(["CTX"] + self.analyzed_param_names)
         with self.builder.block(f"def {self.labelname}({params_str})"):
             self.body.compile()
 

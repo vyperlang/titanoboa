@@ -12,6 +12,7 @@ import eth.constants as constants
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
+from eth.exceptions import Halt, VMError
 from eth.chains.mainnet import MainnetChain
 from eth.codecs import abi
 from eth.db.atomic import AtomicDB
@@ -256,6 +257,10 @@ class SstoreTracer:
 
 # ### End section: sha3 tracing
 
+_SLOW = 0
+_FAST = 1
+_LUDICROUS = 2
+
 
 # py-evm uses class instantiaters which need to be classes
 # instead of like factories or other easier to use architectures -
@@ -317,26 +322,31 @@ class computation_template:
     def apply_computation(cls, state, msg, tx_ctx):
         addr = msg.code_address
         contract = cls.env.lookup_contract(addr) if addr else None
-        if contract is None or not cls.env._enable_fast_mode:
+        if contract is None or cls.env._speed == _SLOW:
             print("SLOW MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
         err = None
         with cls(state, msg, tx_ctx) as computation:
-            print("FAST MODE")
             # print(contract.ir_executor)
             eval_ctx = EvalContext(contract.ir_executor, computation)
             try:
-                #eval_ctx.run()
-                print("ENTER")
-                contract.ir_compiler.exec(eval_ctx)
-            #except PyEVMError as e:
-            #    raise e
+                if cls.env._speed == _FAST:
+                    print("FAST MODE")
+                    eval_ctx.run()
+                else:  # LUDICROUS
+                    print("LUDICROUS SPEED")
+                    contract.ir_compiler.exec(eval_ctx)
+            except (Halt, VMError):
+                pass
             except Exception as e:
+                # grab the exception to raise later -
+                # unclear why this is getting swallowed by py-evm.
+               # print(e)
                 err = e
-                traceback.print_exception(e, file=sys.stderr)
 
         if err is not None:
+            # if err is not None:
             raise err
         return computation
 
@@ -346,7 +356,7 @@ class Env:
     _singleton = None
     _initial_address_counter = 100
     _coverage_enabled = False
-    _enable_fast_mode = False
+    _speed = _SLOW
 
     def __init__(self):
         self.chain = _make_chain()

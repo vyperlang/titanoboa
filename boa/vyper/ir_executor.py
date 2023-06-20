@@ -6,17 +6,15 @@ from typing import Any, Optional
 
 import vyper.ir.optimizer
 from eth.exceptions import Revert
-from eth.vm.memory import Memory
 from vyper.evm.opcodes import OPCODES
 from vyper.utils import unsigned_to_signed
+
+from boa.vm.fast_mem import FastMem
+from boa.vm.utils import to_bytes, to_int, ceil32
 
 
 def debug(*args, **kwargs):
     print(*args, **kwargs)
-
-
-def ceil32(x):
-    return (x + 31) & ~31
 
 
 @dataclass
@@ -249,18 +247,6 @@ def executor(cls):
 StackItem = int | bytes
 
 
-def _to_int(stack_item: StackItem) -> int:
-    if isinstance(stack_item, int):
-        return stack_item
-    return int.from_bytes(stack_item, "big")
-
-
-def _to_bytes(stack_item: StackItem) -> bytes:
-    if isinstance(stack_item, bytes):
-        return stack_item
-    return stack_item.to_bytes(32, "big")
-
-
 def _wrap256(x):
     return x % 2**256
 
@@ -279,66 +265,6 @@ class VariableExecutor:
 
     def eval(self, context):
         return context.local_vars[self.var_slot]
-
-
-# most memory is aligned. treat it as list of ints, and provide mocking
-# for instructions which access it in the slow way
-class FastMem(Memory):
-    __slots__ = ("mem_cache", "_bytes", "needs_writeback")
-
-    def __init__(self):
-        # XXX: check if this would be faster as dict?
-        self.mem_cache = []  # cached words
-
-        # words which are in the cache but have not been written
-        # to the backing bytes
-        self.needs_writeback = set()
-
-        super().__init__()
-
-    _DIRTY = object()
-
-    def extend(self, start_position, size_bytes):
-        # i.e. ceil32(len(self)) // 32
-        new_size = (start_position + size_bytes + 31) // 32
-        if (size_difference := new_size - len(self.mem_cache)) > 0:
-            self.mem_cache.extend([self._DIRTY] * size_difference)
-            super().extend(start_position, size_bytes)
-
-    def read_word(self, start_position):
-        if start_position % 32 == 0:
-            if (ret := self.mem_cache[start_position // 32]) is not self._DIRTY:
-                return ret
-
-        ret = _to_int(self.read_bytes(start_position, 32))
-        self.mem_cache[start_position // 32] = ret
-        return ret
-
-    def read_bytes(self, start_position, size):
-        start = start_position // 32
-        end = ceil32(start_position + size) // 32
-        for ix in range(start, end):
-            if ix in self.needs_writeback:
-                super().write(ix * 32, 32, _to_bytes(self.mem_cache[ix]))
-                self.needs_writeback.remove(ix)
-
-        return super().read_bytes(start_position, size)
-
-    def write_word(self, start_position, int_val):
-        if start_position % 32 == 0:
-            self.mem_cache[start_position // 32] = int_val
-
-        self.needs_writeback.add(start_position // 32)
-
-        # bypass cache dirtying
-        # super().write(start_position, 32, _to_bytes(int_val))
-
-    def write(self, start_position, size, value):
-        start = start_position // 32
-        end = (start_position + size + 31) // 32
-        for i in range(start, end):
-            self.mem_cache[i] = self._DIRTY
-        super().write(start_position, size, value)
 
 
 class IRExecutor(IRBaseExecutor):
@@ -360,7 +286,7 @@ class IRExecutor(IRBaseExecutor):
 
     @cached_property
     def sig_mapper(self):
-        return tuple(_to_int if typ is int else _to_bytes for typ in self._sig)
+        return tuple(to_int if typ is int else to_bytes for typ in self._sig)
 
 
 class UnsignedBinopExecutor(IRExecutor):
@@ -370,8 +296,8 @@ class UnsignedBinopExecutor(IRExecutor):
         # debug("ENTER",self._name,self.args)
         x, y = self.args
         # note: eval in reverse order.
-        y = _to_int(y.eval(context))
-        x = _to_int(x.eval(context))
+        y = to_int(y.eval(context))
+        x = to_int(x.eval(context))
         return _wrap256(self._op(x, y))
 
 
@@ -379,8 +305,8 @@ class SignedBinopExecutor(UnsignedBinopExecutor):
     def eval(self, context):
         x, y = self.args
         # note: eval in reverse order.
-        y = unsigned_to_signed(_to_int(y.eval(context), 256, strict=True))
-        x = unsigned_to_signed(_to_int(x.eval(context), 256, strict=True))
+        y = unsigned_to_signed(to_int(y.eval(context), 256, strict=True))
+        x = unsigned_to_signed(to_int(x.eval(context), 256, strict=True))
         return _wrap256(self._op(x, y))
 
 
@@ -397,7 +323,7 @@ class MLoad(IRExecutor):
 
     def eval(self, context):
         # perf hotspot.
-        ptr = _to_int(self.args[0].eval(context))
+        ptr = to_int(self.args[0].eval(context))
         context.computation._memory.extend(ptr, 32)
         # return context.computation._memory.read_bytes(ptr, 32)
         return context.computation._memory.read_word(ptr)
@@ -409,8 +335,8 @@ class MStore(IRExecutor):
 
     def eval(self, context):
         # perf hotspot.
-        val = _to_int(self.args[1].eval(context))
-        ptr = _to_int(self.args[0].eval(context))
+        val = to_int(self.args[1].eval(context))
+        ptr = to_int(self.args[0].eval(context))
         context.computation._memory.extend(ptr, 32)
         # context.computation._memory.write(ptr, 32, val)
         context.computation._memory.write_word(ptr, val)
@@ -506,7 +432,7 @@ class If(IRExecutor):
             test, body = self.args
             orelse = None
 
-        test = _to_int(test.eval(context))
+        test = to_int(test.eval(context))
         if bool(test):
             return body.eval(context)
 
