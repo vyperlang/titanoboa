@@ -436,6 +436,15 @@ for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
     _executors[opname] = type(nickname, (base,), {"_op": op, "_name": opname})
 
 
+@executor
+class Select(IRExecutor):
+    _name = "select"
+    _sig = (int, StackItem, StackItem)
+    _type: type = StackItem
+    def _compile(self, test, x, y):
+        return f"{x} if {test} else {y}"
+
+
 _NULL_BYTE = repr(b"\x00")
 
 @executor
