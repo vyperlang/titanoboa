@@ -405,6 +405,7 @@ def _as_signed(x):
     return unsigned_to_signed(x, 256, strict=True)
 
 
+# XXX: some of these do not need to be wrapped
 class UnsignedBinopExecutor(IRExecutor):
     __slots__ = ("_name", "_op")
     _sig = int, int
@@ -420,13 +421,9 @@ class UnsignedBinopExecutor(IRExecutor):
 
 class SignedBinopExecutor(UnsignedBinopExecutor):
     def _compile(self, x, y):
-        self.builder.extend(
-            f"""
-        x = _as_signed({x}, 256, strict=True))
-        y = _as_signed({y}, 256, strict=True))
-        """
-        )
-        return f"_wrap256({self._funcname}(x, y))"
+        return f"_wrap256({self._funcname}(_as_signed({x}), _as_signed({y})))"
+
+
 
 
 # for binops, just use routines from vyper optimizer
@@ -434,6 +431,37 @@ for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
     base = UnsignedBinopExecutor if unsigned else SignedBinopExecutor
     nickname = opname.capitalize()
     _executors[opname] = type(nickname, (base,), {"_op": op, "_name": opname})
+
+
+# shift instructions have opposite operand order from operator.*shift functions.
+@executor
+class Shr(IRExecutor):
+    _name = "shr"
+    _sig = (int,int)
+    _type: type = int
+
+    def _compile(self, bits, val):
+        return f"{val} >> {bits}"
+
+@executor
+class Sar(IRExecutor):
+    _name = "sar"
+    _sig = (int,int)
+    _type: type = int
+
+    def _compile(self, bits, val):
+        # wrap256 to get back into unsigned land
+        return f"_wrap256(_as_signed({val}) >> {bits})"
+
+@executor
+class Shl(IRExecutor):
+    _name = "shl"
+    _sig = (int,int)
+    _type: type = int
+
+    def _compile(self, bits, val):
+        return f"{val} >> {bits}"
+
 
 
 @executor
@@ -446,6 +474,17 @@ class Select(IRExecutor):
 
 
 _NULL_BYTE = repr(b"\x00")
+
+
+@executor
+class Caller(IRExecutor):
+    _name = "caller"
+    _sig = ()
+    _type: type = bytes
+
+    def _compile(self):
+        return f"VM.msg.sender"
+
 
 @executor
 class CalldataSize(IRExecutor):
