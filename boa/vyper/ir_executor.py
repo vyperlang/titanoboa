@@ -7,7 +7,7 @@ from pathlib import PurePath
 from typing import Any, Optional
 
 import vyper.ir.optimizer
-from eth.exceptions import Revert as VMRevert
+from eth.exceptions import Halt, Revert as VMRevert
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
 from vyper.utils import mkalphanum, unsigned_to_signed
@@ -418,6 +418,42 @@ for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
     _executors[opname] = type(nickname, (base,), {"_op": op, "_name": opname})
 
 
+_NULL_BYTE = repr(b"\x00")
+
+@executor
+class CalldataLoad(IRExecutor):
+    _name = "calldataload"
+    _sig = (int,)
+    _type: type = bytes
+
+    def _compile(self, ptr):
+        self.builder.extend(
+            f"""
+            ret = VM.msg.data_as_bytes[{ptr} : {ptr} + 32]
+            """)
+        return f"ret.ljust(32, {_NULL_BYTE})"
+
+@executor
+class CalldataSize(IRExecutor):
+    _name = "calldatasize"
+    _sig = ()
+    _type: type = int
+
+    def _compile(self):
+        return f"len(VM.msg.data)"
+
+@executor
+class CallValue(IRExecutor):
+    _name = "callvalue"
+    _sig = ()
+    _type: type = int
+
+    def _compile(self):
+        return f"VM.msg.value"
+
+
+# XXX: calldatacopy
+
 @executor
 class MLoad(IRExecutor):
     _name = "mload"
@@ -467,7 +503,7 @@ class DLoad(_CodeLoader):
 
         """
         )
-        return f"""ret.ljust(32, b"\\x00")"""
+        return f"ret.ljust(32, {_NULL_BYTE})"
 
 
 @executor
@@ -488,7 +524,7 @@ class DLoadBytes(_CodeLoader):
         with VM.code.seek(code_start_position):
             code_bytes = VM.code.read({size})
 
-        padded_code_bytes = code_bytes.ljust({size}, b"\\x00")
+        padded_code_bytes = code_bytes.ljust({size}, {_NULL_BYTE})
 
         VM.memory_write({dst}, {size}, padded_code_bytes)
         """
@@ -669,6 +705,33 @@ class _IRRevert(IRExecutor):
             raise VMRevert("")  # venom revert
         """
         )
+
+@executor
+class Return(IRExecutor):
+    _name = "return"
+    _sig = (int,int)
+
+    def _compile(self, ptr, size):
+        self.builder.extend(
+            f"""
+            VM.output = VM.memory_read_bytes({ptr}, {size})
+            raise Halt("")  # return
+        """
+        )
+
+@executor
+class Stop(IRExecutor):
+    _name = "stop"
+    _sig = ()
+
+    def _compile(self):
+        self.builder.extend(
+            f"""
+            raise Halt("")  # return
+        """
+        )
+
+
 
 
 @executor
