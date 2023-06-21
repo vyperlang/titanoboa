@@ -48,7 +48,7 @@ class FastMem(Memory):
         self.mem_cache[start_position // 32] = ret
         return ret
 
-    def read_bytes(self, start_position, size):
+    def _writeback(self, start_position, size):
         start = start_position // 32
         end = ceil32(start_position + size) // 32
         for ix in range(start, end):
@@ -56,7 +56,13 @@ class FastMem(Memory):
                 super().write(ix * 32, 32, to_bytes(self.mem_cache[ix]))
                 self.needs_writeback[ix] = False
 
+    def read_bytes(self, start_position, size):
+        self._writeback(start_position, size)
         return super().read_bytes(start_position, size)
+
+    def read(self, start_position, size):
+        self._writeback(start_position, size)
+        return super().read(start_position, size)
 
     def write_word(self, start_position, int_val):
         if start_position % 32 == 0:
