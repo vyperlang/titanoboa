@@ -190,8 +190,8 @@ class ErrorDetail:
 
     @classmethod
     def from_computation(cls, contract, computation):
-        error_detail = contract.find_error_meta(computation.code)
-        ast_source = contract.find_source_of(computation.code)
+        error_detail = contract.find_error_meta(computation)
+        ast_source = contract.find_source_of(computation)
         reason = None
         if ast_source is not None:
             reason = DevReason.at_source_location(
@@ -541,7 +541,7 @@ class VyperContract(_BaseContract):
         return ast_map_of(self.compiler_data.vyper_module)
 
     def _get_fn_from_computation(self, computation):
-        node = self.find_source_of(computation.code)
+        node = self.find_source_of(computation)
         return get_fn_ancestor_from_node(node)
 
     def debug_frame(self, computation=None):
@@ -581,14 +581,22 @@ class VyperContract(_BaseContract):
             )
         return self._source_map
 
-    def find_error_meta(self, code_stream):
+    def find_error_meta(self, computation):
+        if hasattr(computation, "vyper_error_msg"):
+            return computation.vyper_error_msg
+
+        code_stream = computation.code_stream
         error_map = self.source_map.get("error_map", {})
         for pc in reversed(code_stream._trace):
             if pc in error_map:
                 return error_map[pc]
         return None
 
-    def find_source_of(self, code_stream, is_initcode=False):
+    def find_source_of(self, computation, is_initcode=False):
+        if hasattr(computation, "vyper_source_pos"):
+            return self.ast_map.get(computation.vyper_source_pos)
+
+        code_stream = computation.code_stream
         pc_map = self.source_map["pc_pos_map"]
         for pc in reversed(code_stream._trace):
             if pc in pc_map and pc_map[pc] in self.ast_map:
@@ -693,7 +701,7 @@ class VyperContract(_BaseContract):
     def stack_trace(self, computation=None):
         computation = computation or self._computation
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
-        error_detail = self.find_error_meta(computation.code)
+        error_detail = self.find_error_meta(computation)
         if error_detail not in EXTERNAL_CALL_ERRORS:
             return ret
         return _handle_child_trace(computation, self.env, ret)

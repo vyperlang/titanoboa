@@ -7,7 +7,7 @@ from pathlib import PurePath
 from typing import Any, Optional
 
 import vyper.ir.optimizer
-from eth.exceptions import Revert
+from eth.exceptions import Revert as VMRevert
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
 from vyper.utils import mkalphanum, unsigned_to_signed
@@ -645,12 +645,29 @@ class Assert(IRExecutor):
     _sig = (int,)
 
     def _compile(self, test):
-        _ = Revert  # linter does not know we are using `Revert`.
         self.builder.extend(
             f"""
         if not bool({test}):
             VM.output = b""
-            raise Revert(b"")
+            VM.vyper_source_pos = {repr(self.ir_node.source_pos)}
+            VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
+            raise VMRevert("")  # venom assert
+        """
+        )
+
+
+@executor
+class _IRRevert(IRExecutor):
+    _name = "revert"
+    _sig = (int,int)
+
+    def _compile(self, ptr, size):
+        self.builder.extend(
+            f"""
+            VM.output = VM.memory_read_bytes({ptr}, {size})
+            VM.vyper_source_pos = {repr(self.ir_node.source_pos)}
+            VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
+            raise VMRevert("")  # venom revert
         """
         )
 
