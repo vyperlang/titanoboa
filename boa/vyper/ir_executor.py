@@ -7,7 +7,7 @@ from pathlib import PurePath
 from typing import Any, Optional
 
 import vyper.ir.optimizer
-from eth.exceptions import Halt, Revert as VMRevert
+from eth.exceptions import Halt, Revert as VMRevert, WriteProtection
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
 from vyper.utils import mkalphanum, unsigned_to_signed
@@ -204,6 +204,14 @@ class IRExecutor:
 
         if hasattr(self, "_name"):
             self.builder.append(f"# {self.name}")
+
+        if not self._is_static:
+            self.builder.extend(f"""
+            if VM.msg.is_static:
+                raise WriteProtection(
+                    "Cannot modify state while inside of a STATICCALL context"
+                )
+            """)
 
         res = self._compile(*argnames)
 
@@ -554,6 +562,27 @@ class DLoadBytes(_CodeLoader):
         VM.memory_write({dst}, {size}, padded_code_bytes)
         """
         )
+
+
+@executor
+class SLoad(IRExecutor):
+    _name = "sload"
+    _sig = (int,)
+    _type = int
+
+    def _compile(self, slot):
+        return f"""VM.state.get_storage(address=VM.msg.storage_address, slot={slot})"""
+
+
+@executor
+class SStore(IRExecutor):
+    _name = "sstore"
+    _is_static = False
+    _sig = (int,int)
+    _type = int
+
+    def _compile(self, slot, value):
+        return f"""VM.state.set_storage(address=VM.msg.storage_address, slot={slot}, value={value})"""
 
 
 @executor
