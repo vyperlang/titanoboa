@@ -648,7 +648,6 @@ class Assert(IRExecutor):
         self.builder.extend(
             f"""
         if not bool({test}):
-            VM.output = b""
             VM.vyper_source_pos = {repr(self.ir_node.source_pos)}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert("")  # venom assert
@@ -843,7 +842,15 @@ class Set(IRExecutor):
         val.compile(out=variable.out_name, out_typ=int)
 
 
+def _ensure_source_pos(ir_node, source_pos=None):
+    if ir_node.source_pos is None:
+        ir_node.source_pos = source_pos
+    for arg in ir_node.args:
+        _ensure_source_pos(arg, ir_node.source_pos)
+
+
 def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
+    _ensure_source_pos(ir_node)
     ret = _executor_from_ir(ir_node, CompileContext(vyper_compiler_data))
 
     ret = ret.analyze()
