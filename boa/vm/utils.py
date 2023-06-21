@@ -1,5 +1,9 @@
-def ceil32(x):
-    return (x + 31) & ~31
+def ceil32(n):
+    return floor32(n + 31)
+
+
+def floor32(n):
+    return n & ~31
 
 
 def to_int(stack_item) -> int:

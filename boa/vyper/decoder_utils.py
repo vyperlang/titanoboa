@@ -11,14 +11,7 @@ from vyper.semantics.types import (
     StringT,
 )
 from vyper.utils import unsigned_to_signed
-
-
-def ceil32(n):
-    return floor32(n + 31)
-
-
-def floor32(n):
-    return n & ~31
+from boa.vm.utils import ceil32, floor32
 
 
 # wrap storage in something which looks like memory
