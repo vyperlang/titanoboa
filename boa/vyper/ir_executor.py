@@ -261,7 +261,7 @@ class IntExecutor(IRExecutor):
     _type: type = int
 
     def __post_init__(self):
-        assert 0 <= self._int_value < 2**256
+        assert -(2**255) <= self._int_value < 2**256
         self.args = self._sig = ()
 
     def __repr__(self):
