@@ -15,6 +15,12 @@ from vyper.utils import mkalphanum, unsigned_to_signed
 from boa.vm.fast_mem import FastMem
 from boa.vm.utils import to_bytes, to_int, ceil32
 
+from eth_hash.auto import keccak
+
+
+def keccak256(x):
+    return keccak(x)
+
 
 @dataclass
 class _Line:
@@ -81,7 +87,7 @@ class CompileContext:
         return self.frames[-1].slots
 
 
-    def fresh_var(self, name = ""):
+    def freshvar(self, name = ""):
         self.var_id += 1
         return f"var_{name}_{self.var_id}"
 
@@ -150,6 +156,7 @@ class IRExecutor:
 
     # the type produced when executing this node
     _type: Optional[type] = None  # | int | bytes
+    _is_static = True  # can be used from a STATICCALL context
 
     def __init__(self, ir_node, compile_ctx, *args):
         self.ir_node = ir_node
@@ -188,7 +195,7 @@ class IRExecutor:
             assert argnames[0] == "self"
             argnames = argnames[1:]
 
-        argnames = [self.compile_ctx.fresh_var(x) for x in argnames]
+        argnames = [self.compile_ctx.freshvar(x) for x in argnames]
 
         self._compile_args(argnames)
 
@@ -421,19 +428,6 @@ for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
 _NULL_BYTE = repr(b"\x00")
 
 @executor
-class CalldataLoad(IRExecutor):
-    _name = "calldataload"
-    _sig = (int,)
-    _type: type = bytes
-
-    def _compile(self, ptr):
-        self.builder.extend(
-            f"""
-            ret = VM.msg.data_as_bytes[{ptr} : {ptr} + 32]
-            """)
-        return f"ret.ljust(32, {_NULL_BYTE})"
-
-@executor
 class CalldataSize(IRExecutor):
     _name = "calldatasize"
     _sig = ()
@@ -452,7 +446,36 @@ class CallValue(IRExecutor):
         return f"VM.msg.value"
 
 
-# XXX: calldatacopy
+@executor
+class CalldataLoad(IRExecutor):
+    _name = "calldataload"
+    _sig = (int,)
+    _type: type = bytes
+
+    def _compile(self, ptr):
+        self.builder.extend(
+            f"""
+            val = bytes(VM.msg.data[{ptr} : {ptr} + 32])
+            """)
+        return f"val.ljust(32, {_NULL_BYTE})"
+
+
+@executor
+class CalldataCopy(IRExecutor):
+    _name = "calldatacopy"
+    _sig = (int, int, int)
+
+    def _compile(self, dst, src, size):
+        self.builder.extend(
+            f"""
+            val = bytes(VM.msg.data[{src} : {src} + {size}])
+            val = val.ljust({size}, {_NULL_BYTE})
+
+            VM.extend_memory({dst}, {size})
+            VM.memory_write({dst}, {size}, val)
+            """
+            )
+
 
 @executor
 class MLoad(IRExecutor):
@@ -500,7 +523,6 @@ class DLoad(_CodeLoader):
 
         with VM.code.seek(code_start_position):
             ret = VM.code.read(32)
-
         """
         )
         return f"ret.ljust(32, {_NULL_BYTE})"
@@ -531,46 +553,31 @@ class DLoadBytes(_CodeLoader):
         )
 
 
-# we call into py-evm for sha3_32 and sha3_64 to allow tracing to still work
-class _Sha3_N(IRExecutor):
-    _type: type = bytes
-
-    @cached_property
-    def _argnames(self):
-        return tuple(f"{self.name}.arg{i}" for i in range(len(self._sig)))
-
-    def _compile(self, *args):
-        assert self.N > 0 and self.N % 32 == 0
-        opcode_info = OpcodeInfo.from_mnemonic("SHA3")
-        self.builder.append(f"VM.extend_memory(0, {self.N})")
-        for i, val in enumerate(args):
-            self.builder.append(f"VM.memory_write({i*32}, 32, {val})")
-
-        sha3 = hex(opcode_info.opcode)
-        self.builder.extend(
-            f"""
-        VM.stack_push_int({self.N})
-        VM.stack_push_int(0)
-        VM.opcodes[{sha3}].__call__(VM)
-        """
-        )
-        return "VM.stack_pop1_any()"
-
-
 @executor
-class Sha3_64(_Sha3_N):
+class Sha3_64(IRExecutor):
     _name = "sha3_64"
     _sig = (bytes, bytes)
-    _argnames = ("sha3_64_arg0", "sha3_64_arg1")
-    N = 64
+
+    # we need to trace for downstream to reverse engineer mappings
+    def _compile(self, arg1, arg2):
+        self.builder.extend(f"""
+        preimage = {arg1}.rjust(32, {_NULL_BYTE}) + {arg2}.rjust(32, {_NULL_BYTE})
+        image = keccak256(preimage)
+        VM.env._trace_sha3_preimage(preimage, image)
+        """)
+        return "image"
 
 
 @executor
-class Sha3_32(_Sha3_N):
+class Sha3_32(IRExecutor):
     _name = "sha3_32"
     _sig = (bytes,)
-    _argnames = ("sha3_32_arg0",)
-    N = 32
+
+    def _compile(self, arg):
+        self.builder.extend(f"""
+        preimage = {arg}.rjust(32, {_NULL_BYTE})
+        """)
+        return "keccak256(preimage)"
 
 
 @executor
@@ -625,8 +632,8 @@ class Repeat(IRExecutor):
     def compile(self, out=None):
         i_var, start, rounds, rounds_bound, body = self.args
 
-        startname = self.compile_ctx.fresh_var("start")
-        roundsname = self.compile_ctx.fresh_var("rounds")
+        startname = self.compile_ctx.freshvar("start")
+        roundsname = self.compile_ctx.freshvar("rounds")
         start.compile(startname, out_typ=int)
         rounds.compile(roundsname, out_typ=int)
 
@@ -664,7 +671,7 @@ class If(IRExecutor):
         else:
             test, body = self.args
 
-        testname = self.compile_ctx.fresh_var("test")
+        testname = self.compile_ctx.freshvar("test")
         test.compile(testname, out_typ=int)
 
         with self.builder.block(f"if bool({testname})"):

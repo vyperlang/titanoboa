@@ -32,11 +32,12 @@ from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT
 from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import method_id
 
-from boa.environment import AddressType, Env, to_int
+from boa.environment import AddressType, Env
 from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
+from boa.vm.utils import to_int, to_bytes
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
@@ -343,8 +344,9 @@ def unwrap_storage_key(sha3_db, k):
     path = []
 
     def unwrap(k):
-        if k in sha3_db:
-            preimage = sha3_db[k]
+        k_bytes = to_bytes(k)
+        if k_bytes in sha3_db:
+            preimage = sha3_db[k_bytes]
             slot, k = preimage[:32], preimage[32:]
 
             unwrap(slot)
@@ -402,7 +404,7 @@ class VarModel:
                     path_t.append(ty.key_type)
                     ty = ty.value_type
 
-                val = self._decode(to_int(k), ty, truncate_limit)
+                val = self._decode(k, ty, truncate_limit)
 
                 # set val only if value is nonzero
                 if val:

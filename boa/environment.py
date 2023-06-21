@@ -26,6 +26,7 @@ from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_ad
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_mem import FastMem
 from boa.vm.fork import AccountDBFork
+from boa.vm.utils import to_bytes, to_int
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 
 
@@ -186,27 +187,14 @@ class TracingCodeStream(CodeStream):
 
 
 # ### section: sha3 preimage tracing
-# (TODO: move to dedicated module)
-def to_int(value):
-    if isinstance(value, tuple):
-        return to_int(value[1])  # how py-evm stores stuff on stack
-    if isinstance(value, int):
-        return value
-    if isinstance(value, bytes):
-        return int.from_bytes(value, "big")
-
-    raise ValueError("invalid type %s", type(value))
+def _stackitem_to_int(value):
+    assert isinstance(value, tuple)
+    return to_int(value[1])  # how py-evm stores stuff on stack
 
 
-def to_bytes(value):
-    if isinstance(value, tuple):
-        return to_bytes(value[1])  # how py-evm stores stuff on stack
-    if isinstance(value, bytes):
-        return value
-    if isinstance(value, int):
-        return value.to_bytes(32, "big")
-
-    raise ValueError("invalid type %s", type(value))
+def _stackitem_to_bytes(value):
+    assert isinstance(value, tuple)
+    return to_bytes(value[1])  # how py-evm stores stuff on stack
 
 
 class Sha3PreimageTracer:
@@ -214,12 +202,12 @@ class Sha3PreimageTracer:
 
     # trace preimages of sha3
 
-    def __init__(self, sha3_op, preimage_map):
-        self.preimages = preimage_map
+    def __init__(self, sha3_op, env):
+        self.env = env
         self.sha3 = sha3_op
 
     def __call__(self, computation):
-        size, offset = [to_int(x) for x in computation._stack.values[-2:]]
+        size, offset = [_stackitem_to_int(x) for x in computation._stack.values[-2:]]
 
         # dispatch into py-evm
         self.sha3(computation)
@@ -229,27 +217,23 @@ class Sha3PreimageTracer:
 
         preimage = computation._memory.read_bytes(offset, size)
 
-        image = to_bytes(computation._stack.values[-1])
+        image = _stackitem_to_bytes(computation._stack.values[-1])
 
-        self.preimages[image] = preimage
+        self.env._trace_sha3_preimage(preimage, image)
 
 
 class SstoreTracer:
     mnemonic = "SSTORE"
 
-    def __init__(self, sstore_op, trace_db):
-        self.trace_db = trace_db
+    def __init__(self, sstore_op, env):
+        self.env = env
         self.sstore = sstore_op
 
     def __call__(self, computation):
-        value, slot = [to_bytes(t) for t in computation._stack.values[-2:]]
+        value, slot = [_stackitem_to_int(t) for t in computation._stack.values[-2:]]
         account = computation.msg.storage_address
 
-        self.trace_db.setdefault(account, set())
-        # we don't want to deal with snapshots/commits/reverts, so just
-        # register that the slot was touched and downstream can filter
-        # zero entries.
-        self.trace_db[account].add(slot)
+        self.env._trace_sstore(account, slot)
 
         # dispatch into py-evm
         self.sstore(computation)
@@ -390,10 +374,21 @@ class Env:
             self.sstore_trace = {}
 
         # patch in tracing opcodes
-        c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.sha3_trace)
-        c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.sstore_trace)
+        c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self)
+        c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self)
 
         self.vm.patch = VMPatcher(self.vm)
+
+    def _trace_sha3_preimage(self, preimage, image):
+        self.sha3_trace[image] = preimage
+
+    def _trace_sstore(self, account, slot):
+        self.sstore_trace.setdefault(account, set())
+        # we don't want to deal with snapshots/commits/reverts, so just
+        # register that the slot was touched and downstream can filter
+        # zero entries.
+        self.sstore_trace[account].add(slot)
+
 
     def fork(self, url, reset_traces=True, **kwargs):
         kwargs["url"] = url
