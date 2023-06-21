@@ -145,6 +145,10 @@ class VyperBlueprint(_BaseContract):
         self.env.register_blueprint(compiler_data.bytecode, self)
 
     @cached_property
+    def canonical_address(self):
+        return to_canonical_address(self.address)
+
+    @cached_property
     def deployer(self):
         return VyperDeployer(self.compiler_data, filename=self.filename)
 
@@ -384,7 +388,7 @@ class VarModel:
     def get(self, truncate_limit=None):
         if isinstance(self.typ, HashMapT):
             ret = {}
-            for k in self.contract.env.sstore_trace.get(self.contract.address, {}):
+            for k in self.contract.env.sstore_trace.get(self.addr, {}):
                 path = unwrap_storage_key(self.contract.env.sha3_trace, k)
                 if to_int(path[0]) != self.slot:
                     continue
