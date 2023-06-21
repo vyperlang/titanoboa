@@ -14,12 +14,15 @@ from vyper.utils import mkalphanum, unsigned_to_signed
 
 from boa.vm.fast_mem import FastMem
 from boa.vm.utils import to_bytes, to_int, ceil32
+from boa.util.lrudict import lrudict
 
 from eth_hash.auto import keccak
 
 
+_keccak_cache = lrudict(256)
+
 def keccak256(x):
-    return keccak(x)
+    return _keccak_cache.setdefault_lambda(x, keccak)
 
 
 @dataclass
