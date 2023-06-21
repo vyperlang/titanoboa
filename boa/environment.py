@@ -20,10 +20,11 @@ from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
-from eth_typing import Address
+from eth_typing import Address as PYEVM_Address
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
+from boa.util.lrudict import lrudict
 from boa.vm.fast_mem import FastMem
 from boa.vm.fork import AccountDBFork
 from boa.vm.utils import to_bytes, to_int
@@ -93,11 +94,37 @@ class VMPatcher:
                     setattr(self, attr, snap[attr])
 
 
-AddressType = Union[Address, bytes, str]  # make mypy happy
+# XXX: inherit from bytes directly so that we can pass it to py-evm?
+class Address:  #(PYEVM_Address):
+    # converting between checksum and canonical addresses is a hotspot;
+    # this class contains both and caches recently seen conversions
 
+    __slots__ = "checksum_address", "canonical_address", "normalized_address"
+    _cache = lrudict(1024)
+    def __new__(cls, address):
+        if isinstance(address, Address):
+            return address
 
-def _addr(addr: AddressType) -> Address:
-    return Address(to_canonical_address(addr))
+        try:
+            return cls._cache[address]
+        except KeyError:
+            pass
+
+        self = super().__new__(cls)
+        self.checksum_address = to_checksum_address(address)
+        self.canonical_address = to_canonical_address(address)
+        self.normalized_address = self.checksum_address.lower()
+        cls._cache[address] = self
+        return self
+
+    def __repr__(self):
+        return f"_Address({self.normalized_address})"
+
+    def __str__(self):
+        return self.checksum_address
+
+# make mypy happy
+_AddressType = Address | str | bytes | PYEVM_Address
 
 
 _opcode_overrides = {}
@@ -124,14 +151,14 @@ def register_precompile(*args, **kwargs):
 
 def register_raw_precompile(address, fn, force=False):
     global _precompiles
-    address = _addr(address)
+    address = Address(address)
     if address in _precompiles and not force:
         raise ValueError(f"Already registered: {address}")
     _precompiles[address] = fn
 
 
 def deregister_raw_precompile(address, force=True):
-    address = _addr(address)
+    address = Address(address)
     if address not in _precompiles and not force:
         raise ValueError("Not registered: {address}")
     _precompiles.pop(address, None)
@@ -297,7 +324,7 @@ class titanoboa_computation:
 
         if bytecode in cls.env._code_registry:
             target = cls.env._code_registry[bytecode].deployer.at(contract_address)
-            target.created_from = to_checksum_address(msg.sender)
+            target.created_from = Address(msg.sender)
             cls.env.register_contract(contract_address, target)
 
         return computation
@@ -305,15 +332,15 @@ class titanoboa_computation:
     @classmethod
     def apply_computation(cls, state, msg, tx_ctx):
         addr = msg.code_address
-        contract = cls.env.lookup_contract(addr) if addr else None
+        contract = cls.env._lookup_contract_fast(addr) if addr else None
         if contract is None or cls.env._speed == _SLOW:
-            # print("REGULAR MODE")
+            #print("REGULAR MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
         err = None
         with cls(state, msg, tx_ctx) as computation:
             try:
-                # print("LUDICROUS MODE")
+                #print("LUDICROUS MODE")
                 contract.ir_executor.exec(computation)
             except Halt:
                 pass
@@ -425,14 +452,14 @@ class Env:
 
     # set balance of address in py-evm
     def set_balance(self, addr, value):
-        self.vm.state.set_balance(to_canonical_address(addr), value)
+        self.vm.state.set_balance(Address(addr), value)
 
     # get balance of address in py-evm
     def get_balance(self, addr):
-        return self.vm.state.get_balance(to_canonical_address(addr))
+        return self.vm.state.get_balance(Address(addr))
 
     def register_contract(self, address, obj):
-        addr = to_canonical_address(address)
+        addr = Address(address).canonical_address
         self._contracts[addr] = obj
 
         # also register it in the registry for
@@ -443,14 +470,17 @@ class Env:
     def register_blueprint(self, bytecode, obj):
         self._code_registry[bytecode] = obj
 
-    def lookup_contract(self, address):
-        return self._contracts.get(to_canonical_address(address))
+    def _lookup_contract_fast(self, address: PYEVM_Address):
+        return self._contracts.get(address)
+
+    def lookup_contract(self, address: _AddressType):
+        return self._contracts.get(Address(address).canonical_address)
 
     def alias(self, address, name):
-        self._aliases[to_checksum_address(address)] = name
+        self._aliases[Address(address).canonical_address] = name
 
     def lookup_alias(self, address):
-        return self._aliases[to_checksum_address(address)]
+        return self._aliases[Address(address).canonical_address]
 
     # advanced: reset warm/cold counters for addresses and storage
     def _reset_access_counters(self):
@@ -470,7 +500,7 @@ class Env:
     @contextlib.contextmanager
     def sender(self, address):
         tmp = self.eoa
-        self.eoa = to_checksum_address(address)
+        self.eoa = Address(address)
         try:
             yield
         finally:
@@ -485,40 +515,39 @@ class Env:
             cls._singleton = cls()
         return cls._singleton
 
-    def generate_address(self, alias: Optional[str] = None) -> AddressType:
+    def generate_address(self, alias: Optional[str] = None) -> Address:
         self._address_counter += 1
-        t = self._address_counter.to_bytes(length=20, byteorder="big")
-        # checksum addr easier for humans to debug
-        ret = to_checksum_address(t)
+        t = Address(self._address_counter.to_bytes(length=20, byteorder="big"))
         if alias is not None:
-            self.alias(ret, alias)
+            self.alias(t, alias)
 
-        return ret
+        return t
 
     # helper fn
-    def _get_sender(self, sender=None) -> Address:
+    def _get_sender(self, sender=None) -> PYEVM_Address:
         if sender is None:
             sender = self.eoa
         if self.eoa is None:
             raise ValueError(f"{self}.eoa not defined!")
-        return _addr(sender)
+        return Address(sender).canonical_address
 
     def deploy_code(
         self,
-        sender: Optional[AddressType] = None,
+        sender: Optional[_AddressType] = None,
         gas: Optional[int] = None,
         value: int = 0,
         bytecode: bytes = b"",
         start_pc: int = 0,
         # override the target address:
-        override_address: Optional[AddressType] = None,
-    ) -> Tuple[AddressType, bytes]:
+        override_address: Optional[_AddressType] = None,
+    ) -> Tuple[Address, bytes]:
         if gas is None:
             gas = self.vm.state.gas_limit
+
         sender = self._get_sender(sender)
 
         if override_address is not None:
-            target_address = _addr(override_address)
+            target_address = Address(override_address).canonical_address
         else:
             nonce = self.vm.state.get_nonce(sender)
             self.vm.state.increment_nonce(sender)
@@ -546,8 +575,8 @@ class Env:
 
     def execute_code(
         self,
-        to_address: AddressType = constants.ZERO_ADDRESS,
-        sender: Optional[AddressType] = None,
+        to_address: _AddressType = constants.ZERO_ADDRESS,
+        sender: Optional[_AddressType] = None,
         gas: Optional[int] = None,
         value: int = 0,
         data: bytes = b"",
@@ -559,12 +588,13 @@ class Env:
     ) -> Any:
         if gas is None:
             gas = self.vm.state.gas_limit
+
         sender = self._get_sender(sender)
 
         class FakeMessage(Message):  # Message object with settable attrs
             __dict__: dict = {}
 
-        to = _addr(to_address)
+        to = Address(to_address).canonical_address
 
         bytecode = override_bytecode
         if override_bytecode is None:
@@ -601,7 +631,7 @@ class Env:
             # loop over pc so that it is available when coverage hooks into it
             pass
         for child in computation.children:
-            child_contract = self.lookup_contract(child.msg.code_address)
+            child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._hook_trace_computation(computation, child_contract)
 
     # function to time travel

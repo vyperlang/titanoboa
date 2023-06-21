@@ -32,7 +32,7 @@ from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT
 from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import method_id
 
-from boa.environment import AddressType, Env
+from boa.environment import Address, Env, to_int
 from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
@@ -79,8 +79,8 @@ class VyperDeployer:
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
 
-    def at(self, address: AddressType) -> "VyperContract":
-        address = to_checksum_address(address)
+    def at(self, address: Any) -> "VyperContract":
+        address = Address(address)
         ret = VyperContract(
             self.compiler_data,
             override_address=address,
@@ -88,7 +88,7 @@ class VyperDeployer:
             filename=self.filename,
         )
         vm = ret.env.vm
-        bytecode = vm.state.get_code(to_canonical_address(address))
+        bytecode = vm.state.get_code(address.canonical_address)
 
         ret._set_bytecode(bytecode)
 
@@ -141,13 +141,9 @@ class VyperBlueprint(_BaseContract):
             bytecode=deploy_bytecode, override_address=override_address
         )
 
-        self.address = to_checksum_address(addr)
+        self.address = Address(addr)
 
         self.env.register_blueprint(compiler_data.bytecode, self)
-
-    @cached_property
-    def canonical_address(self):
-        return to_canonical_address(self.address)
 
     @cached_property
     def deployer(self):
@@ -766,6 +762,10 @@ class VyperContract(_BaseContract):
         finally:
             self._vyper_namespace["self"].typ.members.pop("__boa_debug__", None)
 
+    @cached_property
+    def checksum_address(self):
+        return self.address.checksum_address
+
     # for eval(), we need unoptimized assembly, since the dead code
     # eliminator might prune a dead function (which we want to eval)
     @cached_property
@@ -934,8 +934,7 @@ class VyperFunction:
 
         total_non_base_args = len(kwargs) + len(args) - n_pos_args
 
-        # allow things with `.address` to be encode-able
-        args = [getattr(arg, "address", arg) for arg in args]
+        args = [getattr(arg, "checksum_address", arg) for arg in args]
 
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
         encoded_args = abi.encode(args_abi_type, args)
