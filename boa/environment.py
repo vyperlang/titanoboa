@@ -333,14 +333,7 @@ class titanoboa_computation:
                 contract.ir_executor.exec(computation)
             except Halt:
                 pass
-            except Exception as e:
-                # grab the exception to raise later -
-                # unclear why this is getting swallowed by py-evm.
-                # print(e)
-                err = e
 
-        if err is not None:
-            raise err
         return computation
 
 
