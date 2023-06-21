@@ -11,6 +11,7 @@ from vyper.semantics.types import (
     StringT,
 )
 from vyper.utils import unsigned_to_signed
+
 from boa.vm.utils import ceil32, floor32
 
 

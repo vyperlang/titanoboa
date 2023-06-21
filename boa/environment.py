@@ -27,8 +27,8 @@ from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
 from boa.vm.fast_mem import FastMem
 from boa.vm.fork import AccountDBFork
-from boa.vm.utils import to_bytes, to_int
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
+from boa.vm.utils import to_bytes, to_int
 
 
 def enable_pyevm_verbose_logging():
@@ -95,12 +95,13 @@ class VMPatcher:
 
 
 # XXX: inherit from bytes directly so that we can pass it to py-evm?
-class Address:  #(PYEVM_Address):
+class Address:  # (PYEVM_Address):
     # converting between checksum and canonical addresses is a hotspot;
     # this class contains both and caches recently seen conversions
 
     __slots__ = "checksum_address", "canonical_address", "normalized_address"
     _cache = lrudict(1024)
+
     def __new__(cls, address):
         if isinstance(address, Address):
             return address
@@ -122,6 +123,7 @@ class Address:  #(PYEVM_Address):
 
     def __str__(self):
         return self.checksum_address
+
 
 # make mypy happy
 _AddressType = Address | str | bytes | PYEVM_Address
@@ -334,13 +336,13 @@ class titanoboa_computation:
         addr = msg.code_address
         contract = cls.env._lookup_contract_fast(addr) if addr else None
         if contract is None or cls.env._speed == _SLOW:
-            #print("REGULAR MODE")
+            # print("REGULAR MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
         err = None
         with cls(state, msg, tx_ctx) as computation:
             try:
-                #print("LUDICROUS MODE")
+                # print("LUDICROUS MODE")
                 contract.ir_executor.exec(computation)
             except Halt:
                 pass
@@ -415,7 +417,6 @@ class Env:
         # register that the slot was touched and downstream can filter
         # zero entries.
         self.sstore_trace[account].add(slot)
-
 
     def fork(self, url, reset_traces=True, **kwargs):
         kwargs["url"] = url

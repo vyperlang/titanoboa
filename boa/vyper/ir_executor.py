@@ -7,19 +7,20 @@ from pathlib import PurePath
 from typing import Any, Optional
 
 import vyper.ir.optimizer
-from eth.exceptions import Halt, Revert as VMRevert, WriteProtection
+from eth.exceptions import Halt
+from eth.exceptions import Revert as VMRevert
+from eth.exceptions import WriteProtection
+from eth_hash.auto import keccak
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
 from vyper.utils import mkalphanum, unsigned_to_signed
 
-from boa.vm.fast_mem import FastMem
-from boa.vm.utils import to_bytes, to_int, ceil32
 from boa.util.lrudict import lrudict
-
-from eth_hash.auto import keccak
-
+from boa.vm.fast_mem import FastMem
+from boa.vm.utils import ceil32, to_bytes, to_int
 
 _keccak_cache = lrudict(256)
+
 
 def keccak256(x):
     return _keccak_cache.setdefault_lambda(x, keccak)
@@ -89,8 +90,7 @@ class CompileContext:
     def local_vars(self):
         return self.frames[-1].slots
 
-
-    def freshvar(self, name = ""):
+    def freshvar(self, name=""):
         self.var_id += 1
         return f"var_{name}_{self.var_id}"
 
@@ -206,12 +206,14 @@ class IRExecutor:
             self.builder.append(f"# {self.name}")
 
         if not self._is_static:
-            self.builder.extend(f"""
+            self.builder.extend(
+                f"""
             if VM.msg.is_static:
                 raise WriteProtection(
                     "Cannot modify state while inside of a STATICCALL context"
                 )
-            """)
+            """
+            )
 
         res = self._compile(*argnames)
 
@@ -424,8 +426,6 @@ class SignedBinopExecutor(UnsignedBinopExecutor):
         return f"_wrap256({self._funcname}(_as_signed({x}), _as_signed({y})))"
 
 
-
-
 # for binops, just use routines from vyper optimizer
 for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
     base = UnsignedBinopExecutor if unsigned else SignedBinopExecutor
@@ -437,31 +437,32 @@ for opname, (op, _, unsigned) in vyper.ir.optimizer.arith.items():
 @executor
 class Shr(IRExecutor):
     _name = "shr"
-    _sig = (int,int)
+    _sig = (int, int)
     _type: type = int
 
     def _compile(self, bits, val):
         return f"{val} >> {bits}"
 
+
 @executor
 class Sar(IRExecutor):
     _name = "sar"
-    _sig = (int,int)
+    _sig = (int, int)
     _type: type = int
 
     def _compile(self, bits, val):
         # wrap256 to get back into unsigned land
         return f"_wrap256(_as_signed({val}) >> {bits})"
 
+
 @executor
 class Shl(IRExecutor):
     _name = "shl"
-    _sig = (int,int)
+    _sig = (int, int)
     _type: type = int
 
     def _compile(self, bits, val):
         return f"{val} >> {bits}"
-
 
 
 @executor
@@ -469,6 +470,7 @@ class Select(IRExecutor):
     _name = "select"
     _sig = (int, StackItem, StackItem)
     _type: type = StackItem
+
     def _compile(self, test, x, y):
         return f"{x} if {test} else {y}"
 
@@ -495,6 +497,7 @@ class CalldataSize(IRExecutor):
     def _compile(self):
         return f"len(VM.msg.data)"
 
+
 @executor
 class CallValue(IRExecutor):
     _name = "callvalue"
@@ -515,7 +518,8 @@ class CalldataLoad(IRExecutor):
         self.builder.extend(
             f"""
             val = bytes(VM.msg.data[{ptr} : {ptr} + 32])
-            """)
+            """
+        )
         return f"val.ljust(32, {_NULL_BYTE})"
 
 
@@ -533,7 +537,7 @@ class CalldataCopy(IRExecutor):
             VM.extend_memory({dst}, {size})
             VM.memory_write({dst}, {size}, val)
             """
-            )
+        )
 
 
 @executor
@@ -626,7 +630,7 @@ class SLoad(IRExecutor):
 class SStore(IRExecutor):
     _name = "sstore"
     _is_static = False
-    _sig = (int,int)
+    _sig = (int, int)
     _type = int
 
     def _compile(self, slot, value):
@@ -640,11 +644,13 @@ class Sha3_64(IRExecutor):
 
     # we need to trace for downstream to reverse engineer mappings
     def _compile(self, arg1, arg2):
-        self.builder.extend(f"""
+        self.builder.extend(
+            f"""
         preimage = {arg1}.rjust(32, {_NULL_BYTE}) + {arg2}.rjust(32, {_NULL_BYTE})
         image = keccak256(preimage)
         VM.env._trace_sha3_preimage(preimage, image)
-        """)
+        """
+        )
         return "image"
 
 
@@ -654,10 +660,41 @@ class Sha3_32(IRExecutor):
     _sig = (bytes,)
 
     def _compile(self, arg):
-        self.builder.extend(f"""
+        self.builder.extend(
+            f"""
         preimage = {arg}.rjust(32, {_NULL_BYTE})
-        """)
+        """
+        )
         return "keccak256(preimage)"
+
+
+class _LogN(IRExecutor):
+    @cached_property
+    def _argnames(self):
+        return ("ofst", "size") + tuple(f"log_arg{i}" for i in range(self.N))
+
+    @cached_property
+    def _sig(self):
+        return (int, int) + tuple(int for _ in range(self.N))
+
+    def _compile(self, ofst, size, *topics):
+        self.builder.extend(
+            f"""
+            VM.extend_memory({ofst}, {size})
+            log_data = VM.memory_read_bytes({ofst}, {size})
+            VM.add_log_entry(
+                account=VM.msg.storage_address,
+                topics=({", ".join(topics)}),
+                data=log_data,
+            )
+            """
+        )
+
+
+# generate log0..log4
+for i in (0, 1, 2, 3, 4):
+    opname = f"log{i}"
+    _executors[opname] = type(opname.capitalize(), (_LogN,), {"N": i, "_name": opname})
 
 
 @executor
@@ -667,6 +704,7 @@ class Ceil32(IRExecutor):
     _type: type = int
 
     def _compile(self, x):
+        _ = ceil32  # typing hint
         return f"ceil32({x})"
 
 
@@ -717,12 +755,10 @@ class Repeat(IRExecutor):
         start.compile(startname, out_typ=int)
         rounds.compile(roundsname, out_typ=int)
 
-        rounds_bound = rounds_bound._int_value
+        end = f"{startname} + {roundsname}"
 
-        end = f"{start} + {rounds}"
-
-        self.builder.append("assert {rounds} <= rounds_bound")
-        with self.builder.block(f"for {i_var.out_name} in range({start}, {end})"):
+        self.builder.append(f"assert {roundsname} <= {rounds_bound}")
+        with self.builder.block(f"for {i_var.out_name} in range({startname}, {end})"):
             body.compile()
 
     def analyze(self):
@@ -781,7 +817,7 @@ class Assert(IRExecutor):
 @executor
 class _IRRevert(IRExecutor):
     _name = "revert"
-    _sig = (int,int)
+    _sig = (int, int)
 
     def _compile(self, ptr, size):
         self.builder.extend(
@@ -793,10 +829,11 @@ class _IRRevert(IRExecutor):
         """
         )
 
+
 @executor
 class Return(IRExecutor):
     _name = "return"
-    _sig = (int,int)
+    _sig = (int, int)
 
     def _compile(self, ptr, size):
         self.builder.extend(
@@ -805,6 +842,7 @@ class Return(IRExecutor):
             raise Halt("")  # return
         """
         )
+
 
 @executor
 class Stop(IRExecutor):
@@ -817,8 +855,6 @@ class Stop(IRExecutor):
             raise Halt("")  # return
         """
         )
-
-
 
 
 @executor

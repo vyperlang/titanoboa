@@ -37,7 +37,7 @@ from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
-from boa.vm.utils import to_int, to_bytes
+from boa.vm.utils import to_bytes, to_int
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
