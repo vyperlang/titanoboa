@@ -423,7 +423,7 @@ class UnsignedBinopExecutor(IRExecutor):
 
 class SignedBinopExecutor(UnsignedBinopExecutor):
     def _compile(self, x, y):
-        return f"_wrap256({self._funcname}(_as_signed({x}), _as_signed({y})))"
+        return f"_wrap256({self.funcname}(_as_signed({x}), _as_signed({y})))"
 
 
 # for binops, just use routines from vyper optimizer
@@ -932,9 +932,42 @@ class Goto(IRExecutor):
 
 @executor
 class ExitTo(Goto):
-    # exit_to and goto have pretty much the same semantics as far as we
-    # are concerned here.
+    # exit_to is similar but it is known to end execution of this subroutine
     _name = "exit_to"
+
+    def _compile(self, *args):
+        subroutine_call = super()._compile(*args)
+        return f"return {subroutine_call}"
+
+@executor
+class CleanupRepeat(IRExecutor):
+    # a no-op from our perspective
+    _name = "cleanup_repeat"
+    _sig = ()
+    _argnames = ()
+
+    def _compile(self):
+        self.builder.append("pass")
+
+
+@executor
+class Break(IRExecutor):
+    _name = "break"
+    _sig = ()
+    _argnames = ()
+
+    def _compile(self):
+        self.builder.append("break")
+
+
+@executor
+class Continue(IRExecutor):
+    _name = "continue"
+    _sig = ()
+    _argnames = ()
+
+    def _compile(self):
+        self.builder.append("continue")
 
 
 @executor
