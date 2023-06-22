@@ -95,11 +95,11 @@ class VMPatcher:
 
 
 # XXX: inherit from bytes directly so that we can pass it to py-evm?
-class Address:  # (PYEVM_Address):
+class Address(str):  # (PYEVM_Address):
     # converting between checksum and canonical addresses is a hotspot;
     # this class contains both and caches recently seen conversions
 
-    __slots__ = "checksum_address", "canonical_address", "normalized_address"
+    __slots__ = ("canonical_address",)
     _cache = lrudict(1024)
 
     def __new__(cls, address):
@@ -111,18 +111,20 @@ class Address:  # (PYEVM_Address):
         except KeyError:
             pass
 
-        self = super().__new__(cls)
-        self.checksum_address = to_checksum_address(address)
+        checksum_address = to_checksum_address(address)
+        self = super().__new__(cls, checksum_address)
         self.canonical_address = to_canonical_address(address)
-        self.normalized_address = self.checksum_address.lower()
         cls._cache[address] = self
         return self
 
+    #def __hash__(self):
+    #    return hash(self.checksum_address)
+
+    #def __eq__(self, other):
+    #    return super().__eq__(self, other)
+
     def __repr__(self):
         return f"_Address({self.normalized_address})"
-
-    def __str__(self):
-        return self.checksum_address
 
 
 # make mypy happy
@@ -453,11 +455,11 @@ class Env:
 
     # set balance of address in py-evm
     def set_balance(self, addr, value):
-        self.vm.state.set_balance(Address(addr), value)
+        self.vm.state.set_balance(Address(addr).canonical_address, value)
 
     # get balance of address in py-evm
     def get_balance(self, addr):
-        return self.vm.state.get_balance(Address(addr))
+        return self.vm.state.get_balance(Address(addr).canonical_address)
 
     def register_contract(self, address, obj):
         addr = Address(address).canonical_address
