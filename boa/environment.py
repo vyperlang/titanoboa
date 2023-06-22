@@ -124,7 +124,8 @@ class Address(str):  # (PYEVM_Address):
     #    return super().__eq__(self, other)
 
     def __repr__(self):
-        return f"_Address({self.normalized_address})"
+        checksum_addr = super().__repr__()
+        return f"_Address({checksum_addr})"
 
 
 # make mypy happy
