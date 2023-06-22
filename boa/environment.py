@@ -283,6 +283,7 @@ class titanoboa_computation:
         # super() hardcodes CodeStream into the ctor
         # so we have to override it here
         super().__init__(*args, **kwargs)
+
         self.code = TracingCodeStream(
             self.code._raw_code_bytes,
             fake_codesize=getattr(self.msg, "_fake_codesize", None),

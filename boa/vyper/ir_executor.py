@@ -678,13 +678,15 @@ class _LogN(IRExecutor):
         return (int, int) + tuple(int for _ in range(self.N))
 
     def _compile(self, ofst, size, *topics):
+        # write out tuple strings correctly, always need trailing comma
+        topics = [f"{topic}," for topic in topics]
         self.builder.extend(
             f"""
             VM._memory.extend({ofst}, {size})
             log_data = VM.memory_read_bytes({ofst}, {size})
             VM.add_log_entry(
                 account=VM.msg.storage_address,
-                topics=({", ".join(topics)}),
+                topics=({" ".join(topics)}),
                 data=log_data,
             )
             """
