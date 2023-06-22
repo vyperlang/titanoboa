@@ -272,10 +272,6 @@ class SstoreTracer:
 
 # ### End section: sha3 tracing
 
-_SLOW = 0
-_FAST = 1
-_LUDICROUS = 2
-
 
 # py-evm uses class instantiaters which need to be classes
 # instead of like factories or other easier to use architectures -
@@ -337,7 +333,7 @@ class titanoboa_computation:
     def apply_computation(cls, state, msg, tx_ctx):
         addr = msg.code_address
         contract = cls.env._lookup_contract_fast(addr) if addr else None
-        if contract is None or cls.env._speed == _SLOW:
+        if contract is None or not cls.env._enable_fast_mode:
             # print("REGULAR MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
@@ -357,7 +353,7 @@ class Env:
     _singleton = None
     _initial_address_counter = 100
     _coverage_enabled = False
-    _speed = _SLOW
+    _enable_fast_mode = False
 
     def __init__(self):
         self.chain = _make_chain()
