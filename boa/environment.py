@@ -13,7 +13,6 @@ import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
 from eth.chains.mainnet import MainnetChain
-from eth.codecs import abi
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt, VMError
 from eth.vm.code_stream import CodeStream
@@ -25,6 +24,7 @@ from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_ad
 
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
+from boa.util.abi import abi_decode
 from boa.vm.fast_mem import FastMem
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -170,8 +170,8 @@ def deregister_raw_precompile(address, force=True):
 
 def console_log(computation):
     msgdata = computation.msg.data_as_bytes
-    schema, payload = abi.decode("(string,bytes)", msgdata[4:])
-    data = abi.decode(schema, payload)
+    schema, payload = abi_decode("(string,bytes)", msgdata[4:])
+    data = abi_decode(schema, payload)
     print(*data, file=sys.stderr)
     return computation
 

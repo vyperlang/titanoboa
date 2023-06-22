@@ -14,7 +14,7 @@ import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
-from eth.codecs import abi
+
 from eth.exceptions import VMError
 from eth_typing import Address
 from vyper.ast.utils import parse_to_ast
@@ -35,6 +35,7 @@ from boa.environment import Address, Env, to_int
 from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
+from boa.util.abi import abi_encode, abi_decode
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 from boa.vyper import _METHOD_ID_VAR
@@ -222,7 +223,7 @@ class ErrorDetail:
         # decode error msg if it's "Error(string)"
         # b"\x08\xc3y\xa0" == method_id("Error(string)")
         if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-            return abi.decode("(string)", err.args[0][4:])[0]
+            return abi_decode("(string)", err.args[0][4:])[0]
 
         return repr(err)
 
@@ -663,12 +664,12 @@ class VyperContract(_BaseContract):
             # convert to bytes for abi decoder
             encoded_topic = t.to_bytes(32, "big")
             decoded_topics.append(
-                abi.decode(typ.abi_type.selector_name(), encoded_topic)
+                abi_decode(typ.abi_type.selector_name(), encoded_topic)
             )
 
         tuple_typ = TupleT(arg_typs)
 
-        args = abi.decode(tuple_typ.abi_type.selector_name(), data)
+        args = abi_decode(tuple_typ.abi_type.selector_name(), data)
 
         return Event(log_id, self._address, event_t, decoded_topics, args)
 
@@ -687,7 +688,7 @@ class VyperContract(_BaseContract):
             return None
 
         return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi.decode(return_typ.abi_type.selector_name(), computation.output)
+        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
         if not isinstance(vyper_typ, TupleT):
@@ -900,6 +901,7 @@ class VyperFunction:
     def args_abi_type(self, num_kwargs):
         if not hasattr(self, "_signature_cache"):
             self._signature_cache = {}
+
         if num_kwargs in self._signature_cache:
             return self._signature_cache[num_kwargs]
 
@@ -910,6 +912,7 @@ class VyperFunction:
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
         abi_sig = self.func_t.name + args_abi_type
+
         _method_id = method_id(abi_sig)
         self._signature_cache[num_kwargs] = (_method_id, args_abi_type)
 
@@ -936,7 +939,7 @@ class VyperFunction:
         args = [getattr(arg, "address", arg) for arg in args]
 
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
-        encoded_args = abi.encode(args_abi_type, args)
+        encoded_args = abi_encode(args_abi_type, args)
 
         if self.func_t.is_constructor or self.func_t.is_fallback:
             return encoded_args
