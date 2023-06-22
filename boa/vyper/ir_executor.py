@@ -749,7 +749,7 @@ class Seq(IRExecutor):
 class Repeat(IRExecutor):
     _name = "repeat"
 
-    def compile(self, out=None):
+    def compile(self, out=None, out_typ=None):
         i_var, start, rounds, rounds_bound, body = self.args
 
         startname = self.compile_ctx.freshvar("start")
