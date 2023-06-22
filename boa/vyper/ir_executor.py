@@ -1028,11 +1028,13 @@ class Set(IRExecutor):
         val.compile(out=variable.out_name, out_typ=int)
 
 
-def _ensure_source_pos(ir_node, source_pos=None):
+def _ensure_source_pos(ir_node, source_pos=None, error_msg=None):
     if ir_node.source_pos is None:
         ir_node.source_pos = source_pos
+    if ir_node.error_msg is None:
+        ir_node.error_msg = error_msg
     for arg in ir_node.args:
-        _ensure_source_pos(arg, ir_node.source_pos)
+        _ensure_source_pos(arg, ir_node.source_pos, ir_node.error_msg)
 
 
 def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
