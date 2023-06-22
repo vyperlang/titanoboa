@@ -462,7 +462,7 @@ class Shl(IRExecutor):
     _type: type = int
 
     def _compile(self, bits, val):
-        return f"{val} >> {bits}"
+        return f"_wrap256({val} << {bits})"
 
 
 @executor
