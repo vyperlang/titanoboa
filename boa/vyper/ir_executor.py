@@ -534,7 +534,7 @@ class CalldataCopy(IRExecutor):
             val = bytes(VM.msg.data[{src} : {src} + {size}])
             val = val.ljust({size}, {_NULL_BYTE})
 
-            VM.extend_memory({dst}, {size})
+            VM._memory.extend({dst}, {size})
             VM.memory_write({dst}, {size}, val)
             """
         )
@@ -604,7 +604,7 @@ class DLoadBytes(_CodeLoader):
         self.builder.extend(
             f"""
         code_start_position = {src} - {self.immutables_size} + len(VM.code)
-        VM.extend_memory({dst}, {size})
+        VM._memory.extend({dst}, {size})
 
         with VM.code.seek(code_start_position):
             code_bytes = VM.code.read({size})
@@ -680,7 +680,7 @@ class _LogN(IRExecutor):
     def _compile(self, ofst, size, *topics):
         self.builder.extend(
             f"""
-            VM.extend_memory({ofst}, {size})
+            VM._memory.extend({ofst}, {size})
             log_data = VM.memory_read_bytes({ofst}, {size})
             VM.add_log_entry(
                 account=VM.msg.storage_address,
