@@ -80,5 +80,6 @@ class FastMem(Memory):
         end = (start_position + size + 31) // 32
         for i in range(start, end):
             self.mem_cache[i] = self._DIRTY
+            self.needs_writeback[i] = False
 
         super().write(start_position, size, value)
