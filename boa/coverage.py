@@ -66,8 +66,18 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
     # from there.
 
     def _valid_frame(self, frame):
-        code_qualname = getattr(frame.f_code, "co_qualname", None)
-        return code_qualname == Env._hook_trace_computation.__qualname__
+        if hasattr(frame.f_code, "co_qualname"):
+            # Python>=3.11
+            code_qualname = frame.f_code.co_qualname
+            return code_qualname == Env._hook_trace_computation.__qualname__
+
+        else:
+            # in Python<3.11 we don't have co_qualname, so try hard to
+            # find a match anyways. (this might fail if for some reason
+            # the executing env has a monkey-patched _hook_trace_computation
+            # or something)
+            env = Env.get_singleton()
+            return frame.f_code == env._hook_trace_computation.__code__
 
     def _contract_for_frame(self, frame):
         if not self._valid_frame(frame):
