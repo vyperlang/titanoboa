@@ -12,7 +12,7 @@ Then, run with `coverage run ...`
 With `pytest-cov`, it can be invoked in either of two ways,
 `coverage run -m pytest ...`
 or,
-`pytest --cov=<report_directory>/ ...`
+`pytest --cov= ...`
 
 Coverage is experimental and there may be odd corner cases! If so,
 please report them on github or in the discord.
