@@ -827,7 +827,7 @@ class _IRRevert(IRExecutor):
             VM.output = VM.memory_read_bytes({ptr}, {size})
             VM.vyper_source_pos = {repr(self.ir_node.source_pos)}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
-            raise VMRevert("")  # venom revert
+            raise VMRevert(VM.output)  # venom revert
         """
         )
 

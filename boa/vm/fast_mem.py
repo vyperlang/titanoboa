@@ -69,17 +69,18 @@ class FastMem(Memory):
     def write_word(self, start_position, int_val):
         if start_position % 32 == 0:
             self.mem_cache[start_position // 32] = int_val
-
-        self.needs_writeback[start_position // 32] = True
-
-        # bypass cache dirtying
-        # super().write(start_position, 32, to_bytes(int_val))
+            self.needs_writeback[start_position // 32] = True
+        else:
+            self.write(start_position, 32, to_bytes(int_val))
 
     def write(self, start_position, size, value):
         start = start_position // 32
         end = (start_position + size + 31) // 32
+
+        # need to write back, in case this is not an aligned write.
+        self._writeback(start_position, size)
         for i in range(start, end):
             self.mem_cache[i] = self._DIRTY
-            self.needs_writeback[i] = False
+            assert self.needs_writeback[i] == False
 
         super().write(start_position, size, value)

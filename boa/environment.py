@@ -342,7 +342,7 @@ class titanoboa_computation:
         err = None
         with cls(state, msg, tx_ctx) as computation:
             try:
-                # print("LUDICROUS MODE")
+                # print("FAST MODE")
                 contract.ir_executor.exec(computation)
             except Halt:
                 pass
