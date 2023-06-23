@@ -30,29 +30,29 @@ hypothesis.core.HypothesisHandle.__init__ = _HypothesisHandle__init__  # type: i
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--profile", action="store_true", help="Profile contracts called in tests"
+        "--gas-profile", action="store_true", help="Profile gas used by contracts called in tests"
     )
 
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "ignore_isolation")
-    config.addinivalue_line("markers", "ignore_profiling")
-    config.addinivalue_line("markers", "profile")
+    config.addinivalue_line("markers", "ignore_gas_profiling")
+    config.addinivalue_line("markers", "gas_profile")
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("profile"):
+    if config.getoption("gas_profile"):
         for item in items:
-            ignore_profiling = item.get_closest_marker("ignore_profiling")
-            if not ignore_profiling:
-                item.add_marker("profile")
+            ignore_gas_profiling = item.get_closest_marker("ignore_gas_profiling")
+            if not ignore_gas_profiling:
+                item.add_marker("gas_profile")
 
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Generator:
     ignore_isolation = item.get_closest_marker("ignore_isolation") is not None
     profiling_ignored = item.get_closest_marker("ignore_profiling") is not None
-    profiling_enabled = item.get_closest_marker("profile") is not None
+    profiling_enabled = item.get_closest_marker("gas_profile") is not None
 
     if profiling_enabled and profiling_ignored:
         raise ValueError("Cannot ignore profiling and profile at the same time")
