@@ -12,7 +12,7 @@ Then, run with `coverage run ...`
 With `pytest-cov`, it can be invoked in either of two ways,
 `coverage run -m pytest ...`
 or,
-`pytest --cov=<report_directory>/ ...`
+`pytest --cov= ...`
 
 Coverage is experimental and there may be odd corner cases! If so,
 please report them on github or in the discord.
@@ -31,13 +31,20 @@ from boa.vyper.ast_utils import get_fn_ancestor_from_node
 
 
 def coverage_init(registry, options):
-    registry.add_file_tracer(TitanoboaPlugin(options))
-    Env.get_singleton()._coverage_enabled = True
+    plugin = TitanoboaPlugin(options)
+    registry.add_file_tracer(plugin)
+    registry.add_configurer(plugin)
+
+    # set on the class so that reset_env() doesn't disable tracing
+    Env._coverage_enabled = True
 
 
 class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
     def __init__(self, options):
         pass
+
+    def configure(self, config):
+        config.get_option("run:source_pkgs").append("boa.environment")
 
     def file_tracer(self, filename):
         if filename.endswith("boa/environment.py"):
@@ -49,8 +56,8 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
 
 
 class TitanoboaTracer(coverage.plugin.FileTracer):
-    def __init__(self, env=None):
-        self.env = env or Env.get_singleton()
+    def __init__(self):
+        pass
 
     # coverage.py requires us to inspect the python call frame to
     # see what line number to produce. we hook into specially crafted
@@ -59,8 +66,18 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
     # from there.
 
     def _valid_frame(self, frame):
-        code_qualname = getattr(frame.f_code, "co_qualname", None)
-        return code_qualname == Env._hook_trace_computation.__qualname__
+        if hasattr(frame.f_code, "co_qualname"):
+            # Python>=3.11
+            code_qualname = frame.f_code.co_qualname
+            return code_qualname == Env._hook_trace_computation.__qualname__
+
+        else:
+            # in Python<3.11 we don't have co_qualname, so try hard to
+            # find a match anyways. (this might fail if for some reason
+            # the executing env has a monkey-patched _hook_trace_computation
+            # or something)
+            env = Env.get_singleton()
+            return frame.f_code == env._hook_trace_computation.__code__
 
     def _contract_for_frame(self, frame):
         if not self._valid_frame(frame):
