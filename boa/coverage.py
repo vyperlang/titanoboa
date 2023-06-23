@@ -31,13 +31,20 @@ from boa.vyper.ast_utils import get_fn_ancestor_from_node
 
 
 def coverage_init(registry, options):
-    registry.add_file_tracer(TitanoboaPlugin(options))
-    Env.get_singleton()._coverage_enabled = True
+    plugin = TitanoboaPlugin(options)
+    registry.add_file_tracer(plugin)
+    registry.add_configurer(plugin)
+
+    # set on the class so that reset_env() doesn't disable tracing
+    Env._coverage_enabled = True
 
 
 class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
     def __init__(self, options):
         pass
+
+    def configure(self, config):
+        config.get_option("run:source_pkgs").append("boa.environment")
 
     def file_tracer(self, filename):
         if filename.endswith("boa/environment.py"):
@@ -49,8 +56,8 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
 
 
 class TitanoboaTracer(coverage.plugin.FileTracer):
-    def __init__(self, env=None):
-        self.env = env or Env.get_singleton()
+    def __init__(self):
+        pass
 
     # coverage.py requires us to inspect the python call frame to
     # see what line number to produce. we hook into specially crafted
