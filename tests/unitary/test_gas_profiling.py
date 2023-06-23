@@ -85,7 +85,7 @@ def test_ignore_profiling(variable_loop_contract, a, b, c):
 @pytest.mark.parametrize(
     "a,b,c", [(42, 69, 150), (420, 690, 20000), (42, 690, 10000), (420, 69, 5000)]
 )
-@pytest.mark.profile
+@pytest.mark.gas_profile
 def test_call_variable_iter_method(variable_loop_contract, a, b, c):
     variable_loop_contract.foo(a, b, c)
     variable_loop_contract._barfoo(a, b, c)
@@ -100,18 +100,18 @@ def test_call_variable_iter_method(variable_loop_contract, a, b, c):
     c=strategy("uint256", max_value=10**6),
 )
 @settings(max_examples=100, deadline=None)
-@pytest.mark.profile
+@pytest.mark.gas_profile
 def test_fuzz_profiling(variable_loop_contract, a, b, c):
     variable_loop_contract.foo(a, b, c)
 
 
-@pytest.mark.profile
+@pytest.mark.gas_profile
 def test_external_call(source_contract):
     source_contract.bar(10)
 
 
-@pytest.mark.profile
-def test_profile():
+@pytest.mark.gas_profile
+def test_gas_profile():
     source_code = """
 @external
 @view
@@ -122,7 +122,7 @@ def foo(a: uint256 = 0):
     contract.foo()
 
 
-@pytest.mark.profile
+@pytest.mark.gas_profile
 def test_profile_empty_function():
     source_code = """
 @external
@@ -134,7 +134,7 @@ def bar():
     contract.bar()
 
 
-@pytest.mark.profile
+@pytest.mark.gas_profile
 def test_profile_long_contract():
     source_code = """
 @external
@@ -147,7 +147,7 @@ def bar() -> uint256:
     contract.bar()
 
 
-@pytest.mark.profile
+@pytest.mark.gas_profile
 def test_profile_long_names():
     source_code = """
 @external
