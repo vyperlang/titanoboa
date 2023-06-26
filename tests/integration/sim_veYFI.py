@@ -48,14 +48,14 @@ timeit("load YFI")
 _rewards_pool_address = format_addr("rewards_pool")
 
 veYFI = boa.load(
-    "tests/veYFI.vy",
+    "tests/integration/veYFI.vy",
     YFI.address,
     _rewards_pool_address,
     override_address=format_addr("veYFI"),
 )
 timeit("load veYFI")
 rewards_pool = boa.load(
-    "tests/RewardPool.vy",
+    "tests/integration/RewardPool.vy",
     veYFI.address,
     START_TIME,
     override_address=_rewards_pool_address,
@@ -80,7 +80,7 @@ for t in parties:
     assert YFI.balanceOf(t) == YFI.eval(f"self.balanceOf[{t}]")
 
 # check external call == eval for immutable
-assert YFI.name() == YFI.eval("NAME"), (YFI.name(), YFI.eval("NAME"))
+assert YFI.name() == YFI.eval("name"), (YFI.name(), YFI.eval("name"))
 
 timeit("set up balances")
 

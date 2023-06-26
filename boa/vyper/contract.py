@@ -6,34 +6,39 @@ import contextlib
 import copy
 import warnings
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Any, Optional
 
 import vyper
 import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
+import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
-import vyper.semantics.validation as validation
+from eth.codecs import abi
 from eth.exceptions import VMError
 from eth_typing import Address
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
+from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
-from vyper.codegen.module import parse_external_interfaces
-from vyper.codegen.types.types import MappingType, TupleType, is_base_type
+from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import output as compiler_output
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.validation.data_positions import set_data_positions
-from vyper.utils import abi_method_id, cached_property
+from vyper.semantics.analysis.data_positions import set_data_positions
+from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT
+from vyper.semantics.types.function import ContractFunctionT
+from vyper.utils import method_id
 
-from boa.environment import AddressT, Env, to_int
-from boa.profiling import LineProfile
+from boa.environment import AddressType, Env, to_int
+from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
+from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vyper import _METHOD_ID_VAR
-from boa.vyper.ast_utils import ast_map_of, reason_at
+from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
     _compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
@@ -41,16 +46,6 @@ from boa.vyper.compiler_utils import (
 )
 from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 from boa.vyper.event import Event, RawEvent
-
-try:
-    # `eth-stdlib` requires python 3.10 and above
-    from eth.codecs.abi import decode as abi_decode
-    from eth.codecs.abi import encode as abi_encode
-
-except ImportError:
-    from eth_abi import decode_single as abi_decode  # type: ignore
-    from eth_abi import encode_single as abi_encode  # type: ignore
-
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -60,43 +55,57 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
 class VyperDeployer:
-    def __init__(self, compiler_data, env=None):
+    def __init__(self, compiler_data, filename=None):
         self.compiler_data = compiler_data
+
+        # force compilation so that if there are any errors in the contract,
+        # we fail at load rather than at deploy time.
+        _ = compiler_data.bytecode
+
+        self.filename = filename
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
 
     def deploy(self, *args, **kwargs):
-        return VyperContract(self.compiler_data, *args, **kwargs)
+        return VyperContract(
+            self.compiler_data, *args, filename=self.filename, **kwargs
+        )
 
     def deploy_as_blueprint(self, *args, **kwargs):
-        return VyperBlueprint(self.compiler_data, *args, **kwargs)
+        return VyperBlueprint(
+            self.compiler_data, *args, filename=self.filename, **kwargs
+        )
 
-    def at(self, address: AddressT) -> "VyperContract":
+    def at(self, address: AddressType) -> "VyperContract":
         address = to_checksum_address(address)
         ret = VyperContract(
-            self.compiler_data, override_address=address, skip_init=True
+            self.compiler_data,
+            override_address=address,
+            skip_initcode=True,
+            filename=self.filename,
         )
         vm = ret.env.vm
         bytecode = vm.state.get_code(to_canonical_address(address))
 
         ret._set_bytecode(bytecode)
+
+        ret.env.register_contract(address, ret)
+
         return ret
 
 
 # a few lines of shared code between VyperBlueprint and VyperContract
 class _BaseContract:
-    def __init__(self, compiler_data, env=None, override_address=None):
+    def __init__(self, compiler_data, env=None, filename=None):
         self.compiler_data = compiler_data
 
         if env is None:
             env = Env.get_singleton()
 
         self.env = env
-        if override_address is None:
-            self.address = self.env.generate_address()
-        else:
-            self.address = override_address
+
+        self.filename = filename
 
 
 # create a blueprint for use with `create_from_blueprint`.
@@ -109,10 +118,11 @@ class VyperBlueprint(_BaseContract):
         env=None,
         override_address=None,
         blueprint_preamble=b"\xFE\x71\x00",
+        filename=None,
     ):
         # note slight code duplication with VyperContract ctor,
         # maybe use common base class?
-        super().__init__(compiler_data, env, override_address)
+        super().__init__(compiler_data, env, filename)
 
         if blueprint_preamble is None:
             blueprint_preamble = b""
@@ -125,9 +135,17 @@ class VyperBlueprint(_BaseContract):
 
         deploy_bytecode += blueprint_bytecode
 
-        self.bytecode = self.env.deploy_code(
-            bytecode=deploy_bytecode, deploy_to=self.address
+        addr, self.bytecode = self.env.deploy_code(
+            bytecode=deploy_bytecode, override_address=override_address
         )
+
+        self.address = to_checksum_address(addr)
+
+        self.env.register_blueprint(compiler_data.bytecode, self)
+
+    @cached_property
+    def deployer(self):
+        return VyperDeployer(self.compiler_data, filename=self.filename)
 
 
 class FrameDetail(dict):
@@ -146,8 +164,10 @@ class DevReason:
     reason_str: str
 
     @classmethod
-    def at(cls, source_code: str, lineno: int) -> Optional["DevReason"]:
-        s = reason_at(source_code, lineno)
+    def at_source_location(
+        cls, source_code: str, lineno: int, end_lineno: int
+    ) -> Optional["DevReason"]:
+        s = reason_at(source_code, lineno, end_lineno)
         if s is None:
             return None
         reason_type, reason_str = s
@@ -173,7 +193,11 @@ class ErrorDetail:
         ast_source = contract.find_source_of(computation.code)
         reason = None
         if ast_source is not None:
-            reason = DevReason.at(contract.compiler_data.source_code, ast_source.lineno)
+            reason = DevReason.at_source_location(
+                contract.compiler_data.source_code,
+                ast_source.lineno,
+                ast_source.end_lineno,
+            )
         frame_detail = contract.debug_frame(computation)
         storage_detail = contract._storage.dump()
 
@@ -193,7 +217,7 @@ class ErrorDetail:
         # decode error msg if it's "Error(string)"
         # b"\x08\xc3y\xa0" == method_id("Error(string)")
         if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-            return abi_decode("(string)", err.args[0][4:])[0]
+            return abi.decode("(string)", err.args[0][4:])[0]
 
         return repr(err)
 
@@ -246,7 +270,7 @@ def _handle_child_trace(computation, env, return_trace):
     if child_obj is None:
         child_trace = trace_for_unknown_contract(child, env)
     else:
-        child_trace = child_obj.vyper_stack_trace(child)
+        child_trace = child_obj.stack_trace(child)
     return StackTrace(child_trace + return_trace)
 
 
@@ -357,7 +381,7 @@ class VarModel:
             return maybe_address
 
     def get(self, truncate_limit=None):
-        if isinstance(self.typ, MappingType):
+        if isinstance(self.typ, HashMapT):
             ret = {}
             for k in self.contract.env.sstore_trace.get(self.contract.address, {}):
                 path = unwrap_storage_key(self.contract.env.sha3_trace, k)
@@ -369,9 +393,9 @@ class VarModel:
 
                 ty = self.typ
                 for i, p in enumerate(path):
-                    path[i] = decode_vyper_object(memoryview(p), ty.keytype)
-                    path_t.append(ty.keytype)
-                    ty = ty.valuetype
+                    path[i] = decode_vyper_object(memoryview(p), ty.key_type)
+                    path_t.append(ty.key_type)
+                    ty = ty.value_type
 
                 val = self._decode(to_int(k), ty, truncate_limit)
 
@@ -380,7 +404,7 @@ class VarModel:
                     # decode aliases as needed/possible
                     dealiased_path = []
                     for p, t in zip(path, path_t):
-                        if is_base_type(t, "address"):
+                        if isinstance(t, AddressT):
                             p = self._dealias(p)
                         dealiased_path.append(p)
                     setpath(ret, dealiased_path, val)
@@ -395,7 +419,7 @@ class VarModel:
 class StorageModel:
     def __init__(self, contract):
         compiler_data = contract.compiler_data
-        for k, v in compiler_data.global_ctx._globals.items():
+        for k, v in compiler_data.global_ctx.variables.items():
             is_storage = not v.is_immutable
             if is_storage:  # check that v
                 slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
@@ -415,16 +439,24 @@ class StorageModel:
 
 class VyperContract(_BaseContract):
     def __init__(
-        self, compiler_data, *args, env=None, override_address=None, skip_init=False
+        self,
+        compiler_data,
+        *args,
+        env=None,
+        override_address=None,
+        # whether or not to skip constructor
+        skip_initcode=False,
+        created_from=None,
+        filename=None,
     ):
-        super().__init__(compiler_data, env, override_address)
+        super().__init__(compiler_data, env, filename)
 
-        self.env.register_contract(self.address, self)
+        self.created_from = created_from
 
         # add all exposed functions from the interface to the contract
         external_fns = {
             fn.name: fn
-            for fn in self.global_ctx._function_defs
+            for fn in self.global_ctx.functions
             if fn._metadata["type"].is_external
         }
 
@@ -433,12 +465,17 @@ class VyperContract(_BaseContract):
         if "__init__" in external_fns:
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
+        if skip_initcode:
+            self.address = to_checksum_address(override_address)
+        else:
+            self.address = self._run_init(*args, override_address=override_address)
+
         for fn_name, fn in external_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))
 
         # set internal methods as class.internal attributes:
         self.internal = lambda: None
-        for fn in self.global_ctx._function_defs:
+        for fn in self.global_ctx.functions:
             if not fn._metadata["type"].is_internal:
                 continue
             setattr(self.internal, fn.name, VyperInternalFunction(fn, self))
@@ -449,37 +486,42 @@ class VyperContract(_BaseContract):
         self._source_map = None
         self._computation = None
 
-        if not skip_init:
-            self._run_init(*args)
+        self.env.register_contract(self.address, self)
 
-    def _run_init(self, *args):
+    def _run_init(self, *args, override_address=None):
         encoded_args = b""
-
         if self._ctor:
             encoded_args = self._ctor._prepare_calldata(*args)
-            encoded_args = encoded_args[4:]  # strip method_id
 
         initcode = self.compiler_data.bytecode + encoded_args
-        self.bytecode = self.env.deploy_code(bytecode=initcode, deploy_to=self.address)
+        addr, self.bytecode = self.env.deploy_code(
+            bytecode=initcode, override_address=override_address
+        )
+        return to_checksum_address(addr)
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
         to_check = bytecode
         if self.data_section_size != 0:
-            to_check = bytecode[-self.data_section_size :]
+            to_check = bytecode[: -self.data_section_size]
         if to_check != self.compiler_data.bytecode_runtime:
-            warnings.warn(f"casted bytecode does not match compiled bytecode at {self}")
+            warnings.warn(
+                f"casted bytecode does not match compiled bytecode at {self}",
+                stacklevel=2,
+            )
         self.bytecode = bytecode
 
     def __repr__(self):
-        storage_detail = self._storage.dump()
-
         ret = (
             f"<{self.compiler_data.contract_name} at {to_checksum_address(self.address)}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
         )
 
+        if self.created_from is not None:
+            ret += f" (created by {self.created_from})"
+
         dump_storage = True  # maybe make this configurable in the future
+        storage_detail = self._storage.dump()
         if dump_storage and len(storage_detail) > 0:
             ret += f"\n{storage_detail}"
 
@@ -487,27 +529,30 @@ class VyperContract(_BaseContract):
 
     @cached_property
     def deployer(self):
-        return VyperDeployer(self.compiler_data, env=self.env)
+        return VyperDeployer(self.compiler_data, env=self.env, filename=self.filename)
 
     # is this actually useful?
-    def at(self, *args, **kwargs):
-        return self.deployer.wrap(*args, **kwargs)
+    def at(self, address):
+        return self.deployer.at(address)
 
     @cached_property
     def ast_map(self):
         return ast_map_of(self.compiler_data.vyper_module)
 
+    def _get_fn_from_computation(self, computation):
+        node = self.find_source_of(computation.code)
+        return get_fn_ancestor_from_node(node)
+
     def debug_frame(self, computation=None):
         if computation is None:
             computation = self._computation
 
-        node = self.find_source_of(computation.code)
-        if node is None:
+        fn = self._get_fn_from_computation(computation)
+        if fn is None:
+            # TODO: figure out why fn is None.
             return None
 
-        fn = node.get_ancestor(vy_ast.FunctionDef)
-
-        frame_info = self.compiler_data.function_signatures[fn.name].frame_info
+        frame_info = self.compiler_data.function_signatures[fn.name]._ir_info.frame_info
 
         mem = computation._memory
         frame_detail = FrameDetail(fn.name)
@@ -547,7 +592,6 @@ class VyperContract(_BaseContract):
         for pc in reversed(code_stream._trace):
             if pc in pc_map and pc_map[pc] in self.ast_map:
                 return self.ast_map[pc_map[pc]]
-
         return None
 
     # ## handling events
@@ -605,12 +649,12 @@ class VyperContract(_BaseContract):
             # convert to bytes for abi decoder
             encoded_topic = t.to_bytes(32, "big")
             decoded_topics.append(
-                abi_decode(typ.abi_type.selector_name(), encoded_topic)
+                abi.decode(typ.abi_type.selector_name(), encoded_topic)
             )
 
-        tuple_typ = TupleType(arg_typs)
+        tuple_typ = TupleT(arg_typs)
 
-        args = abi_decode(tuple_typ.abi_type.selector_name(), data)
+        args = abi.decode(tuple_typ.abi_type.selector_name(), data)
 
         return Event(log_id, self.address, event_t, decoded_topics, args)
 
@@ -620,33 +664,33 @@ class VyperContract(_BaseContract):
         if computation.is_error:
             self.handle_error(computation)
 
+        # cache gas used for call if profiling is enabled
+        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        if gas_meter == ProfilingGasMeter:
+            cache_gas_used_for_computation(self, computation)
+
         if vyper_typ is None:
             return None
 
         return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
+        ret = abi.decode(return_typ.abi_type.selector_name(), computation.output)
 
         # unwrap the tuple if needed
-        if not isinstance(vyper_typ, TupleType):
+        if not isinstance(vyper_typ, TupleT):
             (ret,) = ret
-
-        # eth_abi does not checksum addresses. patch this in a limited
-        # way here, but for complex return types, we need an upstream
-        # fix.
-        if is_base_type(vyper_typ, "address"):
-            ret = to_checksum_address(ret)
 
         return vyper_object(ret, vyper_typ)
 
     def handle_error(self, computation):
         try:
-            raise BoaError(self.vyper_stack_trace(computation))
+            raise BoaError(self.stack_trace(computation))
         except BoaError as b:
             # modify the error so the traceback starts in userland.
             # inspired by answers in https://stackoverflow.com/q/1603940/
             raise strip_internal_frames(b) from None
 
-    def vyper_stack_trace(self, computation):
+    def stack_trace(self, computation=None):
+        computation = computation or self._computation
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation.code)
         if error_detail not in EXTERNAL_CALL_ERRORS:
@@ -658,9 +702,9 @@ class VyperContract(_BaseContract):
         ret = LineProfile.from_single(self, computation)
         for child in computation.children:
             child_obj = self.env.lookup_contract(child.msg.code_address)
+            # TODO: child obj is opaque contract that calls back into known contract
             if child_obj is not None:
-                ret.merge(child_obj.line_profile(computation))
-
+                ret.merge(child_obj.line_profile(child))
         return ret
 
     @cached_property
@@ -670,8 +714,8 @@ class VyperContract(_BaseContract):
         # do the same thing as vyper_module_folded but skip getter expansion
         vy_ast.folding.fold(module)
         with vy_ns.get_namespace().enter_scope():
-            validation.add_module_namespace(module, self.compiler_data.interface_codes)
-            validation.validate_functions(module)
+            analysis.add_module_namespace(module, self.compiler_data.interface_codes)
+            analysis.validate_functions(module)
             # we need to cache the namespace right here(!).
             # set_data_positions will modify the type definitions in place.
             self._cache_namespace(vy_ns.get_namespace())
@@ -680,6 +724,10 @@ class VyperContract(_BaseContract):
         # calculate slots for all storage variables, tagging
         # the types in the namespace.
         set_data_positions(module, storage_layout_overrides=None)
+
+        # ensure _ir_info is generated for all functions in this copied/shadow
+        # namespace
+        _ = generate_ir_for_module(GlobalContext(module))
 
         return module
 
@@ -701,7 +749,7 @@ class VyperContract(_BaseContract):
             with vy_ns.override_global_namespace(self._vyper_namespace):
                 yield
         finally:
-            self._vyper_namespace["self"].members.pop("__boa_debug__", None)
+            self._vyper_namespace["self"].typ.members.pop("__boa_debug__", None)
 
     # for eval(), we need unoptimized assembly, since the dead code
     # eliminator might prune a dead function (which we want to eval)
@@ -739,7 +787,11 @@ class VyperContract(_BaseContract):
             self._source_map = tmp
 
     def eval(
-        self, stmt: str, value: int = 0, gas: int = None, sender: Address = None
+        self,
+        stmt: str,
+        value: int = 0,
+        gas: Optional[int] = None,
+        sender: Optional[Address] = None,
     ) -> Any:
         """eval vyper code in the context of this contract"""
 
@@ -754,11 +806,12 @@ class VyperContract(_BaseContract):
             method_id = b"dbug"  # note dummy method id, doesn't get validated
             c = self.env.execute_code(
                 to_address=self.address,
-                bytecode=bytecode,
                 sender=sender,
                 data=method_id,
                 value=value,
                 gas=gas,
+                contract=self,
+                override_bytecode=bytecode,
             )
 
             ret = self.marshal_to_python(c, typ)
@@ -779,18 +832,9 @@ class VyperContract(_BaseContract):
 
         # ensure self._vyper_namespace is computed
         m = self._ast_module  # noqa: F841
-        self._vyper_namespace["self"].members.pop(fn_ast.name, None)
+        self._vyper_namespace["self"].typ.members.pop(fn_ast.name, None)
         f = _InjectVyperFunction(self, fn_source_code)
         setattr(self.inject, fn_ast.name, f)
-
-    @cached_property
-    def _sigs(self):
-        sigs = {}
-        global_ctx = self.compiler_data.global_ctx
-        if global_ctx._contracts or global_ctx._interfaces:
-            sigs = parse_external_interfaces(sigs, global_ctx)
-        sigs["self"] = self.compiler_data.function_signatures
-        return sigs
 
 
 class VyperFunction:
@@ -803,24 +847,19 @@ class VyperFunction:
         return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
 
     @cached_property
-    def _bytecode(self):
-        return self.contract.bytecode
-
-    @cached_property
     def _source_map(self):
         return self.contract.source_map
 
-    @cached_property
-    def fn_signature(self):
-        return self.contract.compiler_data.function_signatures[self.fn_ast.name]
+    @property
+    def func_t(self):
+        return self.fn_ast._metadata["type"]
 
     @cached_property
     def ir(self):
         # patch compiler_data to have IR for every function
-        sigs = self.contract._sigs
         global_ctx = self.contract.global_ctx
 
-        ir = generate_ir_for_function(self.fn_ast, sigs, global_ctx, False)
+        ir = generate_ir_for_function(self.fn_ast, global_ctx, False)
         return optimize(ir)
 
     @cached_property
@@ -847,51 +886,61 @@ class VyperFunction:
             return self._signature_cache[num_kwargs]
 
         # align the kwargs with the signature
-        sig_kwargs = self.fn_signature.default_args[:num_kwargs]
-        sig_args = self.fn_signature.base_args + sig_kwargs
+        sig_kwargs = self.func_t.keyword_args[:num_kwargs]
+        sig_args = self.func_t.positional_args + sig_kwargs
         args_abi_type = (
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
-        method_id = abi_method_id(self.fn_signature.name + args_abi_type).to_bytes(
-            4, "big"
-        )
-        self._signature_cache[num_kwargs] = (method_id, args_abi_type)
+        abi_sig = self.func_t.name + args_abi_type
+        _method_id = method_id(abi_sig)
+        self._signature_cache[num_kwargs] = (_method_id, args_abi_type)
 
-        return method_id, args_abi_type
+        return _method_id, args_abi_type
 
     def _prepare_calldata(self, *args, **kwargs):
-        if (
-            not len(self.fn_signature.base_args)
-            <= len(args)
-            <= len(self.fn_signature.args)
-        ):
-            raise Exception(f"bad args to {self}")
+        n_total_args = self.func_t.n_total_args
+        n_pos_args = self.func_t.n_positional_args
+
+        if not n_pos_args <= len(args) <= n_total_args:
+            expectation_str = f"expected between {n_pos_args} and {n_total_args}"
+            if n_pos_args == n_total_args:
+                expectation_str = f"expected {n_total_args}"
+            raise Exception(
+                f"bad args to `{repr(self.func_t)}` "
+                f"({expectation_str}, got {len(args)})"
+            )
 
         # align the kwargs with the signature
-        # sig_kwargs = self.fn_signature.default_args[: len(kwargs)]
+        # sig_kwargs = self.func_t.default_args[: len(kwargs)]
 
-        total_non_base_args = len(kwargs) + len(args) - len(self.fn_signature.base_args)
-        method_id, args_abi_type = self.args_abi_type(total_non_base_args)
-
+        total_non_base_args = len(kwargs) + len(args) - n_pos_args
         # allow things with `.address` to be encode-able
         args = [getattr(arg, "address", arg) for arg in args]
 
-        encoded_args = abi_encode(args_abi_type, args)
+        method_id, args_abi_type = self.args_abi_type(total_non_base_args)
+        encoded_args = abi.encode(args_abi_type, args)
+
+        if self.func_t.is_constructor or self.func_t.is_fallback:
+            return encoded_args
+
         return method_id + encoded_args
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
+        override_bytecode = getattr(self, "override_bytecode", None)
         with self.contract._anchor_source_map(self._source_map):
             computation = self.env.execute_code(
                 to_address=self.contract.address,
-                bytecode=self._bytecode,
-                data=calldata_bytes,
                 sender=sender,
+                data=calldata_bytes,
                 value=value,
                 gas=gas,
+                is_modifying=self.func_t.is_mutable,
+                override_bytecode=override_bytecode,
+                contract=self.contract,
             )
 
-            typ = self.fn_signature.return_type
+            typ = self.func_t.return_type
             return self.contract.marshal_to_python(computation, typ)
 
 
@@ -908,7 +957,7 @@ class VyperInternalFunction(VyperFunction):
 
     # OVERRIDE so that __call__ uses the specially crafted bytecode
     @cached_property
-    def _bytecode(self):
+    def override_bytecode(self):
         bytecode, _, _ = self._compiled
         return bytecode
 
@@ -919,20 +968,143 @@ class VyperInternalFunction(VyperFunction):
         return source_map
 
 
+# a contract which we only have the ABI for.
+# TODO refactor:
+# right now inherits functionality from VyperContract
+# but would be better to put this in like BaseContract
+# and have both BaseContract => InterfaceContract
+# and separately BaseContract => VyperContract
+class ABIContract(VyperContract):
+    def __init__(self, name, functions, events, address, created_from=None, env=None):
+        if env is None:
+            env = Env.get_singleton()
+        self.env = env
+
+        self._name = name
+        self._events = events
+        self._functions = functions
+
+        for func_t in self._functions:
+            setattr(self, func_t.name, ABIFunction(func_t, self))
+
+        self.address = to_checksum_address(address)
+        self.created_from = created_from
+
+        self._source_map = {"pc_pos_map": {}}  # override
+
+    @cached_property
+    def method_id_map(self):
+        ret = {}
+        for func_t in self._functions:
+            for abi_sig, method_id_int in func_t.method_ids.items():
+                method_id_bytes = method_id_int.to_bytes(4, "big")
+                assert method_id_bytes not in ret  # vyper guarantees unique method ids
+                ret[method_id_bytes] = abi_sig
+        return ret
+
+    def stack_trace(self, computation=None):
+        computation = computation or self._computation
+        calldata_method_id = bytes(computation.msg.data[:4])
+        abi_sig = self.method_id_map[calldata_method_id]
+        ret = StackTrace([f"  (unknown location in {self}.{abi_sig})"])
+        return _handle_child_trace(computation, self.env, ret)
+
+    @property
+    def deployer(self):
+        return ABIContractFactory(self._name, self._functions, self._events)
+
+    def __repr__(self):
+        ret = f"<{self._name} interface at {to_checksum_address(self.address)}>"
+
+        if self.created_from is not None:
+            ret += f" (created by {self.created_from})"
+
+        return ret
+
+    # OVERRIDE
+    @cached_property
+    def event_for(self):
+        return {e.event_id: e for e in self._events}
+
+
+# name Factory instead of Deployer because it doesn't actually do any
+# contract deployment.
+class ABIContractFactory:
+    def __init__(self, name, functions, events):
+        self._name = name
+        self._functions = functions
+        self._events = events
+
+    @classmethod
+    def from_abi_dict(cls, abi, name=None):
+        if name is None:
+            name = "<anonymous contract>"
+
+        functions = [
+            ContractFunctionT.from_abi(i) for i in abi if i.get("type") == "function"
+        ]
+
+        # warn on functions with same name
+        _tmp = set()
+        for f in functions:
+            if f.name in _tmp:
+                warnings.warn(
+                    f"{name} overloads {f.name}! overloaded methods "
+                    "might not work correctly at this time",
+                    stacklevel=1,
+                )
+            _tmp.add(f.name)
+
+        events = [EventT.from_abi(i) for i in abi if i.get("type") == "event"]
+
+        return cls(name, functions, events)
+
+    def at(self, address) -> ABIContract:
+        address = to_checksum_address(address)
+
+        ret = ABIContract(self._name, self._functions, self._events, address)
+
+        bytecode = ret.env.vm.state.get_code(to_canonical_address(address))
+        if bytecode == b"":
+            warnings.warn(
+                "requested {ret} but there is no bytecode at that address!",
+                stacklevel=2,
+            )
+
+        ret.env.register_contract(address, ret)
+
+        return ret
+
+
+class ABIFunction(VyperFunction):
+    def __init__(self, func_t, contract):
+        self.contract = contract
+        self.env = contract.env
+        self._func_t = func_t
+
+    def __repr__(self):
+        return f"{self.contract._name}.{self._func_t.name}"
+
+    # OVERRIDE
+    @property
+    def func_t(self):
+        return self._func_t
+
+    # OVERRIDE
+    @cached_property
+    def _source_map(self):
+        return {"pc_pos_map": {}}
+
+
 class _InjectVyperFunction(VyperFunction):
     def __init__(self, contract, fn_source):
         ast, bytecode, source_map, _ = _compile_vyper_function(fn_source, contract)
         super().__init__(ast, contract)
 
-        # OVERRIDE so that __call__ uses special bytecode
-        self._bytecode = bytecode
+        self.override_bytecode = bytecode
+
         # OVERRIDE so that __call__ uses special source map
         self._source_map = source_map
-
-    # OVERRIDE
-    @property
-    def fn_signature(self):
-        return self.fn_ast._metadata["signature"]
 
 
 @dataclass

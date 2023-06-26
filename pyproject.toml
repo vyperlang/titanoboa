@@ -1,7 +1,7 @@
 [project]
 name = "titanoboa"
-version = "0.1.6"
-description = "Experimental Vyper interpreter"
+version = "0.1.7"
+description = "A Vyper interpreter"
 #authors = []
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -15,23 +15,24 @@ classifiers = ["Topic :: Software Development"]
 
 # Requirements
 dependencies = [
-    "vyper >= 0.3.7",
+    "vyper >= 0.3.8",
+    "eth-stdlib",
     "eth-abi",
-    "py-evm",
+    "py-evm>=0.7.0a2",
     "eth-typing",
     "hypothesis",
     "pytest",
-#'eth-stdlib; python_version >= "3.10"',
+    "rich",
 
-# required for forking:
+    # required for forking:
     "requests",
+
+    # required for networked accounts
+    "eth-account",
 ]
 
 [project.optional-dependencies]
-forking-recommended = [
-    "plyvel",
-    "ujson",
-]
+forking-recommended = ["plyvel", "ujson"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

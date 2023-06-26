@@ -451,14 +451,13 @@ Low-Level Functionality
         :param pc: The program counter to start the execution at.
         :returns: The return value from the top-level call.
 
-    .. method:: time_travel(seconds = None, blocks = None, block_delta=12)
+    .. method:: time_travel(seconds: int = None, blocks: int = None, block_delta: int = 12)
 
         Fast forward, increase the chain timestamp and block number.
 
         :param seconds: Change current timestamp by `seconds` seconds.
         :param blocks: Change block number by `blocks` blocks.
         :param block_delta: The time between two blocks. Set to 12 as default.
-
 
 .. module:: boa.vyper.contract
 
@@ -544,10 +543,18 @@ Low-Level Functionality
         ... @external
         ... def main():
         ...     pass
+        ...
+        ... @internal
+        ... def foo() -> uint256:
+        ...     return 123
         ... """
         >>> contract = boa.loads(src)
         >>> type(contract.main)
         <class 'boa.vyper.contract.VyperFunction'>
+        >>> type(contract.foo)
+        <class 'boa.vyper.contract.VyperInternalFunction'>
+        >>> contract.internal.foo()
+        123
 
     .. method:: eval(statement: str, value: int = 0, gas: int | None = None, sender: str | None = None) -> Any
 
@@ -631,45 +638,62 @@ Low-Level Functionality
             >>> contract.main(68)
             69
 
-    .. .. attribute:: contract
-    ..     :type: VyperContract
+    .. attribute:: contract
+        :type: VyperContract
 
-    ..     The :py:class:`VyperContract` instance this :py:class:`VyperFunction` instance is attached to.
+        The :py:class:`VyperContract` instance this :py:class:`VyperFunction` instance is attached to.
 
-    .. .. attribute:: env
-    ..     :type: boa.environment.Env
+    .. attribute:: env
+        :type: boa.environment.Env
 
-    ..     The :py:class:`boa.environment.Env` instance of the :py:attr:`contract` attribute.
+        The :py:class:`boa.environment.Env` instance of the :py:attr:`contract` attribute.
 
-    .. .. attribute:: fn_ast
-    ..     :type: vyper.ast.nodes.FunctionDef
+    .. attribute:: fn_ast
+        :type: vyper.ast.nodes.FunctionDef
 
-    ..     The Vyper AST of this function.
+        The Vyper AST of this function.
 
-    .. .. property:: assembly
-    ..     :type: list[str]
+    .. property:: assembly
+        :type: list[str]
 
-    ..     The function's runtime bytecode as a list of mnemonics.
+        The function's runtime bytecode as a list of mnemonics.
 
-    .. .. property:: bytecode
-    ..     :type: bytes
+    .. property:: bytecode
+        :type: bytes
 
-    ..     The function's runtime bytecode in bytes form.
+        The function's runtime bytecode in bytes form.
 
-    .. .. property:: fn_signature
-    ..     :type: vyper.ast.signatures.function_signature.FunctionSignature
+    .. property:: fn_signature
+        :type: vyper.ast.signatures.function_signature.FunctionSignature
 
-    ..     The internal Vyper representation of the function's signature.
+        The internal Vyper representation of the function's signature.
 
-    .. .. property:: opcodes
-    ..     :type: str
+    .. property:: opcodes
+        :type: str
 
-    ..     The function's runtime bytecode as a string of mnemonics.
+        The function's runtime bytecode as a string of mnemonics.
 
-    .. .. property:: ir
-    ..     :type: vyper.codegen.ir_node.IRnode
+    .. property:: ir
+        :type: vyper.codegen.ir_node.IRnode
 
-    ..     The internal representation of the function (a.k.a. VenomIR).
+        The internal representation of the function (a.k.a. VenomIR).
+
+.. class:: VyperInternalFunction
+
+    Internal contract functions are exposed by wrapping it with a dummy external contract function, appending the wrapper's ast at the top of the contract and then generating bytecode to run internal methods (as external methods). Therefore, they share the same API as :py:class:`boa.vyper.contract.VyperFunction`. Internal functions can be accessed using the `internal` namespace of a :py:class:`VyperContract`.
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> src = """
+        ... @internal
+        ... def main(a: uint256) -> uint256:
+        ...     return 1 + a
+        ... """
+        >>> contract = boa.loads(src)
+        >>> contract.internal.main(68)
+        69
+
 
 Exceptions
 ----------

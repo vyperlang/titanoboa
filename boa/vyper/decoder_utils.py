@@ -1,12 +1,14 @@
 from eth_utils import to_checksum_address
-from vyper.codegen.types.types import (
-    ByteArrayType,
-    DArrayType,
-    SArrayType,
-    StringType,
-    is_base_type,
-    is_bytes_m_type,
-    is_integer_type,
+from vyper.semantics.types import (
+    AddressT,
+    BoolT,
+    BytesM_T,
+    BytesT,
+    DArrayT,
+    IntegerT,
+    InterfaceT,
+    SArrayT,
+    StringT,
 )
 from vyper.utils import unsigned_to_signed
 
@@ -44,32 +46,32 @@ class ByteAddressableStorage:
 
 
 def decode_vyper_object(mem, typ):
-    if is_bytes_m_type(typ):
+    if isinstance(typ, BytesM_T):
         # TODO tag return value like `vyper_object` does
-        return mem[: typ._bytes_info.m].tobytes()
-    if is_base_type(typ, "address"):
+        return mem[: typ.m_bits].tobytes()
+    if isinstance(typ, (AddressT, InterfaceT)):
         return to_checksum_address(mem[12:32].tobytes())
-    if is_base_type(typ, "bool"):
+    if isinstance(typ, BoolT):
         return bool.from_bytes(mem[31:32], "big")
-    if is_integer_type(typ):
+    if isinstance(typ, IntegerT):
         ret = int.from_bytes(mem[:32], "big")
-        if typ._int_info.is_signed:
+        if typ.is_signed:
             return unsigned_to_signed(ret, 256)
         return ret
-    if isinstance(typ, ByteArrayType):
+    if isinstance(typ, BytesT):
         length = int.from_bytes(mem[:32], "big")
         return mem[32 : 32 + length].tobytes()
-    if isinstance(typ, StringType):
+    if isinstance(typ, StringT):
         length = int.from_bytes(mem[:32], "big")
         return mem[32 : 32 + length].tobytes().decode("utf-8")
-    if isinstance(typ, SArrayType):
+    if isinstance(typ, SArrayT):
         length = typ.count
         n = typ.subtype.memory_bytes_required
         return [
             decode_vyper_object(mem[i * n : i * n + n], typ.subtype)
             for i in range(length)
         ]
-    if isinstance(typ, DArrayType):
+    if isinstance(typ, DArrayT):
         length = int.from_bytes(mem[:32], "big")
         n = typ.subtype.memory_bytes_required
         ofst = 32
@@ -79,4 +81,4 @@ def decode_vyper_object(mem, typ):
             ofst += n
         return ret
 
-    return "unimplemented decoder for `{typ}`"
+    return f"unimplemented decoder for `{typ}`"

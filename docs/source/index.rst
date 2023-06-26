@@ -33,6 +33,7 @@ Alternatively, the latest in-development version of ``titanoboa`` can be install
    :caption: Contents:
 
    api
+   test
 
 Indices and tables
 ==================

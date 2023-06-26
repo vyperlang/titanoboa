@@ -22,6 +22,13 @@ def bar(x: uint256):
 @external
 def baz(x: uint256) -> uint256:
     return x + 1  # rekt: overflow!
+
+@external
+def qux(x: uint256):
+    assert (
+        x + 1 ==
+        x + 2 # reason: multiline
+    )
 """
 
 
@@ -70,6 +77,11 @@ def test_revert_wrong_reason_string(contract):
     with check_raises():
         with boa.reverts(reason="x is 2"):
             contract.foo(1)
+
+
+def test_revert_multiline_statement(contract):
+    with boa.reverts(reason="multiline"):
+        contract.qux(1)
 
 
 def test_reverts_correct_reason(contract):
