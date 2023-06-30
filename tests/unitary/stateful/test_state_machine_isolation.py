@@ -1,3 +1,4 @@
+import hypothesis.strategies as st
 import pytest
 from hypothesis._settings import HealthCheck
 from hypothesis.stateful import (
@@ -17,10 +18,13 @@ def boa_contract():
 a: public(uint256)
 
 @external
-def add_to_a(_a: uint256):
-    self.a += _a
+def add_to_a(d: uint256):
+    self.a += d
 """
     return boa.loads(source_code)
+
+
+NUM_STEPS = 100
 
 
 class StateMachine(RuleBasedStateMachine):
@@ -28,16 +32,16 @@ class StateMachine(RuleBasedStateMachine):
 
     @initialize()
     def setup(self):
-        self.contract.add_to_a(10)
+        self.a = 0
 
-    # empty rule just so hypothesis does not complain
-    @rule()
-    def void(self):
-        pass
+    @rule(d=st.integers(min_value=0, max_value=(2**256) // NUM_STEPS))
+    def change_a(self, d):
+        self.contract.add_to_a(d)
+        self.a += d
 
     @invariant()
     def foo(self):
-        assert self.contract.a() == 10
+        assert self.contract.a() == self.a
 
     # ensure overriding teardown doesn't break things
     def teardown(self):
@@ -47,7 +51,7 @@ class StateMachine(RuleBasedStateMachine):
 def test_state_machine_isolation(boa_contract):
     StateMachine.contract = boa_contract
     StateMachine.settings = {
-        "max_examples": 5,
+        "stateful_step_count": NUM_STEPS,
         "suppress_health_check": HealthCheck.all(),
     }
     run_state_machine_as_test(StateMachine)

@@ -30,14 +30,16 @@ hypothesis.core.HypothesisHandle.__init__ = _HypothesisHandle__init__  # type: i
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--gas-profile", action="store_true", help="Profile gas used by contracts called in tests"
+        "--gas-profile",
+        action="store_true",
+        help="Profile gas used by contracts called in tests",
     )
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "ignore_isolation")
-    config.addinivalue_line("markers", "ignore_gas_profiling")
-    config.addinivalue_line("markers", "gas_profile")
+    config.addinivalue_line("markers", "ignore_isolation: ignore test isolation")
+    config.addinivalue_line("markers", "ignore_gas_profiling: do not report on gas")
+    config.addinivalue_line("markers", "gas_profile: report on gas")
 
 
 def pytest_collection_modifyitems(config, items):
