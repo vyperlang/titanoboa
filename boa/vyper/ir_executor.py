@@ -1076,6 +1076,10 @@ def _ensure_source_pos(ir_node, source_pos=None, error_msg=None):
 
 
 def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
+    import vyper.version
+    if vyper.version.__version_tuple__ < (0, 3, 10):
+        raise RuntimeError("IR executor requires vyper 0.3.10 or above")
+
     _ensure_source_pos(ir_node)
     ret = _executor_from_ir(ir_node, CompileContext(vyper_compiler_data))
 
