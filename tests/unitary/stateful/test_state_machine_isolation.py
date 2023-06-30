@@ -1,5 +1,5 @@
-import pytest
 import hypothesis.strategies as st
+import pytest
 from hypothesis._settings import HealthCheck
 from hypothesis.stateful import (
     RuleBasedStateMachine,
