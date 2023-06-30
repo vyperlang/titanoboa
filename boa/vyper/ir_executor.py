@@ -264,6 +264,7 @@ class IntExecutor(IRExecutor):
 
     def __post_init__(self):
         assert -(2**255) <= self._int_value < 2**256
+        self._int_value = _wrap256(self._int_value)  # wrap, could be negative
         self.args = self._sig = ()
 
     def __repr__(self):
