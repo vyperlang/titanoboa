@@ -870,24 +870,21 @@ class Goto(IRExecutor):
 
     def analyze(self):
         self.label = self.args[0]._str_value
-        # exit_to labels weird, fixed in GH vyper#3488
-        if self.label.startswith("_sym_"):
-            self.label = self.label[len("_sym_") :]
 
         # just get the parameters, leaving the label in self.args
         # messes with downstream machinery which tries to analyze the label.
         runtime_args = []
         for arg in self.args[1:]:
             if isinstance(arg, StringExecutor):
+                if arg._str_value == "return_pc":
+                    # we don't need to deal with return pc on the way out.
+                    continue
+
                 argval = arg._str_value
-                # GH vyper#3488
-                if argval == "return_pc":
-                    continue
-                # calling convention wants to push the return pc since evm
-                # has no subroutines, we are using python function call
-                # machinery so we don't need to worry about that.
-                if argval.startswith("_sym_"):
-                    continue
+
+            if isinstance(arg, Symbol):
+                # we don't need to push the return pc on the way in.
+                continue
 
             runtime_args.append(arg.analyze())
 
@@ -1009,6 +1006,12 @@ class Label(IRExecutor):
         with self.builder.block(f"def {self.labelname}({params_str})"):
             self.builder.append("VM = CTX.computation")
             body.compile()
+
+@executor
+class Symbol(IRExecutor):
+    # in IR, a "symbol" is a label which needs to be pushed to the
+    # stack for the calling convention.
+    _name = "symbol"
 
 
 @executor
