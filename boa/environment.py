@@ -572,7 +572,7 @@ class Env:
             # loop over pc so that it is available when coverage hooks into it
             pass
         for child in computation.children:
-            if child.msg.code_address != b'':
+            if child.msg.code_address != b"":
                 child_contract = self.lookup_contract(child.msg.code_address)
                 self._hook_trace_computation(child, child_contract)
 
