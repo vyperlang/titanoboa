@@ -29,7 +29,6 @@ NUM_STEPS = 100
 
 class StateMachine(RuleBasedStateMachine):
     contract = None
-    d = None
 
     @initialize()
     def setup(self):
