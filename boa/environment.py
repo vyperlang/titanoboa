@@ -4,7 +4,6 @@
 import contextlib
 import logging
 import sys
-import traceback
 import warnings
 from typing import Annotated, Any, Iterator, Optional, Tuple
 
@@ -14,7 +13,7 @@ import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
 from eth.chains.mainnet import MainnetChain
 from eth.db.atomic import AtomicDB
-from eth.exceptions import Halt, VMError
+from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
@@ -22,10 +21,9 @@ from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
+from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
-from boa.util.abi import abi_decode
-from boa.vm.fast_mem import FastMem
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -118,10 +116,10 @@ class Address(str):  # (PYEVM_Address):
         cls._cache[address] = self
         return self
 
-    #def __hash__(self):
+    # def __hash__(self):
     #    return hash(self.checksum_address)
 
-    #def __eq__(self, other):
+    # def __eq__(self, other):
     #    return super().__eq__(self, other)
 
     def __repr__(self):
@@ -336,18 +334,46 @@ class titanoboa_computation:
     def apply_computation(cls, state, msg, tx_ctx):
         addr = msg.code_address
         contract = cls.env._lookup_contract_fast(addr) if addr else None
+        #print("ENTER", Address(msg.code_address or bytes([0]*20)), contract)
         if contract is None or not cls.env._enable_fast_mode:
-            # print("REGULAR MODE")
+            #print("SLOW MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
         with cls(state, msg, tx_ctx) as computation:
             try:
-                # print("FAST MODE")
-                contract.ir_executor.exec(computation)
+                if getattr(msg, "_ir_executor", None) is not None:
+                    #print("MSG HAS IR EXECUTOR")
+                    # this happens when bytecode is overridden, e.g.
+                    # for injected functions. note ir_executor is (correctly)
+                    # used for the outer computation only because on subcalls
+                    # a clean message is constructed for the child computation
+                    msg._ir_executor.exec(computation)
+                else:
+                    #print("REGULAR FAST MODE")
+                    contract.ir_executor.exec(computation)
             except Halt:
                 pass
 
         return computation
+
+
+# Message object with extra attrs we can use to thread things through
+# the execution context.
+class FakeMessage(Message):
+    def __init__(
+        self,
+        *args,
+        ir_executor=None,
+        fake_codesize=None,
+        start_pc=0,
+        contract=None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._ir_executor = ir_executor
+        self._fake_codesize = fake_codesize
+        self._start_pc = start_pc
+        self._contract = contract
 
 
 # wrapper class around py-evm which provides a "contract-centric" API
@@ -582,6 +608,7 @@ class Env:
         value: int = 0,
         data: bytes = b"",
         override_bytecode: Optional[bytes] = None,
+        ir_executor: Any = None,
         is_modifying: bool = True,
         start_pc: int = 0,
         fake_codesize: Optional[int] = None,
@@ -591,9 +618,6 @@ class Env:
             gas = self.vm.state.gas_limit
 
         sender = self._get_sender(sender)
-
-        class FakeMessage(Message):  # Message object with settable attrs
-            __dict__: dict = {}
 
         to = Address(to_address).canonical_address
 
@@ -611,11 +635,12 @@ class Env:
             code=bytecode,  # type: ignore
             data=data,
             is_static=is_static,
+            fake_codesize=fake_codesize,
+            start_pc=start_pc,
+            ir_executor=ir_executor,
+            contract=contract,
         )
 
-        msg._fake_codesize = fake_codesize  # type: ignore
-        msg._start_pc = start_pc  # type: ignore
-        msg._contract = contract  # type: ignore
         origin = sender  # XXX: consider making this parametrizable
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
 

@@ -14,9 +14,7 @@ import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
-
 from eth.exceptions import VMError
-from eth_typing import Address
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
@@ -33,15 +31,15 @@ from vyper.utils import method_id
 
 from boa.environment import Address, Env
 from boa.profiling import LineProfile, cache_gas_used_for_computation
+from boa.util.abi import abi_decode, abi_encode
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict
-from boa.util.abi import abi_encode, abi_decode
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
-    _compile_vyper_function,
+    compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
@@ -589,6 +587,7 @@ class VyperContract(_BaseContract):
 
     def find_error_meta(self, computation):
         if hasattr(computation, "vyper_error_msg"):
+            # this is set by ir executor currently.
             return computation.vyper_error_msg
 
         code_stream = computation.code
@@ -600,6 +599,7 @@ class VyperContract(_BaseContract):
 
     def find_source_of(self, computation, is_initcode=False):
         if hasattr(computation, "vyper_source_pos"):
+            # this is set by ir executor currently.
             return self.ast_map.get(computation.vyper_source_pos)
 
         code_stream = computation.code
@@ -760,11 +760,17 @@ class VyperContract(_BaseContract):
     def override_vyper_namespace(self):
         # ensure self._vyper_namespace is computed
         m = self._ast_module  # noqa: F841
+        contract_members = self._vyper_namespace["self"].typ.members
         try:
+            to_keep = set(contract_members.keys())
             with vy_ns.override_global_namespace(self._vyper_namespace):
                 yield
         finally:
-            self._vyper_namespace["self"].typ.members.pop("__boa_debug__", None)
+            # drop all keys which were added while yielding
+            keys = list(contract_members.keys())
+            for k in keys:
+                if k not in to_keep:
+                    contract_members.pop(k)
 
     # for eval(), we need unoptimized assembly, since the dead code
     # eliminator might prune a dead function (which we want to eval)
@@ -816,11 +822,9 @@ class VyperContract(_BaseContract):
         """eval vyper code in the context of this contract"""
 
         # this method is super slow so we cache compilation results
-        if stmt in self._eval_cache:
-            bytecode, source_map, typ = self._eval_cache[stmt]
-        else:
-            bytecode, source_map, typ = generate_bytecode_for_arbitrary_stmt(stmt, self)
-            self._eval_cache[stmt] = (bytecode, source_map, typ)
+        if stmt not in self._eval_cache:
+            self._eval_cache[stmt] = generate_bytecode_for_arbitrary_stmt(stmt, self)
+        _, ir_executor, bytecode, source_map, typ = self._eval_cache[stmt]
 
         with self._anchor_source_map(source_map):
             method_id = b"dbug"  # note dummy method id, doesn't get validated
@@ -832,6 +836,7 @@ class VyperContract(_BaseContract):
                 gas=gas,
                 contract=self,
                 override_bytecode=bytecode,
+                ir_executor=ir_executor,
             )
 
             ret = self.marshal_to_python(c, typ)
@@ -948,7 +953,8 @@ class VyperFunction:
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
-        override_bytecode = getattr(self, "override_bytecode", None)
+        override_bytecode = getattr(self, "_override_bytecode", None)
+        ir_executor = getattr(self, "_ir_executor", None)
         with self.contract._anchor_source_map(self._source_map):
             computation = self.env.execute_code(
                 to_address=self.contract._address,
@@ -958,6 +964,7 @@ class VyperFunction:
                 gas=gas,
                 is_modifying=self.func_t.is_mutable,
                 override_bytecode=override_bytecode,
+                ir_executor=ir_executor,
                 contract=self.contract,
             )
 
@@ -978,14 +985,19 @@ class VyperInternalFunction(VyperFunction):
 
     # OVERRIDE so that __call__ uses the specially crafted bytecode
     @cached_property
-    def override_bytecode(self):
-        bytecode, _, _ = self._compiled
+    def _override_bytecode(self):
+        _, _, bytecode, _, _ = self._compiled
         return bytecode
+
+    @cached_property
+    def _ir_executor(self):
+        _, ir_executor, _, _, _ = self._compiled
+        return ir_executor
 
     # OVERRIDE so that __call__ uses corresponding source map
     @cached_property
     def _source_map(self):
-        _, source_map, _ = self._compiled
+        _, _, _, source_map, _ = self._compiled
         return source_map
 
 
@@ -1119,12 +1131,14 @@ class ABIFunction(VyperFunction):
 
 class _InjectVyperFunction(VyperFunction):
     def __init__(self, contract, fn_source):
-        ast, bytecode, source_map, _ = _compile_vyper_function(fn_source, contract)
+        ast, ir_executor, bytecode, source_map, _ = compile_vyper_function(
+            fn_source, contract
+        )
         super().__init__(ast, contract)
 
-        self.override_bytecode = bytecode
-
-        # OVERRIDE so that __call__ uses special source map
+        # OVERRIDES so that __call__ does the right thing
+        self._override_bytecode = bytecode
+        self._ir_executor = ir_executor
         self._source_map = source_map
 
 

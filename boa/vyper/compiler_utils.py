@@ -6,14 +6,15 @@ from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.exceptions import InvalidType
-from vyper.ir import compile_ir as compile_ir
+from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.utils import get_exact_type_from_node
 from vyper.utils import method_id_int
 
 from boa.vyper import _METHOD_ID_VAR
+from boa.vyper.ir_executor import executor_from_ir
 
 
-def _compile_vyper_function(vyper_function, contract):
+def compile_vyper_function(vyper_function, contract):
     """Compiles a vyper function and appends it to the top of the IR of a
     contract. This is useful for vyper `eval` and internal functions, where
     the runtime bytecode must be changed to add more runtime functionality
@@ -37,16 +38,25 @@ def _compile_vyper_function(vyper_function, contract):
 
     base_signature = func_t.abi_signature_for_kwargs([])
     ir = IRnode.from_list(["with", _METHOD_ID_VAR, method_id_int(base_signature), ir])
-    assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
+    ir = optimizer.optimize(ir)
 
-    # extend IR with contract's unoptimized assembly
+    # extend IR with contract's unoptimized assembly to avoid stripping
+    # labels at first (and then optimize all together)
+    assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
     assembly.extend(contract.unoptimized_assembly)
     compile_ir._optimize_assembly(assembly)
     bytecode, source_map = compile_ir.assembly_to_evm(assembly)
     bytecode += contract.data_section
     typ = func_t.return_type
 
-    return ast, bytecode, source_map, typ
+    # generate the IR executor
+    # first mush it with the rest of the IR in the contract to ensure
+    # all labels are present
+    ir = IRnode.from_list(["seq", ir, contract.compiler_data.ir_runtime])
+    # now compile.
+    ir_executor = executor_from_ir(ir, compiler_data)
+
+    return ast, ir_executor, bytecode, source_map, typ
 
 
 def generate_bytecode_for_internal_fn(fn):
@@ -84,7 +94,7 @@ def generate_bytecode_for_internal_fn(fn):
             {fn_call}
     """
     )
-    return _compile_vyper_function(wrapper_code, contract)[1:]
+    return compile_vyper_function(wrapper_code, contract)
 
 
 def generate_bytecode_for_arbitrary_stmt(source_code, contract):
@@ -115,4 +125,4 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
             {debug_body}
     """
     )
-    return _compile_vyper_function(wrapper_code, contract)[1:]
+    return compile_vyper_function(wrapper_code, contract)
