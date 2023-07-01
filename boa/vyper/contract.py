@@ -31,7 +31,7 @@ from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT
 from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import method_id
 
-from boa.environment import Address, Env, to_int
+from boa.environment import Address, Env
 from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.exceptions import strip_internal_frames
 from boa.util.lrudict import lrudict

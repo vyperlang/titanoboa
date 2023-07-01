@@ -2,13 +2,9 @@ from typing import Any
 
 from vyper.ast import parse_to_ast
 from vyper.builtins._signatures import BuiltinFunction
-from vyper.builtins.functions import (
-    DISPATCH_TABLE,
-    STMT_DISPATCH_TABLE,
-    abi_encode as abi_encode_ir,
-    ir_tuple_from_args,
-    process_inputs,
-)
+from vyper.builtins.functions import DISPATCH_TABLE, STMT_DISPATCH_TABLE
+from vyper.builtins.functions import abi_encode as abi_encode_ir
+from vyper.builtins.functions import ir_tuple_from_args, process_inputs
 from vyper.codegen.core import IRnode, needs_external_call_wrap
 from vyper.evm.address_space import MEMORY
 from vyper.semantics.analysis.base import VarInfo
@@ -18,7 +14,7 @@ from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import keccak256
 
 from boa.environment import register_raw_precompile
-from boa.util.abi import abi_encode, abi_decode
+from boa.util.abi import abi_decode, abi_encode
 
 
 class PrecompileBuiltin(BuiltinFunction):

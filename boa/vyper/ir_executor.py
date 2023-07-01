@@ -206,8 +206,9 @@ class IRExecutor:
             self.builder.append(f"# {self.name}")
 
         if not self._is_static:
+            _ = WriteProtection  # make flake8 happy
             self.builder.extend(
-                f"""
+                """
             if VM.msg.is_static:
                 raise WriteProtection(
                     "Cannot modify state while inside of a STATICCALL context"
@@ -355,7 +356,7 @@ class OpcodeInfo:
 
 # an executor for evm opcodes which dispatches into py-evm
 class OpcodeIRExecutor(IRExecutor):
-    _type: type = StackItem
+    _type: type = StackItem  # type: ignore
 
     def __init__(self, name, opcode_info, *args):
         self.opcode_info: OpcodeInfo = opcode_info
@@ -470,7 +471,13 @@ class Shl(IRExecutor):
 class Select(IRExecutor):
     _name = "select"
     _sig = (int, StackItem, StackItem)
-    _type: type = StackItem
+
+    @cached_property
+    def _type(self):
+        _, x, y = self.args
+        if x._type == y._type:
+            return x._type
+        return StackItem
 
     def _compile(self, test, x, y):
         return f"{x} if {test} else {y}"
@@ -486,7 +493,7 @@ class Caller(IRExecutor):
     _type: type = bytes
 
     def _compile(self):
-        return f"VM.msg.sender"
+        return "VM.msg.sender"
 
 
 @executor
@@ -496,7 +503,7 @@ class CalldataSize(IRExecutor):
     _type: type = int
 
     def _compile(self):
-        return f"len(VM.msg.data)"
+        return "len(VM.msg.data)"
 
 
 @executor
@@ -506,7 +513,7 @@ class CallValue(IRExecutor):
     _type: type = int
 
     def _compile(self):
-        return f"VM.msg.value"
+        return "VM.msg.value"
 
 
 @executor
@@ -635,7 +642,9 @@ class SStore(IRExecutor):
     _type = int
 
     def _compile(self, slot, value):
-        return f"""VM.state.set_storage(address=VM.msg.storage_address, slot={slot}, value={value})"""
+        return f"""
+            VM.state.set_storage(address=VM.msg.storage_address, slot={slot}, value={value})
+        """.strip()
 
 
 @executor
@@ -807,6 +816,7 @@ class Assert(IRExecutor):
     _sig = (int,)
 
     def _compile(self, test):
+        _ = VMRevert  # make flake8 happy
         self.builder.extend(
             f"""
         if not bool({test}):
@@ -839,6 +849,7 @@ class Return(IRExecutor):
     _sig = (int, int)
 
     def _compile(self, ptr, size):
+        _ = Halt  # make flake8 happy
         self.builder.extend(
             f"""
             VM.output = VM.memory_read_bytes({ptr}, {size})
@@ -854,9 +865,9 @@ class Stop(IRExecutor):
 
     def _compile(self):
         self.builder.extend(
-            f"""
+            """
             raise Halt("")  # return
-        """
+            """
         )
 
 
@@ -880,8 +891,6 @@ class Goto(IRExecutor):
                 if arg._str_value == "return_pc":
                     # we don't need to deal with return pc on the way out.
                     continue
-
-                argval = arg._str_value
 
             if isinstance(arg, Symbol):
                 # we don't need to push the return pc on the way in.
@@ -938,6 +947,7 @@ class ExitTo(Goto):
     def _compile(self, *args):
         subroutine_call = super()._compile(*args)
         return f"return {subroutine_call}"
+
 
 @executor
 class CleanupRepeat(IRExecutor):
@@ -1007,6 +1017,7 @@ class Label(IRExecutor):
         with self.builder.block(f"def {self.labelname}({params_str})"):
             self.builder.append("VM = CTX.computation")
             body.compile()
+
 
 @executor
 class Symbol(IRExecutor):
@@ -1078,6 +1089,7 @@ def _ensure_source_pos(ir_node, source_pos=None, error_msg=None):
 
 def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
     import vyper.version
+
     if vyper.version.__version_tuple__ < (0, 3, 10):
         raise RuntimeError("IR executor requires vyper 0.3.10 or above")
 

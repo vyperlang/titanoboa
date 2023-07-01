@@ -1,14 +1,4 @@
-import contextlib
-import re
-from dataclasses import dataclass, field
-from functools import cached_property
-from typing import Any, Optional
-
-import vyper.ir.optimizer
-from eth.exceptions import Revert
 from eth.vm.memory import Memory
-from vyper.evm.opcodes import OPCODES
-from vyper.utils import unsigned_to_signed
 
 from boa.vm.utils import ceil32, to_bytes, to_int
 
@@ -81,6 +71,6 @@ class FastMem(Memory):
         self._writeback(start_position, size)
         for i in range(start, end):
             self.mem_cache[i] = self._DIRTY
-            assert self.needs_writeback[i] == False
+            assert self.needs_writeback[i] is False
 
         super().write(start_position, size, value)

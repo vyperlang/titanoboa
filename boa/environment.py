@@ -6,7 +6,7 @@ import logging
 import sys
 import traceback
 import warnings
-from typing import Any, Iterator, Optional, Tuple, Union
+from typing import Annotated, Any, Iterator, Optional, Tuple
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -19,7 +19,7 @@ from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
-from eth_typing import Address as PYEVM_Address
+from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
@@ -98,9 +98,10 @@ class VMPatcher:
 class Address(str):  # (PYEVM_Address):
     # converting between checksum and canonical addresses is a hotspot;
     # this class contains both and caches recently seen conversions
-
     __slots__ = ("canonical_address",)
     _cache = lrudict(1024)
+
+    canonical_address: Annotated[PYEVM_Address, "canonical address"]
 
     def __new__(cls, address):
         if isinstance(address, Address):
@@ -339,7 +340,6 @@ class titanoboa_computation:
             # print("REGULAR MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
-        err = None
         with cls(state, msg, tx_ctx) as computation:
             try:
                 # print("FAST MODE")
@@ -548,11 +548,11 @@ class Env:
         sender = self._get_sender(sender)
 
         if override_address is not None:
-            target_address = Address(override_address).canonical_address
+            target_address = Address(override_address)
         else:
             nonce = self.vm.state.get_nonce(sender)
             self.vm.state.increment_nonce(sender)
-            target_address = generate_contract_address(sender, nonce)
+            target_address = Address(generate_contract_address(sender, nonce))
 
         msg = Message(
             to=constants.CREATE_CONTRACT_ADDRESS,  # i.e., b""
@@ -560,7 +560,7 @@ class Env:
             gas=gas,
             value=value,
             code=bytecode,
-            create_address=target_address,
+            create_address=target_address.canonical_address,
             data=b"",
         )
         origin = sender  # XXX: consider making this parametrizable

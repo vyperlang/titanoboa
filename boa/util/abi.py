@@ -4,7 +4,7 @@ from eth.codecs.abi.decoder import Decoder
 from eth.codecs.abi.encoder import Encoder
 from eth.codecs.abi.parser import Parser
 
-_parsers = {}
+_parsers: dict[str, Parser] = {}
 
 
 def _get_parser(schema):
