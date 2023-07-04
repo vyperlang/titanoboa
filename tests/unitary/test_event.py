@@ -2,12 +2,15 @@ from boa.environment import Env
 from boa.interpret import load
 from boa.vyper.event import Event
 
-BASE_TYPES = ["address", "bool", "bytes32", "decimal", "int", "string", "uint"]
-
+param_types = "bool,uint256,address,bytes32"
+event_type = {
+    "indexed": [False, True, True, True],
+    "arguments": {idx: value for idx, value in enumerate(param_types)},
+}
 
 
 def test_topics_saved_to_event(args):
-    event = Event("0x0", "0x0", "", args, [], {})
+    event = Event("0x0", "0x0", event_type, args, [])
     assert event.topics == args
     assert event.args == []
     print(Event)
@@ -15,7 +18,7 @@ def test_topics_saved_to_event(args):
 
 
 def test_args_saved_to_event(args):
-    event = Event("0x0", "0x0", "", [], args, {})
+    event = Event("0x0", "0x0", event_type, [], args)
     assert event.args == args
     assert event.topics == []
     assert len(event.ordered_args()) == len(args)
