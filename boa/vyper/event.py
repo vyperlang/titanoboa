@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Tuple
 class Event:
     log_id: int  # internal py-evm log id, for ordering purposes
     address: str  # checksum address
-    event_type: Any  # vyper.semantics.types.user.Event
+    event_type: Any  # vyper.semantics.types.user.EventT
     topics: List[Any]  # list of decoded topics
     args: List[Any]  # list of decoded args
 
@@ -26,7 +26,7 @@ class Event:
         # align the evm topic + args lists with the way they appear in the source
         # ex. Transfer(indexed address, address, indexed address)
         for is_topic, k in zip(
-            self.event_type["indexed"], self.event_type["arguments"].keys()
+            self.event_type.indexed, self.event_type.arguments.keys()
         ):
             if is_topic:
                 b.append((k, self.topics[t_i]))
