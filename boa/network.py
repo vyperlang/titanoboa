@@ -288,7 +288,7 @@ class NetworkEnv(Env):
             if e.code == -32601:
                 warnings.warn(
                     "debug_traceTransaction not available! "
-                    "titanoboa will try hard to deploy your code, but "
+                    "titanoboa will try hard to interact with the network, but "
                     "this means that titanoboa is not able to do certain "
                     "safety checks at runtime. it is recommended to switch "
                     "to a node or provider with debug_traceTransaction.",
