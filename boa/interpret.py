@@ -30,7 +30,7 @@ def set_cache_dir(cache_dir="~/.cache/titanoboa"):
     _disk_cache = DiskCache(cache_dir, compiler_version)
 
 
-def compiler_data(source_code: str, contract_name: str) -> CompilerData:
+def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerData:
     global _disk_cache
 
     def _ifaces():
@@ -41,12 +41,12 @@ def compiler_data(source_code: str, contract_name: str) -> CompilerData:
 
     if _disk_cache is None:
         ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces)
+        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
         return ret
 
     def func():
         ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces)
+        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
         ret.bytecode_runtime  # force compilation to happen
         return ret
 
@@ -80,6 +80,7 @@ def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFac
 def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
 
+USE_EXPERIMENTAL = True
 
 def loads_partial(
     source_code: str, name: str = None, filename: str = None, dedent: bool = True
@@ -87,7 +88,7 @@ def loads_partial(
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
     if dedent:
         source_code = textwrap.dedent(source_code)
-    data = compiler_data(source_code, name)
+    data = compiler_data(source_code, name, experimental_codegen=USE_EXPERIMENTAL)
     return VyperDeployer(data, filename=filename)
 
 
