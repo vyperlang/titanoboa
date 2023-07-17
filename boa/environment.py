@@ -526,9 +526,17 @@ class Env:
     ):
         # simple wrapper around `execute_code` to help simulate calling
         # a contract from an EOA.
-        return self.execute_code(
+        ret = self.execute_code(
             to_address=to_address, sender=sender, gas=gas, value=value, data=data
         )
+        if ret.is_error:
+            # differ from execute_code, consumers of execute_code want to get
+            # error returned "silently" (not thru exception handling mechanism)
+            # whereas users of call() expect the exception to be thrown, just
+            # like a regular contract call.
+            raise ret.error
+
+        return ret
 
     def execute_code(
         self,

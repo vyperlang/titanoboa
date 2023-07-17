@@ -1,6 +1,8 @@
 import contextlib
 import sys
 
+import eth.exceptions
+
 from boa.debugger import BoaDebug
 from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
 from boa.interpret import BoaError, load, load_abi, load_partial, loads, loads_abi, loads_partial
