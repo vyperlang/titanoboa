@@ -516,6 +516,20 @@ class Env:
 
         return target_address, c.output
 
+    def call(
+        self,
+        to_address,
+        sender: Optional[AddressType] = None,
+        gas: Optional[int] = None,
+        value: int = 0,
+        data: bytes = b"",
+    ):
+        # simple wrapper around `execute_code` to help simulate calling
+        # a contract from an EOA.
+        return self.execute_code(
+            to_address=to_address, sender=sender, gas=gas, value=value, data=data
+        )
+
     def execute_code(
         self,
         to_address: AddressType = constants.ZERO_ADDRESS,
