@@ -25,6 +25,7 @@ from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
 from boa.vm.fork import AccountDBFork
+from boa.vm.fast_accountdb import FastAccountDB
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 
@@ -421,6 +422,8 @@ class Env:
         )
 
         self.vm.state.computation_class = c
+        # TODO: enable this with fast mode
+        # self.vm.state.account_db_class = FastAccountDB
 
         # we usually want to reset the trace data structures
         # but sometimes don't, give caller the option.
