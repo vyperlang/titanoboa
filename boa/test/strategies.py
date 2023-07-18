@@ -100,6 +100,8 @@ def generate_random_string(n):
 @_exclude_filter
 def _address_strategy(length: Optional[int] = 100) -> SearchStrategy:
     random_strings = generate_random_string(length)
+    # TODO: add addresses from the environment. probably everything in
+    # boa.env._contracts, boa.env._blueprints and boa.env.eoa.
     accounts = [format_addr(i) for i in random_strings]
     return _DeferredStrategyRepr(
         lambda: st.sampled_from(list(accounts)[:length]), "accounts"

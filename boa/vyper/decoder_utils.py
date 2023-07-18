@@ -3,12 +3,12 @@ from vyper.semantics.types import (
     AddressT,
     BoolT,
     BytesM_T,
+    BytesT,
     DArrayT,
     IntegerT,
     InterfaceT,
     SArrayT,
     StringT,
-    _BytestringT,
 )
 from vyper.utils import unsigned_to_signed
 
@@ -58,7 +58,7 @@ def decode_vyper_object(mem, typ):
         if typ.is_signed:
             return unsigned_to_signed(ret, 256)
         return ret
-    if isinstance(typ, _BytestringT):
+    if isinstance(typ, BytesT):
         length = int.from_bytes(mem[:32], "big")
         return mem[32 : 32 + length].tobytes()
     if isinstance(typ, StringT):

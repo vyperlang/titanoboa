@@ -3,6 +3,7 @@ import contextlib
 import time
 import warnings
 from functools import cached_property
+from math import ceil
 
 from eth_account import Account
 from eth_utils import to_canonical_address, to_checksum_address
@@ -107,6 +108,14 @@ class NetworkEnv(Env):
             return self._gas_price
         return to_int(self._rpc.fetch("eth_gasPrice", []))
 
+    # when calculating the base fee, the number of blocks N ahead
+    # to compute a cap for the Nth block.
+    # defaults to 0 (no blocks ahead, just use pending block's baseFee)
+    # but can be tweaked if you get errors like
+    # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
+
+    BASE_FEE_ESTIMATOR_CONSTANT = 0
+
     def get_fee_info(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
         reqs = [
@@ -116,8 +125,15 @@ class NetworkEnv(Env):
         ]
         block_info, max_priority_fee, chain_id = self._rpc.fetch_multi(reqs)
         base_fee = block_info["baseFeePerGas"]
-        max_fee = to_hex(to_int(base_fee) + to_int(max_priority_fee))
-        return base_fee, max_priority_fee, max_fee, chain_id
+
+        # Each block increases the base fee by 1/8 at most.
+        # here we have the next block's base fee, compute a cap for the
+        # next N blocks here.
+        blocks_ahead = self.BASE_FEE_ESTIMATOR_CONSTANT
+        base_fee_estimate = ceil(to_int(base_fee) * (9 / 8) ** blocks_ahead)
+
+        max_fee = to_hex(base_fee_estimate + to_int(max_priority_fee))
+        return to_hex(base_fee_estimate), max_priority_fee, max_fee, chain_id
 
     def _check_sender(self, address):
         if address is None:
@@ -165,15 +181,17 @@ class NetworkEnv(Env):
                 assert computation.is_error
                 return computation
 
-            output = trace.returndata_bytes
-            # gas_used = to_int(receipt["gasUsed"])
+            output = None
+            if trace is not None:
+                output = trace.returndata_bytes
+                # gas_used = to_int(receipt["gasUsed"])
 
-            # the node reverted but we didn't. consider this an unrecoverable
-            # error and bail out
-            if trace.is_error and not computation.is_error:
-                raise RuntimeError(
-                    f"panic: local computation succeeded but node didnt: {trace}"
-                )
+                # the node reverted but we didn't. consider this an
+                # unrecoverable error and bail out
+                if trace.is_error and not computation.is_error:
+                    raise RuntimeError(
+                        f"panic: local computation succeeded but node didnt: {trace}"
+                    )
 
         else:
             args = _fixup_dict(
@@ -196,9 +214,10 @@ class NetworkEnv(Env):
         # not the greatest, but we will just patch the returndata and
         # pretend nothing happened (which is not really a problem unless
         # the caller wants to inspect the trace or memory).
-        if computation.output != output:
+        if output is not None and computation.output != output:
             warnings.warn(
-                "local fork did not match node! this likely indicates a bug in titanoboa!",
+                "local fork did not match node! this indicates state got out "
+                "of sync with the network or a bug in titanoboa!",
                 stacklevel=2,
             )
             # just return whatever the node had.
@@ -222,19 +241,25 @@ class NetworkEnv(Env):
 
         create_address = to_canonical_address(receipt["contractAddress"])
 
-        if local_bytecode != trace.returndata_bytes:
+        deployed_bytecode = local_bytecode
+
+        if trace is not None and local_bytecode != trace.returndata_bytes:
             # not sure what to do about this, for now just complain
             warnings.warn(
-                "local fork did not match node! this likely indicates a bug in titanoboa!",
+                "local fork did not match node! this indicates state got out "
+                "of sync with the network or a bug in titanoboa!",
                 stacklevel=2,
             )
+            # return what the node returned anyways.
+            deployed_bytecode = trace.returndata_bytes
+
         if local_address != create_address:
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
 
         # TODO get contract info in here
         print(f"contract deployed at {to_checksum_address(create_address)}")
 
-        return create_address, trace.returndata_bytes
+        return create_address, deployed_bytecode
 
     def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
         start = time.time()
@@ -246,7 +271,9 @@ class NetworkEnv(Env):
                 raise ValueError(f"Timed out waiting for ({tx_hash})")
             time.sleep(poll_latency)
 
-        trace = self._rpc.fetch("debug_traceTransaction", [tx_hash, self._tracer])
+        trace = None
+        if self._tracer is not None:
+            trace = self._rpc.fetch("debug_traceTransaction", [tx_hash, self._tracer])
         return receipt, trace
 
     @cached_property
@@ -259,6 +286,14 @@ class NetworkEnv(Env):
             self._rpc.fetch("debug_traceTransaction", [txn_hash, call_tracer])
         except RPCError as e:
             if e.code == -32601:
+                warnings.warn(
+                    "debug_traceTransaction not available! "
+                    "titanoboa will try hard to interact with the network, but "
+                    "this means that titanoboa is not able to do certain "
+                    "safety checks at runtime. it is recommended to switch "
+                    "to a node or provider with debug_traceTransaction.",
+                    stacklevel=2,
+                )
                 return None
             # can't handle callTracer, use default (i.e. structLogs)
             if e.code == -32602:
@@ -328,4 +363,5 @@ class NetworkEnv(Env):
         # the block was mined, reset state
         self._reset_fork(block_identifier=receipt["blockNumber"])
 
-        return receipt, TraceObject(trace)
+        t_obj = TraceObject(trace) if trace is not None else None
+        return receipt, t_obj

@@ -8,7 +8,7 @@ from boa.environment import Env
 
 # run all tests with this forked environment
 # called as fixture for its side effects
-@pytest.fixture(scope="package", autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def forked_env():
     with boa.swap_env(Env()):
         fork_uri = os.environ.get("MAINNET_ENDPOINT", "http://localhost:8545")

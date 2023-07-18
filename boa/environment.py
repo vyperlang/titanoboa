@@ -158,7 +158,7 @@ class TracingCodeStream(CodeStream):
         "program_counter",
     ]
 
-    def __init__(self, *args, start_pc=0, fake_codesize=None, **kwargs):
+    def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._trace = []  # trace of opcodes that were run
         self.program_counter = start_pc  # configurable start PC
@@ -259,6 +259,7 @@ class SstoreTracer:
 class Env:
     _singleton = None
     _initial_address_counter = 100
+    _coverage_enabled = False
 
     def __init__(self):
         self.chain = _make_chain()
@@ -278,6 +279,7 @@ class Env:
         self._profiled_contracts = {}
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
+        self._coverage_data = {}
 
         self.sha3_trace = {}
         self.sstore_trace = {}
@@ -514,6 +516,28 @@ class Env:
 
         return target_address, c.output
 
+    def call(
+        self,
+        to_address,
+        sender: Optional[AddressType] = None,
+        gas: Optional[int] = None,
+        value: int = 0,
+        data: bytes = b"",
+    ):
+        # simple wrapper around `execute_code` to help simulate calling
+        # a contract from an EOA.
+        ret = self.execute_code(
+            to_address=to_address, sender=sender, gas=gas, value=value, data=data
+        )
+        if ret.is_error:
+            # differ from execute_code, consumers of execute_code want to get
+            # error returned "silently" (not thru exception handling mechanism)
+            # whereas users of call() expect the exception to be thrown, just
+            # like a regular contract call.
+            raise ret.error
+
+        return ret
+
     def execute_code(
         self,
         to_address: AddressType = constants.ZERO_ADDRESS,
@@ -557,7 +581,22 @@ class Env:
         msg._contract = contract  # type: ignore
         origin = sender  # XXX: consider making this parametrizable
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
-        return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
+        ret = self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
+
+        if self._coverage_enabled:
+            self._hook_trace_computation(ret, contract)
+
+        return ret
+
+    def _hook_trace_computation(self, computation, contract=None):
+        # XXX perf: don't trace if contract is None
+        for _pc in computation.code._trace:
+            # loop over pc so that it is available when coverage hooks into it
+            pass
+        for child in computation.children:
+            if child.msg.code_address != b"":
+                child_contract = self.lookup_contract(child.msg.code_address)
+                self._hook_trace_computation(child, child_contract)
 
     # function to time travel
     def time_travel(

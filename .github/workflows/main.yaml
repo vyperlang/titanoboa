@@ -12,7 +12,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
 
-    name: "tests: Python ${{ matrix.python-version }}"
+    name: "unit tests: python ${{ matrix.python-version }}"
 
     steps:
       - uses: actions/checkout@v2
@@ -28,13 +28,43 @@ jobs:
           pip install -r dev-requirements.txt
           pip install .
 
-      - name: Run Tests (except those which require anvil)
-        run: pytest -n auto --ignore tests/integration/network
-        env:
-          MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+      - name: Run Unit Tests
+        run: pytest -n auto tests/unitary/
+
+  integration:
+    name: "integration tests (forked and networked modes)"
+    runs-on: ubuntu-latest
+    # only run in single process, so there is no contention for sepolia tx nonce
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Requirements
+        run: |
+          pip install -r dev-requirements.txt
+          pip install .
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      # XXX: are these actually unit tests?
+      - name: Run Fork Mode Tests
+        run: pytest -n auto tests/integration/fork/
+        env:
+          MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+
       - name: Run Networked Tests against anvil
-        run: pytest -n 0 tests/integration/network
+        # run separately to clarify its dependency on outside binary
+        run: pytest -n auto tests/integration/network/anvil/
+
+      - name: Run Sepolia Tests
+        # disable xdist, otherwise they can contend for tx nonce
+        run: pytest -n 0 tests/integration/network/sepolia/
+        env:
+          SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
+          SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
