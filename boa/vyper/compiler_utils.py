@@ -5,6 +5,7 @@ import vyper.semantics.analysis as analysis
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
+from vyper.compiler.settings import OptimizationLevel
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir as compile_ir
 from vyper.semantics.analysis.utils import get_exact_type_from_node
@@ -33,11 +34,16 @@ def _compile_vyper_function(vyper_function, contract):
     ast = ast.body[0]
     func_t = ast._metadata["type"]
 
-    ir = generate_ir_for_function(ast, global_ctx, False)
-
     base_signature = func_t.abi_signature_for_kwargs([])
-    ir = IRnode.from_list(["with", _METHOD_ID_VAR, method_id_int(base_signature), ir])
-    assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
+
+    func_ir = generate_ir_for_function(ast, global_ctx)
+
+    entry_point = func_ir.entry_points[base_signature]
+
+    # stick function common body into final entry point to save a jump
+    ir = IRnode.from_list(["seq", entry_point.ir_node, func_ir.common_ir])
+
+    assembly = compile_ir.compile_to_assembly(ir, optimize=OptimizationLevel.NONE)
 
     # extend IR with contract's unoptimized assembly
     assembly.extend(contract.unoptimized_assembly)

@@ -25,6 +25,7 @@ from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import output as compiler_output
+from vyper.compiler.settings import OptimizationLevel
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
@@ -779,7 +780,7 @@ class VyperContract(_BaseContract):
     @cached_property
     def unoptimized_assembly(self):
         runtime = self.compiler_data.ir_runtime
-        return compile_ir.compile_to_assembly(runtime, no_optimize=True)
+        return compile_ir.compile_to_assembly(runtime, optimize=OptimizationLevel.NONE)
 
     @cached_property
     def data_section_size(self):
