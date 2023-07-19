@@ -291,6 +291,15 @@ class Env:
 
     def _init_vm(self, reset_traces=True):
         self.vm = self.chain.get_vm()
+
+        self.vm.patch = VMPatcher(self.vm)
+        import datetime
+
+        # patch until upstream PR #2119 is merged
+        self.vm.patch.timestamp = int(
+            datetime.datetime.now(datetime.timezone.utc).timestamp()
+        )
+
         env = self
 
         class OpcodeTracingComputation(self.vm.state.computation_class):
@@ -360,8 +369,6 @@ class Env:
         # patch in tracing opcodes
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.sha3_trace)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.sstore_trace)
-
-        self.vm.patch = VMPatcher(self.vm)
 
     def fork(self, url, reset_traces=True, **kwargs):
         kwargs["url"] = url
