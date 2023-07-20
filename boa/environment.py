@@ -523,7 +523,7 @@ class Env:
 
         return target_address, c.output
 
-    def call(
+    def raw_call(
         self,
         to_address,
         sender: Optional[AddressType] = None,
