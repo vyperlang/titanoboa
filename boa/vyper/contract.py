@@ -501,8 +501,6 @@ class VyperContract(_BaseContract):
 
         self._storage = StorageModel(self)
 
-        self._immutables = ImmutablesModel(self)
-
         self._eval_cache = lrudict(0x1000)
         self._source_map = None
         self._computation = None
@@ -547,6 +545,10 @@ class VyperContract(_BaseContract):
             ret += f"\n{storage_detail}"
 
         return ret
+
+    @cached_property
+    def _immutables(self):
+        return ImmutablesModel(self)
 
     @cached_property
     def deployer(self):
