@@ -26,7 +26,7 @@ def test_deposit_via_default_function(fund_me):
     boa.env.set_balance(user, 100000)
     with boa.env.prank(user):
         with pytest.raises(eth.exceptions.Revert):
-            boa.env.call(fund_me.address, value=100000)
+            boa.env.raw_call(fund_me.address, value=100000)
 
         # demonstrate using execute_code
         computation = boa.env.execute_code(fund_me.address, value=100000)

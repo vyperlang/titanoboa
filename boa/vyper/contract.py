@@ -358,7 +358,7 @@ def setpath(lens, path, val):
             lens = lens.setdefault(k, {})
 
 
-class VarModel:
+class StorageVar:
     def __init__(self, contract, slot, typ):
         self.contract = contract
         self.addr = to_canonical_address(self.contract.address)
@@ -420,10 +420,10 @@ class StorageModel:
     def __init__(self, contract):
         compiler_data = contract.compiler_data
         for k, v in compiler_data.global_ctx.variables.items():
-            is_storage = not v.is_immutable
-            if is_storage:  # check that v
+            is_storage = not v.is_immutable and not v.is_constant
+            if is_storage:
                 slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
-                setattr(self, k, VarModel(contract, slot, v.typ))
+                setattr(self, k, StorageVar(contract, slot, v.typ))
 
     def dump(self):
         ret = FrameDetail("storage")
@@ -435,6 +435,25 @@ class StorageModel:
             ret[k] = t
 
         return ret
+
+
+# data structure to represent the storage variables in a contract
+class ImmutablesModel:
+    def __init__(self, contract):
+        compiler_data = contract.compiler_data
+        data_section = memoryview(contract.data_section)
+        for k, v in compiler_data.global_ctx.variables.items():
+            if v.is_immutable:  # check that v
+                ofst = compiler_data.storage_layout["code_layout"][k]["offset"]
+                immutable_raw_bytes = data_section[ofst:]
+                value = decode_vyper_object(immutable_raw_bytes, v.typ)
+                setattr(self, k, value)
+
+    def dump(self):
+        return FrameDetail("immutables", vars(self))
+
+    def __repr__(self):
+        return repr(self.dump())
 
 
 class VyperContract(_BaseContract):
@@ -526,6 +545,10 @@ class VyperContract(_BaseContract):
             ret += f"\n{storage_detail}"
 
         return ret
+
+    @cached_property
+    def _immutables(self):
+        return ImmutablesModel(self)
 
     @cached_property
     def deployer(self):
