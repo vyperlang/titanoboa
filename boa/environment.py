@@ -423,6 +423,8 @@ class Env:
         self._code_registry[bytecode] = obj
 
     def lookup_contract(self, address):
+        if address == b"":
+            return None
         return self._contracts.get(to_checksum_address(address))
 
     def alias(self, address, name):
