@@ -50,6 +50,8 @@ from boa.vyper.event import Event, RawEvent
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
 
+CREATE_ERRORS = ("create failed", "create2 failed")
+
 # error detail where user possibly provided dev revert reason
 DEV_REASON_ALLOWED = ("user raise", "user assert")
 
@@ -716,7 +718,7 @@ class VyperContract(_BaseContract):
         computation = computation or self._computation
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation.code)
-        if error_detail not in EXTERNAL_CALL_ERRORS:
+        if error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS:
             return ret
         return _handle_child_trace(computation, self.env, ret)
 
