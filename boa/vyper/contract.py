@@ -79,6 +79,7 @@ class VyperDeployer:
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
 
+    # TODO: allow `env=` kwargs and so on
     def at(self, address: AddressType) -> "VyperContract":
         address = to_checksum_address(address)
         ret = VyperContract(
@@ -554,7 +555,8 @@ class VyperContract(_BaseContract):
 
     @cached_property
     def deployer(self):
-        return VyperDeployer(self.compiler_data, env=self.env, filename=self.filename)
+        # TODO add test
+        return VyperDeployer(self.compiler_data, filename=self.filename)
 
     # is this actually useful?
     def at(self, address):
