@@ -205,6 +205,17 @@ def to_bytes(value):
 
     raise ValueError("invalid type %s", type(value))
 
+class DebugOpcode:
+    def __init__(self, opcode):
+        self.opcode = opcode
+
+    @property
+    def mnemonic(self):
+        return self.opcode.mnemonic
+
+    def __call__(self, computation):
+        self.opcode.__call__(computation)
+        print(self.mnemonic, computation._stack)
 
 class Sha3PreimageTracer:
     mnemonic = "SHA3"
@@ -323,6 +334,9 @@ class Env:
                 # copy so as not to mess with class state
                 self.opcodes = self.opcodes.copy()
                 self.opcodes.update(_opcode_overrides)
+
+                for k, v in self.opcodes.copy().items():
+                    self.opcodes[k] = DebugOpcode(v)
 
                 self._gas_meter = self._gas_meter_class(self.msg.gas)
                 if hasattr(self._gas_meter, "_set_code"):
