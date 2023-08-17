@@ -1,5 +1,7 @@
-from typing import Optional
+from typing import Optional, Any
 import eth_typing
+from vyper.utils import keccak256
+from eth_utils import to_canonical_address, to_checksum_address
 
 
 # TODO replace return type with upcoming AddressType wrapper
