@@ -214,8 +214,8 @@ class DebugOpcode:
         return self.opcode.mnemonic
 
     def __call__(self, computation):
-        self.opcode.__call__(computation)
         print(self.mnemonic, computation._stack)
+        self.opcode.__call__(computation)
 
 class Sha3PreimageTracer:
     mnemonic = "SHA3"
