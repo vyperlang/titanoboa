@@ -607,7 +607,7 @@ class Env:
     def raw_call(
         self,
         to_address,
-        sender: Optional[AddressType] = None,
+        sender: Optional[_AddressType] = None,
         gas: Optional[int] = None,
         value: int = 0,
         data: bytes = b"",
