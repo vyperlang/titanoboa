@@ -291,14 +291,7 @@ class Env:
 
     def _init_vm(self, reset_traces=True):
         self.vm = self.chain.get_vm()
-
         self.vm.patch = VMPatcher(self.vm)
-        import datetime
-
-        # patch until upstream PR #2119 is merged
-        self.vm.patch.timestamp = int(
-            datetime.datetime.now(datetime.timezone.utc).timestamp()
-        )
 
         env = self
 
