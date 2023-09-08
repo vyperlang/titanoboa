@@ -62,7 +62,7 @@ def precompile(user_signature: str, force: bool = False) -> Any:
         vy_ast = parse_to_ast(user_signature + ": view").body[0]
         func_t = ContractFunctionT.from_FunctionDef(vy_ast, is_interface=True)
 
-        args_t = TupleT(tuple(func_t.arguments.values()))
+        args_t = TupleT(tuple(func_t.argument_types))
 
         def wrapper(computation):
             # Decode input arguments from message data
@@ -88,7 +88,7 @@ def precompile(user_signature: str, force: bool = False) -> Any:
         address = keccak256(user_signature.encode("utf-8"))[:20]
         register_raw_precompile(address, wrapper, force=force)
 
-        args = list(func_t.arguments.items())
+        args = [(arg.name, arg.typ) for arg in func_t.arguments]
         fn_name = func_t.name
         builtin = PrecompileBuiltin(fn_name, args, func_t.return_type, address)
 

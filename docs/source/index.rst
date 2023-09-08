@@ -34,6 +34,7 @@ Alternatively, the latest in-development version of ``titanoboa`` can be install
 
    api
    test
+   coverage
 
 Indices and tables
 ==================

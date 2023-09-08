@@ -414,6 +414,7 @@ class Env:
 
     def _init_vm(self, reset_traces=True):
         self.vm = self.chain.get_vm()
+        self.vm.patch = VMPatcher(self.vm)
 
         c = type(
             "TitanoboaComputation",
@@ -434,8 +435,6 @@ class Env:
         # patch in tracing opcodes
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self)
-
-        self.vm.patch = VMPatcher(self.vm)
 
     def _trace_sha3_preimage(self, preimage, image):
         self.sha3_trace[image] = preimage
@@ -504,6 +503,8 @@ class Env:
         return self._contracts.get(address)
 
     def lookup_contract(self, address: _AddressType):
+        if address == b"":
+            return None
         return self._contracts.get(Address(address).canonical_address)
 
     def alias(self, address, name):
@@ -602,6 +603,28 @@ class Env:
             raise c.error
 
         return target_address, c.output
+
+    def raw_call(
+        self,
+        to_address,
+        sender: Optional[AddressType] = None,
+        gas: Optional[int] = None,
+        value: int = 0,
+        data: bytes = b"",
+    ):
+        # simple wrapper around `execute_code` to help simulate calling
+        # a contract from an EOA.
+        ret = self.execute_code(
+            to_address=to_address, sender=sender, gas=gas, value=value, data=data
+        )
+        if ret.is_error:
+            # differ from execute_code, consumers of execute_code want to get
+            # error returned "silently" (not thru exception handling mechanism)
+            # whereas users of call() expect the exception to be thrown, just
+            # like a regular contract call.
+            raise ret.error
+
+        return ret
 
     def execute_code(
         self,

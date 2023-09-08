@@ -50,6 +50,8 @@ from boa.vyper.ir_executor import executor_from_ir
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
 
+CREATE_ERRORS = ("create failed", "create2 failed")
+
 # error detail where user possibly provided dev revert reason
 DEV_REASON_ALLOWED = ("user raise", "user assert")
 
@@ -77,8 +79,10 @@ class VyperDeployer:
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
 
+    # TODO: allow `env=` kwargs and so on
     def at(self, address: Any) -> "VyperContract":
         address = Address(address)
+
         ret = VyperContract(
             self.compiler_data,
             override_address=address,
@@ -355,7 +359,7 @@ def setpath(lens, path, val):
             lens = lens.setdefault(k, {})
 
 
-class VarModel:
+class StorageVar:
     def __init__(self, contract, slot, typ):
         self.contract = contract
         self.addr = self.contract._address.canonical_address
@@ -417,10 +421,10 @@ class StorageModel:
     def __init__(self, contract):
         compiler_data = contract.compiler_data
         for k, v in compiler_data.global_ctx.variables.items():
-            is_storage = not v.is_immutable
-            if is_storage:  # check that v
+            is_storage = not v.is_immutable and not v.is_constant
+            if is_storage:
                 slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
-                setattr(self, k, VarModel(contract, slot, v.typ))
+                setattr(self, k, StorageVar(contract, slot, v.typ))
 
     def dump(self):
         ret = FrameDetail("storage")
@@ -432,6 +436,25 @@ class StorageModel:
             ret[k] = t
 
         return ret
+
+
+# data structure to represent the storage variables in a contract
+class ImmutablesModel:
+    def __init__(self, contract):
+        compiler_data = contract.compiler_data
+        data_section = memoryview(contract.data_section)
+        for k, v in compiler_data.global_ctx.variables.items():
+            if v.is_immutable:  # check that v
+                ofst = compiler_data.storage_layout["code_layout"][k]["offset"]
+                immutable_raw_bytes = data_section[ofst:]
+                value = decode_vyper_object(immutable_raw_bytes, v.typ)
+                setattr(self, k, value)
+
+    def dump(self):
+        return FrameDetail("immutables", vars(self))
+
+    def __repr__(self):
+        return repr(self.dump())
 
 
 class VyperContract(_BaseContract):
@@ -525,8 +548,13 @@ class VyperContract(_BaseContract):
         return ret
 
     @cached_property
+    def _immutables(self):
+        return ImmutablesModel(self)
+
+    @cached_property
     def deployer(self):
-        return VyperDeployer(self.compiler_data, env=self.env, filename=self.filename)
+        # TODO add test
+        return VyperDeployer(self.compiler_data, filename=self.filename)
 
     # is this actually useful?
     def at(self, address):
@@ -700,7 +728,7 @@ class VyperContract(_BaseContract):
         computation = computation or self._computation
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation)
-        if error_detail not in EXTERNAL_CALL_ERRORS:
+        if error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS:
             return ret
         return _handle_child_trace(computation, self.env, ret)
 
