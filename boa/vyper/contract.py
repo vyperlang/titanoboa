@@ -821,9 +821,13 @@ class VyperContract(_BaseContract):
         return s + self.data_section
 
     @cached_property
-    def ir_executor(self):
+    def unoptimized_ir(self):
         with anchor_opt_level(OptimizationLevel.NONE):
-            _, ir_runtime = generate_ir_for_module(self.compiler_data.global_ctx)
+            return generate_ir_for_module(self.compiler_data.global_ctx)
+
+    @cached_property
+    def ir_executor(self):
+        _, ir_runtime = self.unoptimized_ir
         return executor_from_ir(ir_runtime, self.compiler_data)
 
     @contextlib.contextmanager

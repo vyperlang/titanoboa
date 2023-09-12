@@ -20,6 +20,7 @@ def compile_vyper_function(vyper_function, contract):
     contract. This is useful for vyper `eval` and internal functions, where
     the runtime bytecode must be changed to add more runtime functionality
     (such as eval, and calling internal functions)
+    (performance note: this function is very very slow!)
     """
 
     compiler_data = contract.compiler_data
@@ -38,8 +39,10 @@ def compile_vyper_function(vyper_function, contract):
     external_func_info = generate_ir_for_function(ast, global_ctx, False)
     ir = external_func_info.common_ir
 
-    base_signature = func_t.abi_signature_for_kwargs([])
-    ir = IRnode.from_list(["with", _METHOD_ID_VAR, method_id_int(base_signature), ir])
+    ir = ["seq", ["goto", func_t._ir_info.external_function_base_entry_label], ir]
+
+    # use a dummy method id
+    ir = IRnode.from_list(["with", _METHOD_ID_VAR, 0, ir])
     ir = optimizer.optimize(ir)
 
     # extend IR with contract's unoptimized assembly to avoid stripping
@@ -54,7 +57,9 @@ def compile_vyper_function(vyper_function, contract):
     # generate the IR executor
     # first mush it with the rest of the IR in the contract to ensure
     # all labels are present
-    ir = IRnode.from_list(["seq", ir, contract.compiler_data.ir_runtime])
+    # (use unoptimized IR as ir_executor can't handle optimized selector tables)
+    _, contract_runtime = contract.unoptimized_ir
+    ir = IRnode.from_list(["seq", ir, contract_runtime])
     # now compile.
     ir_executor = executor_from_ir(ir, compiler_data)
 
