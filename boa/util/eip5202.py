@@ -1,11 +1,13 @@
-from typing import Optional, Any
-import eth_typing
-from vyper.utils import keccak256
+from typing import Any, Optional
+
 from eth_utils import to_canonical_address, to_checksum_address
+from vyper.utils import keccak256
 
 
 # TODO replace return type with upcoming AddressType wrapper
-def get_create2_address(blueprint_bytecode: bytes, deployer_address: Any, salt: bytes) -> str:
+def get_create2_address(
+    blueprint_bytecode: bytes, deployer_address: Any, salt: bytes
+) -> str:
     _, _, initcode = parse_erc5202(blueprint_bytecode)
 
     initcode_hash = keccak256(initcode)
@@ -13,7 +15,7 @@ def get_create2_address(blueprint_bytecode: bytes, deployer_address: Any, salt: 
     prefix = b"\xFF"
     addr = to_canonical_address(deployer_address)
     if len(salt) != 32:
-        raise ValueError(f"bad salt (must be bytes32): {salt}")
+        raise ValueError(f"bad salt (must be bytes32): {salt!r}")
 
     create2_hash = keccak256(prefix + addr + salt + initcode_hash)
 
@@ -45,7 +47,9 @@ def parse_erc5202(blueprint_bytecode: bytes) -> tuple[int, Optional[bytes], byte
     if n_length_bytes == 0b11:
         raise ValueError("Reserved bits are set")
 
-    data_length = int.from_bytes(blueprint_bytecode[3 : 3 + n_length_bytes], byteorder="big")
+    data_length = int.from_bytes(
+        blueprint_bytecode[3 : 3 + n_length_bytes], byteorder="big"
+    )
 
     if n_length_bytes == 0:
         preamble_data = None

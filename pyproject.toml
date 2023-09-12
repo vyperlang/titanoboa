@@ -15,7 +15,7 @@ classifiers = ["Topic :: Software Development"]
 
 # Requirements
 dependencies = [
-    "vyper >= 0.3.8",
+    "vyper > 0.3.9",
     "eth-stdlib>=0.2.7,<0.3.0",
     "eth-abi",
     "py-evm>=0.7.0a4",

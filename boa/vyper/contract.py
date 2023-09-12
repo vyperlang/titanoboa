@@ -23,6 +23,7 @@ from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import output as compiler_output
+from vyper.compiler.settings import OptimizationLevel
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
@@ -798,7 +799,7 @@ class VyperContract(_BaseContract):
     @cached_property
     def unoptimized_assembly(self):
         runtime = self.compiler_data.ir_runtime
-        return compile_ir.compile_to_assembly(runtime, no_optimize=True)
+        return compile_ir.compile_to_assembly(runtime, optimize=OptimizationLevel.NONE)
 
     @cached_property
     def data_section_size(self):
@@ -975,8 +976,17 @@ class VyperFunction:
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
         calldata_bytes = self._prepare_calldata(*args, **kwargs)
-        override_bytecode = getattr(self, "_override_bytecode", None)
-        ir_executor = getattr(self, "_ir_executor", None)
+
+        # getattr(x, attr, None) swallows exceptions. use explicit hasattr+getattr
+
+        ir_executor = None
+        if hasattr(self, "_ir_executor"):
+            ir_executor = self._ir_executor
+
+        override_bytecode = None
+        if hasattr(self, "override_bytecode"):
+            override_bytecode = self.override_bytecode
+
         with self.contract._anchor_source_map(self._source_map):
             computation = self.env.execute_code(
                 to_address=self.contract._address,

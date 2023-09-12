@@ -5,6 +5,7 @@ import vyper.semantics.analysis as analysis
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
+from vyper.compiler.settings import OptimizationLevel
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.utils import get_exact_type_from_node
@@ -34,7 +35,8 @@ def compile_vyper_function(vyper_function, contract):
     ast = ast.body[0]
     func_t = ast._metadata["type"]
 
-    ir = generate_ir_for_function(ast, global_ctx, False)
+    external_func_info = generate_ir_for_function(ast, global_ctx, False)
+    ir = external_func_info.common_ir
 
     base_signature = func_t.abi_signature_for_kwargs([])
     ir = IRnode.from_list(["with", _METHOD_ID_VAR, method_id_int(base_signature), ir])
@@ -42,7 +44,7 @@ def compile_vyper_function(vyper_function, contract):
 
     # extend IR with contract's unoptimized assembly to avoid stripping
     # labels at first (and then optimize all together)
-    assembly = compile_ir.compile_to_assembly(ir, no_optimize=True)
+    assembly = compile_ir.compile_to_assembly(ir, optimize=OptimizationLevel.NONE)
     assembly.extend(contract.unoptimized_assembly)
     compile_ir._optimize_assembly(assembly)
     bytecode, source_map = compile_ir.assembly_to_evm(assembly)
