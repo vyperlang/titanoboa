@@ -1097,7 +1097,10 @@ def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
     ret = _executor_from_ir(ir_node, CompileContext(vyper_compiler_data))
 
     ret = ret.analyze()
-    ret.compile_main()
+
+    # TODO: rename this, this is "something.vy", but we maybe want
+    # "something.py <compiled from .vy>"
+    ret.compile_main(vyper_compiler_data.contract_name)
     return ret
 
 
