@@ -189,6 +189,7 @@ class IRExecutor:
         self.args = [arg.analyze() for arg in self.args]
         return self
 
+    # compile an IR "expr". called for its side effects on builder
     def compile(self, out=None, out_typ=None):
         # do a bit of metaprogramming to infer how to compile the args
         if hasattr(self, "_argnames"):
@@ -745,6 +746,9 @@ class Seq(IRExecutor):
     _name = "seq"
 
     def compile(self, out=None, out_typ=None):
+        if len(self.args) == 0:
+            self.builder.append("pass")
+            return
         for i, arg in enumerate(self.args):
             if i + 1 < len(self.args):
                 # don't accidentally assign
