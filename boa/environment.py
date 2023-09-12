@@ -25,7 +25,7 @@ from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
 from boa.vm.fork import AccountDBFork
-from boa.vm.fast_accountdb import FastAccountDB
+from boa.vm.fast_accountdb import FastAccountDB, patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 
@@ -336,7 +336,7 @@ class titanoboa_computation:
         addr = msg.code_address
         contract = cls.env._lookup_contract_fast(addr) if addr else None
         #print("ENTER", Address(msg.code_address or bytes([0]*20)), contract)
-        if contract is None or not cls.env._enable_fast_mode:
+        if contract is None or not cls.env._fast_mode_enabled:
             #print("SLOW MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
@@ -382,7 +382,7 @@ class Env:
     _singleton = None
     _initial_address_counter = 100
     _coverage_enabled = False
-    _enable_fast_mode = False
+    _fast_mode_enabled = False
 
     def __init__(self):
         self.chain = _make_chain()
@@ -414,6 +414,7 @@ class Env:
 
     def _init_vm(self, reset_traces=True):
         self.vm = self.chain.get_vm()
+
         self.vm.patch = VMPatcher(self.vm)
 
         c = type(
@@ -422,9 +423,10 @@ class Env:
             {"env": self},
         )
 
+        if self._fast_mode_enabled:
+            self.vm._state_class.account_db_class = FastAccountDB
+
         self.vm.state.computation_class = c
-        # TODO: enable this with fast mode
-        # self.vm.state.account_db_class = FastAccountDB
 
         # we usually want to reset the trace data structures
         # but sometimes don't, give caller the option.
@@ -445,6 +447,13 @@ class Env:
         # register that the slot was touched and downstream can filter
         # zero entries.
         self.sstore_trace[account].add(slot)
+
+    def enable_fast_mode(self, flag: bool = True):
+        self._fast_mode_enabled = flag
+        if flag:
+            patch_pyevm_state_object(self.vm.state)
+        else:
+            unpatch_pyevm_state_object(self.vm.state)
 
     def fork(self, url, reset_traces=True, **kwargs):
         kwargs["url"] = url
