@@ -16,7 +16,8 @@ import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
 from vyper.ast.utils import parse_to_ast
-from vyper.codegen.core import calculate_type_for_external_return
+from vyper.compiler.settings import OptimizationLevel
+from vyper.codegen.core import calculate_type_for_external_return, anchor_opt_level
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
@@ -820,8 +821,9 @@ class VyperContract(_BaseContract):
 
     @cached_property
     def ir_executor(self):
-        ir = self.compiler_data.ir_runtime
-        return executor_from_ir(ir, self.compiler_data)
+        with anchor_opt_level(OptimizationLevel.NONE):
+            _, ir_runtime = generate_ir_for_module(self.compiler_data.global_ctx)
+        return executor_from_ir(ir_runtime, self.compiler_data)
 
     @contextlib.contextmanager
     def _anchor_source_map(self, source_map):
