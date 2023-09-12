@@ -405,7 +405,8 @@ def executor(cls):
 def _wrap256(x):
     return x % 2**256
 
-def wrap256(x_str):
+
+def wrap256_str(x_str):
     return f"(({x_str}) % 2**256)"
 
 
@@ -424,12 +425,12 @@ class UnsignedBinopExecutor(IRExecutor):
         return self._op.__module__ + "." + self._op.__name__
 
     def _compile(self, x, y):
-        return wrap256(f"{self.funcname}({x}, {y})")
+        return wrap256_str(f"{self.funcname}({x}, {y})")
 
 
 class SignedBinopExecutor(UnsignedBinopExecutor):
     def _compile(self, x, y):
-        return wrap256(f"{self.funcname}(_as_signed({x}), _as_signed({y}))")
+        return wrap256_str(f"{self.funcname}(_as_signed({x}), _as_signed({y}))")
 
 
 # for binops, just use routines from vyper optimizer
@@ -458,7 +459,7 @@ class Sar(IRExecutor):
 
     def _compile(self, bits, val):
         # wrap256 to get back into unsigned land
-        return wrap256(f"_as_signed({val}) >> {bits}")
+        return wrap256_str(f"_as_signed({val}) >> {bits}")
 
 
 @executor
@@ -468,7 +469,7 @@ class Shl(IRExecutor):
     _type: type = int
 
     def _compile(self, bits, val):
-        return wrap256(f"{val} << {bits}")
+        return wrap256_str(f"{val} << {bits}")
 
 
 @executor
