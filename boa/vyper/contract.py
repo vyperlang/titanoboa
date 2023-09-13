@@ -988,8 +988,8 @@ class VyperFunction:
             ir_executor = self._ir_executor
 
         override_bytecode = None
-        if hasattr(self, "override_bytecode"):
-            override_bytecode = self.override_bytecode
+        if hasattr(self, "_override_bytecode"):
+            override_bytecode = self._override_bytecode
 
         with self.contract._anchor_source_map(self._source_map):
             computation = self.env.execute_code(
