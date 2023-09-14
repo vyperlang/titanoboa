@@ -647,9 +647,12 @@ class SStore(IRExecutor):
     _type = int
 
     def _compile(self, slot, value):
-        return f"""
+        self.builder.extend(
+            f"""
+            VM.env._trace_sstore(VM.msg.storage_address, {slot})
             VM.state.set_storage(address=VM.msg.storage_address, slot={slot}, value={value})
-        """.strip()
+            """
+        )
 
 
 @executor
