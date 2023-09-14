@@ -268,6 +268,10 @@ def _handle_child_trace(computation, env, return_trace):
     if not computation.children[-1].is_error:
         return return_trace
     child = computation.children[-1]
+
+    # TODO: maybe should be:
+    # child_obj = env.lookup_contract(child.msg.code_address) or env._code_registry.get(child.msg.code)
+
     child_obj = env.lookup_contract(child.msg.code_address)
     if child_obj is None:
         child_trace = trace_for_unknown_contract(child, env)

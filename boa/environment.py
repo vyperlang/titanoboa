@@ -355,6 +355,8 @@ class titanoboa_computation:
             except Halt:
                 pass
 
+        # return computation outside of with block; computation.__exit__
+        # swallows exceptions (including Revert).
         return computation
 
 
