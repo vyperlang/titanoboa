@@ -99,7 +99,7 @@ class CompileContext:
         return mkalphanum(PurePath(self.vyper_compiler_data.contract_name).name)
 
     def translate_label(self, label):
-        return f"{label}_{self.contract_name}_{self.uuid}"
+        return f"{self.contract_name}_{self.uuid}_{label}"
 
     def add_unique_symbol(self, symbol):
         if symbol in self.unique_symbols:
@@ -247,7 +247,14 @@ class IRExecutor:
             self.builder.extend("\n\n")
             func.compile_func()
 
-        py_bytecode = compile(self.builder.get_output(), contract_path, "exec")
+
+        py_file = contract_path + str(self.compile_ctx.uuid) + ".py"
+
+        # uncomment for debugging the python code:
+        #with open(py_file, "w") as f:
+        #    print(self.builder.get_output(), file=f)
+
+        py_bytecode = compile(self.builder.get_output(), py_file, "exec")
         exec(py_bytecode, globals())
 
         self._exec = globals()[main_name]
@@ -891,18 +898,15 @@ class VarList(IRExecutor):
 class Goto(IRExecutor):
     _name = "goto"
 
+    is_return_stmt = False
+
     def analyze(self):
-        self.label = self.args[0]._str_value
+        self.label = self.compile_ctx.translate_label(self.args[0]._str_value)
 
         # just get the parameters, leaving the label in self.args
         # messes with downstream machinery which tries to analyze the label.
         runtime_args = []
         for arg in self.args[1:]:
-            if isinstance(arg, StringExecutor):
-                if arg._str_value == "return_pc":
-                    # we don't need to deal with return pc on the way out.
-                    continue
-
             if isinstance(arg, Symbol):
                 # we don't need to push the return pc on the way in.
                 continue
@@ -912,11 +916,6 @@ class Goto(IRExecutor):
         self.args = runtime_args
 
         return self
-
-    @cached_property
-    def is_return_stmt(self):
-        # i.e. we are exiting a subroutine
-        return self.label == "return_pc"
 
     @cached_property
     def _argnames(self):
@@ -936,18 +935,11 @@ class Goto(IRExecutor):
         return tuple(int for _ in self._argnames)
 
     def _compile(self, *args):
-        label = self.label
-
-        if self.is_return_stmt:
-            assert len(self.args) == 0
-            self.builder.append("return")
-            return
-
         argnames = self._argnames
         assert len(argnames) == len(self.args)
 
         args_str = ", ".join(["CTX"] + list(args))
-        return f"{label}({args_str})"
+        return f"{self.label}({args_str})"
 
 
 @executor
@@ -955,7 +947,37 @@ class ExitTo(Goto):
     # exit_to is similar but it is known to end execution of this subroutine
     _name = "exit_to"
 
+    def analyze(self):
+        # small helper function
+        def _is_return_pc(arg):
+            return isinstance(arg, StringExecutor) and arg._str_value == "return_pc"
+
+        if _is_return_pc(self.args[0]):
+            assert len(self.args) == 1
+            self.is_return_stmt = True
+
+        # strip out return_pc args, we don't need actually need to
+        # generate any code for it
+        self.args = [arg for arg in self.args if not _is_return_pc(arg)]
+
+        if len(self.args) == 0:
+            # it's not really a goto, it's a return statement
+            # skip super.analyze() as it will choke on no args
+            assert self.is_return_stmt
+            return self
+
+        return super().analyze()
+
     def _compile(self, *args):
+        if self.is_return_stmt:
+            # straight return
+            # skip super._compile() as it will choke on no args
+            assert len(self.args) == 0
+            self.builder.append("return")
+            return
+
+        # execute the subroutine and then return
+        # (probably not necessary to return the result but may as well)
         subroutine_call = super()._compile(*args)
         return f"return {subroutine_call}"
 
@@ -1002,6 +1024,9 @@ class Label(IRExecutor):
 
     def analyze(self):
         name, var_list, body = self.args
+
+        # use translate_label to ensure no collisions across compilations
+        name._str_value = self.compile_ctx.translate_label(name._str_value)
 
         self.labelname = name._str_value
 
