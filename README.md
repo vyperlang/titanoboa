@@ -193,6 +193,23 @@ Cast current deployed addresses to vyper contract
     'Curve DAO Token'
 ```
 
+### Network Mode
+```python
+>>> import boa; from boa.network import NetworkEnv
+>>> from eth_account import Account
+>>> boa.env.set_env(NetworkEnv("<rpc server address>"))
+>>> # in a real codebase, always load private keys safely from an encrypted store!
+>>> boa.env.add_account(Account(<a private key>))
+>>> c = boa.load("examples/ERC20.vy", "My Token", "TKN", 10**18, 10)
+>>> c.name()
+    'My Token'
+```
+
+### Jupyter Integration
+
+You can use Jupyter to execute titanoboa code in network mode from your browser using any wallet, using `boa.integrations.jupyter.BrowserSigner` as a drop-in replacement for `eth_account.Account`. For a full example, please see [this example Jupyter notebook](examples/jupyter_browser_signer.ipynb)
+
+
 basic tests:
 ```bash
 $ python -m tests.integration.sim_veYFI
