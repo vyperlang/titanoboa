@@ -34,7 +34,14 @@ High-Level Functionality
         >>> boa.load("Foo.vy")
         <tmp/Foo.vy at 0x0000000000000000000000000000000000000066, compiled with ...>
 
-.. function:: loads(source: str, *args: Any, as_blueprint: bool = False, name: str | None = None, **kwargs) -> VyperContract | VyperBlueprint
+    .. code-block:: python
+
+        >>> import boa
+        >>> from vyper.compiler.settings import OptimizationLevel, Settings
+        >>> boa.load("Foo.vy", compiler_args={"settings": Settings(optimize=OptimizationLevel.CODESIZE)})
+        <tmp/Foo.vy at 0xf2Db9344e9B01CB353fe7a2d076ae34A9A442513, compiled with ...>
+
+.. function:: loads(source: str, *args: Any, as_blueprint: bool = False, name: str | None = None, compiler_args: dict | None = None, **kwargs) -> VyperContract | VyperBlueprint
 
     Compile source code and return a deployed instance of the contract.
 
@@ -42,6 +49,7 @@ High-Level Functionality
     :param args: Contract constructor arguments.
     :param as_blueprint: Whether to deploy an :eip:`5202` blueprint of the compiled contract.
     :param name: The name of the contract.
+    :param compiler_args: Argument to be passed to the Vyper compiler.
     :param kwargs: Keyword arguments to pass to the :py:class:`VyperContract` or :py:class:`VyperBlueprint` ``__init__`` method.
 
     .. rubric:: Example
@@ -58,11 +66,12 @@ High-Level Functionality
         >>> boa.loads(src, 69)
         <VyperContract at 0x0000000000000000000000000000000000000066, compiled with ...>
 
-.. function:: load_partial(fp: str) -> VyperDeployer
+.. function:: load_partial(fp: str, compiler_args: dict | None = None) -> VyperDeployer
 
     Compile source from disk and return a :py:class:`VyperDeployer`.
 
     :param fp: The contract source code file path.
+    :param compiler_args: Argument to be passed to the Vyper compiler.
     :returns: A :py:class:`VyperDeployer` factory instance.
 
     .. rubric:: Example
@@ -80,12 +89,14 @@ High-Level Functionality
         >>> boa.load_partial("Foo.vy")
         <boa.vyper.contract.VyperDeployer object at ...>
 
-.. function:: loads_partial(source: str, name: str | None = None) -> VyperDeployer
+.. function:: loads_partial(source: str, name: str | None = None, dedent: bool = True, compiler_args: dict | None = None) -> VyperDeployer
 
     Compile source and return a :py:class:`VyperDeployer`.
 
     :param source: The Vyper source code.
     :param name: The name of the contract.
+    :param dedent: If `True`, remove any common leading whitespace from every line in `source`.
+    :param compiler_args: Argument to be passed to the Vyper compiler.
     :returns: A :py:class:`VyperDeployer` factory instance.
 
     .. rubric:: Example
