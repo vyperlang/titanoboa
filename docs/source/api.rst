@@ -624,6 +624,30 @@ Low-Level Functionality
     ..         >>> contract.main.args_abi_type(1)
     ..         (b'\xccW,\xf9', '(uint256,uint256)')
 
+    .. method:: prepare_calldata(*args: Any, **kwargs: Any) -> bytes:
+        Prepare the calldata that a function call would use.
+        This is useful for saving calldata for use in a transaction later.
+
+        :param args: The positional arguments of the contract function.
+        :param kwargs: Keyword arguments of the contract function.
+
+        :returns: The calldata that a call with a particular set of arguments would use, in bytes.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = """
+            ... @external
+            ... def main(a: uint256) -> uint256:
+            ...     return 1 + a
+            ... """
+            >>> c = boa.loads(src)
+            >>> contract.main.prepare_calldata(68)
+            b'\xab:\xe2U\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0D'
+
+
     .. method:: __call__(*args: Any, value: int = 0, gas: int | None = None, sender: str | None = None, **kwargs: Any) -> Any
 
         Execute the function.
