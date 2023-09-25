@@ -514,7 +514,7 @@ class VyperContract(_BaseContract):
     def _run_init(self, *args, override_address=None):
         encoded_args = b""
         if self._ctor:
-            encoded_args = self._ctor._prepare_calldata(*args)
+            encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
         addr, self.bytecode = self.env.deploy_code(
@@ -925,7 +925,7 @@ class VyperFunction:
 
         return _method_id, args_abi_type
 
-    def _prepare_calldata(self, *args, **kwargs):
+    def prepare_calldata(self, *args, **kwargs):
         n_total_args = self.func_t.n_total_args
         n_pos_args = self.func_t.n_positional_args
 
@@ -954,7 +954,7 @@ class VyperFunction:
         return method_id + encoded_args
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
-        calldata_bytes = self._prepare_calldata(*args, **kwargs)
+        calldata_bytes = self.prepare_calldata(*args, **kwargs)
         # getattr(x, attr, None) swallows exceptions. use explicit hasattr+getattr
         override_bytecode = None
         if hasattr(self, "override_bytecode"):
