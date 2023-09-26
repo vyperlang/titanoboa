@@ -25,6 +25,7 @@ def _compile_vyper_function(vyper_function, contract):
     global_ctx = contract.global_ctx
     ifaces = compiler_data.interface_codes
     ast = parse_to_ast(vyper_function, ifaces)
+    vy_ast.folding.fold(ast)
 
     # override namespace and add wrapper code at the top
     with contract.override_vyper_namespace():
