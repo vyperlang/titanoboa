@@ -21,6 +21,7 @@ from eth_utils import to_canonical_address, to_checksum_address
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
+from vyper.codegen.function_definitions.common import ExternalFuncIR, InternalFuncIR
 from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
@@ -887,7 +888,12 @@ class VyperFunction:
         # patch compiler_data to have IR for every function
         global_ctx = self.contract.global_ctx
 
-        ir = generate_ir_for_function(self.fn_ast, global_ctx, False)
+        res = generate_ir_for_function(self.fn_ast, global_ctx, False)
+        if isinstance(res, InternalFuncIR):
+            ir = res.func_ir
+        elif isinstance(res, ExternalFuncIR):
+            ir = res.common_ir
+
         return optimize(ir)
 
     @cached_property
