@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-forking-recommended = ["plyvel", "ujson"]
+forking-recommended = ["ujson"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

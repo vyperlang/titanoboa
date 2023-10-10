@@ -8,9 +8,7 @@ except ImportError:
 
 import rlp
 from eth.db.account import AccountDB, keccak
-from eth.db.backends.level import LevelDB
 from eth.db.backends.memory import MemoryDB
-from eth.db.cache import CacheDB
 from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth_utils import int_to_big_endian, to_checksum_address
@@ -35,6 +33,9 @@ class CachingRPC(EthereumRPC):
         self._init_mem_db()
         if cache_file is not None:
             try:
+                # LevelDB has been removed from py-evm 0.8.1 onwards
+                from eth.db.backends.level import LevelDB
+                from eth.db.cache import CacheDB
                 cache_file = os.path.expanduser(cache_file)
                 # use CacheDB as an additional layer over disk
                 # (ideally would use leveldb lru cache but it's not configurable
