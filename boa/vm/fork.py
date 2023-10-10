@@ -36,6 +36,7 @@ class CachingRPC(EthereumRPC):
                 # LevelDB has been removed from py-evm 0.8.1 onwards
                 from eth.db.backends.level import LevelDB
                 from eth.db.cache import CacheDB
+
                 cache_file = os.path.expanduser(cache_file)
                 # use CacheDB as an additional layer over disk
                 # (ideally would use leveldb lru cache but it's not configurable

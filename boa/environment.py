@@ -3,6 +3,7 @@
 
 import contextlib
 import logging
+import random
 import sys
 import warnings
 from typing import Any, Iterator, Optional, Union
@@ -258,15 +259,13 @@ class SstoreTracer:
 # wrapper class around py-evm which provides a "contract-centric" API
 class Env:
     _singleton = None
-    _initial_address_counter = 100
+    _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
 
     def __init__(self):
         self.chain = _make_chain()
 
         self._gas_price = None
-
-        self._address_counter = self.__class__._initial_address_counter
 
         self._aliases = {}
 
@@ -285,6 +284,9 @@ class Env:
         self.sstore_trace = {}
 
         self._init_vm()
+
+    def set_random_seed(self, seed=None):
+        self._random = random.Random(seed)
 
     def get_gas_price(self):
         return self._gas_price or 0
@@ -460,8 +462,7 @@ class Env:
         return cls._singleton
 
     def generate_address(self, alias: Optional[str] = None) -> AddressType:
-        self._address_counter += 1
-        t = self._address_counter.to_bytes(length=20, byteorder="big")
+        t = self._random.randbytes(20)
         # checksum addr easier for humans to debug
         ret = to_checksum_address(t)
         if alias is not None:

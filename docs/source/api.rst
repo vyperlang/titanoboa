@@ -357,7 +357,22 @@ Low-Level Functionality
 
             >>> import boa
             >>> boa.env.generate_address()
-            '0x0000000000000000000000000000000000000066'
+            '0xd13f0Bd22AFF8176761AEFBfC052a7490bDe268E'
+
+    .. method:: set_random_seed(seed: Any = None) -> None
+
+        Set the random seed used by this ``Env`` to generate addresses. Useful in case you want to introduce some more randomization to how ``Env`` generates addresses.
+
+        :param seed: The seed to pass to this ``Env``'s instance of ``random.Random``. Can be any value that ``random.Random()`` accepts.
+
+        .. rubric:: Example
+
+     .. code-block:: python
+
+            >>> import boa
+            >>> boa.env.set_random_seed(100)
+            >>> boa.env.generate_address()
+            '0x93944a25b3ADa3759918767471C5A3F3601652c5
 
     .. method:: set_balance(address: str, value: int)
 
