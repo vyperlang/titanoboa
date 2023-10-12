@@ -95,6 +95,7 @@ class VMPatcher:
 
 
 # XXX: inherit from bytes directly so that we can pass it to py-evm?
+# inherit from `str` so that ABI encoder / decoder can work without failing
 class Address(str):  # (PYEVM_Address):
     # converting between checksum and canonical addresses is a hotspot;
     # this class contains both and caches recently seen conversions
