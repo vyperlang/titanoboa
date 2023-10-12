@@ -1,6 +1,7 @@
 import json
 import textwrap
 from pathlib import Path
+from typing import Union
 
 import vyper
 from vyper.cli.vyper_compile import get_interface_codes
@@ -15,7 +16,7 @@ from boa.vyper.contract import (
     VyperDeployer,
 )
 
-_Contract = VyperContract | VyperBlueprint
+_Contract = Union[VyperContract, VyperBlueprint]
 
 
 _disk_cache = None

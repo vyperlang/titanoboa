@@ -6,25 +6,29 @@ import logging
 import random
 import sys
 import warnings
-from typing import Any, Iterator, Optional, Union
+from typing import Annotated, Any, Iterator, Optional, Tuple
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
 from eth.chains.mainnet import MainnetChain
-from eth.codecs import abi
 from eth.db.atomic import AtomicDB
+from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
-from eth_typing import Address
+from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
+from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
+from boa.util.lrudict import lrudict
 from boa.vm.fork import AccountDBFork
+from boa.vm.fast_accountdb import FastAccountDB, patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
+from boa.vm.utils import to_bytes, to_int
 
 
 def enable_pyevm_verbose_logging():
@@ -90,11 +94,43 @@ class VMPatcher:
                     setattr(self, attr, snap[attr])
 
 
-AddressType = Union[Address, bytes, str]  # make mypy happy
+# XXX: inherit from bytes directly so that we can pass it to py-evm?
+class Address(str):  # (PYEVM_Address):
+    # converting between checksum and canonical addresses is a hotspot;
+    # this class contains both and caches recently seen conversions
+    __slots__ = ("canonical_address",)
+    _cache = lrudict(1024)
+
+    canonical_address: Annotated[PYEVM_Address, "canonical address"]
+
+    def __new__(cls, address):
+        if isinstance(address, Address):
+            return address
+
+        try:
+            return cls._cache[address]
+        except KeyError:
+            pass
+
+        checksum_address = to_checksum_address(address)
+        self = super().__new__(cls, checksum_address)
+        self.canonical_address = to_canonical_address(address)
+        cls._cache[address] = self
+        return self
+
+    # def __hash__(self):
+    #    return hash(self.checksum_address)
+
+    # def __eq__(self, other):
+    #    return super().__eq__(self, other)
+
+    def __repr__(self):
+        checksum_addr = super().__repr__()
+        return f"_Address({checksum_addr})"
 
 
-def _addr(addr: AddressType) -> Address:
-    return Address(to_canonical_address(addr))
+# make mypy happy
+_AddressType = Address | str | bytes | PYEVM_Address
 
 
 _opcode_overrides = {}
@@ -121,14 +157,14 @@ def register_precompile(*args, **kwargs):
 
 def register_raw_precompile(address, fn, force=False):
     global _precompiles
-    address = _addr(address)
+    address = Address(address)
     if address in _precompiles and not force:
         raise ValueError(f"Already registered: {address}")
     _precompiles[address] = fn
 
 
 def deregister_raw_precompile(address, force=True):
-    address = _addr(address)
+    address = Address(address)
     if address not in _precompiles and not force:
         raise ValueError("Not registered: {address}")
     _precompiles.pop(address, None)
@@ -136,8 +172,8 @@ def deregister_raw_precompile(address, force=True):
 
 def console_log(computation):
     msgdata = computation.msg.data_as_bytes
-    schema, payload = abi.decode("(string,bytes)", msgdata[4:])
-    data = abi.decode(schema, payload)
+    schema, payload = abi_decode("(string,bytes)", msgdata[4:])
+    data = abi_decode(schema, payload)
     print(*data, file=sys.stderr)
     return computation
 
@@ -184,27 +220,14 @@ class TracingCodeStream(CodeStream):
 
 
 # ### section: sha3 preimage tracing
-# (TODO: move to dedicated module)
-def to_int(value):
-    if isinstance(value, tuple):
-        return to_int(value[1])  # how py-evm stores stuff on stack
-    if isinstance(value, int):
-        return value
-    if isinstance(value, bytes):
-        return int.from_bytes(value, "big")
-
-    raise ValueError("invalid type %s", type(value))
+def _stackitem_to_int(value):
+    assert isinstance(value, tuple)
+    return to_int(value[1])  # how py-evm stores stuff on stack
 
 
-def to_bytes(value):
-    if isinstance(value, tuple):
-        return to_bytes(value[1])  # how py-evm stores stuff on stack
-    if isinstance(value, bytes):
-        return value
-    if isinstance(value, int):
-        return value.to_bytes(32, "big")
-
-    raise ValueError("invalid type %s", type(value))
+def _stackitem_to_bytes(value):
+    assert isinstance(value, tuple)
+    return to_bytes(value[1])  # how py-evm stores stuff on stack
 
 
 class Sha3PreimageTracer:
@@ -212,12 +235,12 @@ class Sha3PreimageTracer:
 
     # trace preimages of sha3
 
-    def __init__(self, sha3_op, preimage_map):
-        self.preimages = preimage_map
+    def __init__(self, sha3_op, env):
+        self.env = env
         self.sha3 = sha3_op
 
     def __call__(self, computation):
-        size, offset = [to_int(x) for x in computation._stack.values[-2:]]
+        size, offset = [_stackitem_to_int(x) for x in computation._stack.values[-2:]]
 
         # dispatch into py-evm
         self.sha3(computation)
@@ -227,27 +250,23 @@ class Sha3PreimageTracer:
 
         preimage = computation._memory.read_bytes(offset, size)
 
-        image = to_bytes(computation._stack.values[-1])
+        image = _stackitem_to_bytes(computation._stack.values[-1])
 
-        self.preimages[image] = preimage
+        self.env._trace_sha3_preimage(preimage, image)
 
 
 class SstoreTracer:
     mnemonic = "SSTORE"
 
-    def __init__(self, sstore_op, trace_db):
-        self.trace_db = trace_db
+    def __init__(self, sstore_op, env):
+        self.env = env
         self.sstore = sstore_op
 
     def __call__(self, computation):
-        value, slot = [to_bytes(t) for t in computation._stack.values[-2:]]
-        account = to_checksum_address(computation.msg.storage_address)
+        value, slot = [_stackitem_to_int(t) for t in computation._stack.values[-2:]]
+        account = computation.msg.storage_address
 
-        self.trace_db.setdefault(account, set())
-        # we don't want to deal with snapshots/commits/reverts, so just
-        # register that the slot was touched and downstream can filter
-        # zero entries.
-        self.trace_db[account].add(slot)
+        self.env._trace_sstore(account, slot)
 
         # dispatch into py-evm
         self.sstore(computation)
@@ -256,11 +275,117 @@ class SstoreTracer:
 # ### End section: sha3 tracing
 
 
+# py-evm uses class instantiaters which need to be classes
+# instead of like factories or other easier to use architectures -
+# `titanoboa_computation` is a class which can be constructed dynamically
+class titanoboa_computation:
+    _gas_meter_class = GasMeter
+
+    def __init__(self, *args, **kwargs):
+        # super() hardcodes CodeStream into the ctor
+        # so we have to override it here
+        super().__init__(*args, **kwargs)
+
+        self.code = TracingCodeStream(
+            self.code._raw_code_bytes,
+            fake_codesize=getattr(self.msg, "_fake_codesize", None),
+            start_pc=getattr(self.msg, "_start_pc", 0),
+        )
+        global _precompiles
+        # copy so as not to mess with class state
+        self._precompiles = self._precompiles.copy()
+        self._precompiles.update(_precompiles)
+
+        global _opcode_overrides
+        # copy so as not to mess with class state
+        self.opcodes = self.opcodes.copy()
+        self.opcodes.update(_opcode_overrides)
+
+        self._gas_meter = self._gas_meter_class(self.msg.gas)
+        if hasattr(self._gas_meter, "_set_code"):
+            self._gas_meter._set_code(self.code)
+
+        self._child_pcs = []
+
+    def add_child_computation(self, child_computation):
+        super().add_child_computation(child_computation)
+        # track PCs of child calls for profiling purposes
+        self._child_pcs.append(self.code.program_counter)
+
+    # hijack creations to automatically generate blueprints
+    @classmethod
+    def apply_create_message(cls, state, msg, tx_ctx):
+        computation = super().apply_create_message(state, msg, tx_ctx)
+
+        bytecode = msg.code
+        # cf. eth/vm/logic/system/Create* opcodes
+        contract_address = msg.storage_address
+
+        if is_eip1167_contract(bytecode):
+            contract_address = extract_eip1167_address(bytecode)
+            bytecode = cls.env.vm.state.get_code(contract_address)
+
+        if bytecode in cls.env._code_registry:
+            target = cls.env._code_registry[bytecode].deployer.at(contract_address)
+            target.created_from = Address(msg.sender)
+            cls.env.register_contract(contract_address, target)
+
+        return computation
+
+    @classmethod
+    def apply_computation(cls, state, msg, tx_ctx):
+        addr = msg.code_address
+        contract = cls.env._lookup_contract_fast(addr) if addr else None
+        #print("ENTER", Address(msg.code_address or bytes([0]*20)), contract)
+        if contract is None or not cls.env._fast_mode_enabled:
+            #print("SLOW MODE")
+            return super().apply_computation(state, msg, tx_ctx)
+
+        with cls(state, msg, tx_ctx) as computation:
+            try:
+                if getattr(msg, "_ir_executor", None) is not None:
+                    #print("MSG HAS IR EXECUTOR")
+                    # this happens when bytecode is overridden, e.g.
+                    # for injected functions. note ir_executor is (correctly)
+                    # used for the outer computation only because on subcalls
+                    # a clean message is constructed for the child computation
+                    msg._ir_executor.exec(computation)
+                else:
+                    #print("REGULAR FAST MODE")
+                    contract.ir_executor.exec(computation)
+            except Halt:
+                pass
+
+        # return computation outside of with block; computation.__exit__
+        # swallows exceptions (including Revert).
+        return computation
+
+
+# Message object with extra attrs we can use to thread things through
+# the execution context.
+class FakeMessage(Message):
+    def __init__(
+        self,
+        *args,
+        ir_executor=None,
+        fake_codesize=None,
+        start_pc=0,
+        contract=None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._ir_executor = ir_executor
+        self._fake_codesize = fake_codesize
+        self._start_pc = start_pc
+        self._contract = contract
+
+
 # wrapper class around py-evm which provides a "contract-centric" API
 class Env:
     _singleton = None
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
+    _fast_mode_enabled = False
 
     def __init__(self):
         self.chain = _make_chain()
@@ -293,65 +418,17 @@ class Env:
 
     def _init_vm(self, reset_traces=True):
         self.vm = self.chain.get_vm()
+
         self.vm.patch = VMPatcher(self.vm)
 
-        env = self
+        c = type(
+            "TitanoboaComputation",
+            (titanoboa_computation, self.vm.state.computation_class),
+            {"env": self},
+        )
 
-        class OpcodeTracingComputation(self.vm.state.computation_class):
-            _gas_meter_class = GasMeter
-
-            def __init__(self, *args, **kwargs):
-                # super() hardcodes CodeStream into the ctor
-                # so we have to override it here
-                super().__init__(*args, **kwargs)
-                self.code = TracingCodeStream(
-                    self.code._raw_code_bytes,
-                    fake_codesize=getattr(self.msg, "_fake_codesize", None),
-                    start_pc=getattr(self.msg, "_start_pc", 0),
-                )
-                global _precompiles
-                # copy so as not to mess with class state
-                self._precompiles = self._precompiles.copy()
-                self._precompiles.update(_precompiles)
-
-                global _opcode_overrides
-                # copy so as not to mess with class state
-                self.opcodes = self.opcodes.copy()
-                self.opcodes.update(_opcode_overrides)
-
-                self._gas_meter = self._gas_meter_class(self.msg.gas)
-                if hasattr(self._gas_meter, "_set_code"):
-                    self._gas_meter._set_code(self.code)
-
-                self._child_pcs = []
-
-            def add_child_computation(self, child_computation):
-                super().add_child_computation(child_computation)
-                # track PCs of child calls for profiling purposes
-                self._child_pcs.append(self.code.program_counter)
-
-            # hijack creations to automatically generate blueprints
-            @classmethod
-            def apply_create_message(cls, state, msg, tx_ctx):
-                computation = super().apply_create_message(state, msg, tx_ctx)
-
-                bytecode = msg.code
-                # cf. eth/vm/logic/system/Create* opcodes
-                contract_address = msg.storage_address
-
-                if is_eip1167_contract(bytecode):
-                    contract_address = extract_eip1167_address(bytecode)
-                    bytecode = self.vm.state.get_code(contract_address)
-
-                if bytecode in self._code_registry:
-                    target = self._code_registry[bytecode].deployer.at(contract_address)
-                    target.created_from = to_checksum_address(msg.sender)
-                    env.register_contract(contract_address, target)
-
-                return computation
-
-        # TODO make metering toggle-able
-        c = OpcodeTracingComputation
+        if self._fast_mode_enabled:
+            self.vm._state_class.account_db_class = FastAccountDB
 
         self.vm.state.computation_class = c
 
@@ -362,8 +439,25 @@ class Env:
             self.sstore_trace = {}
 
         # patch in tracing opcodes
-        c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.sha3_trace)
-        c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.sstore_trace)
+        c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self)
+        c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self)
+
+    def _trace_sha3_preimage(self, preimage, image):
+        self.sha3_trace[image] = preimage
+
+    def _trace_sstore(self, account, slot):
+        self.sstore_trace.setdefault(account, set())
+        # we don't want to deal with snapshots/commits/reverts, so just
+        # register that the slot was touched and downstream can filter
+        # zero entries.
+        self.sstore_trace[account].add(slot)
+
+    def enable_fast_mode(self, flag: bool = True):
+        self._fast_mode_enabled = flag
+        if flag:
+            patch_pyevm_state_object(self.vm.state)
+        else:
+            unpatch_pyevm_state_object(self.vm.state)
 
     def fork(self, url, reset_traces=True, **kwargs):
         kwargs["url"] = url
@@ -400,33 +494,37 @@ class Env:
 
     # set balance of address in py-evm
     def set_balance(self, addr, value):
-        self.vm.state.set_balance(to_canonical_address(addr), value)
+        self.vm.state.set_balance(Address(addr).canonical_address, value)
 
     # get balance of address in py-evm
     def get_balance(self, addr):
-        return self.vm.state.get_balance(to_canonical_address(addr))
+        return self.vm.state.get_balance(Address(addr).canonical_address)
 
     def register_contract(self, address, obj):
-        self._contracts[to_checksum_address(address)] = obj
+        addr = Address(address).canonical_address
+        self._contracts[addr] = obj
 
         # also register it in the registry for
         # create_minimal_proxy_to and create_copy_of
-        bytecode = self.vm.state.get_code(to_canonical_address(address))
+        bytecode = self.vm.state.get_code(addr)
         self._code_registry[bytecode] = obj
 
     def register_blueprint(self, bytecode, obj):
         self._code_registry[bytecode] = obj
 
-    def lookup_contract(self, address):
+    def _lookup_contract_fast(self, address: PYEVM_Address):
+        return self._contracts.get(address)
+
+    def lookup_contract(self, address: _AddressType):
         if address == b"":
             return None
-        return self._contracts.get(to_checksum_address(address))
+        return self._contracts.get(Address(address).canonical_address)
 
     def alias(self, address, name):
-        self._aliases[to_checksum_address(address)] = name
+        self._aliases[Address(address).canonical_address] = name
 
     def lookup_alias(self, address):
-        return self._aliases[to_checksum_address(address)]
+        return self._aliases[Address(address).canonical_address]
 
     # advanced: reset warm/cold counters for addresses and storage
     def _reset_access_counters(self):
@@ -446,7 +544,7 @@ class Env:
     @contextlib.contextmanager
     def sender(self, address):
         tmp = self.eoa
-        self.eoa = to_checksum_address(address)
+        self.eoa = Address(address)
         try:
             yield
         finally:
@@ -462,42 +560,41 @@ class Env:
         return cls._singleton
 
     def generate_address(self, alias: Optional[str] = None) -> AddressType:
-        t = self._random.randbytes(20)
-        # checksum addr easier for humans to debug
-        ret = to_checksum_address(t)
+        t = Address(self._random.randbytes(20))
         if alias is not None:
-            self.alias(ret, alias)
+            self.alias(t, alias)
 
-        return ret
+        return t
 
     # helper fn
-    def _get_sender(self, sender=None) -> Address:
+    def _get_sender(self, sender=None) -> PYEVM_Address:
         if sender is None:
             sender = self.eoa
         if self.eoa is None:
             raise ValueError(f"{self}.eoa not defined!")
-        return _addr(sender)
+        return Address(sender).canonical_address
 
     def deploy_code(
         self,
-        sender: Optional[AddressType] = None,
+        sender: Optional[_AddressType] = None,
         gas: Optional[int] = None,
         value: int = 0,
         bytecode: bytes = b"",
         start_pc: int = 0,
         # override the target address:
-        override_address: Optional[AddressType] = None,
-    ) -> tuple[AddressType, bytes]:
+        override_address: Optional[_AddressType] = None,
+    ) -> Tuple[Address, bytes]:
         if gas is None:
             gas = self.vm.state.gas_limit
+
         sender = self._get_sender(sender)
 
         if override_address is not None:
-            target_address = _addr(override_address)
+            target_address = Address(override_address)
         else:
             nonce = self.vm.state.get_nonce(sender)
             self.vm.state.increment_nonce(sender)
-            target_address = generate_contract_address(sender, nonce)
+            target_address = Address(generate_contract_address(sender, nonce))
 
         msg = Message(
             to=constants.CREATE_CONTRACT_ADDRESS,  # i.e., b""
@@ -505,7 +602,7 @@ class Env:
             gas=gas,
             value=value,
             code=bytecode,
-            create_address=target_address,
+            create_address=target_address.canonical_address,
             data=b"",
         )
         origin = sender  # XXX: consider making this parametrizable
@@ -522,7 +619,7 @@ class Env:
     def raw_call(
         self,
         to_address,
-        sender: Optional[AddressType] = None,
+        sender: Optional[_AddressType] = None,
         gas: Optional[int] = None,
         value: int = 0,
         data: bytes = b"",
@@ -543,12 +640,13 @@ class Env:
 
     def execute_code(
         self,
-        to_address: AddressType = constants.ZERO_ADDRESS,
-        sender: Optional[AddressType] = None,
+        to_address: _AddressType = constants.ZERO_ADDRESS,
+        sender: Optional[_AddressType] = None,
         gas: Optional[int] = None,
         value: int = 0,
         data: bytes = b"",
         override_bytecode: Optional[bytes] = None,
+        ir_executor: Any = None,
         is_modifying: bool = True,
         start_pc: int = 0,
         fake_codesize: Optional[int] = None,
@@ -556,12 +654,10 @@ class Env:
     ) -> Any:
         if gas is None:
             gas = self.vm.state.gas_limit
+
         sender = self._get_sender(sender)
 
-        class FakeMessage(Message):  # Message object with settable attrs
-            __dict__: dict = {}
-
-        to = _addr(to_address)
+        to = Address(to_address).canonical_address
 
         bytecode = override_bytecode
         if override_bytecode is None:
@@ -577,13 +673,15 @@ class Env:
             code=bytecode,  # type: ignore
             data=data,
             is_static=is_static,
+            fake_codesize=fake_codesize,
+            start_pc=start_pc,
+            ir_executor=ir_executor,
+            contract=contract,
         )
 
-        msg._fake_codesize = fake_codesize  # type: ignore
-        msg._start_pc = start_pc  # type: ignore
-        msg._contract = contract  # type: ignore
         origin = sender  # XXX: consider making this parametrizable
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
+
         ret = self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
         if self._coverage_enabled:
@@ -596,10 +694,12 @@ class Env:
         for _pc in computation.code._trace:
             # loop over pc so that it is available when coverage hooks into it
             pass
+
         for child in computation.children:
-            if child.msg.code_address != b"":
-                child_contract = self.lookup_contract(child.msg.code_address)
-                self._hook_trace_computation(child, child_contract)
+            if child.msg.code_address == b"":
+                continue
+            child_contract = self._lookup_contract_fast(child.msg.code_address)
+            self._hook_trace_computation(computation, child_contract)
 
     # function to time travel
     def time_travel(
