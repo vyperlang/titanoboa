@@ -132,7 +132,12 @@ class NetworkEnv(Env):
         blocks_ahead = self.BASE_FEE_ESTIMATOR_CONSTANT
         base_fee_estimate = ceil(to_int(base_fee) * (9 / 8) ** blocks_ahead)
 
-        max_fee = to_hex(base_fee_estimate + to_int(max_priority_fee))
+        max_fee = base_fee_estimate + to_int(max_priority_fee)
+        
+        # bump max_fee and max_priority_fee
+        max_fee = to_hex(int(1.5 * max_fee))
+        max_priority_fee = to_hex(int(1.5 * to_int(max_priority_fee)))
+        
         return to_hex(base_fee_estimate), max_priority_fee, max_fee, chain_id
 
     def _check_sender(self, address):
@@ -261,7 +266,7 @@ class NetworkEnv(Env):
 
         return create_address, deployed_bytecode
 
-    def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
+    def _wait_for_tx_trace(self, tx_hash, timeout=240, poll_latency=0.25):
         start = time.time()
         while True:
             receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
@@ -272,8 +277,10 @@ class NetworkEnv(Env):
             time.sleep(poll_latency)
 
         trace = None
-        if self._tracer is not None:
-            trace = self._rpc.fetch("debug_traceTransaction", [tx_hash, self._tracer])
+        # Disable debug_traceTransaction since this endpoint tends to be a paid
+        # feature (temporary).
+        # if self._tracer is not None:
+            # trace = self._rpc.fetch("debug_traceTransaction", [tx_hash, self._tracer])
         return receipt, trace
 
     @cached_property
