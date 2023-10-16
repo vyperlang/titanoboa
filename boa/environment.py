@@ -25,8 +25,12 @@ from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_ad
 from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
+from boa.vm.fast_accountdb import (
+    FastAccountDB,
+    patch_pyevm_state_object,
+    unpatch_pyevm_state_object,
+)
 from boa.vm.fork import AccountDBFork
-from boa.vm.fast_accountdb import FastAccountDB, patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 
@@ -337,22 +341,22 @@ class titanoboa_computation:
     def apply_computation(cls, state, msg, tx_ctx):
         addr = msg.code_address
         contract = cls.env._lookup_contract_fast(addr) if addr else None
-        #print("ENTER", Address(msg.code_address or bytes([0]*20)), contract)
+        # print("ENTER", Address(msg.code_address or bytes([0]*20)), contract)
         if contract is None or not cls.env._fast_mode_enabled:
-            #print("SLOW MODE")
+            # print("SLOW MODE")
             return super().apply_computation(state, msg, tx_ctx)
 
         with cls(state, msg, tx_ctx) as computation:
             try:
                 if getattr(msg, "_ir_executor", None) is not None:
-                    #print("MSG HAS IR EXECUTOR")
+                    # print("MSG HAS IR EXECUTOR")
                     # this happens when bytecode is overridden, e.g.
                     # for injected functions. note ir_executor is (correctly)
                     # used for the outer computation only because on subcalls
                     # a clean message is constructed for the child computation
                     msg._ir_executor.exec(computation)
                 else:
-                    #print("REGULAR FAST MODE")
+                    # print("REGULAR FAST MODE")
                     contract.ir_executor.exec(computation)
             except Halt:
                 pass
@@ -560,7 +564,7 @@ class Env:
             cls._singleton = cls()
         return cls._singleton
 
-    def generate_address(self, alias: Optional[str] = None) -> AddressType:
+    def generate_address(self, alias: Optional[str] = None) -> _AddressType:
         t = Address(self._random.randbytes(20))
         if alias is not None:
             self.alias(t, alias)

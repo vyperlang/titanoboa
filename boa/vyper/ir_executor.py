@@ -247,11 +247,10 @@ class IRExecutor:
             self.builder.extend("\n\n")
             func.compile_func()
 
-
         py_file = contract_path + str(self.compile_ctx.uuid) + ".py"
 
         # uncomment for debugging the python code:
-        #with open(py_file, "w") as f:
+        # with open(py_file, "w") as f:
         #    print(self.builder.get_output(), file=f)
 
         py_bytecode = compile(self.builder.get_output(), py_file, "exec")
@@ -1124,8 +1123,6 @@ def _ensure_source_pos(ir_node, source_pos=None, error_msg=None):
 
 
 def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
-    import vyper.version
-
     _ensure_source_pos(ir_node)
     ret = _executor_from_ir(ir_node, CompileContext(vyper_compiler_data))
 

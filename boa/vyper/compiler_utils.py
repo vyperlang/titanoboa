@@ -5,11 +5,9 @@ import vyper.semantics.analysis as analysis
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
-from vyper.compiler.settings import OptimizationLevel
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.utils import get_exact_type_from_node
-from vyper.utils import method_id_int
 
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ir_executor import executor_from_ir

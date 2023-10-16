@@ -16,8 +16,7 @@ import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
 from vyper.ast.utils import parse_to_ast
-from vyper.compiler.settings import OptimizationLevel
-from vyper.codegen.core import calculate_type_for_external_return, anchor_opt_level
+from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.function_definitions.common import ExternalFuncIR, InternalFuncIR
 from vyper.codegen.global_context import GlobalContext
@@ -271,7 +270,8 @@ def _handle_child_trace(computation, env, return_trace):
     child = computation.children[-1]
 
     # TODO: maybe should be:
-    # child_obj = env.lookup_contract(child.msg.code_address) or env._code_registry.get(child.msg.code)
+    # child_obj = env.lookup_contract(child.msg.code_address)
+    # or env._code_registry.get(child.msg.code)
 
     child_obj = env.lookup_contract(child.msg.code_address)
     if child_obj is None:

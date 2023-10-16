@@ -280,7 +280,7 @@ class NetworkEnv(Env):
         # Disable debug_traceTransaction since this endpoint tends to be a paid
         # feature (temporary).
         # if self._tracer is not None:
-            # trace = self._rpc.fetch("debug_traceTransaction", [tx_hash, self._tracer])
+        # trace = self._rpc.fetch("debug_traceTransaction", [tx_hash, self._tracer])
         return receipt, trace
 
     @cached_property
