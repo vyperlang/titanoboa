@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 import requests
 
 try:
@@ -48,6 +50,14 @@ class EthereumRPC:
     def __init__(self, url: str):
         self._rpc_url = url
         self._session = requests.Session()
+
+    @property
+    def url_base(self):
+        # return a version of the URL which has everything past the "base"
+        # url stripped out (content which you might not want to end up
+        # in logs)
+        parse_result = urlparse(self._rpc_url)
+        return f"{parse_result.scheme}://{parse_result.netloc}"
 
     def fetch(self, method, params):
         # the obvious thing to do here is dispatch into fetch_multi.

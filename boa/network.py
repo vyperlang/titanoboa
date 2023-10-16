@@ -64,6 +64,20 @@ class TransactionSettings:
     poll_timeout: float = 240.0
 
 
+@dataclass
+class ExternalAccount:
+    address: Address
+    _rpc: EthereumRPC
+
+    def __post_init__(self):
+        self.address = Address(self.address)
+
+    def send_transaction(self, tx_data):
+        txhash = self._rpc.fetch("eth_sendTransaction", [tx_data])
+        # format to be the same as what BrowserSigner returns
+        return {"hash": txhash}
+
+
 class NetworkEnv(Env):
     """
     An Env object which can be swapped in via `boa.set_env()`.
@@ -111,10 +125,27 @@ class NetworkEnv(Env):
             # wipe forked state
             self._reset_fork(blkid)
 
+    # add account, or "Account-like" object. MUST expose
+    # `sign_transaction` or `send_transaction` method!
     def add_account(self, account: Account, force_eoa=False):
         self._accounts[account.address] = account  # type: ignore
         if self.eoa is None or force_eoa:
             self.eoa = account.address  # type: ignore
+
+    def add_accounts_from_rpc(self, rpc: str | EthereumRPC) -> None:
+        if isinstance(rpc, str):
+            rpc = EthereumRPC(rpc)
+
+        # address strings, ex. ["0x0e5437b1b3448d22c07caed31e5bcdc4ec5284a9"]
+        addresses = rpc.fetch("eth_accounts", [])
+        if not addresses:
+            # strip out content in the URL which might not want to get into logs
+            warnings.warn(
+                f"No accounts fetched from <{rpc.url_base}>! (URL partially masked for privacy)",
+                stacklevel=2,
+            )
+        for address in addresses:
+            self.add_account(ExternalAccount(_rpc=rpc, address=address))  # type: ignore
 
     def set_eoa(self, eoa: Account) -> None:
         self.add_account(eoa, force_eoa=True)
