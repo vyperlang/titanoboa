@@ -49,6 +49,21 @@ class _EstimateGasFailed(Exception):
     pass
 
 
+@dataclass
+class TransactionSettings:
+    # when calculating the base fee, the number of blocks N ahead
+    # to compute a cap for the Nth block.
+    # defaults to 4 (4 blocks ahead, pending block's baseFee * ~1.6)
+    # but can be tweaked. if you get errors like
+    # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
+    # try increasing the constant.
+    # do not recommend setting below 0.
+    base_fee_estimator_constant: int = 4
+
+    # amount of time to wait, in seconds before giving up on a transaction
+    poll_timeout: float = 240.0
+
+
 class NetworkEnv(Env):
     """
     An Env object which can be swapped in via `boa.set_env()`.
@@ -68,6 +83,8 @@ class NetworkEnv(Env):
         self.eoa = None
 
         self._gas_price = None
+
+        self.tx_settings = TransactionSettings()
 
     @cached_property
     def _rpc_has_snapshot(self):
@@ -108,14 +125,6 @@ class NetworkEnv(Env):
             return self._gas_price
         return to_int(self._rpc.fetch("eth_gasPrice", []))
 
-    # when calculating the base fee, the number of blocks N ahead
-    # to compute a cap for the Nth block.
-    # defaults to 0 (no blocks ahead, just use pending block's baseFee)
-    # but can be tweaked if you get errors like
-    # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
-
-    BASE_FEE_ESTIMATOR_CONSTANT = 4
-
     def get_fee_info(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
         reqs = [
@@ -129,7 +138,7 @@ class NetworkEnv(Env):
         # Each block increases the base fee by 1/8 at most.
         # here we have the next block's base fee, compute a cap for the
         # next N blocks here.
-        blocks_ahead = self.BASE_FEE_ESTIMATOR_CONSTANT
+        blocks_ahead = self.tx_settings.base_fee_estimator_constant
         base_fee_estimate = ceil(to_int(base_fee) * (9 / 8) ** blocks_ahead)
 
         max_fee = to_hex(base_fee_estimate + to_int(max_priority_fee))
@@ -261,8 +270,11 @@ class NetworkEnv(Env):
 
         return create_address, deployed_bytecode
 
-    def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
+    def _wait_for_tx_trace(self, tx_hash, poll_latency=0.25):
         start = time.time()
+
+        timeout = self.tx_settings.poll_timeout
+
         while True:
             receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
             if receipt is not None:
