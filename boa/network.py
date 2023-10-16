@@ -7,9 +7,8 @@ from functools import cached_property
 from math import ceil
 
 from eth_account import Account
-from eth_utils import to_canonical_address, to_checksum_address
 
-from boa.environment import Env
+from boa.environment import Address, Env
 from boa.rpc import EthereumRPC, RPCError, to_bytes, to_hex, to_int
 
 
@@ -148,7 +147,7 @@ class NetworkEnv(Env):
     def _check_sender(self, address):
         if address is None:
             raise ValueError("No sender!")
-        return to_checksum_address(address)
+        return address
 
     # OVERRIDES
     def execute_code(
@@ -249,7 +248,7 @@ class NetworkEnv(Env):
             from_=sender, value=value, gas=gas, data=bytecode
         )
 
-        create_address = to_canonical_address(receipt["contractAddress"])
+        create_address = Address(receipt["contractAddress"])
 
         deployed_bytecode = local_bytecode
 
@@ -267,7 +266,7 @@ class NetworkEnv(Env):
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
 
         # TODO get contract info in here
-        print(f"contract deployed at {to_checksum_address(create_address)}")
+        print(f"contract deployed at {create_address}")
 
         return create_address, deployed_bytecode
 
