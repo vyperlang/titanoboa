@@ -147,7 +147,7 @@ class NetworkEnv(Env):
     def _check_sender(self, address):
         if address is None:
             raise ValueError("No sender!")
-        return address
+        return Address(address)
 
     # OVERRIDES
     def execute_code(
