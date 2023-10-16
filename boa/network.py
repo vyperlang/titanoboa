@@ -114,7 +114,7 @@ class NetworkEnv(Env):
     # but can be tweaked if you get errors like
     # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
 
-    BASE_FEE_ESTIMATOR_CONSTANT = 0
+    BASE_FEE_ESTIMATOR_CONSTANT = 4
 
     def get_fee_info(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
