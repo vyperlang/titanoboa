@@ -51,6 +51,9 @@ class EthereumRPC:
         self._rpc_url = url
         self._session = requests.Session()
 
+        # declare app name to frame.sh
+        self._session.headers["Origin"] = "Titanoboa"
+
     @property
     def url_base(self):
         # return a version of the URL which has everything past the "base"
