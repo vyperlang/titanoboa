@@ -2,6 +2,7 @@
 import contextlib
 import time
 import warnings
+from dataclasses import dataclass
 from functools import cached_property
 from math import ceil
 
