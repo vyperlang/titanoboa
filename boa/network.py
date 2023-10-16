@@ -285,7 +285,9 @@ class NetworkEnv(Env):
             call_tracer = {"tracer": "callTracer", "onlyTopCall": True}
             self._rpc.fetch("debug_traceTransaction", [txn_hash, call_tracer])
         except RPCError as e:
-            if e.code == -32601:
+            # -32600 is alchemy unpaid tier error message
+            # -32601 is infura error message (if i recall correctly)
+            if e.code in (-32601, -32600):
                 warnings.warn(
                     "debug_traceTransaction not available! "
                     "titanoboa will try hard to interact with the network, but "
