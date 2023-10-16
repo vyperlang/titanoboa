@@ -160,6 +160,7 @@ class NetworkEnv(Env):
         override_bytecode=None,
         contract=None,
         is_modifying=True,
+        ir_executor=None,  # maybe just have **kwargs to collect extra kwargs
     ):
         # call execute_code for tracing side effects
         computation = super().execute_code(
