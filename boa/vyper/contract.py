@@ -24,6 +24,7 @@ from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import output as compiler_output
 from vyper.compiler.settings import OptimizationLevel
+from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
@@ -64,7 +65,8 @@ class VyperDeployer:
 
         # force compilation so that if there are any errors in the contract,
         # we fail at load rather than at deploy time.
-        _ = compiler_data.bytecode
+        with anchor_evm_version(compiler_data.settings.evm_version):
+            _ = compiler_data.bytecode
 
         self.filename = filename
 
@@ -609,9 +611,10 @@ class VyperContract(_BaseContract):
     @property
     def source_map(self):
         if self._source_map is None:
-            _, self._source_map = compile_ir.assembly_to_evm(
-                self.compiler_data.assembly_runtime
-            )
+            with anchor_evm_version(self.compiler_data.settings.evm_version):
+                _, self._source_map = compile_ir.assembly_to_evm(
+                    self.compiler_data.assembly_runtime
+                )
         return self._source_map
 
     def find_error_meta(self, computation):
@@ -756,24 +759,27 @@ class VyperContract(_BaseContract):
         module = copy.deepcopy(self.compiler_data.vyper_module)
 
         # do the same thing as vyper_module_folded but skip getter expansion
-        vy_ast.folding.fold(module)
-        with vy_ns.get_namespace().enter_scope():
-            analysis.add_module_namespace(module, self.compiler_data.interface_codes)
-            analysis.validate_functions(module)
-            # we need to cache the namespace right here(!).
-            # set_data_positions will modify the type definitions in place.
-            self._cache_namespace(vy_ns.get_namespace())
+        with anchor_evm_version(self.compiler_data.settings.evm_version):
+            vy_ast.folding.fold(module)
+            with vy_ns.get_namespace().enter_scope():
+                analysis.add_module_namespace(
+                    module, self.compiler_data.interface_codes
+                )
+                analysis.validate_functions(module)
+                # we need to cache the namespace right here(!).
+                # set_data_positions will modify the type definitions in place.
+                self._cache_namespace(vy_ns.get_namespace())
 
-        vy_ast.expansion.remove_unused_statements(module)
-        # calculate slots for all storage variables, tagging
-        # the types in the namespace.
-        set_data_positions(module, storage_layout_overrides=None)
+            vy_ast.expansion.remove_unused_statements(module)
+            # calculate slots for all storage variables, tagging
+            # the types in the namespace.
+            set_data_positions(module, storage_layout_overrides=None)
 
-        # ensure _ir_info is generated for all functions in this copied/shadow
-        # namespace
-        _ = generate_ir_for_module(GlobalContext(module))
+            # ensure _ir_info is generated for all functions in this copied/shadow
+            # namespace
+            _ = generate_ir_for_module(GlobalContext(module))
 
-        return module
+            return module
 
     # the global namespace is expensive to compute, so cache it
     def _cache_namespace(self, namespace):
@@ -805,8 +811,11 @@ class VyperContract(_BaseContract):
     # eliminator might prune a dead function (which we want to eval)
     @cached_property
     def unoptimized_assembly(self):
-        runtime = self.compiler_data.ir_runtime
-        return compile_ir.compile_to_assembly(runtime, optimize=OptimizationLevel.NONE)
+        with anchor_evm_version(self.compiler_data.settings.evm_version):
+            runtime = self.compiler_data.ir_runtime
+            return compile_ir.compile_to_assembly(
+                runtime, optimize=OptimizationLevel.NONE
+            )
 
     @cached_property
     def data_section_size(self):
@@ -829,12 +838,15 @@ class VyperContract(_BaseContract):
 
     @cached_property
     def unoptimized_ir(self):
-        with anchor_opt_level(OptimizationLevel.NONE):
+        with anchor_opt_level(OptimizationLevel.NONE), anchor_evm_version(
+            self.compiler_data.settings.evm_version
+        ):
             return generate_ir_for_module(self.compiler_data.global_ctx)
 
     @cached_property
     def ir_executor(self):
         _, ir_runtime = self.unoptimized_ir
+        # TODO: check if this needs anchor_evm_version
         return executor_from_ir(ir_runtime, self.compiler_data)
 
     @contextlib.contextmanager

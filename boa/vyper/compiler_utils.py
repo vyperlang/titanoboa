@@ -5,6 +5,7 @@ import vyper.semantics.analysis as analysis
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
+from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.utils import get_exact_type_from_node
@@ -22,45 +23,47 @@ def compile_vyper_function(vyper_function, contract):
     """
 
     compiler_data = contract.compiler_data
-    global_ctx = contract.global_ctx
-    ifaces = compiler_data.interface_codes
-    ast = parse_to_ast(vyper_function, ifaces)
-    vy_ast.folding.fold(ast)
 
-    # override namespace and add wrapper code at the top
-    with contract.override_vyper_namespace():
-        analysis.add_module_namespace(ast, ifaces)
-        analysis.validate_functions(ast)
+    with anchor_evm_version(compiler_data.settings.evm_version):
+        global_ctx = contract.global_ctx
+        ifaces = compiler_data.interface_codes
+        ast = parse_to_ast(vyper_function, ifaces)
+        vy_ast.folding.fold(ast)
 
-    ast = ast.body[0]
-    func_t = ast._metadata["type"]
+        # override namespace and add wrapper code at the top
+        with contract.override_vyper_namespace():
+            analysis.add_module_namespace(ast, ifaces)
+            analysis.validate_functions(ast)
 
-    external_func_info = generate_ir_for_function(ast, global_ctx, False)
-    ir = external_func_info.common_ir
+        ast = ast.body[0]
+        func_t = ast._metadata["type"]
 
-    entry_label = func_t._ir_info.external_function_base_entry_label
+        external_func_info = generate_ir_for_function(ast, global_ctx, False)
+        ir = external_func_info.common_ir
 
-    ir = ["seq", ["goto", entry_label], ir]
+        entry_label = func_t._ir_info.external_function_base_entry_label
 
-    # use a dummy method id
-    ir = ["with", _METHOD_ID_VAR, 0, ir]
+        ir = ["seq", ["goto", entry_label], ir]
 
-    # first mush it with the rest of the IR in the contract to ensure
-    # all labels are present, and then optimize all together
-    # (use unoptimized IR, ir_executor can't handle optimized selector tables)
-    _, contract_runtime = contract.unoptimized_ir
-    ir = IRnode.from_list(["seq", ir, contract_runtime])
-    ir = optimizer.optimize(ir)
+        # use a dummy method id
+        ir = ["with", _METHOD_ID_VAR, 0, ir]
 
-    assembly = compile_ir.compile_to_assembly(ir)
-    bytecode, source_map = compile_ir.assembly_to_evm(assembly)
-    bytecode += contract.data_section
-    typ = func_t.return_type
+        # first mush it with the rest of the IR in the contract to ensure
+        # all labels are present, and then optimize all together
+        # (use unoptimized IR, ir_executor can't handle optimized selector tables)
+        _, contract_runtime = contract.unoptimized_ir
+        ir = IRnode.from_list(["seq", ir, contract_runtime])
+        ir = optimizer.optimize(ir)
 
-    # generate the IR executor
-    ir_executor = executor_from_ir(ir, compiler_data)
+        assembly = compile_ir.compile_to_assembly(ir)
+        bytecode, source_map = compile_ir.assembly_to_evm(assembly)
+        bytecode += contract.data_section
+        typ = func_t.return_type
 
-    return ast, ir_executor, bytecode, source_map, typ
+        # generate the IR executor
+        ir_executor = executor_from_ir(ir, compiler_data)
+
+        return ast, ir_executor, bytecode, source_map, typ
 
 
 def generate_bytecode_for_internal_fn(fn):
