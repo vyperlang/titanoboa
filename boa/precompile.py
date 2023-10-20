@@ -1,15 +1,10 @@
 from typing import Any
 
-from eth.codecs import abi
 from vyper.ast import parse_to_ast
 from vyper.builtins._signatures import BuiltinFunction
-from vyper.builtins.functions import (
-    DISPATCH_TABLE,
-    STMT_DISPATCH_TABLE,
-    abi_encode,
-    ir_tuple_from_args,
-    process_inputs,
-)
+from vyper.builtins.functions import DISPATCH_TABLE, STMT_DISPATCH_TABLE
+from vyper.builtins.functions import abi_encode as abi_encode_ir
+from vyper.builtins.functions import ir_tuple_from_args, process_inputs
 from vyper.codegen.core import IRnode, needs_external_call_wrap
 from vyper.evm.address_space import MEMORY
 from vyper.semantics.analysis.base import VarInfo
@@ -19,6 +14,7 @@ from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import keccak256
 
 from boa.environment import register_raw_precompile
+from boa.util.abi import abi_decode, abi_encode
 
 
 class PrecompileBuiltin(BuiltinFunction):
@@ -44,7 +40,7 @@ class PrecompileBuiltin(BuiltinFunction):
         ret = ["seq"]
 
         # store abi-encoded argument at buf
-        args_len = abi_encode(
+        args_len = abi_encode_ir(
             args_buf, args_as_tuple, context, args_abi_t.size_bound(), returns_len=True
         )
         ret_len = self._return_type.abi_type.size_bound()
@@ -66,12 +62,12 @@ def precompile(user_signature: str, force: bool = False) -> Any:
         vy_ast = parse_to_ast(user_signature + ": view").body[0]
         func_t = ContractFunctionT.from_FunctionDef(vy_ast, is_interface=True)
 
-        args_t = TupleT(tuple(func_t.arguments.values()))
+        args_t = TupleT(tuple(func_t.argument_types))
 
         def wrapper(computation):
             # Decode input arguments from message data
             msg_data = computation.msg.data_as_bytes
-            arg_values = abi.decode(args_t.abi_type.selector_name(), msg_data)
+            arg_values = abi_decode(args_t.abi_type.selector_name(), msg_data)
 
             # Call the original function with decoded input arguments
             res = func(*arg_values)
@@ -85,14 +81,14 @@ def precompile(user_signature: str, force: bool = False) -> Any:
                     return_t = TupleT((return_t,))
 
                 ret_abi_t = return_t.abi_type.selector_name()
-                computation.output = abi.encode(ret_abi_t, res)
+                computation.output = abi_encode(ret_abi_t, res)
 
                 return computation
 
         address = keccak256(user_signature.encode("utf-8"))[:20]
         register_raw_precompile(address, wrapper, force=force)
 
-        args = list(func_t.arguments.items())
+        args = [(arg.name, arg.typ) for arg in func_t.arguments]
         fn_name = func_t.name
         builtin = PrecompileBuiltin(fn_name, args, func_t.return_type, address)
 

@@ -28,6 +28,8 @@ pip install brownie
 pip install git+https://github.com/vyperlang/titanoboa
 ```
 
+Sometimes, using [pypy](https://www.pypy.org/download.html) can result in a substantial performance improvement for computation heavy contracts. `Pypy` can usually be used as a drop-in replacement for `CPython`.
+
 To get a performance boost for mainnet forking, install with the `forking-recommended` extra (`pip install "git+https://github.com/vyperlang/titanoboa#egg=titanoboa[forking-recommended]"`, or `pip install titanoboa[forking-recommended]`). This installs `plyvel` to cache RPC results between sessions, and `ujson` which improves json performance.
 
 If you are running titanoboa on a local [Vyper](https://github.com/vyperlang/vyper) project folder, you might need to run `python setup.py install` on your [Vyper](https://github.com/vyperlang/vyper) project if you encounter errors such as `ModuleNotFoundError: No module named 'vyper.version'`
@@ -191,7 +193,25 @@ Cast current deployed addresses to vyper contract
     'Curve DAO Token'
 ```
 
-basic tests:
+### Network Mode
+```python
+>>> import boa; from boa.network import NetworkEnv
+>>> from eth_account import Account
+>>> boa.env.set_env(NetworkEnv("<rpc server address>"))
+>>> # in a real codebase, always load private keys safely from an encrypted store!
+>>> boa.env.add_account(Account(<a private key>))
+>>> c = boa.load("examples/ERC20.vy", "My Token", "TKN", 10**18, 10)
+>>> c.name()
+    'My Token'
+```
+
+### Jupyter Integration
+
+You can use Jupyter to execute titanoboa code in network mode from your browser using any wallet, using `boa.integrations.jupyter.BrowserSigner` as a drop-in replacement for `eth_account.Account`. For a full example, please see [this example Jupyter notebook](examples/jupyter_browser_signer.ipynb)
+
+
+### Basic tests
+
 ```bash
 $ python -m tests.integration.sim_veYFI
 ```

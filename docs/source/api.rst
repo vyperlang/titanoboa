@@ -34,7 +34,14 @@ High-Level Functionality
         >>> boa.load("Foo.vy")
         <tmp/Foo.vy at 0x0000000000000000000000000000000000000066, compiled with ...>
 
-.. function:: loads(source: str, *args: Any, as_blueprint: bool = False, name: str | None = None, **kwargs) -> VyperContract | VyperBlueprint
+    .. code-block:: python
+
+        >>> import boa
+        >>> from vyper.compiler.settings import OptimizationLevel, Settings
+        >>> boa.load("Foo.vy", compiler_args={"settings": Settings(optimize=OptimizationLevel.CODESIZE)})
+        <tmp/Foo.vy at 0xf2Db9344e9B01CB353fe7a2d076ae34A9A442513, compiled with ...>
+
+.. function:: loads(source: str, *args: Any, as_blueprint: bool = False, name: str | None = None, compiler_args: dict | None = None, **kwargs) -> VyperContract | VyperBlueprint
 
     Compile source code and return a deployed instance of the contract.
 
@@ -42,6 +49,7 @@ High-Level Functionality
     :param args: Contract constructor arguments.
     :param as_blueprint: Whether to deploy an :eip:`5202` blueprint of the compiled contract.
     :param name: The name of the contract.
+    :param compiler_args: Argument to be passed to the Vyper compiler.
     :param kwargs: Keyword arguments to pass to the :py:class:`VyperContract` or :py:class:`VyperBlueprint` ``__init__`` method.
 
     .. rubric:: Example
@@ -58,11 +66,12 @@ High-Level Functionality
         >>> boa.loads(src, 69)
         <VyperContract at 0x0000000000000000000000000000000000000066, compiled with ...>
 
-.. function:: load_partial(fp: str) -> VyperDeployer
+.. function:: load_partial(fp: str, compiler_args: dict | None = None) -> VyperDeployer
 
     Compile source from disk and return a :py:class:`VyperDeployer`.
 
     :param fp: The contract source code file path.
+    :param compiler_args: Argument to be passed to the Vyper compiler.
     :returns: A :py:class:`VyperDeployer` factory instance.
 
     .. rubric:: Example
@@ -80,12 +89,14 @@ High-Level Functionality
         >>> boa.load_partial("Foo.vy")
         <boa.vyper.contract.VyperDeployer object at ...>
 
-.. function:: loads_partial(source: str, name: str | None = None) -> VyperDeployer
+.. function:: loads_partial(source: str, name: str | None = None, dedent: bool = True, compiler_args: dict | None = None) -> VyperDeployer
 
     Compile source and return a :py:class:`VyperDeployer`.
 
     :param source: The Vyper source code.
     :param name: The name of the contract.
+    :param dedent: If `True`, remove any common leading whitespace from every line in `source`.
+    :param compiler_args: Argument to be passed to the Vyper compiler.
     :returns: A :py:class:`VyperDeployer` factory instance.
 
     .. rubric:: Example
@@ -346,7 +357,22 @@ Low-Level Functionality
 
             >>> import boa
             >>> boa.env.generate_address()
-            '0x0000000000000000000000000000000000000066'
+            '0xd13f0Bd22AFF8176761AEFBfC052a7490bDe268E'
+
+    .. method:: set_random_seed(seed: Any = None) -> None
+
+        Set the random seed used by this ``Env`` to generate addresses. Useful in case you want to introduce some more randomization to how ``Env`` generates addresses.
+
+        :param seed: The seed to pass to this ``Env``'s instance of ``random.Random``. Can be any value that ``random.Random()`` accepts.
+
+        .. rubric:: Example
+
+     .. code-block:: python
+
+            >>> import boa
+            >>> boa.env.set_random_seed(100)
+            >>> boa.env.generate_address()
+            '0x93944a25b3ADa3759918767471C5A3F3601652c5
 
     .. method:: set_balance(address: str, value: int)
 
@@ -612,6 +638,30 @@ Low-Level Functionality
     ..         (b'\xab:\xe2U', '(uint256)')
     ..         >>> contract.main.args_abi_type(1)
     ..         (b'\xccW,\xf9', '(uint256,uint256)')
+
+    .. method:: prepare_calldata(*args: Any, **kwargs: Any) -> bytes:
+        Prepare the calldata that a function call would use.
+        This is useful for saving calldata for use in a transaction later.
+
+        :param args: The positional arguments of the contract function.
+        :param kwargs: Keyword arguments of the contract function.
+
+        :returns: The calldata that a call with a particular set of arguments would use, in bytes.
+
+        .. rubric:: Example
+
+        .. code-block:: python
+
+            >>> import boa
+            >>> src = """
+            ... @external
+            ... def main(a: uint256) -> uint256:
+            ...     return 1 + a
+            ... """
+            >>> c = boa.loads(src)
+            >>> contract.main.prepare_calldata(68)
+            b'\xab:\xe2U\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0D'
+
 
     .. method:: __call__(*args: Any, value: int = 0, gas: int | None = None, sender: str | None = None, **kwargs: Any) -> Any
 

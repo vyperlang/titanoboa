@@ -9,16 +9,12 @@ from vyper.semantics.types import (
     InterfaceT,
     SArrayT,
     StringT,
+    StructT,
+    TupleT,
 )
 from vyper.utils import unsigned_to_signed
 
-
-def ceil32(n):
-    return floor32(n + 31)
-
-
-def floor32(n):
-    return n & ~31
+from boa.vm.utils import ceil32, floor32
 
 
 # wrap storage in something which looks like memory
@@ -43,6 +39,15 @@ class ByteAddressableStorage:
             return memoryview(ret[start:stop])
         else:
             raise Exception("Must slice {self}")
+
+
+class _Struct(dict):
+    def __init__(self, name, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.struct_name = name
+
+    def __repr__(self):
+        return f"{self.struct_name}({super().__repr__()})"
 
 
 def decode_vyper_object(mem, typ):
@@ -80,5 +85,21 @@ def decode_vyper_object(mem, typ):
             ret.append(decode_vyper_object(mem[ofst : ofst + n], typ.subtype))
             ofst += n
         return ret
+    if isinstance(typ, StructT):
+        ret = _Struct(typ.name)
+        ofst = 0
+        for k, subtype in typ.tuple_items():
+            n = subtype.memory_bytes_required
+            ret[k] = decode_vyper_object(mem[ofst : ofst + n], subtype)
+            ofst += n
+        return ret
+    if isinstance(typ, TupleT):
+        ret = []
+        ofst = 0
+        for _, subtype in typ.tuple_items():
+            n = subtype.memory_bytes_required
+            ret.append(decode_vyper_object(mem[ofst : ofst + n], subtype))
+            ofst += n
+        return tuple(ret)
 
     return f"unimplemented decoder for `{typ}`"

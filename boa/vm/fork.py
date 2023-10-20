@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from typing import Any, Dict, Tuple
 
 try:
     import ujson as json
@@ -8,7 +8,6 @@ except ImportError:
 
 import rlp
 from eth.db.account import AccountDB, keccak
-from eth.db.backends.level import LevelDB
 from eth.db.backends.memory import MemoryDB
 from eth.db.cache import CacheDB
 from eth.rlp.accounts import Account
@@ -35,6 +34,8 @@ class CachingRPC(EthereumRPC):
         self._init_mem_db()
         if cache_file is not None:
             try:
+                from boa.util.leveldb import LevelDB
+
                 cache_file = os.path.expanduser(cache_file)
                 # use CacheDB as an additional layer over disk
                 # (ideally would use leveldb lru cache but it's not configurable
@@ -46,7 +47,7 @@ class CachingRPC(EthereumRPC):
 
     # _loaded is a cache for the constructor.
     # reduces fork time after the first fork.
-    _loaded: dict[tuple[str, str], "CachingRPC"] = {}
+    _loaded: Dict[Tuple[str, str], "CachingRPC"] = {}
     _pid: int = os.getpid()  # so we can detect if our fds are bad
 
     def _init_mem_db(self):
@@ -102,7 +103,7 @@ class CachingRPC(EthereumRPC):
 # AccountDB which dispatches to an RPC when we don't have the
 # data locally
 class AccountDBFork(AccountDB):
-    _rpc_init_kwargs: dict[str, Any] = {}
+    _rpc_init_kwargs: Dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

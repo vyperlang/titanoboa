@@ -1,6 +1,7 @@
 import json
 import textwrap
 from pathlib import Path
+from typing import Union
 
 import vyper
 from vyper.cli.vyper_compile import get_interface_codes
@@ -15,7 +16,7 @@ from boa.vyper.contract import (
     VyperDeployer,
 )
 
-_Contract = VyperContract | VyperBlueprint
+_Contract = Union[VyperContract, VyperBlueprint]
 
 
 _disk_cache = None
@@ -30,7 +31,7 @@ def set_cache_dir(cache_dir="~/.cache/titanoboa"):
     _disk_cache = DiskCache(cache_dir, compiler_version)
 
 
-def compiler_data(source_code: str, contract_name: str) -> CompilerData:
+def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerData:
     global _disk_cache
 
     def _ifaces():
@@ -41,16 +42,16 @@ def compiler_data(source_code: str, contract_name: str) -> CompilerData:
 
     if _disk_cache is None:
         ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces)
+        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
         return ret
 
     def func():
         ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces)
-        ret.bytecode_runtime  # force compilation to happen
+        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
+        _ = ret.bytecode_runtime  # force compilation to happen
         return ret
 
-    return _disk_cache.caching_lookup(source_code, func)
+    return _disk_cache.caching_lookup(str((kwargs, source_code)), func)
 
 
 def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
@@ -62,8 +63,16 @@ def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
         return loads(f.read(), *args, name=name, **kwargs, filename=filename)
 
 
-def loads(source_code, *args, as_blueprint=False, name=None, filename=None, **kwargs):
-    d = loads_partial(source_code, name, filename=filename)
+def loads(
+    source_code,
+    *args,
+    as_blueprint=False,
+    name=None,
+    filename=None,
+    compiler_args=None,
+    **kwargs,
+):
+    d = loads_partial(source_code, name, filename=filename, compiler_args=compiler_args)
     if as_blueprint:
         return d.deploy_as_blueprint(**kwargs)
     else:
@@ -82,18 +91,27 @@ def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFa
 
 
 def loads_partial(
-    source_code: str, name: str = None, filename: str = None, dedent: bool = True
+    source_code: str,
+    name: str = None,
+    filename: str = None,
+    dedent: bool = True,
+    compiler_args: dict = None,
 ) -> VyperDeployer:
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
     if dedent:
         source_code = textwrap.dedent(source_code)
-    data = compiler_data(source_code, name)
+
+    compiler_args = compiler_args or {}
+
+    data = compiler_data(source_code, name, **compiler_args)
     return VyperDeployer(data, filename=filename)
 
 
-def load_partial(filename: str) -> VyperDeployer:  # type: ignore
+def load_partial(filename: str, compiler_args=None) -> VyperDeployer:  # type: ignore
     with open(filename) as f:
-        return loads_partial(f.read(), name=filename, filename=filename)
+        return loads_partial(
+            f.read(), name=filename, filename=filename, compiler_args=compiler_args
+        )
 
 
 __all__ = ["BoaError"]
