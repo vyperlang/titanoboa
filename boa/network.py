@@ -365,9 +365,9 @@ class NetworkEnv(Env):
             {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         )
 
-        base_fee, max_priority_fee, max_fee, chain_id = self.get_fee_info()
         try:
             # eip-1559 txn
+            base_fee, max_priority_fee, max_fee, chain_id = self.get_fee_info()
             tx_data["maxPriorityFeePerGas"] = max_priority_fee
             tx_data["maxFeePerGas"] = max_fee
             tx_data["chainId"] = chain_id
