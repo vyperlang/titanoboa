@@ -176,6 +176,7 @@ class NetworkEnv(Env):
         return to_hex(base_fee_estimate), max_priority_fee, max_fee, chain_id
 
     def get_static_fee(self) -> tuple[str, str]:
+        # non eip-1559 transaction
         return self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])])
 
     def _check_sender(self, address):
