@@ -156,7 +156,7 @@ class NetworkEnv(Env):
             return self._gas_price
         return to_int(self._rpc.fetch("eth_gasPrice", []))
 
-    def estimate_eip1559_fee(self) -> tuple[str, str, str, str]:
+    def get_eip1559_fee(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
         reqs = [
             ("eth_getBlockByNumber", ["pending", False]),
@@ -174,6 +174,9 @@ class NetworkEnv(Env):
 
         max_fee = to_hex(base_fee_estimate + to_int(max_priority_fee))
         return to_hex(base_fee_estimate), max_priority_fee, max_fee, chain_id
+
+    def get_static_fee(self) -> tuple[str, str]:
+        return self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])])
 
     def _check_sender(self, address):
         if address is None:
@@ -367,12 +370,14 @@ class NetworkEnv(Env):
 
         try:
             # eip-1559 txn
-            base_fee, max_priority_fee, max_fee, chain_id = self.estimate_eip1559_fee()
+            (base_fee, max_priority_fee, max_fee, chain_id) = self.get_eip1559_fee()
             tx_data["maxPriorityFeePerGas"] = max_priority_fee
             tx_data["maxFeePerGas"] = max_fee
             tx_data["chainId"] = chain_id
         except (RPCError, KeyError):
-            tx_data["gasPrice"] = to_hex(self.get_gas_price())
+            gas_price, chain_id = self.get_static_fee()
+            tx_data["gasPrice"] = gas_price
+            tx_data["chainId"] = chain_id
 
         tx_data["nonce"] = self._get_nonce(from_)
 
