@@ -23,7 +23,7 @@ def patch_pyevm_state_object(state_object):
     accountdb = state_object._account_db
     accountdb._restore_touch_account = accountdb.touch_account
     accountdb.touch_account = _touch_account_patcher.__get__(accountdb, AccountDB)
-    state_object.__boa_patched__ = True
+    state_object.__boa_patched__ = _BOA_PATCHED
 
 
 def unpatch_pyevm_state_object(state_object):
