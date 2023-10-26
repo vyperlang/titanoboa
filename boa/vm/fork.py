@@ -182,6 +182,8 @@ class AccountDBFork(AccountDB):
                 "data": msg.data,
             }
         )
+        # TODO: skip debug_traceCall if we have seen these specific
+        # arguments with this specific block before
         try:
             tracer = {"tracer": "prestateTracer"}
             res = self._rpc._raw_fetch_single(
