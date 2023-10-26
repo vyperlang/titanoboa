@@ -13,7 +13,7 @@ from eth.db.cache import CacheDB
 from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth.vm.message import Message
-from eth_utils import int_to_big_endian, to_checksum_address
+from eth_utils import int_to_big_endian, to_canonical_address, to_checksum_address
 
 from boa.rpc import EthereumRPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
@@ -194,7 +194,7 @@ class AccountDBFork(AccountDB):
 
         # everything is returned in hex
         for address, v in res.items():
-            address = to_bytes(address)
+            address = to_canonical_address(address)
 
             # set account if we don't already have it
             if self._get_account_helper(address) is None:
@@ -210,9 +210,13 @@ class AccountDBFork(AccountDB):
             for hexslot, hexvalue in storage.items():
                 slot = to_int(hexslot)
                 value = to_int(hexvalue)
-                # set storage if we don't already have it
+                # set storage if we don't already have it.
+                # see AccountStorageDB.get()
+                # note we explicitly write 0s, so that they appear
+                # in the journal later when called by get_storage
+                key = int_to_big_endian(slot)
                 if not self._helper_have_storage(address, slot):
-                    account_store.set(slot, value)
+                    account_store._journal_storage[key] = rlp.encode(value)  # type: ignore
 
     def get_code(self, address):
         try:
@@ -227,23 +231,17 @@ class AccountDBFork(AccountDB):
     # or we need to get from RPC
     def _helper_have_storage(self, address, slot, from_journal=True):
         # we have the storage locally in the VM already
+        # cf. AccountStorageDB.get()
         store = super()._get_address_store(address)
         key = int_to_big_endian(slot)
         db = store._journal_storage if from_journal else store._locked_changes
-        try:
-            if db[key] != _EMPTY:
-                return True
-        except KeyError:
-            # (it was deleted in the journal.)
-            return True
 
-        return False
+        return key in db and db[key] != _EMPTY
 
     def get_storage(self, address, slot, from_journal=True):
         # call super to get address warming semantics
         s = super().get_storage(address, slot, from_journal)
 
-        # cf. AccountStorageDB.get()
         if self._helper_have_storage(address, slot, from_journal=from_journal):
             return s
 
