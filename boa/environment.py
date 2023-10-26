@@ -25,10 +25,7 @@ from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_ad
 from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
-from boa.vm.fast_accountdb import (
-    patch_pyevm_state_object,
-    unpatch_pyevm_state_object,
-)
+from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -390,6 +387,7 @@ class Env:
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
     _fast_mode_enabled = False
+    _fork_mode = False
 
     def __init__(self):
         self.chain = _make_chain()
@@ -466,6 +464,7 @@ class Env:
     def fork(self, url, reset_traces=True, **kwargs):
         kwargs["url"] = url
         AccountDBFork._rpc_init_kwargs = kwargs
+        self._fork_mode = True
         self.vm.__class__._state_class.account_db_class = AccountDBFork
         self._init_vm(reset_traces=reset_traces)
         block_info = self.vm.state._account_db._block_info
@@ -609,6 +608,10 @@ class Env:
             create_address=target_address.canonical_address,
             data=b"",
         )
+
+        if self._fork_mode:
+            self.vm.state._account_db.try_prefetch_state(msg)
+
         origin = sender  # XXX: consider making this parametrizable
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())
         c = self.vm.state.computation_class.apply_create_message(
@@ -682,6 +685,8 @@ class Env:
             ir_executor=ir_executor,
             contract=contract,
         )
+        if self._fork_mode:
+            self.vm.state._account_db.try_prefetch_state(msg)
 
         origin = sender  # XXX: consider making this parametrizable
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=self.get_gas_price())

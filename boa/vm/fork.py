@@ -12,9 +12,10 @@ from eth.db.backends.memory import MemoryDB
 from eth.db.cache import CacheDB
 from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
+from eth.vm.message import Message
 from eth_utils import int_to_big_endian, to_checksum_address
 
-from boa.rpc import EthereumRPC, to_bytes, to_hex, to_int
+from boa.rpc import EthereumRPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
 
 TIMEOUT = 60  # default timeout for http requests in seconds
@@ -71,6 +72,7 @@ class CachingRPC(EthereumRPC):
     def _mk_key(self, method: str, params: Any) -> Any:
         return json.dumps({"method": method, "params": params}).encode("utf-8")
 
+    # note: overrides super().fetch!
     def fetch(self, method, params):
         # dispatch into fetch_multi for caching behavior.
         (res,) = self.fetch_multi([(method, params)])
@@ -117,9 +119,9 @@ class AccountDBFork(AccountDB):
             block_identifier = to_hex(block_identifier)
 
         # do not cache - use raw_fetch
-        self._block_info = self._rpc._raw_fetch_multi(
-            [(0, "eth_getBlockByNumber", [block_identifier, False])]
-        )[0]
+        self._block_info = self._rpc._raw_fetch_single(
+            "eth_getBlockByNumber", [block_identifier, False]
+        )
         self._block_number = to_int(self._block_info["number"])
 
     @property
@@ -129,20 +131,26 @@ class AccountDBFork(AccountDB):
     def _has_account(self, address, from_journal=True):
         return super()._get_encoded_account(address, from_journal) != _EMPTY
 
-    def _get_account(self, address, from_journal=True):
+    def _get_account_helper(self, address, from_journal=True):
         # cf. super impl of _get_account
-        # we need to override this in order so that internal uses of
-        # _set_account() work correctly
-
         if from_journal and address in self._account_cache:
             return self._account_cache[address]
 
         rlp_account = self._get_encoded_account(address, from_journal)
 
         if rlp_account:
-            account = rlp.decode(rlp_account, sedes=Account)
+            return rlp.decode(rlp_account, sedes=Account)
         else:
+            return None
+
+    def _get_account(self, address, from_journal=True):
+        # we need to override this in order so that internal uses of
+        # _set_account() work correctly
+        account = self._get_account_helper(address, from_journal)
+
+        if account is None:
             account = self._get_account_rpc(address)
+
         if from_journal:
             self._account_cache[address] = account
 
@@ -163,6 +171,47 @@ class AccountDBFork(AccountDB):
 
         return Account(nonce=nonce, balance=balance, code_hash=code_hash)
 
+    # try call debug_traceCall to get the ostensible prestate for this call
+    def try_prefetch_state(self, msg: Message):
+        args = fixup_dict(
+            {
+                "from": msg.sender,
+                "to": msg.to,
+                "gas": msg.gas,
+                "value": msg.value,
+                "data": msg.data,
+            }
+        )
+        try:
+            tracer = {"tracer": "prestateTracer"}
+            res = self._rpc._raw_fetch_single(
+                "debug_traceCall", [args, self._block_id, tracer]
+            )
+        except RPCError:
+            return
+
+        # everything is returned in hex
+        for address, v in res.items():
+            address = to_bytes(address)
+
+            # set account if we don't already have it
+            if self._get_account_helper(address) is None:
+                balance = to_int(v.get("balance", "0x"))
+                code = to_bytes(v.get("code", "0x"))
+                nonce = v.get("nonce", 0)  # already an int
+                self._set_account(address, Account(nonce=nonce, balance=balance))
+                self.set_code(address, code)
+
+            storage = v.get("storage", dict())
+
+            account_store = super()._get_address_store(address)
+            for hexslot, hexvalue in storage.items():
+                slot = to_int(hexslot)
+                value = to_int(hexvalue)
+                # set storage if we don't already have it
+                if not self._helper_have_storage(address, slot):
+                    account_store.set(slot, value)
+
     def get_code(self, address):
         try:
             return super().get_code(address)
@@ -172,19 +221,28 @@ class AccountDBFork(AccountDB):
             )
             return to_bytes(ret)
 
-    def get_storage(self, address, slot, from_journal=True):
-        # call super to get address warming semantics
-        s = super().get_storage(address, slot, from_journal)
-
-        # cf. AccountStorageDB.get()
+    # helper to determine if something is in the storage db
+    # or we need to get from RPC
+    def _helper_have_storage(self, address, slot, from_journal=True):
+        # we have the storage locally in the VM already
         store = super()._get_address_store(address)
         key = int_to_big_endian(slot)
         db = store._journal_storage if from_journal else store._locked_changes
         try:
             if db[key] != _EMPTY:
-                return s
+                return True
         except KeyError:
             # (it was deleted in the journal.)
+            return True
+
+        return False
+
+    def get_storage(self, address, slot, from_journal=True):
+        # call super to get address warming semantics
+        s = super().get_storage(address, slot, from_journal)
+
+        # cf. AccountStorageDB.get()
+        if self._helper_have_storage(address, slot, from_journal=from_journal):
             return s
 
         addr = to_checksum_address(address)

@@ -9,7 +9,7 @@ from math import ceil
 from eth_account import Account
 
 from boa.environment import Address, Env
-from boa.rpc import EthereumRPC, RPCError, to_bytes, to_hex, to_int
+from boa.rpc import EthereumRPC, RPCError, fixup_dict, to_bytes, to_hex, to_int, trim_dict
 
 
 class TraceObject:
@@ -35,14 +35,6 @@ class TraceObject:
             return self.raw_trace["failed"]
         else:
             return "error" in self.raw_trace
-
-
-def trim_dict(kv):
-    return {k: v for (k, v) in kv.items() if bool(v)}
-
-
-def _fixup_dict(kv):
-    return {k: to_hex(v) for (k, v) in trim_dict(kv).items()}
 
 
 class _EstimateGasFailed(Exception):
@@ -210,12 +202,12 @@ class NetworkEnv(Env):
 
         sender = self._check_sender(self._get_sender(sender))
 
-        data = to_hex(data)
+        hexdata = to_hex(data)
 
         if is_modifying:
             try:
                 receipt, trace = self._send_txn(
-                    from_=sender, to=to_address, value=value, gas=gas, data=data
+                    from_=sender, to=to_address, value=value, gas=gas, data=hexdata
                 )
             except _EstimateGasFailed:
                 # no need to actually run the txn.
@@ -239,13 +231,13 @@ class NetworkEnv(Env):
                     )
 
         else:
-            args = _fixup_dict(
+            args = fixup_dict(
                 {
                     "from": sender,
                     "to": to_address,
                     "gas": gas,
                     "value": value,
-                    "data": data,
+                    "data": hexdata,
                 }
             )
             returnvalue = self._rpc.fetch("eth_call", [args, "latest"])
@@ -365,7 +357,7 @@ class NetworkEnv(Env):
         self.vm.state._account_db._rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
-        tx_data = _fixup_dict(
+        tx_data = fixup_dict(
             {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         )
 
