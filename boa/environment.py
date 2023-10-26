@@ -388,6 +388,7 @@ class Env:
     _coverage_enabled = False
     _fast_mode_enabled = False
     _fork_mode = False
+    _fork_try_prefetch_state = False
 
     def __init__(self):
         self.chain = _make_chain()
@@ -609,7 +610,7 @@ class Env:
             data=b"",
         )
 
-        if self._fork_mode:
+        if self._fork_mode and self._fork_try_prefetch_state:
             self.vm.state._account_db.try_prefetch_state(msg)
 
         origin = sender  # XXX: consider making this parametrizable
