@@ -1,15 +1,6 @@
 from eth.db.account import AccountDB
 
 
-class FastAccountDB(AccountDB):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    # this is a hotspot in super().
-    def touch_account(self, address):
-        self._accessed_accounts.add(address)
-
-
 def _touch_account_patcher(self, address):
     self._accessed_accounts.add(address)
 

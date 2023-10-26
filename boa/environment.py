@@ -26,7 +26,6 @@ from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
 from boa.vm.fast_accountdb import (
-    FastAccountDB,
     patch_pyevm_state_object,
     unpatch_pyevm_state_object,
 )
@@ -433,7 +432,7 @@ class Env:
         )
 
         if self._fast_mode_enabled:
-            self.vm._state_class.account_db_class = FastAccountDB
+            patch_pyevm_state_object(self.vm.state)
 
         self.vm.state.computation_class = c
 
