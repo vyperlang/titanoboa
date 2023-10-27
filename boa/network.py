@@ -77,6 +77,9 @@ class NetworkEnv(Env):
     mutable functions and contract creation via eth_sendRawTransaction.
     """
 
+    # always prefetch state in network mode
+    _fork_try_prefetch_state = True
+
     def __init__(self, rpc_url, accounts=None):
         super().__init__()
 
@@ -190,6 +193,8 @@ class NetworkEnv(Env):
         ir_executor=None,  # maybe just have **kwargs to collect extra kwargs
     ):
         # call execute_code for tracing side effects
+        # note: we could get a perf improvement if we ran this in
+        # the background while waiting on RPC network calls
         computation = super().execute_code(
             to_address=to_address,
             sender=sender,
