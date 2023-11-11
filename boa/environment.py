@@ -222,13 +222,17 @@ class TracingCodeStream(CodeStream):
 
 # ### section: sha3 preimage tracing
 def _stackitem_to_int(value):
-    assert isinstance(value, tuple)
-    return to_int(value[1])  # how py-evm stores stuff on stack
+    if isinstance(value, tuple):
+        return to_int(value[1])  # how py-evm<=0.8.0b1 stores stuff on stack
+    else:
+        return to_int(value)
 
 
 def _stackitem_to_bytes(value):
-    assert isinstance(value, tuple)
-    return to_bytes(value[1])  # how py-evm stores stuff on stack
+    if isinstance(value, tuple):
+        return to_bytes(value[1])  # how py-evm<=0.8.0b1 stores stuff on stack
+    else:
+        return to_bytes(value)
 
 
 class Sha3PreimageTracer:
