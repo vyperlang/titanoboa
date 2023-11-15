@@ -1,5 +1,6 @@
 import os
 from typing import Any, Dict, Tuple
+from requests import HTTPError
 
 try:
     import ujson as json
@@ -189,7 +190,7 @@ class AccountDBFork(AccountDB):
             res = self._rpc._raw_fetch_single(
                 "debug_traceCall", [args, self._block_id, tracer]
             )
-        except RPCError:
+        except (RPCError, HTTPError):
             return
 
         # everything is returned in hex
