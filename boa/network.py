@@ -379,13 +379,14 @@ class NetworkEnv(Env):
 
         tx_data["nonce"] = self._get_nonce(from_)
 
-        try:
-            tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
-        except RPCError as e:
-            if e.code == 3:
-                # execution failed at estimateGas, probably the txn reverted
-                raise _EstimateGasFailed()
-            raise e from e
+        if gas is None:
+            try:
+                tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
+            except RPCError as e:
+                if e.code == 3:
+                    # execution failed at estimateGas, probably the txn reverted
+                    raise _EstimateGasFailed()
+                raise e from e
 
         if from_ not in self._accounts:
             raise ValueError(f"Account not available: {from_}")
