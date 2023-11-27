@@ -161,11 +161,11 @@ def register_raw_precompile(address, fn, force=False):
     address = Address(address)
     if address in _precompiles and not force:
         raise ValueError(f"Already registered: {address}")
-    _precompiles[address] = fn
+    _precompiles[address.canonical_address] = fn
 
 
 def deregister_raw_precompile(address, force=True):
-    address = Address(address)
+    address = Address(address).canonical_address
     if address not in _precompiles and not force:
         raise ValueError("Not registered: {address}")
     _precompiles.pop(address, None)
