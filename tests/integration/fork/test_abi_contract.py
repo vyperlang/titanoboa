@@ -23,6 +23,30 @@ def tricrypto(get_filepath):
     return abi.at("0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B")
 
 
+def test_erc20_abi():
+    usdc = boa.interfaces.ERC20.at("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    assert usdc.totalSupply() == 26597448818273574
+
+
+def test_erc721_abi():
+    wenllama = boa.interfaces.ERC721.at("0xe127cE638293FA123Be79C25782a5652581Db234")
+    assert wenllama.totalSupply() == 1111
+
+
+def test_erc4626_abi():
+    sfrxeth = boa.interfaces.ERC4626.at("0xac3E018457B222d93114458476f3E3416Abbe38F")
+    assert sfrxeth.totalSupply() == 142528675082860748713122
+
+
+def test_erc1155_abi():
+    return
+    # TODO: add tests for erc1155 when vyper can load dynarray abi
+    # and circumvent: vyper.exceptions.UnknownType: ABI type has an invalid length: address[]
+    # matic_erc1155_predicate = boa.interfaces.ERC1155.at(
+    #     "0x62D7e87677ac7e3bd02c198e3FABeFFdBc5eB2A3"
+    # )
+
+
 def test_tricrypto(tricrypto):
     assert tricrypto.fee_receiver() == "0xeCb456EA5365865EbAb8a2661B0c503410e9B347"
     assert tricrypto.get_virtual_price() == 1002646248101745739

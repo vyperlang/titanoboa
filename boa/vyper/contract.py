@@ -1153,10 +1153,9 @@ class ABIContractFactory:
 
     def at(self, address) -> ABIContract:
         address = Address(address)
-
         ret = ABIContract(self._name, self._functions, self._events, address)
-
         bytecode = ret.env.vm.state.get_code(address.canonical_address)
+
         if bytecode == b"":
             warnings.warn(
                 "requested {ret} but there is no bytecode at that address!",
