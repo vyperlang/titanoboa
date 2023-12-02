@@ -391,6 +391,7 @@ class NetworkEnv(Env):
         if from_ not in self._accounts:
             raise ValueError(f"Account not available: {from_}")
         account = self._accounts[from_]
+
         if hasattr(account, "sign_transaction"):
             signed = account.sign_transaction(tx_data)
 
