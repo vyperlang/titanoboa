@@ -831,10 +831,11 @@ class VyperContract(_BaseContract):
 
     @cached_property
     def unoptimized_bytecode(self):
-        s, _ = compile_ir.assembly_to_evm(
-            self.unoptimized_assembly, insert_vyper_signature=True
-        )
-        return s + self.data_section
+        with anchor_evm_version(self.compiler_data.settings.evm_version):
+            s, _ = compile_ir.assembly_to_evm(
+                self.unoptimized_assembly, insert_vyper_signature=True
+            )
+            return s + self.data_section
 
     @cached_property
     def unoptimized_ir(self):

@@ -1,5 +1,6 @@
 import os
 from typing import Any, Dict, Tuple
+
 from requests import HTTPError
 
 try:

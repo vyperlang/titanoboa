@@ -1,7 +1,7 @@
 import os
 
-import pytest
 import hypothesis
+import pytest
 
 # disable hypothesis deadline globally
 hypothesis.settings.register_profile("ci", deadline=None)
