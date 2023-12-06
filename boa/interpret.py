@@ -81,15 +81,23 @@ def loads(
         return d.deploy(*args, **kwargs)
 
 
-def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
+def load_abi(
+    filename: str, *args, name: str = None, at: Any = None, **kwargs
+) -> ABIContractFactory:
     if name is None:
         name = filename
     with open(filename) as fp:
-        return loads_abi(fp.read(), *args, name=name, **kwargs)
+        return loads_abi(fp.read(), *args, name=name, at=at, **kwargs)
 
 
-def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
-    return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
+def loads_abi(
+    json_str: str, *args, name: str = None, at: Any = None, **kwargs
+) -> ABIContractFactory:
+    s = ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
+    if at is not None:
+        return s.at(at)
+
+    return s
 
 
 def loads_partial(

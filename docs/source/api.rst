@@ -113,13 +113,14 @@ High-Level Functionality
         <boa.vyper.contract.VyperDeployer object at ...>
 
 
-.. function:: load_abi(filename: str, name: str = None) -> ABIContractFactory
+.. function:: load_abi(filename: str, name: str = None, at: str | bytes | Address = None) -> ABIContractFactory | ABIContract
 
-    Return a :py:class:`ABIContractFactory` from an ABI file (.json)
+    Return a :py:class:`ABIContract` from an ABI file (.json)
 
     :param filename: The file containing the ABI as a JSON string (something like ``my_abi.json``)
     :param name: The name of the contract.
-    :returns: A :py:class:`ABIContractFactory` factory instance.
+    :param at: The address to load the ABI contract to
+    :returns: A :py:class:`ABIContractFactory` factory instance. If ``at`` is not None, returns a concrete :py:class:`ABIContract`.
 
     .. rubric:: Example
 
@@ -131,13 +132,14 @@ High-Level Functionality
         <boa.vyper.contract.ABIContractFactory at 0x7ff0f14a1550>
 
 
-.. function:: loads_abi(json_str: str, name: str = None) -> ABIContractFactory
+.. function:: loads_abi(json_str: str, name: str = None) -> ABIContractFactory | ABIContract
 
-    Return a :py:class:`ABIContractFactory` from an ABI string
+    Return a :py:class:`ABIContract` from an ABI string
 
     :param json_str: The ABI as a JSON string (something which can be passed to ``json.loads()``)
     :param name: The name of the contract.
-    :returns: A :py:class:`ABIContractFactory` factory instance.
+    :param at: The address to load the ABI contract to
+    :returns: A :py:class:`ABIContractFactory` factory instance. If ``at`` is not None, returns a concrete :py:class:`ABIContract`.
 
     .. rubric:: Example
 
