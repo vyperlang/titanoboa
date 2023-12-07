@@ -50,7 +50,8 @@ def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerDat
     def func():
         ifaces = _ifaces()
         ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
-        _ = ret.bytecode_runtime  # force compilation to happen
+        with anchor_compiler_settings(ret)
+            _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret
 
     return _disk_cache.caching_lookup(str((kwargs, source_code)), func)

@@ -67,7 +67,7 @@ class VyperDeployer:
         # force compilation so that if there are any errors in the contract,
         # we fail at load rather than at deploy time.
         with anchor_compiler_settings(self.compiler_data):
-            _ = compiler_data.bytecode
+            _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
         self.filename = filename
 
@@ -110,7 +110,7 @@ class _BaseContract:
         self.compiler_data = compiler_data
 
         with anchor_compiler_settings(self.compiler_data):
-            _ = compiler_data.bytecode
+            _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
         if env is None:
             env = Env.get_singleton()
