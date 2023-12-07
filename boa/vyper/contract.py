@@ -1103,7 +1103,7 @@ class ABIContract(VyperContract):
         computation = computation or self._computation
         calldata_method_id = bytes(computation.msg.data[:4])
         # when the method isn't specified in the ABI, it's not present in the map
-        abi_sig = self.method_id_map.get(calldata_method_id, "?")
+        abi_sig = self.method_id_map.get(calldata_method_id, f"({calldata_method_id})")
         ret = StackTrace([f"  (unknown location in {self}.{abi_sig})"])
         return _handle_child_trace(computation, self.env, ret)
 
