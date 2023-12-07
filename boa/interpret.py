@@ -10,6 +10,7 @@ from vyper.compiler.phases import CompilerData
 from boa.environment import Address
 from boa.explorer import fetch_abi_from_etherscan
 from boa.util.disk_cache import DiskCache
+from boa.vyper.compiler_utils import anchor_compiler_settings
 from boa.vyper.contract import (
     ABIContractFactory,
     BoaError,
@@ -50,7 +51,7 @@ def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerDat
     def func():
         ifaces = _ifaces()
         ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
-        with anchor_compiler_settings(ret)
+        with anchor_compiler_settings(ret):
             _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret
 
