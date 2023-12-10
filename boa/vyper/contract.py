@@ -1102,14 +1102,14 @@ class ABIContract(VyperContract):
     def stack_trace(self, computation=None):
         computation = computation or self._computation
         calldata_method_id = bytes(computation.msg.data[:4])
-        return_trace = StackTrace(
-            [
-                f"  (unknown location in {self}.{self.method_id_map[calldata_method_id]})"
-                if calldata_method_id in self.method_id_map
-                # Method might not be specified in the ABI
-                else f"  (unknown method {calldata_method_id} in {self})"
-            ]
-        )
+
+        if calldata_method_id in self.method_id_map:
+            msg = f"  (unknown location in {self}.{self.method_id_map[calldata_method_id]})"
+        else:
+            # Method might not be specified in the ABI
+            msg = f"  (unknown method id {self}.0x{calldata_method_id.hex()})"
+
+        return_trace = StackTrace([msg])
         return _handle_child_trace(computation, self.env, return_trace)
 
     @property
