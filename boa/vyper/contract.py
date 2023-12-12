@@ -5,15 +5,20 @@
 import contextlib
 import copy
 import warnings
+from collections import Counter
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Optional
+from itertools import groupby
+from operator import attrgetter
+from os.path import basename
+from typing import Any, Optional, Union
 
 import vyper
 import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
+from eth.abc import ComputationAPI
 from eth.exceptions import VMError
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
@@ -22,14 +27,16 @@ from vyper.codegen.function_definitions.common import ExternalFuncIR, InternalFu
 from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
-from vyper.compiler import output as compiler_output
+from vyper.compiler import output as compiler_output, CompilerData
 from vyper.compiler.settings import OptimizationLevel
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
+from vyper.semantics.analysis.base import StateMutability, FunctionVisibility
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT
-from vyper.semantics.types.function import ContractFunctionT
+from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT, VyperType, DArrayT
+from vyper.semantics.types.function import PositionalArg, _FunctionArg, _generate_method_id
+from vyper.semantics.types.utils import type_from_abi
 from vyper.utils import method_id
 
 from boa.environment import Address, Env
@@ -104,24 +111,62 @@ class VyperDeployer:
         return ret
 
 
+# base class for ABI and Vyper contracts
+class _EvmContract:
+    def __init__(self, env: Optional[Env] = None, filename: Optional[str] = None,
+                 address: Optional[Address] = None):
+        self.env = env or Env.get_singleton()
+        self._address = address  # this is overridden by subclasses
+        self.filename = filename
+        self._computation: Optional[ComputationAPI] = None
+
+    def stack_trace(self, computation=None):
+        raise NotImplementedError
+
+    def marshal_to_python(self, computation, vyper_typ):
+        self._computation = computation  # for further inspection
+
+        if computation.is_error:
+            self.handle_error(computation)
+
+        # cache gas used for call if profiling is enabled
+        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        if gas_meter == ProfilingGasMeter:
+            cache_gas_used_for_computation(self, computation)
+
+        if vyper_typ is None:
+            return None
+
+        return_typ = calculate_type_for_external_return(vyper_typ)
+        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
+
+        # unwrap the tuple if needed
+        if not isinstance(vyper_typ, TupleT):
+            (ret,) = ret
+
+        return vyper_object(ret, vyper_typ)
+
+    def handle_error(self, computation) -> None:
+        try:
+            raise BoaError(self.stack_trace(computation))
+        except BoaError as b:
+            # modify the error so the traceback starts in userland.
+            # inspired by answers in https://stackoverflow.com/q/1603940/
+            raise strip_internal_frames(b) from None
+
+    @property
+    def address(self) -> Address:
+        return self._address
+
+
 # a few lines of shared code between VyperBlueprint and VyperContract
-class _BaseContract:
-    def __init__(self, compiler_data, env=None, filename=None):
+class _BaseContract(_EvmContract):
+    def __init__(self, compiler_data: CompilerData, env: Optional[Env] = None, filename: Optional[str] = None):
+        super().__init__(env, filename)
         self.compiler_data = compiler_data
 
         with anchor_compiler_settings(self.compiler_data):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
-
-        if env is None:
-            env = Env.get_singleton()
-
-        self.env = env
-
-        self.filename = filename
-
-    @property
-    def address(self):
-        return self._address
 
 
 # create a blueprint for use with `create_from_blueprint`.
@@ -479,7 +524,7 @@ class VyperContract(_BaseContract):
         *args,
         env=None,
         override_address=None,
-        # whether or not to skip constructor
+        # whether to skip constructor
         skip_initcode=False,
         created_from=None,
         filename=None,
@@ -709,29 +754,6 @@ class VyperContract(_BaseContract):
 
         return Event(log_id, self._address, event_t, decoded_topics, args)
 
-    def marshal_to_python(self, computation, vyper_typ):
-        self._computation = computation  # for further inspection
-
-        if computation.is_error:
-            self.handle_error(computation)
-
-        # cache gas used for call if profiling is enabled
-        gas_meter = self.env.vm.state.computation_class._gas_meter_class
-        if gas_meter == ProfilingGasMeter:
-            cache_gas_used_for_computation(self, computation)
-
-        if vyper_typ is None:
-            return None
-
-        return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
-
-        # unwrap the tuple if needed
-        if not isinstance(vyper_typ, TupleT):
-            (ret,) = ret
-
-        return vyper_object(ret, vyper_typ)
-
     def handle_error(self, computation):
         try:
             raise BoaError(self.stack_trace(computation))
@@ -913,8 +935,13 @@ class VyperContract(_BaseContract):
         setattr(self.inject, fn_ast.name, f)
 
 
-class VyperFunction:
+class _EvmFunction:
+    ...
+
+
+class VyperFunction(_EvmFunction):
     def __init__(self, fn_ast, contract):
+        super().__init__()
         self.fn_ast = fn_ast
         self.contract = contract
         self.env = contract.env
@@ -1066,23 +1093,26 @@ class VyperInternalFunction(VyperFunction):
 
 
 # a contract which we only have the ABI for.
-# TODO refactor:
-# right now inherits functionality from VyperContract
-# but would be better to put this in like BaseContract
-# and have both BaseContract => InterfaceContract
-# and separately BaseContract => VyperContract
-class ABIContract(VyperContract):
-    def __init__(self, name, functions, events, address, created_from=None, env=None):
-        if env is None:
-            env = Env.get_singleton()
-        self.env = env
-
+class ABIContract(_EvmContract):
+    def __init__(
+            self, name: str,
+            functions: list["ABIFunction"],
+            events: list["EventT"],
+            address: Address,
+            created_from: Optional[Address]=None,
+            filename: Optional[str]=None,
+            env=None,
+    ):
+        super().__init__(env, filename=filename, address=address)
         self._name = name
         self._events = events
         self._functions = functions
 
-        for func_t in self._functions:
-            setattr(self, func_t.name, ABIFunction(func_t, self))
+        for name, functions in groupby(self._functions, key=attrgetter("name")):
+            functions = list(functions)
+            fn = functions[0] if len(functions) == 1 else ABIOverload(functions)
+            fn.contract = self
+            setattr(self, name, fn)
 
         self._address = Address(address)
         self.created_from = created_from
@@ -1092,17 +1122,15 @@ class ABIContract(VyperContract):
     @cached_property
     def method_id_map(self):
         ret = {}
-        for func_t in self._functions:
-            for abi_sig, method_id_int in func_t.method_ids.items():
+        for function in self._functions:
+            for abi_sig, method_id_int in function.method_ids.items():
                 method_id_bytes = method_id_int.to_bytes(4, "big")
                 assert method_id_bytes not in ret  # vyper guarantees unique method ids
                 ret[method_id_bytes] = abi_sig
         return ret
 
-    def stack_trace(self, computation=None):
-        computation = computation or self._computation
+    def stack_trace(self, computation: ComputationAPI):
         calldata_method_id = bytes(computation.msg.data[:4])
-
         if calldata_method_id in self.method_id_map:
             msg = f"  (unknown location in {self}.{self.method_id_map[calldata_method_id]})"
         else:
@@ -1133,42 +1161,45 @@ class ABIContract(VyperContract):
 # name Factory instead of Deployer because it doesn't actually do any
 # contract deployment.
 class ABIContractFactory:
-    def __init__(self, name, functions, events):
+    def __init__(self, name: str, functions: list["ABIFunction"], events: list["EventT"],
+                 filename: Optional[str] = None):
         self._name = name
         self._functions = functions
         self._events = events
+        self._filename = filename
 
     @classmethod
-    def from_abi_dict(cls, abi, name=None):
+    def from_abi_dict(cls, abi, name: Optional[str] = None):
         if name is None:
             name = "<anonymous contract>"
 
         functions = [
-            ContractFunctionT.from_abi(i) for i in abi if i.get("type") == "function"
+            ABIFunction(item, name) for item in abi if item.get("type") == "function"
         ]
 
         # warn on functions with same name
-        _tmp = set()
-        for f in functions:
-            if f.name in _tmp:
+        for function_name, count in Counter(f.name for f in functions).items():
+            if count > 1:
                 warnings.warn(
-                    f"{name} overloads {f.name}! overloaded methods "
+                    f"{name} overloads {function_name}! overloaded methods "
                     "might not work correctly at this time",
                     stacklevel=1,
                 )
-            _tmp.add(f.name)
 
         events = [EventT.from_abi(i) for i in abi if i.get("type") == "event"]
 
-        return cls(name, functions, events)
+        return cls(basename(name), functions, events, filename=name)
 
     def at(self, address) -> ABIContract:
+        """
+        Create an ABI contract object for a deployed contract at `address`.
+        """
         address = Address(address)
 
-        ret = ABIContract(self._name, self._functions, self._events, address)
+        ret = ABIContract(self._name, self._functions, self._events, address, self._filename)
 
         bytecode = ret.env.vm.state.get_code(address.canonical_address)
-        if bytecode == b"":
+        if not bytecode:
             warnings.warn(
                 "requested {ret} but there is no bytecode at that address!",
                 stacklevel=2,
@@ -1179,24 +1210,139 @@ class ABIContractFactory:
         return ret
 
 
-class ABIFunction(VyperFunction):
-    def __init__(self, func_t, contract):
-        self.contract = contract
-        self.env = contract.env
-        self._func_t = func_t
+class ABIFunction(_EvmFunction):
+    def __init__(self, abi: dict, contract_name: str):
+        super().__init__()
+        self._abi = abi
+        self._contract_name = contract_name
+        self._function_visibility = FunctionVisibility.EXTERNAL
+        self._mutability = StateMutability.from_abi(abi)
+        self.contract: Optional["ABIContract"] = None
 
-    def __repr__(self):
-        return f"{self.contract._name}.{self._func_t.name}"
+    @cached_property
+    def return_type(self) -> Optional[VyperType]:
+        outputs = self._abi["outputs"].copy()
+        if not outputs:
+            return None
+        types = []
+        for output in outputs:
+            if output["type"].endswith("[]"):
+                value_type = {"type": output["type"].removesuffix("[]")}
+                types.append(DArrayT(type_from_abi(value_type), 2 ** 256 - 1))
+            else:
+                types.append(type_from_abi(output))
+        return types[0] if len(types) == 1 else TupleT(tuple(types))
+
+    @cached_property
+    def name(self):
+        return self._abi["name"]
+
+    @cached_property
+    def arguments(self) -> list[PositionalArg]:
+        return [
+            PositionalArg(item["name"], type_from_abi(item))
+            for item in self._abi["inputs"]
+        ]
+
+    @cached_property
+    def argument_types(self) -> list[VyperType]:
+        return [arg.typ for arg in self.arguments]
+
+    @cached_property
+    def method_ids(self) -> dict[str, int]:
+        """
+        Dict of `{signature: four byte selector}` for this function.
+
+        * For functions without default arguments the dict contains one item.
+        * For functions with default arguments, there is one key for each
+          function signature.
+        """
+        arg_types = [i.canonical_abi_type for i in self.argument_types]
+        return _generate_method_id(self.name, arg_types)
+
+    def __repr__(self) -> str:
+        arg_types = ",".join(repr(a) for a in self.argument_types)
+        return f"ABI {self._contract_name}.{self.name}({arg_types}) -> {self.return_type}"
+
+    def __str__(self) -> str:
+        return repr(self)
+
+    @property
+    def is_mutable(self) -> bool:
+        return self._mutability > StateMutability.VIEW
 
     # OVERRIDE
     @property
-    def func_t(self):
-        return self._func_t
+    def func_t(self):  # TODO: Do we really need this?
+        return self
 
     # OVERRIDE
     @cached_property
     def _source_map(self):
         return {"pc_pos_map": {}}
+
+    def __eq__(self, other):
+        return isinstance(other, ABIFunction) and self._abi == other._abi
+
+    def __hash__(self):
+        return hash(self._abi)
+
+    def prepare_calldata(self, *args, **kwargs):
+        if len(kwargs) + len(args) != len(self.arguments):
+            raise Exception(
+                f"Bad args to `{repr(self)}` "
+                f"(expected {len(self.arguments)} arguments, got {len(args)})"
+            )
+        args = [getattr(arg, "address", arg) for arg in args]
+        encoded_args = abi_encode(self.signature, args)
+        return method_id(self.name + self.signature) + encoded_args
+
+    @cached_property
+    def signature(self) -> str:
+        arg_types = [i.canonical_abi_type for i in self.argument_types]
+        return f"({','.join(arg_types)})"
+
+    def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
+        if not self.contract or not self.contract.env:
+            raise Exception(f"Cannot call {self} without deploying contract.")
+
+        computation = self.contract.env.execute_code(
+            to_address=self.contract.address,
+            sender=sender,
+            data=self.prepare_calldata(*args, **kwargs),
+            value=value,
+            gas=gas,
+            is_modifying=self.is_mutable,
+            contract=self.contract,
+        )
+
+        return self.contract.marshal_to_python(computation, self.return_type)
+
+
+class ABIOverload(_EvmFunction):
+    def __init__(self, functions: list[ABIFunction]):
+        super().__init__()
+        self.functions = functions
+
+    @cached_property
+    def name(self):
+        return self.functions[0].name
+
+    @property
+    def contract(self):
+        return self.functions[0].contract
+
+    @contract.setter
+    def contract(self, value):
+        for f in self.functions:
+            f.contract = value
+
+    def __call__(self, *args, **kwargs):
+        arg_count = len(kwargs) + len(args)
+        for function in self.functions:
+            if arg_count == len(function.arguments):
+                return function(*args, **kwargs)
+        raise Exception(f"Could not find matching {self.name} function for given arguments {args} {kwargs}.")
 
 
 class _InjectVyperFunction(VyperFunction):

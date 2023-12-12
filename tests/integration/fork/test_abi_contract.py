@@ -1,5 +1,6 @@
 import hypothesis.strategies as st
 import pytest
+from eth.constants import ZERO_ADDRESS
 from hypothesis import given
 
 import boa
@@ -12,6 +13,13 @@ def crvusd(get_filepath):
     abi = boa.load_abi(abi_path)
 
     return abi.at("0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E")
+
+
+@pytest.fixture(scope="module")
+def metaregistry(get_filepath):
+    abi_path = get_filepath("metaregistry_abi.json")
+    abi = boa.load_abi(abi_path)
+    return abi.at("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
 
 
 @pytest.fixture(scope="module")
@@ -37,6 +45,18 @@ def test_invariants(crvusd):
     assert crvusd.name() == "Curve.Fi USD Stablecoin"
     assert crvusd.symbol() == "crvUSD"
     assert crvusd.totalSupply() == 260000000000000000000000000
+
+
+def test_metaregistry_overloading(metaregistry):
+    pool = metaregistry.pool_list(0)
+    coin1, coin2 = metaregistry.get_coins(pool)[:2]
+    pools_found = metaregistry.find_pools_for_coins(coin1, coin2)
+    first_pools = [pool for pool in pools_found if not pool.startswith("0x0000")][:10]
+    assert first_pools[0] == metaregistry.find_pool_for_coins(coin1, coin2)
+    assert first_pools == [
+        metaregistry.find_pool_for_coins(coin1, coin2, i)
+        for i in range(len(first_pools))
+    ]
 
 
 # randomly grabbed from:
