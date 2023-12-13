@@ -35,7 +35,11 @@ from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.base import StateMutability, FunctionVisibility
 from vyper.semantics.analysis.data_positions import set_data_positions
 from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT, VyperType, DArrayT
-from vyper.semantics.types.function import PositionalArg, _FunctionArg, _generate_method_id
+from vyper.semantics.types.function import (
+    PositionalArg,
+    _FunctionArg,
+    _generate_method_id,
+)
 from vyper.semantics.types.utils import type_from_abi
 from vyper.utils import method_id
 
@@ -113,8 +117,12 @@ class VyperDeployer:
 
 # base class for ABI and Vyper contracts
 class _EvmContract:
-    def __init__(self, env: Optional[Env] = None, filename: Optional[str] = None,
-                 address: Optional[Address] = None):
+    def __init__(
+        self,
+        env: Optional[Env] = None,
+        filename: Optional[str] = None,
+        address: Optional[Address] = None,
+    ):
         self.env = env or Env.get_singleton()
         self._address = address  # this is overridden by subclasses
         self.filename = filename
@@ -161,7 +169,12 @@ class _EvmContract:
 
 # a few lines of shared code between VyperBlueprint and VyperContract
 class _BaseContract(_EvmContract):
-    def __init__(self, compiler_data: CompilerData, env: Optional[Env] = None, filename: Optional[str] = None):
+    def __init__(
+        self,
+        compiler_data: CompilerData,
+        env: Optional[Env] = None,
+        filename: Optional[str] = None,
+    ):
         super().__init__(env, filename)
         self.compiler_data = compiler_data
 
@@ -1095,13 +1108,14 @@ class VyperInternalFunction(VyperFunction):
 # a contract which we only have the ABI for.
 class ABIContract(_EvmContract):
     def __init__(
-            self, name: str,
-            functions: list["ABIFunction"],
-            events: list["EventT"],
-            address: Address,
-            created_from: Optional[Address]=None,
-            filename: Optional[str]=None,
-            env=None,
+        self,
+        name: str,
+        functions: list["ABIFunction"],
+        events: list["EventT"],
+        address: Address,
+        created_from: Optional[Address] = None,
+        filename: Optional[str] = None,
+        env=None,
     ):
         super().__init__(env, filename=filename, address=address)
         self._name = name
@@ -1161,8 +1175,13 @@ class ABIContract(_EvmContract):
 # name Factory instead of Deployer because it doesn't actually do any
 # contract deployment.
 class ABIContractFactory:
-    def __init__(self, name: str, functions: list["ABIFunction"], events: list["EventT"],
-                 filename: Optional[str] = None):
+    def __init__(
+        self,
+        name: str,
+        functions: list["ABIFunction"],
+        events: list["EventT"],
+        filename: Optional[str] = None,
+    ):
         self._name = name
         self._functions = functions
         self._events = events
@@ -1196,7 +1215,9 @@ class ABIContractFactory:
         """
         address = Address(address)
 
-        ret = ABIContract(self._name, self._functions, self._events, address, self._filename)
+        ret = ABIContract(
+            self._name, self._functions, self._events, address, self._filename
+        )
 
         bytecode = ret.env.vm.state.get_code(address.canonical_address)
         if not bytecode:
@@ -1228,7 +1249,7 @@ class ABIFunction(_EvmFunction):
         for output in outputs:
             if output["type"].endswith("[]"):
                 value_type = {"type": output["type"].removesuffix("[]")}
-                types.append(DArrayT(type_from_abi(value_type), 2 ** 256 - 1))
+                types.append(DArrayT(type_from_abi(value_type), 2**256 - 1))
             else:
                 types.append(type_from_abi(output))
         return types[0] if len(types) == 1 else TupleT(tuple(types))
@@ -1262,7 +1283,9 @@ class ABIFunction(_EvmFunction):
 
     def __repr__(self) -> str:
         arg_types = ",".join(repr(a) for a in self.argument_types)
-        return f"ABI {self._contract_name}.{self.name}({arg_types}) -> {self.return_type}"
+        return (
+            f"ABI {self._contract_name}.{self.name}({arg_types}) -> {self.return_type}"
+        )
 
     def __str__(self) -> str:
         return repr(self)
@@ -1342,7 +1365,9 @@ class ABIOverload(_EvmFunction):
         for function in self.functions:
             if arg_count == len(function.arguments):
                 return function(*args, **kwargs)
-        raise Exception(f"Could not find matching {self.name} function for given arguments {args} {kwargs}.")
+        raise Exception(
+            f"Could not find matching {self.name} function for given arguments {args} {kwargs}."
+        )
 
 
 class _InjectVyperFunction(VyperFunction):
