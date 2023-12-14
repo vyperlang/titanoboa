@@ -19,6 +19,7 @@ from boa.precompile import precompile
 from boa.test.strategies import fuzz
 from boa.vyper.contract import check_boa_error_matches
 
+
 # turn off tracebacks if we are in repl
 # https://stackoverflow.com/a/64523765
 if hasattr(sys, "ps1"):
@@ -68,3 +69,11 @@ def reverts(*args, **kwargs):
 
 def eval(code):
     return loads("").eval(code)
+
+
+def _jupyter_server_extension_points() -> list[dict]:
+    """
+    Returns a list of dictionaries with metadata describing
+    where to find the `_load_jupyter_server_extension` function.
+    """
+    return [{"module": "boa.integrations.jupyter"}]
