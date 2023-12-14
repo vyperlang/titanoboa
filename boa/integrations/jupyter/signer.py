@@ -106,6 +106,9 @@ def _sign_transaction_snippet(token: str, tx_data):
 
 
 def _inject_javascript_triggers():
+    """
+    Runs the ethers and titanoboa_jupyterlab Javascript snippets in the browser.
+    """
     ethers_js = requests.get("https://cdnjs.cloudflare.com/ajax/libs/ethers/6.4.2/ethers.umd.min.js")
     display(Javascript(ethers_js.text))
 
