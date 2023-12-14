@@ -1,6 +1,6 @@
 
 (() => {
-    const extensionRoot = '../titanoboa-jupyterlab';
+    const extensionRoot = '../titanoboa_jupyterlab';
     const getProvider = () => new ethers.BrowserProvider(window.ethereum);
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
     const getCookie = (name) => (document.cookie.match(`\\b${name}=([^;]*)\\b`))?.[1];
