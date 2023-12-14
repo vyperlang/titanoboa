@@ -1,6 +1,5 @@
 import json
 from asyncio import sleep, get_running_loop
-from datetime import timedelta
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
 from os.path import realpath, join, dirname
@@ -10,12 +9,10 @@ import nest_asyncio
 import requests
 from IPython.display import display, Javascript
 
+from boa.integrations.jupyter.constants import CALLBACK_TOKEN_TIMEOUT, ADDRESS_LENGTH, TRANSACTION_JSON_LENGTH, \
+    CALLBACK_TOKEN_BYTES, NUL
+
 nest_asyncio.apply()
-_TIMEOUT = timedelta(minutes=3)
-_ADDRESS_LENGTH = 45  # 42 + quotes + \0
-_TOKEN_LENGTH = 32
-_TX_LENGTH = 2048
-_NUL = b"\0"
 
 
 class BrowserSigner:
@@ -28,7 +25,8 @@ class BrowserSigner:
             self.address = address
         else:
             # wait for the address to be set via the API, otherwise boa crashes when trying to create a transaction
-            self.address = _create_and_wait(_load_signer_snippet, size=_ADDRESS_LENGTH)
+            memory_size = ADDRESS_LENGTH + 3  # address + quotes from json encode + \0
+            self.address = _create_and_wait(_load_signer_snippet, size=memory_size)
 
     def send_transaction(self, tx_data: dict) -> dict:
         """
@@ -40,7 +38,7 @@ class BrowserSigner:
         """
         sign_data = _create_and_wait(
             _sign_transaction_snippet,
-            size=_TX_LENGTH,
+            size=TRANSACTION_JSON_LENGTH,
             tx_data=tx_data,
         )
         return {k: int(v) if isinstance(v, str) and v.isnumeric() else v for k, v in sign_data.items() if v}
@@ -57,7 +55,7 @@ def _create_and_wait(snippet: callable, size: int, **kwargs) -> dict:
     token = _generate_token()
     memory = SharedMemory(name=token, create=True, size=size)
     try:
-        memory.buf[:1] = _NUL
+        memory.buf[:1] = NUL
         javascript = snippet(token, **kwargs)
         display(javascript)
         return _wait_buffer_set(memory.buf)
@@ -66,7 +64,7 @@ def _create_and_wait(snippet: callable, size: int, **kwargs) -> dict:
 
 
 def _generate_token():
-    return f"titanoboa_jupyterlab_{urandom(_TOKEN_LENGTH).hex()}"
+    return f"titanoboa_jupyterlab_{urandom(CALLBACK_TOKEN_BYTES).hex()}"
 
 
 def _wait_buffer_set(buffer: memoryview):
@@ -82,14 +80,14 @@ def _wait_buffer_set(buffer: memoryview):
         :return: The result of the Javascript snippet sent to the API.
         """
         inner_loop = get_running_loop()
-        while buffer.tobytes().startswith(_NUL):
+        while buffer.tobytes().startswith(NUL):
             if inner_loop.time() > deadline:
                 raise TimeoutError("Timeout while waiting for user to confirm transaction in the browser.")
             await sleep(0.01)
         return json.loads(buffer.tobytes().decode().split("\0")[0])
 
     loop = get_running_loop()
-    future = _wait_value(deadline=loop.time() + _TIMEOUT.total_seconds())
+    future = _wait_value(deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds())
     task = loop.create_task(future)
     loop.run_until_complete(task)
     return task.result()
