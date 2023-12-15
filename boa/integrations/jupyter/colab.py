@@ -154,25 +154,10 @@ class _UIComm(ipykernel.comm.Comm):
         return self._loop.run_until_complete(self._poll_async())
 
 
-# a test function
-def foo():
-    comm = _UIComm(target_name="test_comm")
-
-    @comm.on_msg
-    def _recv(msg):
-        comm._future.set_result(msg)
-
-    comm.send({"foo": "bar"})
-
-    response = comm.poll()
-
-    return response
-
-
 class ColabSigner:
     def __init__(self, address=None):
         _inject_javascript_triggers()
-        comm = _UIComm(target_name="get_signer")
+        comm = _UIComm(target_name="loadSigner")
         comm.on_msg(self._on_msg(comm))
 
         if address is not None:
@@ -207,7 +192,7 @@ class ColabSigner:
         return _recv
 
     def send_transaction(self, tx_data):
-        comm = _UIComm(target_name="send_transaction")
+        comm = _UIComm(target_name="signTransaction")
 
         comm.on_msg(self._on_msg(comm))
 

@@ -40,10 +40,10 @@
     }
 
     const colab = window.google?.colab ?? window.colab;
-    console.log('colab', colab);
     if (colab) {
         /** Call the backend when the given function is called, handling errors */
         const registerTarget = (name, func) => {
+            console.log('registering', name);
             colab.kernel.comms.registerTarget(name, channel => {
                 console.log(`${name} created`, channel);
                 channel.on_msg(async message => {
