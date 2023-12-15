@@ -1,8 +1,10 @@
+import contextlib
 import textwrap
 
 import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
 from vyper.ast.utils import parse_to_ast
+from vyper.codegen.core import anchor_opt_level
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
 from vyper.evm.opcodes import anchor_evm_version
@@ -12,6 +14,13 @@ from vyper.semantics.analysis.utils import get_exact_type_from_node
 
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ir_executor import executor_from_ir
+
+
+@contextlib.contextmanager
+def anchor_compiler_settings(compiler_data):
+    settings = compiler_data.settings
+    with anchor_opt_level(settings.optimize), anchor_evm_version(settings.evm_version):
+        yield
 
 
 def compile_vyper_function(vyper_function, contract):
@@ -24,7 +33,7 @@ def compile_vyper_function(vyper_function, contract):
 
     compiler_data = contract.compiler_data
 
-    with anchor_evm_version(compiler_data.settings.evm_version):
+    with anchor_compiler_settings(compiler_data):
         global_ctx = contract.global_ctx
         ifaces = compiler_data.interface_codes
         ast = parse_to_ast(vyper_function, ifaces)

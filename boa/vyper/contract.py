@@ -42,6 +42,7 @@ from boa.vm.utils import to_bytes, to_int
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
+    anchor_compiler_settings,
     compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
@@ -65,8 +66,8 @@ class VyperDeployer:
 
         # force compilation so that if there are any errors in the contract,
         # we fail at load rather than at deploy time.
-        with anchor_evm_version(compiler_data.settings.evm_version):
-            _ = compiler_data.bytecode
+        with anchor_compiler_settings(self.compiler_data):
+            _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
         self.filename = filename
 
@@ -107,6 +108,9 @@ class VyperDeployer:
 class _BaseContract:
     def __init__(self, compiler_data, env=None, filename=None):
         self.compiler_data = compiler_data
+
+        with anchor_compiler_settings(self.compiler_data):
+            _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
         if env is None:
             env = Env.get_singleton()
@@ -611,7 +615,7 @@ class VyperContract(_BaseContract):
     @property
     def source_map(self):
         if self._source_map is None:
-            with anchor_evm_version(self.compiler_data.settings.evm_version):
+            with anchor_compiler_settings(self.compiler_data):
                 _, self._source_map = compile_ir.assembly_to_evm(
                     self.compiler_data.assembly_runtime
                 )
@@ -759,7 +763,7 @@ class VyperContract(_BaseContract):
         module = copy.deepcopy(self.compiler_data.vyper_module)
 
         # do the same thing as vyper_module_folded but skip getter expansion
-        with anchor_evm_version(self.compiler_data.settings.evm_version):
+        with anchor_compiler_settings(self.compiler_data):
             vy_ast.folding.fold(module)
             with vy_ns.get_namespace().enter_scope():
                 analysis.add_module_namespace(
@@ -812,7 +816,7 @@ class VyperContract(_BaseContract):
     @cached_property
     def unoptimized_assembly(self):
         with anchor_evm_version(self.compiler_data.settings.evm_version):
-            runtime = self.compiler_data.ir_runtime
+            runtime = self.unoptimized_ir[1]
             return compile_ir.compile_to_assembly(
                 runtime, optimize=OptimizationLevel.NONE
             )
@@ -847,8 +851,8 @@ class VyperContract(_BaseContract):
     @cached_property
     def ir_executor(self):
         _, ir_runtime = self.unoptimized_ir
-        # TODO: check if this needs anchor_evm_version
-        return executor_from_ir(ir_runtime, self.compiler_data)
+        with anchor_evm_version(self.compiler_data.settings.evm_version):
+            return executor_from_ir(ir_runtime, self.compiler_data)
 
     @contextlib.contextmanager
     def _anchor_source_map(self, source_map):
@@ -1098,9 +1102,15 @@ class ABIContract(VyperContract):
     def stack_trace(self, computation=None):
         computation = computation or self._computation
         calldata_method_id = bytes(computation.msg.data[:4])
-        abi_sig = self.method_id_map[calldata_method_id]
-        ret = StackTrace([f"  (unknown location in {self}.{abi_sig})"])
-        return _handle_child_trace(computation, self.env, ret)
+
+        if calldata_method_id in self.method_id_map:
+            msg = f"  (unknown location in {self}.{self.method_id_map[calldata_method_id]})"
+        else:
+            # Method might not be specified in the ABI
+            msg = f"  (unknown method id {self}.0x{calldata_method_id.hex()})"
+
+        return_trace = StackTrace([msg])
+        return _handle_child_trace(computation, self.env, return_trace)
 
     @property
     def deployer(self):

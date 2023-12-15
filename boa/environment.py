@@ -412,6 +412,8 @@ class Env:
         self._cached_line_profiles = {}
         self._coverage_data = {}
 
+        self._gas_tracker = 0
+
         self.sha3_trace = {}
         self.sstore_trace = {}
 
@@ -538,6 +540,13 @@ class Env:
     def _reset_access_counters(self):
         self.vm.state._account_db._reset_access_counters()
 
+    def get_gas_used(self):
+        return self._gas_tracker
+
+    def reset_gas_used(self):
+        self._gas_tracker = 0
+        self._reset_access_counters()
+
     # context manager which snapshots the state and reverts
     # to the snapshot on exiting the with statement
     @contextlib.contextmanager
@@ -582,6 +591,9 @@ class Env:
             raise ValueError(f"{self}.eoa not defined!")
         return Address(sender).canonical_address
 
+    def _update_gas_used(self, gas_used: int):
+        self._gas_tracker += gas_used
+
     def deploy_code(
         self,
         sender: Optional[_AddressType] = None,
@@ -622,6 +634,9 @@ class Env:
         c = self.vm.state.computation_class.apply_create_message(
             self.vm.state, msg, tx_ctx
         )
+
+        if c._gas_meter_class != NoGasMeter:
+            self._update_gas_used(c.get_gas_used())
 
         if c.is_error:
             raise c.error
@@ -700,6 +715,9 @@ class Env:
 
         if self._coverage_enabled:
             self._hook_trace_computation(ret, contract)
+
+        if ret._gas_meter_class != NoGasMeter:
+            self._update_gas_used(ret.get_gas_used())
 
         return ret
 
