@@ -51,7 +51,8 @@
                 const onMessage = async message => {
                     console.log(`${name} received`, message)
                     const args = func(message.data);
-                    channel.send(await parsePromise(args));
+                    const response = await parsePromise(args);
+                    channel.send(JSON.parse(stringify(response)));
                 };
 
                 if ('on_msg' in channel) {
