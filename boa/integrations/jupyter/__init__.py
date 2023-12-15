@@ -1,3 +1,4 @@
+from boa.integrations.jupyter.constants import PLUGIN_NAME
 from boa.integrations.jupyter.handlers import setup_handlers
 from boa.integrations.jupyter.signer import BrowserSigner
 
@@ -10,9 +11,8 @@ def load_jupyter_server_extension(server_app):
     server_app: jupyterlab.labapp.LabApp
         JupyterLab application instance
     """
-    name = "titanoboa_jupyterlab"
-    setup_handlers(server_app, name)
-    server_app.log.info(f"Registered {name} server extension")
+    setup_handlers(server_app)
+    server_app.log.info(f"Registered {PLUGIN_NAME} server extension")
 
 
 # Reference the old function name with the new function name.

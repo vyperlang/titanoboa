@@ -10,10 +10,12 @@ import requests
 from IPython.display import Javascript, display
 
 from boa.integrations.jupyter.constants import (
-    ADDRESS_LENGTH,
+    ADDRESS_JSON_LENGTH,
     CALLBACK_TOKEN_BYTES,
     CALLBACK_TOKEN_TIMEOUT,
+    ETHERS_JS_URL,
     NUL,
+    PLUGIN_NAME,
     TRANSACTION_JSON_LENGTH,
 )
 
@@ -26,12 +28,18 @@ class BrowserSigner:
     """
 
     def __init__(self, address=None):
+        """
+        Create a BrowserSigner instance.
+        :param address: The account address. If not provided, it will be requested from the browser.
+        """
         _inject_javascript_triggers()
         if address:
             self.address = address
         else:
             # wait for the address to be set via the API, otherwise boa crashes
-            memory_size = ADDRESS_LENGTH + 3  # address + quotes from json encode + \0
+            memory_size = (
+                ADDRESS_JSON_LENGTH + 3
+            )  # address + quotes from json encode + \0
             self.address = _create_and_wait(_load_signer_snippet, size=memory_size)
 
     def send_transaction(self, tx_data: dict) -> dict:
@@ -72,7 +80,8 @@ def _create_and_wait(snippet: callable, size: int, **kwargs) -> dict:
 
 
 def _generate_token():
-    return f"titanoboa_jupyterlab_{urandom(CALLBACK_TOKEN_BYTES).hex()}"
+    """Generate a secure unique token to identify the SharedMemory object."""
+    return f"{PLUGIN_NAME}_{urandom(CALLBACK_TOKEN_BYTES).hex()}"
 
 
 def _wait_buffer_set(buffer: memoryview):
@@ -101,28 +110,27 @@ def _wait_buffer_set(buffer: memoryview):
     future = _wait_value(deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds())
     task = loop.create_task(future)
     loop.run_until_complete(task)
-    return task.result()
+    result = task.result()
+    if "data" in result:
+        return result["data"]
+    raise Exception(result["error"])
 
 
 def _load_signer_snippet(token: str) -> Javascript:
-    """Runs the loadSigner in the browser."""
+    """Run loadSigner in the browser."""
     return Javascript(f"window._titanoboa.loadSigner('{token}');")
 
 
 def _sign_transaction_snippet(token: str, tx_data):
-    """Runs the signTransaction in the browser."""
+    """Run signTransaction in the browser."""
     return Javascript(
         f"window._titanoboa.signTransaction('{token}', {json.dumps(tx_data)});"
     )
 
 
 def _inject_javascript_triggers():
-    """
-    Runs the ethers and titanoboa_jupyterlab Javascript snippets in the browser.
-    """
-    ethers_js = requests.get(
-        "https://cdnjs.cloudflare.com/ajax/libs/ethers/6.4.2/ethers.umd.min.js"
-    )
+    """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
+    ethers_js = requests.get(ETHERS_JS_URL)
     display(Javascript(ethers_js.text))
 
     cur_dir = dirname(realpath(__file__))

@@ -6,7 +6,7 @@ from jupyter_server.base.handlers import APIHandler
 from jupyter_server.serverapp import ServerApp
 from jupyter_server.utils import url_path_join
 
-from boa.integrations.jupyter.constants import CALLBACK_TOKEN_BYTES
+from boa.integrations.jupyter.constants import PLUGIN_NAME, TOKEN_REGEX
 
 
 class CallbackHandler(APIHandler):
@@ -44,17 +44,16 @@ class CallbackHandler(APIHandler):
         return self.finish()
 
 
-def setup_handlers(server_app: ServerApp, name: str) -> None:
+def setup_handlers(server_app: ServerApp) -> None:
     """
     Register the handlers in the Jupyter server.
     :param server_app: The Jupyter server application.
     :param name: The name of the extension.
     """
     web_app = server_app.web_app
-    base_url = url_path_join(web_app.settings["base_url"], name)
-    token_regex = rf"{name}_[0-9a-fA-F]{{{CALLBACK_TOKEN_BYTES * 2}}})"
+    base_url = url_path_join(web_app.settings["base_url"], PLUGIN_NAME)
     web_app.add_handlers(
         host_pattern=".*$",
-        host_handlers=[(rf"{base_url}/callback/{token_regex}", CallbackHandler)],
+        host_handlers=[(rf"{base_url}/callback/{TOKEN_REGEX}", CallbackHandler)],
     )
     server_app.log.info(f"Handlers registered in {base_url}")
