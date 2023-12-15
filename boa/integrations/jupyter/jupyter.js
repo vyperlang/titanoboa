@@ -13,7 +13,6 @@
         const headers = {['X-XSRFToken']: getCookie('_xsrf')};
         const init = {method: 'POST', body: stringify(body), headers};
         const url = `${PLUGIN_API_ROOT}/callback/${token}`;
-        console.log(`Requesting ${url}`, init);
         const response = await fetch(url, {...init, headers});
         return response.text();
     }
