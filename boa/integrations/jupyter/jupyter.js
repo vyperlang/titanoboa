@@ -34,6 +34,6 @@
         return callback(token, response);
     };
 
-    // expose functions to window so they can be called from the BrowserSigner
+    // expose functions to window, so they can be called from the BrowserSigner
     window._titanoboa = {loadSigner, signTransaction};
 })();

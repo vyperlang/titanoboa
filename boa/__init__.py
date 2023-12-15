@@ -19,7 +19,6 @@ from boa.precompile import precompile
 from boa.test.strategies import fuzz
 from boa.vyper.contract import check_boa_error_matches
 
-
 # turn off tracebacks if we are in repl
 # https://stackoverflow.com/a/64523765
 if hasattr(sys, "ps1"):

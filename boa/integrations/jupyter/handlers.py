@@ -1,9 +1,9 @@
 from http import HTTPStatus
 from multiprocessing.shared_memory import SharedMemory
-from jupyter_server.serverapp import ServerApp
 
 import tornado
 from jupyter_server.base.handlers import APIHandler
+from jupyter_server.serverapp import ServerApp
 from jupyter_server.utils import url_path_join
 
 from boa.integrations.jupyter.constants import CALLBACK_TOKEN_BYTES
@@ -11,10 +11,10 @@ from boa.integrations.jupyter.constants import CALLBACK_TOKEN_BYTES
 
 class CallbackHandler(APIHandler):
     """
-    This handler receives a callback from jupyter.js when the user interacts with their wallet in the browser.
+    Handler that receives a POST from jupyter.js when user interacts with their browser wallet.
     The token is used to identify the SharedMemory object to write the callback data to.
     Besides, the token needs to fulfill the expected regex that ensures it is a valid format.
-    It is expected that the SharedMemory object has already been created via a BrowserSigner instance.
+    It expects the SharedMemory object has already been created via a BrowserSigner instance.
     """
 
     @tornado.web.authenticated  # ensure only authorized user can request the Jupyter server
@@ -32,10 +32,11 @@ class CallbackHandler(APIHandler):
 
         try:
             body += b"\0"  # mark the end of the buffer
-            memory.buf[:len(body)] = body
+            memory.buf[: len(body)] = body
         except ValueError:
             self.set_status(HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-            return self.finish({"message": f"Request body has {len(body)} bytes, but only {memory.size} are allowed"})
+            message = f"Request body has {len(body)} bytes, but only {memory.size} are allowed"
+            return self.finish({"message": message})
         finally:
             memory.close()
 
@@ -54,6 +55,6 @@ def setup_handlers(server_app: ServerApp, name: str) -> None:
     token_regex = rf"{name}_[0-9a-fA-F]{{{CALLBACK_TOKEN_BYTES * 2}}})"
     web_app.add_handlers(
         host_pattern=".*$",
-        host_handlers=[(rf"{base_url}/callback/{token_regex}", CallbackHandler)]
+        host_handlers=[(rf"{base_url}/callback/{token_regex}", CallbackHandler)],
     )
     server_app.log.info(f"Handlers registered in {base_url}")

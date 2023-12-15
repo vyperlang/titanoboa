@@ -1,16 +1,21 @@
 import json
-from asyncio import sleep, get_running_loop
+from asyncio import get_running_loop, sleep
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
-from os.path import realpath, join, dirname
+from os.path import dirname, join, realpath
 from typing import Any
 
 import nest_asyncio
 import requests
-from IPython.display import display, Javascript
+from IPython.display import Javascript, display
 
-from boa.integrations.jupyter.constants import CALLBACK_TOKEN_TIMEOUT, ADDRESS_LENGTH, TRANSACTION_JSON_LENGTH, \
-    CALLBACK_TOKEN_BYTES, NUL
+from boa.integrations.jupyter.constants import (
+    ADDRESS_LENGTH,
+    CALLBACK_TOKEN_BYTES,
+    CALLBACK_TOKEN_TIMEOUT,
+    NUL,
+    TRANSACTION_JSON_LENGTH,
+)
 
 nest_asyncio.apply()
 
@@ -19,12 +24,13 @@ class BrowserSigner:
     """
     A BrowserSigner is a class that can be used to sign transactions in IPython/JupyterLab.
     """
+
     def __init__(self, address=None):
         _inject_javascript_triggers()
         if address:
             self.address = address
         else:
-            # wait for the address to be set via the API, otherwise boa crashes when trying to create a transaction
+            # wait for the address to be set via the API, otherwise boa crashes
             memory_size = ADDRESS_LENGTH + 3  # address + quotes from json encode + \0
             self.address = _create_and_wait(_load_signer_snippet, size=memory_size)
 
@@ -37,11 +43,13 @@ class BrowserSigner:
         :return: The signed transaction data.
         """
         sign_data = _create_and_wait(
-            _sign_transaction_snippet,
-            size=TRANSACTION_JSON_LENGTH,
-            tx_data=tx_data,
+            _sign_transaction_snippet, size=TRANSACTION_JSON_LENGTH, tx_data=tx_data
         )
-        return {k: int(v) if isinstance(v, str) and v.isnumeric() else v for k, v in sign_data.items() if v}
+        return {
+            k: int(v) if isinstance(v, str) and v.isnumeric() else v
+            for k, v in sign_data.items()
+            if v
+        }
 
 
 def _create_and_wait(snippet: callable, size: int, **kwargs) -> dict:
@@ -73,6 +81,7 @@ def _wait_buffer_set(buffer: memoryview):
     :param buffer: The buffer to wait for.
     :return: The contents of the buffer.
     """
+
     async def _wait_value(deadline: float) -> Any:
         """
         Wait until the SharedMemory object is not empty.
@@ -82,7 +91,9 @@ def _wait_buffer_set(buffer: memoryview):
         inner_loop = get_running_loop()
         while buffer.tobytes().startswith(NUL):
             if inner_loop.time() > deadline:
-                raise TimeoutError("Timeout while waiting for user to confirm transaction in the browser.")
+                raise TimeoutError(
+                    "Timeout while waiting for user to confirm transaction in the browser."
+                )
             await sleep(0.01)
         return json.loads(buffer.tobytes().decode().split("\0")[0])
 
@@ -94,20 +105,24 @@ def _wait_buffer_set(buffer: memoryview):
 
 
 def _load_signer_snippet(token: str) -> Javascript:
-    """ Runs the loadSigner in the browser. """
+    """Runs the loadSigner in the browser."""
     return Javascript(f"window._titanoboa.loadSigner('{token}');")
 
 
 def _sign_transaction_snippet(token: str, tx_data):
-    """ Runs the signTransaction in the browser. """
-    return Javascript(f"window._titanoboa.signTransaction('{token}', {json.dumps(tx_data)});")
+    """Runs the signTransaction in the browser."""
+    return Javascript(
+        f"window._titanoboa.signTransaction('{token}', {json.dumps(tx_data)});"
+    )
 
 
 def _inject_javascript_triggers():
     """
     Runs the ethers and titanoboa_jupyterlab Javascript snippets in the browser.
     """
-    ethers_js = requests.get("https://cdnjs.cloudflare.com/ajax/libs/ethers/6.4.2/ethers.umd.min.js")
+    ethers_js = requests.get(
+        "https://cdnjs.cloudflare.com/ajax/libs/ethers/6.4.2/ethers.umd.min.js"
+    )
     display(Javascript(ethers_js.text))
 
     cur_dir = dirname(realpath(__file__))
