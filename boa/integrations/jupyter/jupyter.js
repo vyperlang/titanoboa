@@ -48,11 +48,9 @@
         const registerTarget = (name, func) => {
             console.log(`Registering${name} to Jupyter Notebook`);
             notebook.kernel.comms.registerTarget(name, async channel => {
-                console.log(`${name} created`, channel);
-
                 const onMessage = async message => {
-                    console.log(`${name} called`, channel, message)
-                    const args = func(message?.content?.data);
+                    console.log(`${name} received`, message)
+                    const args = func(message.data);
                     channel.send(await parsePromise(args));
                 };
 
