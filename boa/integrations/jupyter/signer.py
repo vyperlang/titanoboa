@@ -2,24 +2,23 @@ import json
 from asyncio import get_running_loop, sleep
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
-from os.path import dirname, join, realpath
 from typing import Any
 
 import nest_asyncio
-import requests
 from IPython.display import Javascript, display
 
 from boa.integrations.jupyter.constants import (
     ADDRESS_JSON_LENGTH,
     CALLBACK_TOKEN_BYTES,
     CALLBACK_TOKEN_TIMEOUT,
-    ETHERS_JS_URL,
     NUL,
     PLUGIN_NAME,
     TRANSACTION_JSON_LENGTH,
 )
-
-nest_asyncio.apply()
+from boa.integrations.jupyter.utils import (
+    convert_frontend_dict,
+    install_jupyter_javascript_triggers,
+)
 
 
 class BrowserSigner:
@@ -32,7 +31,7 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        _inject_javascript_triggers()
+        install_jupyter_javascript_triggers()
         if address:
             self.address = address
         else:
@@ -53,11 +52,7 @@ class BrowserSigner:
         sign_data = _create_and_wait(
             _sign_transaction_snippet, size=TRANSACTION_JSON_LENGTH, tx_data=tx_data
         )
-        return {
-            k: int(v) if isinstance(v, str) and v.isnumeric() else v
-            for k, v in sign_data.items()
-            if v
-        }
+        return convert_frontend_dict(sign_data)
 
 
 def _create_and_wait(snippet: callable, size: int, **kwargs) -> dict:
@@ -106,6 +101,7 @@ def _wait_buffer_set(buffer: memoryview):
             await sleep(0.01)
         return json.loads(buffer.tobytes().decode().split("\0")[0])
 
+    nest_asyncio.apply()
     loop = get_running_loop()
     future = _wait_value(deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds())
     task = loop.create_task(future)
@@ -126,13 +122,3 @@ def _sign_transaction_snippet(token: str, tx_data):
     return Javascript(
         f"window._titanoboa.signTransaction('{token}', {json.dumps(tx_data)});"
     )
-
-
-def _inject_javascript_triggers():
-    """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
-    ethers_js = requests.get(ETHERS_JS_URL)
-    display(Javascript(ethers_js.text))
-
-    cur_dir = dirname(realpath(__file__))
-    with open(join(cur_dir, "jupyter.js")) as f:
-        display(Javascript(f.read()))

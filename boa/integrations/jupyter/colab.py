@@ -6,13 +6,13 @@ from typing import Any
 
 import ipykernel.comm
 import nest_asyncio
-from eth_utils import to_checksum_address
 
-from boa.integrations.jupyter.signer import _inject_javascript_triggers
+from boa.integrations.jupyter.utils import (
+    convert_frontend_dict,
+    install_jupyter_javascript_triggers,
+)
 
 ZMQ_POLLOUT = 2  # zmq.POLLOUT without zmq dependency
-
-nest_asyncio.apply()
 
 
 # adapted from:
@@ -108,10 +108,6 @@ class _UIComm(ipykernel.comm.Comm):
             rr = self._kernel.do_one_iteration()
             if isawaitable(rr):  # 6+
                 await rr
-        # except Exception:  # pylint: disable=broad-except
-        #    # it's probably a bug in ipykernel,
-        #    # .do_one_iteration() should not throw
-        #    return
         finally:
             # reset stdio back to original cell
             self._flush_stdio()
@@ -153,64 +149,32 @@ class _UIComm(ipykernel.comm.Comm):
     def poll(self):
         return self._loop.run_until_complete(self._poll_async())
 
-
-class ColabSigner:
-    def __init__(self, address=None):
-        _inject_javascript_triggers()
-        comm = _UIComm(target_name="loadSigner")
-        comm.on_msg(self._on_msg(comm))
-
-        if address is not None:
-            address = to_checksum_address(address)
-
-        comm.send({"address": address})
-
-        res = comm.poll()
-
-        result_address = to_checksum_address(res["address"])
-
-        if result_address != address and address is not None:
-            raise ValueError(
-                "signer returned by RPC is not what we wanted! "
-                f"expected {address}, got {result_address}"
-            )
-
-        self.address = result_address
-
     @staticmethod
-    # boilerplate
-    def _on_msg(comm):
+    def request(target_name, data=None):
         def _recv(msg):
             try:
                 res = msg["content"]["data"]
-                if "success" not in res:
-                    raise ValueError(res)
-                comm._future.set_result(res["success"])
+                if "data" in res:
+                    return comm._future.set_result(res["success"])
+                raise Exception(res["error"])
             except Exception as e:
                 comm._future.set_exception(e)
 
-        return _recv
+        comm = _UIComm(target_name=target_name)
+        comm.on_msg(_recv)
+        comm.send(data or {})
+        return comm.poll()
+
+
+class ColabSigner:
+    def __init__(self, address=None):
+        install_jupyter_javascript_triggers()
+        nest_asyncio.apply()
+        self.address = address
+
+        if not address:
+            self.address = _UIComm.request("loadSigner")
 
     def send_transaction(self, tx_data):
-        comm = _UIComm(target_name="signTransaction")
-
-        comm.on_msg(self._on_msg(comm))
-
-        comm.send({"transaction_data": tx_data, "account": self.address})
-
-        response = comm.poll()
-
-        # clean response
-        def try_cast_int(s):
-            # cast js bigint to string
-            if isinstance(s, str) and s.isnumeric():
-                return int(s)
-            return s
-
-        # TODO: use trim_dict util here
-        response = {k: v for (k, v) in response.items() if bool(v)}
-
-        # cast js bigint values
-        response = {k: try_cast_int(v) for (k, v) in response.items()}
-
-        return response
+        response = _UIComm.request("signTransaction", tx_data)
+        return convert_frontend_dict(response)

@@ -46,12 +46,11 @@
             notebook.kernel.comms.registerTarget(name, async channel => {
                 console.log(`${name} created`, channel);
 
-                async function onMessage(message) {
+                const onMessage = async message => {
                     console.log(`${name} called`, channel, message)
                     const args = func(message?.content?.data);
                     channel.send(await parsePromise(args));
-                    channel.close();
-                }
+                };
 
                 if ('on_msg' in channel) {
                     // older versions of Jupyter Notebook
