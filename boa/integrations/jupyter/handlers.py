@@ -54,6 +54,6 @@ def setup_handlers(server_app: ServerApp) -> None:
     base_url = url_path_join(web_app.settings["base_url"], PLUGIN_NAME)
     web_app.add_handlers(
         host_pattern=".*$",
-        host_handlers=[(rf"{base_url}/callback/{TOKEN_REGEX}", CallbackHandler)],
+        host_handlers=[(rf"{base_url}/callback/({TOKEN_REGEX})", CallbackHandler)],
     )
     server_app.log.info(f"Handlers registered in {base_url}")
