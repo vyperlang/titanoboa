@@ -3,6 +3,8 @@
  * BrowserSigner to the frontend.
  */
 (() => {
+    if (window._titanoboa) return; // don't register twice
+
     const PLUGIN_API_ROOT = '../titanoboa_jupyterlab';
     const getEthersProvider = () => {
         const {ethereum} = window;
@@ -45,8 +47,7 @@
     const notebook = window.google?.colab ?? window.colab ?? window.Jupyter?.notebook;
     if (notebook) {
         /** Call the backend when the given function is called, handling errors */
-        const registerTarget = (name, func) => {
-            console.log(`Registering${name} to Jupyter Notebook`);
+        const registerTarget = (name, func) =>
             notebook.kernel.comms.registerTarget(name, async channel => {
                 const onMessage = async message => {
                     console.log(`${name} received`, message)
@@ -63,11 +64,13 @@
                     await onMessage(message);
                 }
             });
-        };
 
-        registerTarget('loadSigner', loadSigner);
-        registerTarget('signTransaction', signTransaction);
-    } else {
+        console.log(`Registering callbacks to Jupyter Notebook`);
+        window._titanoboa = {
+            loadSigner: registerTarget('loadSigner', loadSigner),
+            signTransaction: registerTarget('signTransaction', signTransaction),
+        };
+    } else { // we are in JupyterLab, use API
         /** Call the backend when the given function is called, handling errors */
         const handleCallback = func => async (token, ...args) => {
             const body = await parsePromise(func(...args));
