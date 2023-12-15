@@ -49,11 +49,12 @@
         /** Call the backend when the given function is called, handling errors */
         const registerTarget = (name, func) =>
             notebook.kernel.comms.registerTarget(name, async channel => {
-                const onMessage = async message => {
-                    console.log(`${name} received`, message)
-                    const args = func(message.data);
-                    const response = await parsePromise(args);
+                const onMessage = async (message, ...args) => {
+                    console.log(`${name} received`, message, args)
+                    const response = await parsePromise(func(message.data));
+                    console.log(`${name} responding`, response);
                     channel.send(JSON.parse(stringify(response)));
+                    channel.close();
                 };
 
                 if ('on_msg' in channel) {

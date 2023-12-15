@@ -21,6 +21,7 @@ ZMQ_POLLOUT = 2  # zmq.POLLOUT without zmq dependency
 class _UIComm(ipykernel.comm.Comm):
     # this entire class is cursed. do not touch!
     def __init__(self, *args, shell=None, loop=None, **kwargs):
+        nest_asyncio.apply()
         if loop is None:
             loop = asyncio.get_running_loop()
         self._loop = loop
@@ -170,7 +171,6 @@ class _UIComm(ipykernel.comm.Comm):
 class NotebookSigner:
     def __init__(self, address=None):
         install_jupyter_javascript_triggers()
-        nest_asyncio.apply()
         self.address = address
 
         if not address:
