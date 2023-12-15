@@ -1,3 +1,4 @@
+from boa.integrations.jupyter.colab import ColabSigner
 from boa.integrations.jupyter.constants import PLUGIN_NAME
 from boa.integrations.jupyter.handlers import setup_handlers
 from boa.integrations.jupyter.signer import BrowserSigner
@@ -19,4 +20,9 @@ def load_jupyter_server_extension(server_app):
 _load_jupyter_server_extension = load_jupyter_server_extension
 
 
-__all__ = [BrowserSigner, load_jupyter_server_extension, _load_jupyter_server_extension]
+__all__ = [
+    BrowserSigner,
+    ColabSigner,
+    load_jupyter_server_extension,
+    _load_jupyter_server_extension,
+]

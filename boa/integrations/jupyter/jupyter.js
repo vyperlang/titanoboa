@@ -1,3 +1,4 @@
+
 (() => {
     const PLUGIN_API_ROOT = '../titanoboa_jupyterlab';
     const getEthersProvider = () => {
@@ -7,6 +8,11 @@
     };
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
     const getCookie = (name) => (document.cookie.match(`\\b${name}=([^;]*)\\b`))?.[1];
+    const parsePromise = promise =>
+        promise.then(data => ({data})).catch(e => {
+            console.error(e.stack || e.message);
+            return {error: e.message};
+        });
 
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
@@ -33,18 +39,35 @@
         return signer.sendTransaction(transaction);
     }
 
-    /** Call the backend when the given function is called, handling errors */
-    const handleCallback = func => async (token, ...args) => {
-        const body = await func(...args).then(data => ({data}), e => {
-            console.error(e.stack || e.message);
-            return {error: e.message};
-        });
-        return callbackAPI(token, body);
-    };
+    const colab = window.google?.colab ?? window.colab;
+    console.log('colab', colab);
+    if (colab) {
+        /** Call the backend when the given function is called, handling errors */
+        const registerTarget = (name, func) => {
+            colab.kernel.comms.registerTarget(name, channel => {
+                console.log(`${name} created`, channel);
+                channel.on_msg(async message => {
+                    console.log(`${name} called`, channel, message)
+                    const args = func(message?.content?.data);
+                    const response = await parsePromise(args);
+                    channel.send(response);
+                });
+            });
+        };
 
-    // expose functions to window, so they can be called from the BrowserSigner
-    window._titanoboa = {
-        loadSigner: handleCallback(loadSigner),
-        signTransaction: handleCallback(signTransaction)
-    };
+        registerTarget('loadSigner', loadSigner);
+        registerTarget('signTransaction', signTransaction);
+    } else {
+        /** Call the backend when the given function is called, handling errors */
+        const handleCallback = func => async (token, ...args) => {
+            const body = await parsePromise(func(...args));
+            return callbackAPI(token, body);
+        };
+
+        // expose functions to window, so they can be called from the BrowserSigner
+        window._titanoboa = {
+            loadSigner: handleCallback(loadSigner),
+            signTransaction: handleCallback(signTransaction)
+        };
+    }
 })();
