@@ -1,4 +1,3 @@
-
 (() => {
     const PLUGIN_API_ROOT = '../titanoboa_jupyterlab';
     const getEthersProvider = () => {
@@ -39,19 +38,28 @@
         return signer.sendTransaction(transaction);
     }
 
-    const colab = window.google?.colab ?? window.colab;
-    if (colab) {
+    const notebook = window.google?.colab ?? window.colab ?? window.Jupyter?.notebook;
+    if (notebook) {
         /** Call the backend when the given function is called, handling errors */
         const registerTarget = (name, func) => {
-            console.log('registering', name);
-            colab.kernel.comms.registerTarget(name, channel => {
+            console.log(`Registering${name} to Jupyter Notebook`);
+            notebook.kernel.comms.registerTarget(name, async channel => {
                 console.log(`${name} created`, channel);
-                channel.on_msg(async message => {
+
+                async function onMessage(message) {
                     console.log(`${name} called`, channel, message)
                     const args = func(message?.content?.data);
-                    const response = await parsePromise(args);
-                    channel.send(response);
-                });
+                    channel.send(await parsePromise(args));
+                    channel.close();
+                }
+
+                if ('on_msg' in channel) {
+                    // older versions of Jupyter Notebook
+                    return channel.on_msg(onMessage);
+                }
+                for await (const message of channel.messages) {
+                    await onMessage(message);
+                }
             });
         };
 
@@ -64,6 +72,7 @@
             return callbackAPI(token, body);
         };
 
+        console.log(`Registering callbacks to JupyterLab`);
         // expose functions to window, so they can be called from the BrowserSigner
         window._titanoboa = {
             loadSigner: handleCallback(loadSigner),
