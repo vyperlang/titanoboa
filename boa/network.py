@@ -7,6 +7,7 @@ from functools import cached_property
 from math import ceil
 
 from eth_account import Account
+from requests.exceptions import HTTPError
 
 from boa.environment import Address, Env
 from boa.rpc import EthereumRPC, RPCError, fixup_dict, to_bytes, to_hex, to_int, trim_dict
@@ -323,28 +324,39 @@ class NetworkEnv(Env):
 
     @cached_property
     def _tracer(self):
+        def _warn_no_tracer():
+            warnings.warn(
+                "debug_traceTransaction not available! "
+                "titanoboa will try hard to interact with the network, but "
+                "this means that titanoboa is not able to do certain "
+                "safety checks at runtime. it is recommended to switch "
+                "to a node or provider with debug_traceTransaction.",
+                stacklevel=3,
+            )
+
         try:
             txn_hash = "0x" + "00" * 32
             # alchemy only can do callTracer, plus it has lowest
             # overhead.
             call_tracer = {"tracer": "callTracer", "onlyTopCall": True}
             self._rpc.fetch("debug_traceTransaction", [txn_hash, call_tracer])
+
         except RPCError as e:
-            # -32600 is alchemy unpaid tier error message
-            # -32601 is infura error message (if i recall correctly)
-            if e.code in (-32601, -32600):
-                warnings.warn(
-                    "debug_traceTransaction not available! "
-                    "titanoboa will try hard to interact with the network, but "
-                    "this means that titanoboa is not able to do certain "
-                    "safety checks at runtime. it is recommended to switch "
-                    "to a node or provider with debug_traceTransaction.",
-                    stacklevel=2,
-                )
-                return None
             # can't handle callTracer, use default (i.e. structLogs)
             if e.code == -32602:
                 return {}
+
+            # catchall - just don't have a tracer
+            # note on error codes:
+            # -32600 is alchemy unpaid tier error message
+            # -32601 is infura error message (if i recall correctly)
+            _warn_no_tracer()
+            return None
+
+        except HTTPError:
+            _warn_no_tracer()
+            return None
+
         return call_tracer
 
     def _get_nonce(self, addr):
