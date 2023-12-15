@@ -1,3 +1,7 @@
+/**
+ * This file is loaded by Jupyter Notebook and JupyterLab to expose the
+ * BrowserSigner to the frontend.
+ */
 (() => {
     const PLUGIN_API_ROOT = '../titanoboa_jupyterlab';
     const getEthersProvider = () => {

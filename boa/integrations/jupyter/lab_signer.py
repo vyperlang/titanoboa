@@ -1,3 +1,7 @@
+"""
+This module implements the BrowserSigner class, which is used to sign transactions
+in IPython/JupyterLab. For Google Colab and Jupyter Notebook, see notebook_signer.py.
+"""
 import json
 from asyncio import get_running_loop, sleep
 from multiprocessing.shared_memory import SharedMemory
@@ -7,7 +11,7 @@ from typing import Any
 import nest_asyncio
 from IPython.display import Javascript, display
 
-from boa.integrations.jupyter.constants import (
+from .constants import (
     ADDRESS_JSON_LENGTH,
     CALLBACK_TOKEN_BYTES,
     CALLBACK_TOKEN_TIMEOUT,
@@ -15,10 +19,7 @@ from boa.integrations.jupyter.constants import (
     PLUGIN_NAME,
     TRANSACTION_JSON_LENGTH,
 )
-from boa.integrations.jupyter.utils import (
-    convert_frontend_dict,
-    install_jupyter_javascript_triggers,
-)
+from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
 
 
 class BrowserSigner:

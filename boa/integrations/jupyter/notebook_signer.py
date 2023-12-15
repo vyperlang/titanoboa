@@ -1,3 +1,7 @@
+"""
+This module implements the NotebookSigner class, which is used to sign transactions in
+Google Colab and Jupyter Notebook. For JupyterLab, see lab_signer.py.
+"""
 import asyncio
 import contextlib
 import sys
@@ -7,10 +11,7 @@ from typing import Any
 import ipykernel.comm
 import nest_asyncio
 
-from boa.integrations.jupyter.utils import (
-    convert_frontend_dict,
-    install_jupyter_javascript_triggers,
-)
+from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
 
 ZMQ_POLLOUT = 2  # zmq.POLLOUT without zmq dependency
 
@@ -155,7 +156,7 @@ class _UIComm(ipykernel.comm.Comm):
             try:
                 res = msg["content"]["data"]
                 if "data" in res:
-                    return comm._future.set_result(res["success"])
+                    return comm._future.set_result(res["data"])
                 raise Exception(res["error"])
             except Exception as e:
                 comm._future.set_exception(e)
@@ -166,7 +167,7 @@ class _UIComm(ipykernel.comm.Comm):
         return comm.poll()
 
 
-class ColabSigner:
+class NotebookSigner:
     def __init__(self, address=None):
         install_jupyter_javascript_triggers()
         nest_asyncio.apply()

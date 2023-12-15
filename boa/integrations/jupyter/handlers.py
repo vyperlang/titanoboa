@@ -1,3 +1,6 @@
+"""
+Handlers for the JupyterLab extension.
+"""
 from http import HTTPStatus
 from multiprocessing.shared_memory import SharedMemory
 
