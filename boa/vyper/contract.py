@@ -326,7 +326,7 @@ def check_boa_error_matches(error, *args, **kwargs):
         _check(
             frame.error_detail == "user revert with reason"
             and v == frame.pretty_vm_reason,
-            f"{frame.vm_error} != {v}",
+            f"{frame.pretty_vm_reason} != {v}",
         )
     # assume it is a dev reason string
     else:
