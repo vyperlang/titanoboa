@@ -1,6 +1,5 @@
 import hypothesis.strategies as st
 import pytest
-from eth.constants import ZERO_ADDRESS
 from hypothesis import given
 
 import boa
@@ -20,6 +19,13 @@ def metaregistry(get_filepath):
     abi_path = get_filepath("metaregistry_abi.json")
     abi = boa.load_abi(abi_path)
     return abi.at("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
+
+
+@pytest.fixture(scope="module")
+def stableswap_factory_ng(get_filepath):
+    abi_path = get_filepath("CurveStableswapFactoryNG_abi.json")
+    abi = boa.load_abi(abi_path)
+    return abi.at("0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf")
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +63,10 @@ def test_metaregistry_overloading(metaregistry):
         metaregistry.find_pool_for_coins(coin1, coin2, i)
         for i in range(len(first_pools))
     ]
+
+
+def test_stableswap_factory_ng(stableswap_factory_ng):
+    assert stableswap_factory_ng.pool_list(0)
 
 
 # randomly grabbed from:

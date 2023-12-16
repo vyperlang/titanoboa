@@ -11,7 +11,7 @@ from functools import cached_property
 from itertools import groupby
 from operator import attrgetter
 from os.path import basename
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import vyper
 import vyper.ast as vy_ast
@@ -27,19 +27,16 @@ from vyper.codegen.function_definitions.common import ExternalFuncIR, InternalFu
 from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
-from vyper.compiler import output as compiler_output, CompilerData
+from vyper.compiler import CompilerData
+from vyper.compiler import output as compiler_output
 from vyper.compiler.settings import OptimizationLevel
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.analysis.base import StateMutability, FunctionVisibility
+from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT, VyperType, DArrayT
-from vyper.semantics.types.function import (
-    PositionalArg,
-    _FunctionArg,
-    _generate_method_id,
-)
+from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT, VyperType
+from vyper.semantics.types.function import PositionalArg, _generate_method_id
 from vyper.semantics.types.utils import type_from_abi
 from vyper.utils import method_id
 
@@ -51,6 +48,7 @@ from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 from boa.vyper import _METHOD_ID_VAR
+from boa.vyper.abi import ABIEvent, parse_abi_type
 from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.vyper.compiler_utils import (
     anchor_compiler_settings,
@@ -1205,7 +1203,7 @@ class ABIContractFactory:
                     stacklevel=1,
                 )
 
-        events = [EventT.from_abi(i) for i in abi if i.get("type") == "event"]
+        events = [ABIEvent.from_abi(i) for i in abi if i.get("type") == "event"]
 
         return cls(basename(name), functions, events, filename=name)
 
@@ -1245,13 +1243,7 @@ class ABIFunction(_EvmFunction):
         outputs = self._abi["outputs"].copy()
         if not outputs:
             return None
-        types = []
-        for output in outputs:
-            if output["type"].endswith("[]"):
-                value_type = {"type": output["type"].removesuffix("[]")}
-                types.append(DArrayT(type_from_abi(value_type), 2**256 - 1))
-            else:
-                types.append(type_from_abi(output))
+        types = [parse_abi_type(output) for output in outputs]
         return types[0] if len(types) == 1 else TupleT(tuple(types))
 
     @cached_property
