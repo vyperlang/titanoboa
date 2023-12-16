@@ -307,8 +307,8 @@ def check_boa_error_matches(error, *args, **kwargs):
         _check(
             err == frame.pretty_vm_reason
             or err == frame.error_detail
-            or err == frame.dev_reason.reason_str,
-            "does not match {args}",
+            or (frame.dev_reason and err == frame.dev_reason.reason_str),
+            f"does not match {args}",
         )
         return
 
