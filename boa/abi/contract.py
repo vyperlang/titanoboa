@@ -7,17 +7,13 @@ from typing import Optional
 
 from _operator import attrgetter
 from eth.abc import ComputationAPI
-from vyper.codegen.core import calculate_type_for_external_return
-from vyper.semantics.types import EventT, TupleT
+from eth_abi import decode
+from vyper.semantics.types import EventT
 
-from boa.abi.errors import BoaError, StackTrace, _handle_child_trace
 from boa.abi.event import ABIEvent
 from boa.abi.function import ABIFunction, ABIOverload
 from boa.environment import Address, Env
-from boa.profiling import cache_gas_used_for_computation
-from boa.util.abi import abi_decode
-from boa.util.exceptions import strip_internal_frames
-from boa.vm.gas_meters import ProfilingGasMeter
+from boa.util.exceptions import BoaError, StackTrace, _handle_child_trace, strip_internal_frames
 
 
 class _EvmContract:
@@ -34,36 +30,9 @@ class _EvmContract:
         self.env = env or Env.get_singleton()
         self._address = address  # this is overridden by subclasses
         self.filename = filename
-        self._computation: Optional[ComputationAPI] = None
 
     def stack_trace(self, computation: ComputationAPI):
         raise NotImplementedError
-
-    def marshal_to_python(self, computation, vyper_typ):
-        self._computation = computation  # for further inspection
-
-        if computation.is_error:
-            self.handle_error(computation)
-
-        # cache gas used for call if profiling is enabled
-        gas_meter = self.env.vm.state.computation_class._gas_meter_class
-        if gas_meter == ProfilingGasMeter:
-            cache_gas_used_for_computation(self, computation)
-
-        if vyper_typ is None:
-            return None
-
-        return_typ = calculate_type_for_external_return(vyper_typ)
-        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
-
-        # unwrap the tuple if needed
-        if not isinstance(vyper_typ, TupleT):
-            (ret,) = ret
-
-        # todo: is this really specific to vyper?
-        from boa.vyper.contract import vyper_object
-
-        return vyper_object(ret, vyper_typ)
 
     def handle_error(self, computation) -> None:
         try:
@@ -108,18 +77,25 @@ class ABIContract(_EvmContract):
 
     @cached_property
     def method_id_map(self):
-        ret = {}
-        for function in self._functions:
-            for abi_sig, method_id_int in function.method_ids.items():
-                method_id_bytes = method_id_int.to_bytes(4, "big")
-                assert method_id_bytes not in ret  # vyper guarantees unique method ids
-                ret[method_id_bytes] = abi_sig
-        return ret
+        return {function.method_id: function for function in self._functions}
+
+    def marshal_to_python(self, computation, abi_type: list[str]):
+        """
+        Convert the output of a contract call to a Python object.
+        :param computation: the computation object returned by `execute_code`
+        :param abi_type: the ABI type of the return value.
+        """
+        if computation.is_error:
+            return self.handle_error(computation)
+
+        decoded = decode(abi_type, computation.output)
+        return [_decode_addresses(typ, val) for typ, val in zip(abi_type, decoded)]
 
     def stack_trace(self, computation: ComputationAPI):
         calldata_method_id = bytes(computation.msg.data[:4])
         if calldata_method_id in self.method_id_map:
-            msg = f"  (unknown location in {self}.{self.method_id_map[calldata_method_id]})"
+            function = self.method_id_map[calldata_method_id]
+            msg = f"  (unknown location in {self}.{function.full_signature})"
         else:
             # Method might not be specified in the ABI
             msg = f"  (unknown method id {self}.0x{calldata_method_id.hex()})"
@@ -196,3 +172,11 @@ class ABIContractFactory:
         ret.env.register_contract(address, ret)
 
         return ret
+
+
+def _decode_addresses(abi_type: str, decoded: any) -> any:
+    if abi_type == "address":
+        return Address(decoded)
+    if abi_type == "address[]":
+        return [Address(i) for i in decoded]
+    return decoded

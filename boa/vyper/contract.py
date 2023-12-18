@@ -16,7 +16,7 @@ import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
 from vyper.ast.utils import parse_to_ast
-from vyper.codegen.core import anchor_opt_level
+from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.function_definitions.common import ExternalFuncIR, InternalFuncIR
 from vyper.codegen.global_context import GlobalContext
@@ -33,13 +33,13 @@ from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
 from boa.abi.contract import _EvmContract
-from boa.abi.errors import BoaError, StackTrace, _handle_child_trace
 from boa.abi.function import _EvmFunction
 from boa.environment import Address, Env
-from boa.profiling import LineProfile
+from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.abi import abi_decode, abi_encode
-from boa.util.exceptions import strip_internal_frames
+from boa.util.exceptions import BoaError, StackTrace, _handle_child_trace
 from boa.util.lrudict import lrudict
+from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 from boa.vyper import _METHOD_ID_VAR
 from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
@@ -669,13 +669,28 @@ class VyperContract(_BaseContract):
 
         return Event(log_id, self._address, event_t, decoded_topics, args)
 
-    def handle_error(self, computation):
-        try:
-            raise BoaError(self.stack_trace(computation))
-        except BoaError as b:
-            # modify the error so the traceback starts in userland.
-            # inspired by answers in https://stackoverflow.com/q/1603940/
-            raise strip_internal_frames(b) from None
+    def marshal_to_python(self, computation, vyper_typ):
+        self._computation = computation  # for further inspection
+
+        if computation.is_error:
+            self.handle_error(computation)
+
+        # cache gas used for call if profiling is enabled
+        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        if gas_meter == ProfilingGasMeter:
+            cache_gas_used_for_computation(self, computation)
+
+        if vyper_typ is None:
+            return None
+
+        return_typ = calculate_type_for_external_return(vyper_typ)
+        ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
+
+        # unwrap the tuple if needed
+        if not isinstance(vyper_typ, TupleT):
+            (ret,) = ret
+
+        return vyper_object(ret, vyper_typ)
 
     def stack_trace(self, computation=None):
         computation = computation or self._computation
@@ -827,9 +842,7 @@ class VyperContract(_BaseContract):
                 ir_executor=ir_executor,
             )
 
-            ret = self.marshal_to_python(c, typ)
-
-            return ret
+            return self.marshal_to_python(c, typ)
 
     # inject a function into this VyperContract without affecting the
     # contract's source code. useful for testing private functionality
