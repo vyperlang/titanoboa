@@ -90,7 +90,6 @@ class ABIContract(_EvmContract):
         functions: list["ABIFunction"],
         events: list["EventT"],
         address: Address,
-        created_from: Optional[Address] = None,
         filename: Optional[str] = None,
         env=None,
     ):
@@ -106,9 +105,6 @@ class ABIContract(_EvmContract):
             setattr(self, name, fn)
 
         self._address = Address(address)
-        self.created_from = created_from
-
-        self._source_map = {"pc_pos_map": {}}  # override
 
     @cached_property
     def method_id_map(self):
@@ -136,17 +132,8 @@ class ABIContract(_EvmContract):
         return ABIContractFactory(self._name, self._functions, self._events)
 
     def __repr__(self):
-        ret = f"<{self._name} interface at {self.address}>"
-
-        if self.created_from is not None:
-            ret += f" (created by {self.created_from})"
-
-        return ret
-
-    # OVERRIDE
-    @cached_property
-    def event_for(self):
-        return {e.event_id: e for e in self._events}
+        file_str = f" (file {self.filename})" if self.filename else ""
+        return f"<{self._name} interface at {self.address}>{file_str}"
 
 
 class ABIContractFactory:
@@ -202,9 +189,8 @@ class ABIContractFactory:
 
         bytecode = ret.env.vm.state.get_code(address.canonical_address)
         if not bytecode:
-            warnings.warn(
-                "requested {ret} but there is no bytecode at that address!",
-                stacklevel=2,
+            raise ValueError(
+                f"Requested {ret} but there is no bytecode at that address!"
             )
 
         ret.env.register_contract(address, ret)

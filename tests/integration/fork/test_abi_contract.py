@@ -39,9 +39,9 @@ def tricrypto(get_filepath):
 
 def test_tricrypto(tricrypto):
     assert tricrypto.fee_receiver() == "0xeCb456EA5365865EbAb8a2661B0c503410e9B347"
-    assert tricrypto.get_virtual_price() == 1002646248101745739
+    assert tricrypto.get_virtual_price() == 1003146380129683788
     assert tricrypto.gamma() == 11809167828997
-    assert tricrypto.fee() == 3704162
+    assert tricrypto.fee() == 7069800
     # TODO: test the overloaded functions
 
 
@@ -50,7 +50,7 @@ def test_invariants(crvusd):
     assert crvusd.version() == "v1.0.0"
     assert crvusd.name() == "Curve.Fi USD Stablecoin"
     assert crvusd.symbol() == "crvUSD"
-    assert crvusd.totalSupply() == 260000000000000000000000000
+    assert crvusd.totalSupply() == 730461476239623125757516933
 
 
 def test_metaregistry_overloading(metaregistry):
@@ -66,32 +66,35 @@ def test_metaregistry_overloading(metaregistry):
 
 
 def test_stableswap_factory_ng(stableswap_factory_ng):
-    assert stableswap_factory_ng.pool_list(0)
+    assert (
+        stableswap_factory_ng.pool_list(0)
+        == "0x36DfE783603522566C046Ba1Fa403C8c6F569220"
+    )
 
 
 # randomly grabbed from:
 # https://etherscan.io/token/0xf939e0a03fb07f59a73314e73794be0e57ac1b4e#balances
+account_a = "0x37417B2238AA52D0DD2D6252d989E728e8f706e4"
+account_b = "0x4e59541306910aD6dC1daC0AC9dFB29bD9F15c67"
 balances = {
-    "0x37417B2238AA52D0DD2D6252d989E728e8f706e4": 1190015011947636310265723,
-    "0x3FAAd2238ab2C50a4BD8Fb496b24CddD2fE6CeB4": 30045280884767179302599,
+    account_a: 3797750812312960372676816,
+    account_b: 167292367990896792104836343,
 }
 
 
-def test_balances(crvusd):
-    for addr, balance in balances.items():
-        assert crvusd.balanceOf(addr) == balance
+@pytest.mark.parametrize("addr,balance", balances.items())
+def test_balances(addr, balance, crvusd):
+    assert crvusd.balanceOf(addr) == balance
 
 
-@given(n=st.integers(min_value=0, max_value=30045280884767179302599))
+@given(n=st.integers(min_value=0, max_value=balances[account_a] - 1))
 def test_fork_write(crvusd, n):
     # test we can mutate the fork state
-    a = "0x37417B2238AA52D0DD2D6252d989E728e8f706e4"
-    b = "0x3FAAd2238ab2C50a4BD8Fb496b24CddD2fE6CeB4"
-    with boa.env.prank(a):
-        crvusd.transfer(b, n)
+    with boa.env.prank(account_a):
+        crvusd.transfer(account_b, n)
 
-    assert crvusd.balanceOf(a) == balances[a] - n
-    assert crvusd.balanceOf(b) == balances[b] + n
+    assert crvusd.balanceOf(account_a) == balances[account_a] - n
+    assert crvusd.balanceOf(account_b) == balances[account_b] + n
 
 
 def test_abi_stack_trace(crvusd):

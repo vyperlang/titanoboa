@@ -75,16 +75,6 @@ class ABIFunction(_EvmFunction):
     def is_mutable(self) -> bool:
         return self._mutability > StateMutability.VIEW
 
-    # OVERRIDE
-    @property
-    def func_t(self):  # TODO: Do we really need this?
-        return self
-
-    # OVERRIDE
-    @cached_property
-    def _source_map(self):
-        return {"pc_pos_map": {}}
-
     def __eq__(self, other):
         return isinstance(other, ABIFunction) and self._abi == other._abi
 
