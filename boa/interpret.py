@@ -7,17 +7,13 @@ import vyper
 from vyper.cli.vyper_compile import get_interface_codes
 from vyper.compiler.phases import CompilerData
 
+from boa.abi.contract import ABIContractFactory
+from boa.abi.errors import BoaError
 from boa.environment import Address
 from boa.explorer import fetch_abi_from_etherscan
 from boa.util.disk_cache import DiskCache
 from boa.vyper.compiler_utils import anchor_compiler_settings
-from boa.vyper.contract import (
-    ABIContractFactory,
-    BoaError,
-    VyperBlueprint,
-    VyperContract,
-    VyperDeployer,
-)
+from boa.vyper.contract import VyperBlueprint, VyperContract, VyperDeployer
 
 _Contract = Union[VyperContract, VyperBlueprint]
 

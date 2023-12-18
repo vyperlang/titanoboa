@@ -1,10 +1,10 @@
 import contextlib
 import sys
 
+from boa.abi.errors import BoaError
 from boa.debugger import BoaDebug
 from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
 from boa.interpret import (
-    BoaError,
     from_etherscan,
     load,
     load_abi,
