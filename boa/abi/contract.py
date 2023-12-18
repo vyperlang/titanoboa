@@ -8,12 +8,15 @@ from typing import Optional
 from _operator import attrgetter
 from eth.abc import ComputationAPI
 from eth_abi import decode
-from vyper.semantics.types import EventT
 
-from boa.abi.event import ABIEvent
 from boa.abi.function import ABIFunction, ABIOverload
 from boa.environment import Address, Env
-from boa.util.exceptions import BoaError, StackTrace, _handle_child_trace, strip_internal_frames
+from boa.util.exceptions import (
+    BoaError,
+    StackTrace,
+    _handle_child_trace,
+    strip_internal_frames,
+)
 
 
 class _EvmContract:
@@ -57,14 +60,12 @@ class ABIContract(_EvmContract):
         self,
         name: str,
         functions: list["ABIFunction"],
-        events: list["EventT"],
         address: Address,
         filename: Optional[str] = None,
         env=None,
     ):
         super().__init__(env, filename=filename, address=address)
         self._name = name
-        self._events = events
         self._functions = functions
 
         for name, functions in groupby(self._functions, key=attrgetter("name")):
@@ -105,7 +106,7 @@ class ABIContract(_EvmContract):
 
     @property
     def deployer(self):
-        return ABIContractFactory(self._name, self._functions, self._events)
+        return ABIContractFactory(self._name, self._functions)
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
@@ -120,15 +121,10 @@ class ABIContractFactory:
     """
 
     def __init__(
-        self,
-        name: str,
-        functions: list["ABIFunction"],
-        events: list["EventT"],
-        filename: Optional[str] = None,
+        self, name: str, functions: list["ABIFunction"], filename: Optional[str] = None
     ):
         self._name = name
         self._functions = functions
-        self._events = events
         self._filename = filename
 
     @classmethod
@@ -149,9 +145,7 @@ class ABIContractFactory:
                     stacklevel=1,
                 )
 
-        events = [ABIEvent.from_abi(i) for i in abi if i.get("type") == "event"]
-
-        return cls(basename(name), functions, events, filename=name)
+        return cls(basename(name), functions, filename=name)
 
     def at(self, address) -> ABIContract:
         """
@@ -159,9 +153,7 @@ class ABIContractFactory:
         """
         address = Address(address)
 
-        ret = ABIContract(
-            self._name, self._functions, self._events, address, self._filename
-        )
+        ret = ABIContract(self._name, self._functions, address, self._filename)
 
         bytecode = ret.env.vm.state.get_code(address.canonical_address)
         if not bytecode:
