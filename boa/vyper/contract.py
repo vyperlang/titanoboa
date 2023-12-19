@@ -32,11 +32,10 @@ from vyper.semantics.analysis.data_positions import set_data_positions
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
-from boa.abi.contract import _EvmContract
-from boa.abi.function import _EvmFunction
 from boa.environment import Address, Env
 from boa.profiling import LineProfile, cache_gas_used_for_computation
 from boa.util.abi import abi_decode, abi_encode
+from boa.util.evm import _EvmContract
 from boa.util.exceptions import BoaError, StackTrace, _handle_child_trace
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
@@ -863,7 +862,7 @@ class VyperContract(_BaseContract):
         setattr(self.inject, fn_ast.name, f)
 
 
-class VyperFunction(_EvmFunction):
+class VyperFunction:
     def __init__(self, fn_ast, contract):
         super().__init__()
         self.fn_ast = fn_ast
