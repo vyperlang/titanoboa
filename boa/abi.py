@@ -17,7 +17,13 @@ from boa.util.exceptions import StackTrace, _handle_child_trace
 
 
 class ABIFunction:
+    """A single function in an ABI. It does not include overloads."""
+
     def __init__(self, abi: dict, contract_name: str):
+        """
+        :param abi: the ABI entry for this function
+        :param contract_name: the name of the contract this function belongs to
+        """
         self._abi = abi
         self._contract_name = contract_name
         self._function_visibility = FunctionVisibility.EXTERNAL
@@ -25,7 +31,7 @@ class ABIFunction:
         self.contract: Optional["ABIContract"] = None
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._abi["name"]
 
     @cached_property
@@ -64,8 +70,9 @@ class ABIFunction:
 
     def is_encodable(self, *args, **kwargs) -> bool:
         """Check whether this function accepts the given arguments after eventual encoding."""
+        if len(kwargs) + len(args) != self.argument_count:
+            return False
         parsed_args = self._merge_kwargs(*args, **kwargs)
-        assert len(parsed_args) == len(self.argument_types)  # sanity check
         return all(
             is_abi_encodable(abi_type, arg)
             for abi_type, arg in zip(self.argument_types, parsed_args)
@@ -96,6 +103,7 @@ class ABIFunction:
         return _encode_addresses(merged)
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
+        """Calls the function with the given arguments based on the ABI contract."""
         if not self.contract or not self.contract.env:
             raise Exception(f"Cannot call {self} without deploying contract.")
 
@@ -120,10 +128,21 @@ class ABIFunction:
 
 
 class ABIOverload:
+    """
+    Represents a set of functions that have the same name but different
+    argument types. This is used to implement function overloading.
+    """
+
     @staticmethod
     def create(
         functions: list[ABIFunction], contract: "ABIContract"
     ) -> Union["ABIOverload", ABIFunction]:
+        """
+        Create an ABIOverload if there are multiple functions, otherwise
+        return the single function.
+        :param functions: a list of functions with the same name
+        :param contract: the ABIContract that these functions belong to
+        """
         for f in functions:
             f.contract = contract
         if len(functions) == 1:
@@ -138,21 +157,17 @@ class ABIOverload:
         return self.functions[0].name
 
     def __call__(self, *args, **kwargs):
-        arg_count = len(kwargs) + len(args)
-        candidates = [
-            f
-            for f in self.functions
-            if f.argument_count == arg_count and f.is_encodable(*args, **kwargs)
-        ]
-
-        match candidates:
-            case [single_match]:
-                return single_match(*args, **kwargs)
+        """
+        Call the function that matches the given arguments.
+        :raises Exception: if not a single function is found
+        """
+        match [f for f in self.functions if f.is_encodable(*args, **kwargs)]:
+            case [function]:
+                return function(*args, **kwargs)
             case []:
-                error = (
+                raise Exception(
                     f"Could not find matching {self.name} function for given arguments."
                 )
-                raise Exception(error)
             case multiple:
                 raise Exception(
                     f"Ambiguous call to {self.name}. "
@@ -162,10 +177,7 @@ class ABIOverload:
 
 
 class ABIContract(_EvmContract):
-    """
-    A contract that has been deployed to the blockchain.
-    We do not have the Vyper source code for this contract.
-    """
+    """A contract that has been deployed to the blockchain and created via an ABI."""
 
     def __init__(
         self,
@@ -180,13 +192,16 @@ class ABIContract(_EvmContract):
         self._functions = functions
 
         for name, group in groupby(self._functions, key=attrgetter("name")):
-            functions = list(group)
-            setattr(self, name, ABIOverload.create(functions, self))
+            setattr(self, name, ABIOverload.create(list(group), self))
 
         self._address = Address(address)
 
     @cached_property
     def method_id_map(self):
+        """
+        Returns a mapping from method id to function object.
+        This is used to create the stack trace when an error occurs.
+        """
         return {function.method_id: function for function in self._functions}
 
     def marshal_to_python(self, computation, abi_type: list[str]) -> tuple[Any, ...]:
@@ -202,7 +217,10 @@ class ABIContract(_EvmContract):
         decoded = abi_decode(schema, computation.output)
         return tuple(_decode_addresses(typ, val) for typ, val in zip(abi_type, decoded))
 
-    def stack_trace(self, computation: ComputationAPI):
+    def stack_trace(self, computation: ComputationAPI) -> StackTrace:
+        """
+        Create a stack trace for a failed contract call.
+        """
         calldata_method_id = bytes(computation.msg.data[:4])
         if calldata_method_id in self.method_id_map:
             function = self.method_id_map[calldata_method_id]
@@ -215,7 +233,10 @@ class ABIContract(_EvmContract):
         return _handle_child_trace(computation, self.env, return_trace)
 
     @property
-    def deployer(self):
+    def deployer(self) -> "ABIContractFactory":
+        """
+        Returns a factory that can be used to retrieve another deployed contract.
+        """
         return ABIContractFactory(self._name, self._functions)
 
     def __repr__(self):
@@ -279,7 +300,7 @@ class ABIContractFactory:
 def _decode_addresses(abi_type: str, decoded: Any) -> Any:
     if abi_type == "address":
         return Address(decoded)
-    if abi_type == "address[]":
+    if abi_type.startswith("address["):
         return [Address(i) for i in decoded]
     return decoded
 
