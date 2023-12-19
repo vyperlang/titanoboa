@@ -7,11 +7,11 @@ from typing import Optional
 
 from _operator import attrgetter
 from eth.abc import ComputationAPI
-from eth_abi import decode, encode, is_encodable
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
 from boa.environment import Address
+from boa.util.abi import abi_decode, abi_encode, is_abi_encodable
 from boa.util.evm import _EvmContract
 from boa.util.exceptions import StackTrace, _handle_child_trace
 
@@ -73,15 +73,16 @@ class ABIFunction:
         """Check whether this function accepts the given arguments after eventual encoding."""
         parsed_args = self._merge_kwargs(*args, **kwargs)
         return all(
-            is_encodable(abi_type, arg)
+            is_abi_encodable(abi_type, arg)
             for abi_type, arg in zip(self.argument_types, parsed_args)
         )
 
     def matches(self, *args, **kwargs) -> bool:
         """Check whether this function matches the given arguments exactly."""
         parsed_args = self._merge_kwargs(*args, **kwargs)
-        encoded_args = encode(self.argument_types, args)
-        return map(type, parsed_args) == map(type, decode(self.signature, encoded_args))
+        encoded_args = abi_encode(self.signature, args)
+        decoded_args = abi_decode(self.signature, encoded_args)
+        return map(type, parsed_args) == map(type, decoded_args)
 
     def _merge_kwargs(self, *args, **kwargs) -> list:
         """Merge positional and keyword arguments into a single list."""
@@ -108,7 +109,7 @@ class ABIFunction:
         computation = self.contract.env.execute_code(
             to_address=self.contract.address,
             sender=sender,
-            data=self.method_id + encode(self.argument_types, args),
+            data=self.method_id + abi_encode(self.signature, args),
             value=value,
             gas=gas,
             is_modifying=self.is_mutable,
@@ -202,7 +203,8 @@ class ABIContract(_EvmContract):
         if computation.is_error:
             return self.handle_error(computation)
 
-        decoded = decode(abi_type, computation.output)
+        schema = f"({','.join(abi_type)})"
+        decoded = abi_decode(schema, computation.output)
         return [_decode_addresses(typ, val) for typ, val in zip(abi_type, decoded)]
 
     def stack_trace(self, computation: ComputationAPI):
