@@ -1,0 +1,173 @@
+import re
+
+import pytest
+import yaml
+from vyper.compiler.output import build_abi_output
+
+import boa
+from boa.abi import ABIContractFactory, ABIFunction
+from boa.environment import Address
+from boa.util.exceptions import BoaError
+
+
+@pytest.fixture()
+def load_via_abi():
+    def _load(code):
+        vyper_contract = boa.loads(code)
+        abi = build_abi_output(vyper_contract.compiler_data)
+        abi_contract = ABIContractFactory.from_abi_dict(abi).at(vyper_contract.address)
+        return abi_contract, vyper_contract
+
+    return _load
+
+
+@pytest.fixture()
+def load_solidity(get_filepath):
+    """
+    Fixture to load a solidity contract from a yaml file.
+    The file is expected to include the "abi" and "bytecode" fields.
+    This is used to test ABI features that cannot be tested with Vyper.
+    """
+
+    def _load(yaml_filename):
+        with open(get_filepath(f"fixtures/solidity_{yaml_filename}.yaml")) as f:
+            data = yaml.safe_load(f)
+        bytecode = bytes.fromhex(data["bytecode"]["object"])
+        address, _ = boa.env.deploy_code(bytecode=bytecode)
+        deployer = ABIContractFactory.from_abi_dict(data["abi"])
+        return deployer.at(address)
+
+    return _load
+
+
+@pytest.mark.parametrize(
+    "selector,value", [("from", "123"), ("global", "global"), ("local", "local")]
+)
+def test_python_keywords(load_solidity, selector, value):
+    """
+    Test that solidity contracts can be used even if they use protected keywords.
+    """
+    contract = load_solidity("python_keywords")
+    assert getattr(contract, selector)(value) is None
+    assert getattr(contract, f"_{selector}")() == value
+
+
+def test_solidity_overloading(load_solidity):
+    contract = load_solidity("overload")
+    with pytest.raises(Exception) as exc_info:
+        contract.f(0)
+    (error,) = exc_info.value.args
+    assert (
+        "Ambiguous call to f. Arguments can be encoded to multiple overloads: (int8), (uint256)."
+        == error
+    )
+    assert contract.f(-1) == -1
+    assert contract.f(1000) == 1000
+
+
+def test_address(load_via_abi):
+    code = """
+@external
+def test(_a: address) -> address:
+    return _a
+    """
+    abi_contract, _ = load_via_abi(code)
+    sender = boa.env.eoa
+    result = abi_contract.test(sender)
+    assert result == sender
+    assert isinstance(result, Address)
+
+
+def test_dynarray(load_via_abi):
+    code = """
+@external
+@view
+def test(_a: DynArray[uint256, 100]) -> (DynArray[address, 2], uint256):
+    return [msg.sender, msg.sender], _a[0]
+    """
+    abi_contract, vyper_contract = load_via_abi(code)
+    deployer_contract = abi_contract.deployer.at(abi_contract.address)
+    given = [1, 2, 3, 4, 5]
+    sender = Address(boa.env.eoa)
+    expected = ([sender, sender], 1)
+    assert vyper_contract.test(given) == expected
+    assert abi_contract.test(given) == expected
+    assert deployer_contract.test(given) == expected
+
+
+def test_overloading(load_via_abi):
+    code = """
+@external
+def test(a: uint128 = 0, b: uint128 = 0) -> uint128:
+    return a + b
+"""
+    c, _ = load_via_abi(code)
+    assert c.test() == 0
+    assert c.test(1) == 1
+    assert c.test(a=1) == 1
+    assert c.test(1, 2) == 3
+    assert c.test(a=1, b=2) == 3
+
+    with pytest.raises(Exception) as exc_info:
+        c.test(1, 2, 3)
+    (error,) = exc_info.value.args
+    assert "Could not find matching test function for given arguments." == error
+
+    with pytest.raises(Exception) as exc_info:
+        c.test(1, c=2)
+    (error,) = exc_info.value.args
+    assert (
+        "Missing keyword argument 'b' for `(uint128,uint128)`. Passed (1,) {'c': 2}"
+        == error
+    )
+
+
+def test_bad_address():
+    with pytest.raises(ValueError) as exc_info:
+        ABIContractFactory.from_abi_dict([]).at(boa.env.eoa)
+    (error,) = exc_info.value.args
+    assert "there is no bytecode at that address!" in error
+
+
+def test_abi_reverts(load_via_abi):
+    code = """
+@external
+def test(n: uint256) -> uint256:
+    assert n > 0
+    return 0
+"""
+    c, _ = load_via_abi(code)
+    with pytest.raises(BoaError) as exc_info:
+        c.test(0)
+    ((error,),) = exc_info.value.args
+    assert re.match(
+        r"^ +\(unknown location in .*\.test\(uint256\) -> \['uint256']\)$", error
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        c.test(1, 2)
+    (error,) = exc_info.value.args
+    assert "expected 1 arguments, got 2" in error
+
+
+def test_abi_not_deployed():
+    f = ABIFunction({"name": "test", "inputs": [], "outputs": []}, contract_name="c")
+    with pytest.raises(Exception) as exc_info:
+        f()
+    (error,) = exc_info.value.args
+    assert "Cannot call ABI c.test() -> [] without deploying contract." == error
+
+
+def test_method_not_in_abi(load_via_abi):
+    code = """
+@external
+def test(n: uint256) -> uint256:
+    assert n > 0
+    return n
+"""
+    abi_contract, _ = load_via_abi(code)
+    abi_contract.method_id_map.clear()  # mess up the method IDs
+    with pytest.raises(BoaError) as exc_info:
+        abi_contract.test(0)
+    ((error,),) = exc_info.value.args
+    assert re.match(r"^ +\(unknown method id .*\.0x29e99f07\)$", error)

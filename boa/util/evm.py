@@ -26,7 +26,7 @@ class _EvmContract:
     def stack_trace(self, computation: ComputationAPI):
         raise NotImplementedError
 
-    def handle_error(self, computation) -> None:
+    def handle_error(self, computation):
         try:
             raise BoaError(self.stack_trace(computation))
         except BoaError as b:
@@ -36,4 +36,5 @@ class _EvmContract:
 
     @property
     def address(self) -> Address:
+        assert self._address is not None
         return self._address
