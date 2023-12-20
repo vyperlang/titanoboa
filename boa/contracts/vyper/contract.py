@@ -32,25 +32,32 @@ from vyper.semantics.analysis.data_positions import set_data_positions
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
-from boa.environment import Address, Env
-from boa.profiling import LineProfile, cache_gas_used_for_computation
-from boa.util.abi import abi_decode, abi_encode
-from boa.util.evm import _EvmContract
-from boa.util.exceptions import BoaError, StackTrace, _handle_child_trace
-from boa.util.lrudict import lrudict
-from boa.vm.gas_meters import ProfilingGasMeter
-from boa.vm.utils import to_bytes, to_int
-from boa.vyper import _METHOD_ID_VAR
-from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
-from boa.vyper.compiler_utils import (
+from boa.contracts.evm_contract import BaseEVMContract
+from boa.contracts.vyper import _METHOD_ID_VAR
+from boa.contracts.vyper.ast_utils import (
+    ast_map_of,
+    get_fn_ancestor_from_node,
+    reason_at,
+)
+from boa.contracts.vyper.compiler_utils import (
     anchor_compiler_settings,
     compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
-from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
-from boa.vyper.event import Event, RawEvent
-from boa.vyper.ir_executor import executor_from_ir
+from boa.contracts.vyper.decoder_utils import (
+    ByteAddressableStorage,
+    decode_vyper_object,
+)
+from boa.contracts.vyper.event import Event, RawEvent
+from boa.contracts.vyper.ir_executor import executor_from_ir
+from boa.environment import Address, Env
+from boa.profiling import LineProfile, cache_gas_used_for_computation
+from boa.util.abi import abi_decode, abi_encode
+from boa.util.exceptions import BoaError, StackTrace, _handle_child_trace
+from boa.util.lrudict import lrudict
+from boa.vm.gas_meters import ProfilingGasMeter
+from boa.vm.utils import to_bytes, to_int
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -106,7 +113,7 @@ class VyperDeployer:
 
 
 # a few lines of shared code between VyperBlueprint and VyperContract
-class _BaseContract(_EvmContract):
+class _BaseContract(BaseEVMContract):
     def __init__(
         self,
         compiler_data: CompilerData,

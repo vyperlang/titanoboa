@@ -5,7 +5,8 @@ import yaml
 from vyper.compiler.output import build_abi_output
 
 import boa
-from boa.abi import ABIContractFactory, ABIFunction
+from boa.contracts.abi.contract import ABIContractFactory
+from boa.contracts.abi.function import ABIFunction
 from boa.environment import Address
 from boa.util.exceptions import BoaError
 
@@ -45,7 +46,7 @@ def load_solidity(get_filepath):
 )
 def test_python_keywords(load_solidity, selector, value):
     """
-    Test that solidity contracts can be used even if they use protected keywords.
+    Test that solidity contract can be used even if they use protected keywords.
     """
     contract = load_solidity("python_keywords")
     assert getattr(contract, selector)(value) is None

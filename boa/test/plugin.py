@@ -32,7 +32,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--gas-profile",
         action="store_true",
-        help="Profile gas used by contracts called in tests",
+        help="Profile gas used by contract called in tests",
     )
 
 

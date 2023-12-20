@@ -7,8 +7,8 @@ from textwrap import dedent
 from eth_utils import to_checksum_address
 from rich.table import Table
 
+from boa.contracts.vyper.ast_utils import get_fn_name_from_lineno, get_line
 from boa.environment import Env
-from boa.vyper.ast_utils import get_fn_name_from_lineno, get_line
 
 
 @dataclass(unsafe_hash=True)
@@ -150,7 +150,7 @@ class _SingleComputation:
         return ret
 
 
-# line profile. mergeable across contracts
+# line profile. mergeable across contract
 class LineProfile:
     def __init__(self):
         self.profile = {}
@@ -267,7 +267,7 @@ def cache_gas_used_for_computation(contract, computation):
     for _computation in computation.children:
         child_contract = env.lookup_contract(_computation.msg.code_address)
 
-        # ignore black box contracts
+        # ignore black box contract
         if child_contract is not None:
             cache_gas_used_for_computation(child_contract, _computation)
 
@@ -313,7 +313,7 @@ def get_call_profile_table(env: Env) -> Table:
             (cache[profile].net_gas_stats.avg_gas, profile.address)
         )
 
-    # arrange from most to least expensive contracts:
+    # arrange from most to least expensive contract:
     sort_gas = sorted(contract_vs_mean_gas, key=lambda x: x[0], reverse=True)
     sorted_addresses = list(set([x[1] for x in sort_gas]))
 
@@ -324,7 +324,7 @@ def get_call_profile_table(env: Env) -> Table:
         for profile in cached_contracts[address]:
             fn_vs_mean_gas.append((cache[profile].net_gas_stats.avg_gas, profile))
 
-        # arrange from most to least expensive contracts:
+        # arrange from most to least expensive contract:
         fn_vs_mean_gas = sorted(fn_vs_mean_gas, key=lambda x: x[0], reverse=True)
 
         for c, (_, profile) in enumerate(fn_vs_mean_gas):

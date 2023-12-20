@@ -26,6 +26,5 @@ def abi_decode(schema: str, data: bytes) -> Any:
     return Decoder.decode(_get_parser(schema), data)
 
 
-# todo: eth.codecs.abi does not have such a function, which one do we use?
 def is_abi_encodable(abi_type: str, data: Any) -> bool:
     return is_encodable(abi_type, data)
