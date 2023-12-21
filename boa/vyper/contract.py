@@ -919,8 +919,14 @@ class VyperFunction:
         self.contract = contract
         self.env = contract.env
 
+        self.__doc__ = fn_ast.doc_string.value
+        self.__module__ = self.contract.compiler_data.contract_name
+
     def __repr__(self):
         return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
+
+    def __str__(self):
+        return repr(self.func_t)
 
     @cached_property
     def _source_map(self):
