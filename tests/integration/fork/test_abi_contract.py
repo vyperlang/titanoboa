@@ -80,6 +80,13 @@ def test_stableswap_factory_ng(stableswap_factory_ng):
         3,
         [0, 0, 0],
     )
+    assert stableswap_factory_ng.base_pool_data(pool) == (
+        "0x0000000000000000000000000000000000000000",
+        [],
+        0,
+        0,
+        [],
+    )
 
 
 # randomly grabbed from:
