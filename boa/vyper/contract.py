@@ -919,7 +919,9 @@ class VyperFunction:
         self.contract = contract
         self.env = contract.env
 
-        self.__doc__ = fn_ast.doc_string.value
+        self.__doc__ = (
+            fn_ast.doc_string.value if hasattr(fn_ast, "doc_string") else None
+        )
         self.__module__ = self.contract.compiler_data.contract_name
 
     def __repr__(self):
