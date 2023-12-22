@@ -8,7 +8,7 @@ from typing import Any, Optional
 from _operator import attrgetter
 from eth.abc import ComputationAPI
 
-from boa.contracts.abi import _decode_addresses
+from boa.contracts.abi import _decode_addresses, _format_abi_type
 from boa.contracts.abi.function import ABIFunction, ABIOverload
 from boa.contracts.evm_contract import BaseEVMContract
 from boa.environment import Address
@@ -53,7 +53,7 @@ class ABIContract(BaseEVMContract):
         if computation.is_error:
             return self.handle_error(computation)
 
-        schema = f"({','.join(abi_type)})"
+        schema = f"({_format_abi_type(abi_type)})"
         decoded = abi_decode(schema, computation.output)
         return tuple(_decode_addresses(typ, val) for typ, val in zip(abi_type, decoded))
 

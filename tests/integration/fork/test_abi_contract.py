@@ -66,9 +66,19 @@ def test_metaregistry_overloading(metaregistry):
 
 
 def test_stableswap_factory_ng(stableswap_factory_ng):
-    assert (
-        stableswap_factory_ng.pool_list(0)
-        == "0x36DfE783603522566C046Ba1Fa403C8c6F569220"
+    pool = "0x76Ae7A7DC125E4163a2137e650b7726231FdB917"
+    assert stableswap_factory_ng.pool_list(5) == pool
+    base_pool = stableswap_factory_ng.get_base_pool(pool)
+    assert stableswap_factory_ng.base_pool_data(base_pool) == (
+        "0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490",
+        [
+            "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        ],
+        394770,
+        3,
+        [0, 0, 0],
     )
 
 

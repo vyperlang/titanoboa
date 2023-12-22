@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Optional, Union
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
-from boa.contracts.abi import _encode_addresses
+from boa.contracts.abi import _encode_addresses, _format_abi_type, _parse_abi_type
 from boa.util.abi import abi_decode, abi_encode, is_abi_encodable
 
 if TYPE_CHECKING:
@@ -30,8 +30,8 @@ class ABIFunction:
         return self._abi["name"]
 
     @cached_property
-    def argument_types(self) -> list[str]:
-        return [i["type"] for i in self._abi["inputs"]]
+    def argument_types(self) -> list:
+        return [_parse_abi_type(i) for i in self._abi["inputs"]]
 
     @property
     def argument_count(self) -> int:
@@ -39,11 +39,11 @@ class ABIFunction:
 
     @property
     def signature(self) -> str:
-        return f"({','.join(self.argument_types)})"
+        return f"({_format_abi_type(self.argument_types)})"
 
     @cached_property
-    def return_type(self) -> list[str]:
-        return [o["type"] for o in self._abi["outputs"]]
+    def return_type(self) -> list:
+        return [_parse_abi_type(o) for o in self._abi["outputs"]]
 
     @property
     def full_signature(self) -> str:
