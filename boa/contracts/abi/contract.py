@@ -1,5 +1,3 @@
-import warnings
-from collections import Counter
 from functools import cached_property
 from itertools import groupby
 from os.path import basename
@@ -99,23 +97,10 @@ class ABIContractFactory:
         self._filename = filename
 
     @classmethod
-    def from_abi_dict(cls, abi, name: Optional[str] = None):
-        if name is None:
-            name = "<anonymous contract>"
-
+    def from_abi_dict(cls, abi, name="<anonymous contract>"):
         functions = [
             ABIFunction(item, name) for item in abi if item.get("type") == "function"
         ]
-
-        # warn on functions with same name
-        for function_name, count in Counter(f.name for f in functions).items():
-            if count > 1:
-                warnings.warn(
-                    f"{name} overloads {function_name}! overloaded methods "
-                    "might not work correctly at this time",
-                    stacklevel=1,
-                )
-
         return cls(basename(name), functions, filename=name)
 
     def at(self, address) -> ABIContract:

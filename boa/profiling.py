@@ -267,7 +267,7 @@ def cache_gas_used_for_computation(contract, computation):
     for _computation in computation.children:
         child_contract = env.lookup_contract(_computation.msg.code_address)
 
-        # ignore black box contract
+        # ignore black box contracts
         if child_contract is not None:
             cache_gas_used_for_computation(child_contract, _computation)
 
