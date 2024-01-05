@@ -34,8 +34,9 @@ class ByteAddressableStorage:
                 ret += self.db.get_storage(self.address, i).to_bytes(32, "big")
                 i += 1
 
-            start -= floor32(start)
-            stop -= floor32(start)
+            start_ofst = floor32(start)
+            start -= start_ofst
+            stop -= start_ofst
             return memoryview(ret[start:stop])
         else:
             raise Exception("Must slice {self}")
