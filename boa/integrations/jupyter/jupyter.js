@@ -66,22 +66,20 @@
             });
 
         console.log(`Registering callbacks to Jupyter Notebook`);
-        window._titanoboa = {
-            loadSigner: registerTarget('loadSigner', loadSigner),
-            signTransaction: registerTarget('signTransaction', signTransaction),
-        };
-    } else { // we are in JupyterLab, use API
-        /** Call the backend when the given function is called, handling errors */
-        const handleCallback = func => async (token, ...args) => {
-            const body = await parsePromise(func(...args));
-            return callbackAPI(token, body);
-        };
-
-        console.log(`Registering callbacks to JupyterLab`);
-        // expose functions to window, so they can be called from the BrowserSigner
-        window._titanoboa = {
-            loadSigner: handleCallback(loadSigner),
-            signTransaction: handleCallback(signTransaction)
-        };
+        registerTarget('loadSigner', loadSigner);
+        registerTarget('signTransaction', signTransaction);
     }
+
+    /** Call the backend when the given function is called, handling errors */
+    const handleCallback = func => async (token, ...args) => {
+        const body = await parsePromise(func(...args));
+        return callbackAPI(token, body);
+    };
+
+    console.log(`Registering callbacks to BrowserSigner`);
+    // expose functions to window, so they can be called from the BrowserSigner
+    window._titanoboa = {
+        loadSigner: handleCallback(loadSigner),
+        signTransaction: handleCallback(signTransaction)
+    };
 })();
