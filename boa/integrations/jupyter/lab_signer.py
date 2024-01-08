@@ -20,7 +20,12 @@ from .constants import (
     PLUGIN_NAME,
     TRANSACTION_JSON_LENGTH,
 )
+from .handlers import start_server
 from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
+
+nest_asyncio.apply()
+if util.find_spec("google.colab"):
+    start_server()
 
 
 class BrowserSigner:
@@ -33,12 +38,6 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        nest_asyncio.apply()
-        if util.find_spec("google.colab"):
-            from .handlers import start_server
-
-            start_server()
-
         install_jupyter_javascript_triggers()
         if address:
             self.address = address

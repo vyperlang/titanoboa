@@ -3,8 +3,6 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    if (window._titanoboa) return; // don't register twice
-
     const getEthersProvider = () => {
         const {ethereum} = window;
         if (!ethereum) throw new Error('No Ethereum browser plugin found');

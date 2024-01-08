@@ -82,5 +82,8 @@ def start_server(port=8888) -> None:
     This is used in Google Colab, where the server extension is not supported.
     """
     app = Application(create_handlers())
-    app.listen(port)
-    logging.info(f"JupyterLab signer extension server running on port {port}")
+    try:
+        app.listen(port)
+        logging.info(f"JupyterLab boa server running on port {port}")
+    except OSError as e:
+        logging.warning(f"JupyterLab boa server could not listen port {port}: {e}")
