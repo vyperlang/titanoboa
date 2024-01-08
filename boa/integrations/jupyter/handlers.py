@@ -1,15 +1,21 @@
 """
 Handlers for the JupyterLab extension.
 """
+import logging
 from http import HTTPStatus
 from multiprocessing.shared_memory import SharedMemory
 
-import tornado
 from jupyter_server.base.handlers import APIHandler
 from jupyter_server.serverapp import ServerApp
 from jupyter_server.utils import url_path_join
+from tornado.web import Application, authenticated
 
 from boa.integrations.jupyter.constants import PLUGIN_NAME, TOKEN_REGEX
+
+
+class StatusHandler(APIHandler):
+    def get(self):
+        self.finish({"status": "ok"})
 
 
 class CallbackHandler(APIHandler):
@@ -20,7 +26,7 @@ class CallbackHandler(APIHandler):
     It expects the SharedMemory object has already been created via a BrowserSigner instance.
     """
 
-    @tornado.web.authenticated  # ensure only authorized user can request the Jupyter server
+    @authenticated  # ensure only authorized user can request the Jupyter server
     def post(self, token: str):
         body = self.request.body
         if not body:
@@ -51,12 +57,30 @@ def setup_handlers(server_app: ServerApp) -> None:
     """
     Register the handlers in the Jupyter server.
     :param server_app: The Jupyter server application.
-    :param name: The name of the extension.
     """
     web_app = server_app.web_app
     base_url = url_path_join(web_app.settings["base_url"], PLUGIN_NAME)
-    web_app.add_handlers(
-        host_pattern=".*$",
-        host_handlers=[(rf"{base_url}/callback/({TOKEN_REGEX})", CallbackHandler)],
-    )
+    web_app.add_handlers(host_pattern=".*$", host_handlers=create_handlers(base_url))
     server_app.log.info(f"Handlers registered in {base_url}")
+
+
+def create_handlers(base_url="/") -> list[tuple[str, callable]]:
+    """
+    Create the handlers for the Jupyter server.
+    :param base_url: The base URL for the handlers.
+    :return: The list of handlers.
+    """
+    return [
+        (rf"{base_url}$", StatusHandler),
+        (rf"{base_url}/callback/({TOKEN_REGEX})$", CallbackHandler),
+    ]
+
+
+def start_server(port=8888) -> None:
+    """
+    Starts a separate tornado server with the handlers.
+    This is used in Google Colab, where the server extension is not supported.
+    """
+    app = Application(create_handlers())
+    app.listen(port)
+    logging.info(f"JupyterLab signer extension server running on port {port}")

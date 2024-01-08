@@ -5,7 +5,6 @@
 (() => {
     if (window._titanoboa) return; // don't register twice
 
-    const PLUGIN_API_ROOT = '../titanoboa_jupyterlab';
     const getEthersProvider = () => {
         const {ethereum} = window;
         if (!ethereum) throw new Error('No Ethereum browser plugin found');
@@ -21,9 +20,10 @@
 
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
-        const headers = {['X-XSRFToken']: getCookie('_xsrf')};
+        const apiRoot = window.colab ? `/tun/m/${window.colab.global.notebook.kernel.endpoint.managedId}/_proxy/8888?authuser=0` : '../titanoboa_jupyterlab';
+        const headers = window.colab ? {"x-colab-tunnel": "Google"} : {['X-XSRFToken']: getCookie('_xsrf')};
         const init = {method: 'POST', body: stringify(body), headers};
-        const url = `${PLUGIN_API_ROOT}/callback/${token}`;
+        const url = `${apiRoot}/callback/${token}`;
         const response = await fetch(url, {...init, headers});
         return response.text();
     }
@@ -44,39 +44,13 @@
         return signer.sendTransaction(transaction);
     }
 
-    const notebook = window.google?.colab ?? window.colab ?? window.Jupyter?.notebook;
-    if (notebook) {
-        /** Call the backend when the given function is called, handling errors */
-        const registerTarget = (name, func) =>
-            notebook.kernel.comms.registerTarget(name, async channel => {
-                const onMessage = async message => {
-                    console.log(`${name} received`, message)
-                    const args = func(message.data);
-                    const response = await parsePromise(args);
-                    channel.send(JSON.parse(stringify(response)));
-                };
-
-                if ('on_msg' in channel) {
-                    // older versions of Jupyter Notebook
-                    return channel.on_msg(onMessage);
-                }
-                for await (const message of channel.messages) {
-                    await onMessage(message);
-                }
-            });
-
-        console.log(`Registering callbacks to Jupyter Notebook`);
-        registerTarget('loadSigner', loadSigner);
-        registerTarget('signTransaction', signTransaction);
-    }
-
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         const body = await parsePromise(func(...args));
         return callbackAPI(token, body);
     };
 
-    console.log(`Registering callbacks to BrowserSigner`);
+    console.log(`Registering Boa callbacks`);
     // expose functions to window, so they can be called from the BrowserSigner
     window._titanoboa = {
         loadSigner: handleCallback(loadSigner),

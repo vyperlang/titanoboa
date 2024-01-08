@@ -1,9 +1,10 @@
 """
 This module implements the BrowserSigner class, which is used to sign transactions
-in IPython/JupyterLab. For Google Colab and Jupyter Notebook, see notebook_signer.py.
+in IPython/JupyterLab/Google Colab.
 """
 import json
 from asyncio import get_running_loop, sleep
+from importlib import util
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
 from typing import Any
@@ -32,6 +33,12 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
+        nest_asyncio.apply()
+        if util.find_spec("google.colab"):
+            from .handlers import start_server
+
+            start_server()
+
         install_jupyter_javascript_triggers()
         if address:
             self.address = address
@@ -102,7 +109,6 @@ def _wait_buffer_set(buffer: memoryview):
             await sleep(0.01)
         return json.loads(buffer.tobytes().decode().split("\0")[0])
 
-    nest_asyncio.apply()
     loop = get_running_loop()
     future = _wait_value(deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds())
     task = loop.create_task(future)
