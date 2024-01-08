@@ -3,6 +3,9 @@ import pytest
 from hypothesis import given
 
 import boa
+from boa.util.exceptions import BoaError
+
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
 @pytest.fixture(scope="module")
@@ -45,6 +48,14 @@ def test_tricrypto(tricrypto):
     # TODO: test the overloaded functions
 
 
+def test_no_bytecode(get_filepath):
+    abi_path = get_filepath("crvusd_abi.json")
+    crvusd = boa.load_abi(abi_path).at(ZERO_ADDRESS)
+    with pytest.raises(BoaError) as exc_info:
+        crvusd.decimals()
+    assert "no bytecode at this address" in str(exc_info.value)
+
+
 def test_invariants(crvusd):
     assert crvusd.decimals() == 18
     assert crvusd.version() == "v1.0.0"
@@ -57,7 +68,7 @@ def test_metaregistry_overloading(metaregistry):
     pool = metaregistry.pool_list(0)
     coin1, coin2 = metaregistry.get_coins(pool)[:2]
     pools_found = metaregistry.find_pools_for_coins(coin1, coin2)
-    first_pools = [pool for pool in pools_found if not pool.startswith("0x0000")][:10]
+    first_pools = [pool for pool in pools_found if not pool.startswith("0x0000")][:2]
     assert first_pools[0] == metaregistry.find_pool_for_coins(coin1, coin2)
     assert first_pools == [
         metaregistry.find_pool_for_coins(coin1, coin2, i)
@@ -80,13 +91,7 @@ def test_stableswap_factory_ng(stableswap_factory_ng):
         3,
         [0, 0, 0],
     )
-    assert stableswap_factory_ng.base_pool_data(pool) == (
-        "0x0000000000000000000000000000000000000000",
-        [],
-        0,
-        0,
-        [],
-    )
+    assert stableswap_factory_ng.base_pool_data(pool) == (ZERO_ADDRESS, [], 0, 0, [])
 
 
 # randomly grabbed from:

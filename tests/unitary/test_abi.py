@@ -124,10 +124,8 @@ def test(a: uint128 = 0, b: uint128 = 0) -> uint128:
 
 
 def test_bad_address():
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.warns(UserWarning, match=r"there is no bytecode at that address!$"):
         ABIContractFactory.from_abi_dict([]).at(boa.env.eoa)
-    (error,) = exc_info.value.args
-    assert "there is no bytecode at that address!" in error
 
 
 def test_abi_reverts(load_via_abi):

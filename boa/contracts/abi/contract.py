@@ -1,12 +1,12 @@
 from functools import cached_property
-from itertools import groupby
+from operator import attrgetter
 from os.path import basename
-from typing import Any, Optional
+from typing import Any, Optional, Union
+from warnings import warn
 
-from _operator import attrgetter
 from eth.abc import ComputationAPI
 
-from boa.contracts.abi import _decode_addresses, _format_abi_type
+from boa.contracts.abi import _decode_addresses, _format_abi_type, group_by
 from boa.contracts.abi.function import ABIFunction, ABIOverload
 from boa.contracts.evm_contract import BaseEVMContract
 from boa.environment import Address
@@ -28,9 +28,15 @@ class ABIContract(BaseEVMContract):
         super().__init__(env, filename=filename, address=address)
         self._name = name
         self._functions = functions
+        self._bytecode = self.env.vm.state.get_code(address.canonical_address)
+        if not self._bytecode:
+            warn(
+                f"Requested {self} but there is no bytecode at that address!",
+                stacklevel=2,
+            )
 
-        for name, group in groupby(self._functions, key=attrgetter("name")):
-            setattr(self, name, ABIOverload.create(list(group), self))
+        for name, group in group_by(self._functions, attrgetter("name")).items():
+            setattr(self, name, ABIOverload.create(group, self))
 
         self._address = Address(address)
 
@@ -48,7 +54,7 @@ class ABIContract(BaseEVMContract):
         :param computation: the computation object returned by `execute_code`
         :param abi_type: the ABI type of the return value.
         """
-        if computation.is_error:
+        if computation.is_error or (abi_type and not computation.output):
             return self.handle_error(computation)
 
         schema = f"({_format_abi_type(abi_type)})"
@@ -79,7 +85,8 @@ class ABIContract(BaseEVMContract):
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
-        return f"<{self._name} interface at {self.address}>{file_str}"
+        warn_str = "" if self._bytecode else " (WARNING: no bytecode at this address!)"
+        return f"<{self._name} interface at {self.address}{warn_str}>{file_str}"
 
 
 class ABIContractFactory:
@@ -103,20 +110,11 @@ class ABIContractFactory:
         ]
         return cls(basename(name), functions, filename=name)
 
-    def at(self, address) -> ABIContract:
+    def at(self, address: Union[Address, str]) -> ABIContract:
         """
         Create an ABI contract object for a deployed contract at `address`.
         """
         address = Address(address)
-
-        ret = ABIContract(self._name, self._functions, address, self._filename)
-
-        bytecode = ret.env.vm.state.get_code(address.canonical_address)
-        if not bytecode:
-            raise ValueError(
-                f"Requested {ret} but there is no bytecode at that address!"
-            )
-
-        ret.env.register_contract(address, ret)
-
-        return ret
+        contract = ABIContract(self._name, self._functions, address, self._filename)
+        contract.env.register_contract(address, contract)
+        return contract

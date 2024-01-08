@@ -5,7 +5,7 @@ from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
 from boa.contracts.abi import _encode_addresses, _format_abi_type, _parse_abi_type
-from boa.util.abi import abi_decode, abi_encode, is_abi_encodable
+from boa.util.abi import abi_encode, is_abi_encodable
 
 if TYPE_CHECKING:
     from boa.contracts.abi.contract import ABIContract
@@ -72,13 +72,6 @@ class ABIFunction:
             is_abi_encodable(abi_type, arg)
             for abi_type, arg in zip(self.argument_types, parsed_args)
         )
-
-    def matches(self, *args, **kwargs) -> bool:
-        """Check whether this function matches the given arguments exactly."""
-        parsed_args = self._merge_kwargs(*args, **kwargs)
-        encoded_args = abi_encode(self.signature, args)
-        decoded_args = abi_decode(self.signature, encoded_args)
-        return map(type, parsed_args) == map(type, decoded_args)
 
     def _merge_kwargs(self, *args, **kwargs) -> list:
         """Merge positional and keyword arguments into a single list."""
@@ -154,7 +147,7 @@ class ABIOverload:
     def __call__(self, *args, **kwargs):
         """
         Call the function that matches the given arguments.
-        :raises Exception: if not a single function is found
+        :raises Exception: if a single function is not found
         """
         match [f for f in self.functions if f.is_encodable(*args, **kwargs)]:
             case [function]:
