@@ -1,6 +1,6 @@
 from boa.integrations.jupyter.constants import PLUGIN_NAME
 from boa.integrations.jupyter.handlers import setup_handlers
-from boa.integrations.jupyter.lab_signer import BrowserSigner
+from boa.integrations.jupyter.signer import BrowserSigner
 
 
 def load_jupyter_server_extension(server_app):

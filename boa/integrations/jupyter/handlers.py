@@ -1,14 +1,13 @@
 """
 Handlers for the JupyterLab extension.
 """
-import logging
 from http import HTTPStatus
 from multiprocessing.shared_memory import SharedMemory
 
 from jupyter_server.base.handlers import APIHandler
 from jupyter_server.serverapp import ServerApp
 from jupyter_server.utils import url_path_join
-from tornado.web import Application, authenticated
+from tornado.web import authenticated
 
 from boa.integrations.jupyter.constants import PLUGIN_NAME, TOKEN_REGEX
 
@@ -60,30 +59,11 @@ def setup_handlers(server_app: ServerApp) -> None:
     """
     web_app = server_app.web_app
     base_url = url_path_join(web_app.settings["base_url"], PLUGIN_NAME)
-    web_app.add_handlers(host_pattern=".*$", host_handlers=create_handlers(base_url))
+    web_app.add_handlers(
+        host_pattern=".*$",
+        host_handlers=[
+            (rf"{base_url}$", StatusHandler),
+            (rf"{base_url}/callback/({TOKEN_REGEX})$", CallbackHandler),
+        ],
+    )
     server_app.log.info(f"Handlers registered in {base_url}")
-
-
-def create_handlers(base_url="/") -> list[tuple[str, callable]]:
-    """
-    Create the handlers for the Jupyter server.
-    :param base_url: The base URL for the handlers.
-    :return: The list of handlers.
-    """
-    return [
-        (rf"{base_url}$", StatusHandler),
-        (rf"{base_url}/callback/({TOKEN_REGEX})$", CallbackHandler),
-    ]
-
-
-def start_server(port=8888) -> None:
-    """
-    Starts a separate tornado server with the handlers.
-    This is used in Google Colab, where the server extension is not supported.
-    """
-    app = Application(create_handlers())
-    try:
-        app.listen(port)
-        logging.info(f"JupyterLab boa server running on port {port}")
-    except OSError as e:
-        logging.warning(f"JupyterLab boa server could not listen port {port}: {e}")
