@@ -307,8 +307,8 @@ def check_boa_error_matches(error, *args, **kwargs):
         _check(
             err == frame.pretty_vm_reason
             or err == frame.error_detail
-            or err == frame.dev_reason.reason_str,
-            "does not match {args}",
+            or (frame.dev_reason and err == frame.dev_reason.reason_str),
+            f"does not match {args}",
         )
         return
 
@@ -326,7 +326,7 @@ def check_boa_error_matches(error, *args, **kwargs):
         _check(
             frame.error_detail == "user revert with reason"
             and v == frame.pretty_vm_reason,
-            f"{frame.vm_error} != {v}",
+            f"{frame.pretty_vm_reason} != {v}",
         )
     # assume it is a dev reason string
     else:
@@ -919,8 +919,16 @@ class VyperFunction:
         self.contract = contract
         self.env = contract.env
 
+        self.__doc__ = (
+            fn_ast.doc_string.value if hasattr(fn_ast, "doc_string") else None
+        )
+        self.__module__ = self.contract.compiler_data.contract_name
+
     def __repr__(self):
         return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
+
+    def __str__(self):
+        return repr(self.func_t)
 
     @cached_property
     def _source_map(self):
