@@ -4,8 +4,6 @@ import re
 
 from tornado.web import Application, RequestHandler
 
-from boa.integrations.jupyter.handlers import create_handlers
-
 IN_GOOGLE_COLAB = importlib.util.find_spec("google.colab")
 
 
@@ -14,6 +12,10 @@ def start_server(port=8888) -> None:
     Starts a separate tornado server with the handlers.
     This is used in Google Colab, where the server extension is not supported.
     """
+    from boa.integrations.jupyter.handlers import (  # avoid circular import
+        create_handlers,
+    )
+
     app = Application(create_handlers())
     try:
         app.listen(port)
