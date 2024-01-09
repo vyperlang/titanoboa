@@ -18,9 +18,13 @@
             console.error(e.stack || e.message);
             return {error: e.message};
         });
-    const detectEnv = () => window.colab
-        ? {apiRoot: `https://localhost:8888`, headers: {"x-colab-tunnel": "Google"}}
-        : {apiRoot: '../titanoboa_jupyterlab', headers: {['X-XSRFToken']: getCookie('_xsrf')}};
+    const detectEnv = () => window.colab ? {
+        apiRoot: `https://colab.research.google.com/tun/m/${window.colab.global.notebook.kernel.endpoint.managedId}/_proxy/8888?authuser=0`,
+        headers: {"x-colab-tunnel": "Google"}
+    } : {
+        apiRoot: '../titanoboa_jupyterlab',
+        headers: {['X-XSRFToken']: getCookie('_xsrf')}
+    };
 
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
