@@ -6,7 +6,6 @@
     const getEthersProvider = () => {
         const {ethereum} = window;
         if (!ethereum) {
-            debugger;
             throw new Error('No Ethereum browser plugin found');
         }
         return new ethers.BrowserProvider(ethereum);
@@ -18,14 +17,15 @@
             console.error(e.stack || e.message);
             return {error: e.message};
         });
-    const detectEnv = () => window.colab ? {
-        apiRoot: `https://colab.research.google.com/tun/m/${window.colab.global.notebook.kernel.endpoint.managedId}/_proxy/8888?authuser=0`,
+
+    const colab = window.colab ?? window.google?.colab; // in the parent window or in an iframe
+    const detectEnv = () => colab ? {
+        apiRoot: `https://localhost:8888`, // this gets proxied to the backend automatically
         headers: {"x-colab-tunnel": "Google"}
     } : {
         apiRoot: '../titanoboa_jupyterlab',
         headers: {['X-XSRFToken']: getCookie('_xsrf')}
     };
-    if (!window.colab) debugger;
 
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
