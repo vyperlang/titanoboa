@@ -5,7 +5,10 @@
 (() => {
     const getEthersProvider = () => {
         const {ethereum} = window;
-        if (!ethereum) throw new Error('No Ethereum browser plugin found');
+        if (!ethereum) {
+            debugger;
+            throw new Error('No Ethereum browser plugin found');
+        }
         return new ethers.BrowserProvider(ethereum);
     };
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
@@ -15,11 +18,13 @@
             console.error(e.stack || e.message);
             return {error: e.message};
         });
+    const detectEnv = () => window.colab
+        ? {apiRoot: `https://localhost:8888`, headers: {"x-colab-tunnel": "Google"}}
+        : {apiRoot: '../titanoboa_jupyterlab', headers: {['X-XSRFToken']: getCookie('_xsrf')}};
 
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
-        const apiRoot = window.colab ? `/tun/m/${window.colab.global.notebook.kernel.endpoint.managedId}/_proxy/8888?authuser=0` : '../titanoboa_jupyterlab';
-        const headers = window.colab ? {"x-colab-tunnel": "Google"} : {['X-XSRFToken']: getCookie('_xsrf')};
+        const {apiRoot, headers} = detectEnv();
         const init = {method: 'POST', body: stringify(body), headers};
         const url = `${apiRoot}/callback/${token}`;
         const response = await fetch(url, {...init, headers});

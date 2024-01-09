@@ -4,7 +4,6 @@ in IPython/JupyterLab/Google Colab.
 """
 import json
 from asyncio import get_running_loop, sleep
-from importlib import util
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
 from typing import Any
@@ -12,6 +11,7 @@ from typing import Any
 import nest_asyncio
 from IPython.display import Javascript, display
 
+from .colab import IN_GOOGLE_COLAB, start_server
 from .constants import (
     ADDRESS_JSON_LENGTH,
     CALLBACK_TOKEN_BYTES,
@@ -20,13 +20,9 @@ from .constants import (
     PLUGIN_NAME,
     TRANSACTION_JSON_LENGTH,
 )
-from .handlers import start_server
 from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
 
 nest_asyncio.apply()
-install_jupyter_javascript_triggers()
-if util.find_spec("google.colab"):
-    start_server()
 
 
 class BrowserSigner:
@@ -34,11 +30,21 @@ class BrowserSigner:
     A BrowserSigner is a class that can be used to sign transactions in IPython/JupyterLab.
     """
 
+    installed = False
+
     def __init__(self, address=None):
         """
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
+        if not self.installed:
+            # delay frontend initialization until the first instance is created
+            if IN_GOOGLE_COLAB:
+                start_server()
+
+            install_jupyter_javascript_triggers()
+            type(self).installed = True
+
         if address:
             self.address = address
         else:

@@ -1,24 +1,26 @@
 """
 Handlers for the JupyterLab extension.
 """
-import logging
 from http import HTTPStatus
 from multiprocessing.shared_memory import SharedMemory
 
 from jupyter_server.base.handlers import APIHandler
 from jupyter_server.serverapp import ServerApp
 from jupyter_server.utils import url_path_join
-from tornado.web import Application, authenticated
+from tornado.web import authenticated
 
+from boa.integrations.jupyter.colab import IN_GOOGLE_COLAB, ColabHandler
 from boa.integrations.jupyter.constants import PLUGIN_NAME, TOKEN_REGEX
 
+BaseHandler = ColabHandler if IN_GOOGLE_COLAB else APIHandler
 
-class StatusHandler(APIHandler):
+
+class StatusHandler(BaseHandler):
     def get(self):
         self.finish({"status": "ok"})
 
 
-class CallbackHandler(APIHandler):
+class CallbackHandler(BaseHandler):
     """
     Handler that receives a POST from jupyter.js when user interacts with their browser wallet.
     The token is used to identify the SharedMemory object to write the callback data to.
@@ -26,7 +28,7 @@ class CallbackHandler(APIHandler):
     It expects the SharedMemory object has already been created via a BrowserSigner instance.
     """
 
-    @authenticated  # ensure only authorized user can request the Jupyter server
+    @authenticated  # ensure only authorized users can request the server
     def post(self, token: str):
         body = self.request.body
         if not body:
@@ -74,16 +76,3 @@ def create_handlers(base_url="/") -> list[tuple[str, callable]]:
         (rf"{base_url}$", StatusHandler),
         (rf"{base_url}/callback/({TOKEN_REGEX})$", CallbackHandler),
     ]
-
-
-def start_server(port=8888) -> None:
-    """
-    Starts a separate tornado server with the handlers.
-    This is used in Google Colab, where the server extension is not supported.
-    """
-    app = Application(create_handlers())
-    try:
-        app.listen(port)
-        logging.info(f"JupyterLab boa server running on port {port}")
-    except OSError as e:
-        logging.warning(f"JupyterLab boa server could not listen port {port}: {e}")
