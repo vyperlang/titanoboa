@@ -8,12 +8,12 @@ from multiprocessing.shared_memory import SharedMemory
 from jupyter_server.base.handlers import APIHandler
 from jupyter_server.serverapp import ServerApp
 from jupyter_server.utils import url_path_join
-from tornado.web import authenticated
+from tornado.web import RequestHandler, authenticated
 
-from boa.integrations.jupyter.colab import IN_GOOGLE_COLAB, ColabHandler
+from boa.integrations.jupyter.colab import IN_GOOGLE_COLAB
 from boa.integrations.jupyter.constants import PLUGIN_NAME, TOKEN_REGEX
 
-BaseHandler = ColabHandler if IN_GOOGLE_COLAB else APIHandler
+BaseHandler = RequestHandler if IN_GOOGLE_COLAB else APIHandler
 
 
 class StatusHandler(BaseHandler):
