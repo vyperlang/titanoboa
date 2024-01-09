@@ -24,6 +24,7 @@ from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
 
 nest_asyncio.apply()
 is_in_colab = util.find_spec("google.colab")
+install_jupyter_javascript_triggers()
 
 
 class BrowserSigner:
@@ -36,7 +37,6 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        install_jupyter_javascript_triggers()
         if address:
             self.address = address
         else:
