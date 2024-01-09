@@ -20,7 +20,7 @@
 
     const colab = window.colab ?? window.google?.colab; // in the parent window or in an iframe
     const detectEnv = () => colab ? {
-        apiRoot: `https://localhost:8888`, // this gets proxied to the backend automatically
+        apiRoot: `https://localhost:8888`, // this gets proxied to the backend by Colab
         headers: {"x-colab-tunnel": "Google"}
     } : {
         apiRoot: '../titanoboa_jupyterlab',

@@ -31,13 +31,13 @@ class ColabHandler(RequestHandler):
         return True  # todo: check if user is authenticated
 
     def set_default_headers(self):
-        if not self._ORIGIN.match(self.request.headers["Origin"]):
+        origin = self.request.headers["Origin"] or self.request.host
+        if not self._ORIGIN.match(origin):
+            error = f"Only requests from {self._ORIGIN.pattern} are allowed, not from {origin}"
             self.set_status(403)
-            return self.finish(
-                {"message": f"Only requests from {self._ORIGIN.pattern} are allowed"}
-            )
+            return self.finish({"error": error})
 
-        self.set_header("Access-Control-Allow-Origin", self.request.headers["Origin"])
+        self.set_header("Access-Control-Allow-Origin", origin)
 
     def options(self, *args):
         self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -45,3 +45,4 @@ class ColabHandler(RequestHandler):
         self.set_header("Access-Control-Allow-Private-Network", "true")
         self.set_header("Access-Control-Allow-Headers", "*")
         self.set_status(204)  # No Content
+        self.finish()
