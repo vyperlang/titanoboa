@@ -15,11 +15,13 @@ from IPython.display import Javascript, display
 from .colab import IN_GOOGLE_COLAB, start_server
 from .constants import (
     ADDRESS_JSON_LENGTH,
+    ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
     CALLBACK_TOKEN_TIMEOUT,
     NUL,
     PLUGIN_NAME,
     TRANSACTION_JSON_LENGTH,
+    TRANSACTION_TIMEOUT_MESSAGE,
 )
 from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
 
@@ -48,7 +50,11 @@ class BrowserSigner:
             memory_size = (
                 ADDRESS_JSON_LENGTH + 3
             )  # address + quotes from json encode + \0
-            self.address = _create_and_wait(_load_signer_snippet, size=memory_size)
+            self.address = _create_memory_and_wait(
+                _load_signer_snippet,
+                memory_size=memory_size,
+                timeout_message=ADDRESS_TIMEOUT_MESSAGE,
+            )
 
     def send_transaction(self, tx_data: dict) -> dict:
         """
@@ -58,28 +64,33 @@ class BrowserSigner:
         :param tx_data: The transaction data to sign.
         :return: The signed transaction data.
         """
-        sign_data = _create_and_wait(
-            _sign_transaction_snippet, size=TRANSACTION_JSON_LENGTH, tx_data=tx_data
+        sign_data = _create_memory_and_wait(
+            _sign_transaction_snippet,
+            memory_size=TRANSACTION_JSON_LENGTH,
+            timeout_message=TRANSACTION_TIMEOUT_MESSAGE,
+            tx_data=tx_data,
         )
         return convert_frontend_dict(sign_data)
 
 
-def _create_and_wait(snippet: callable, size: int, **kwargs) -> dict:
+def _create_memory_and_wait(
+    snippet: callable, memory_size: int, timeout_message: str, **kwargs
+) -> dict:
     """
     Create a SharedMemory object and wait for it to be filled with data.
     :param snippet: A function that given a token and some kwargs, returns a Javascript snippet.
-    :param size: The size of the SharedMemory object to create.
+    :param memory_size: The size of the SharedMemory object to create.
     :param kwargs: The arguments to pass to the Javascript snippet.
     :return: The result of the Javascript snippet sent to the API.
     """
     token = _generate_token()
-    memory = SharedMemory(name=token, create=True, size=size)
-    logging.warning(f"Waiting for {token} of size {size}")
+    memory = SharedMemory(name=token, create=True, size=memory_size)
+    logging.warning(f"Waiting for {token} of size {memory_size}")
     try:
         memory.buf[:1] = NUL
         javascript = snippet(token, **kwargs)
         display(javascript)
-        return _wait_buffer_set(memory.buf)
+        return _wait_buffer_set(memory.buf, timeout_message)
     finally:
         memory.unlink()  # get rid of the SharedMemory object after it's been used
 
@@ -89,14 +100,15 @@ def _generate_token():
     return f"{PLUGIN_NAME}_{urandom(CALLBACK_TOKEN_BYTES).hex()}"
 
 
-def _wait_buffer_set(buffer: memoryview):
+def _wait_buffer_set(buffer: memoryview, timeout_message: str):
     """
     Wait for the SharedMemory object to be filled with data.
     :param buffer: The buffer to wait for.
+    :param timeout_message: The message to show if the timeout is reached.
     :return: The contents of the buffer.
     """
 
-    async def _wait_value(deadline: float) -> Any:
+    async def _wait_buffer_set(deadline: float) -> Any:
         """
         Wait until the SharedMemory object is not empty.
         :param deadline: The deadline to wait for.
@@ -105,14 +117,16 @@ def _wait_buffer_set(buffer: memoryview):
         inner_loop = get_running_loop()
         while buffer.tobytes().startswith(NUL):
             if inner_loop.time() > deadline:
-                raise TimeoutError(
-                    "Timeout while waiting for user to confirm transaction in the browser."
-                )
+                raise TimeoutError(timeout_message)
             await sleep(0.01)
-        return json.loads(buffer.tobytes().decode().split("\0")[0])
+
+        message_bytes = buffer.tobytes().split(NUL)[0]
+        return json.loads(message_bytes.decode())
 
     loop = get_running_loop()
-    future = _wait_value(deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds())
+    future = _wait_buffer_set(
+        deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds()
+    )
     task = loop.create_task(future)
     loop.run_until_complete(task)
     result = task.result()

@@ -11,7 +11,7 @@ def start_server(port=8888) -> None:
     Starts a separate tornado server with the handlers.
     This is used in Google Colab, where the server extension is not supported.
     """
-    # import here to avoid circular import
+    # import here to avoid circular import. Maybe merge file with handlers.py?
     from boa.integrations.jupyter.handlers import create_handlers
 
     app = Application(create_handlers())
@@ -24,7 +24,7 @@ def start_server(port=8888) -> None:
 
 class ColabHandler(RequestHandler):
     def get_current_user(self):
-        if self.request.host == "https://colab.research.google.com":
+        if self.request.host == "colab.research.google.com":
             # Google proxy will ensure only authorized users can request the server
             return True
 
