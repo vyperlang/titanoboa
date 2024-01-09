@@ -20,11 +20,13 @@ from .constants import (
     PLUGIN_NAME,
     TRANSACTION_JSON_LENGTH,
 )
+from .handlers import start_server
 from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
 
 nest_asyncio.apply()
-is_in_colab = util.find_spec("google.colab")
 install_jupyter_javascript_triggers()
+if util.find_spec("google.colab"):
+    start_server()
 
 
 class BrowserSigner:
@@ -69,15 +71,10 @@ def _create_and_wait(snippet: callable, size: int, **kwargs) -> dict:
     :return: The result of the Javascript snippet sent to the API.
     """
     token = _generate_token()
-    javascript = snippet(token, **kwargs)
-    if is_in_colab:
-        from google.colab.output import eval_js
-
-        return eval_js(javascript.data)
-
     memory = SharedMemory(name=token, create=True, size=size)
     try:
         memory.buf[:1] = NUL
+        javascript = snippet(token, **kwargs)
         display(javascript)
         return _wait_buffer_set(memory.buf)
     finally:

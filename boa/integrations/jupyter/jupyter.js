@@ -3,7 +3,6 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    const API_ROOT = '../titanoboa_jupyterlab';
     const getEthersProvider = () => {
         const {ethereum} = window;
         if (!ethereum) throw new Error('No Ethereum browser plugin found');
@@ -19,9 +18,10 @@
 
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
-        const headers = {['X-XSRFToken']: getCookie('_xsrf')};
+        const apiRoot = window.colab ? `/tun/m/${window.colab.global.notebook.kernel.endpoint.managedId}/_proxy/8888?authuser=0` : '../titanoboa_jupyterlab';
+        const headers = window.colab ? {"x-colab-tunnel": "Google"} : {['X-XSRFToken']: getCookie('_xsrf')};
         const init = {method: 'POST', body: stringify(body), headers};
-        const url = `${API_ROOT}/callback/${token}`;
+        const url = `${apiRoot}/callback/${token}`;
         const response = await fetch(url, {...init, headers});
         return response.text();
     }
@@ -45,10 +45,6 @@
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         const body = await parsePromise(func(...args));
-        if (window.colab) {
-            // colab calls the JavaScript function directly, just return the result
-            return body;
-        }
         return callbackAPI(token, body);
     };
 

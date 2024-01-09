@@ -9,10 +9,11 @@ from boa.integrations.jupyter.constants import ETHERS_JS_URL
 def install_jupyter_javascript_triggers():
     """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
     ethers_js = requests.get(ETHERS_JS_URL)
+    display(Javascript(ethers_js.text))
 
     cur_dir = dirname(realpath(__file__))
     with open(join(cur_dir, "jupyter.js")) as f:
-        display(Javascript(ethers_js.text + f.read()))
+        display(Javascript(f.read()))
 
 
 def convert_frontend_dict(data):
