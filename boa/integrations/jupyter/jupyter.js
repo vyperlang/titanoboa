@@ -25,6 +25,7 @@
         apiRoot: '../titanoboa_jupyterlab',
         headers: {['X-XSRFToken']: getCookie('_xsrf')}
     };
+    if (!window.colab) debugger;
 
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
