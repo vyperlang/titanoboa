@@ -1,6 +1,7 @@
 import importlib.util
 import logging
 import re
+from http import HTTPStatus
 
 from tornado.web import Application, RequestHandler
 
@@ -12,9 +13,8 @@ def start_server(port=8888) -> None:
     Starts a separate tornado server with the handlers.
     This is used in Google Colab, where the server extension is not supported.
     """
-    from boa.integrations.jupyter.handlers import (  # avoid circular import
-        create_handlers,
-    )
+    # import here to avoid circular import
+    from boa.integrations.jupyter.handlers import create_handlers
 
     app = Application(create_handlers())
     try:
@@ -34,7 +34,7 @@ class ColabHandler(RequestHandler):
         origin = self.request.headers["Origin"] or self.request.host
         if not self._ORIGIN.match(origin):
             error = f"Only requests from {self._ORIGIN.pattern} are allowed, not from {origin}"
-            self.set_status(403)
+            self.set_status(HTTPStatus.FORBIDDEN)
             return self.finish({"error": error})
 
         self.set_header("Access-Control-Allow-Origin", origin)
@@ -44,5 +44,5 @@ class ColabHandler(RequestHandler):
         self.set_header("Access-Control-Request-Credentials", "true")
         self.set_header("Access-Control-Allow-Private-Network", "true")
         self.set_header("Access-Control-Allow-Headers", "*")
-        self.set_status(204)  # No Content
+        self.set_status(HTTPStatus.NO_CONTENT)
         self.finish()

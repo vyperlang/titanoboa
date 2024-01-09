@@ -3,6 +3,7 @@ This module implements the BrowserSigner class, which is used to sign transactio
 in IPython/JupyterLab/Google Colab.
 """
 import json
+import logging
 from asyncio import get_running_loop, sleep
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
@@ -78,6 +79,7 @@ def _create_and_wait(snippet: callable, size: int, **kwargs) -> dict:
     """
     token = _generate_token()
     memory = SharedMemory(name=token, create=True, size=size)
+    logging.warning(f"Waiting for {token} of size {size}")
     try:
         memory.buf[:1] = NUL
         javascript = snippet(token, **kwargs)
@@ -121,6 +123,8 @@ def _wait_buffer_set(buffer: memoryview):
     result = task.result()
     if "data" in result:
         return result["data"]
+
+    # raise the error in the Jupyter cell so that the user can see it
     raise Exception(result["error"])
 
 

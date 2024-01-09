@@ -1,6 +1,7 @@
 """
 Handlers for the JupyterLab extension.
 """
+import logging
 from http import HTTPStatus
 from multiprocessing.shared_memory import SharedMemory
 
@@ -17,7 +18,7 @@ BaseHandler = ColabHandler if IN_GOOGLE_COLAB else APIHandler
 
 class StatusHandler(BaseHandler):
     def get(self):
-        self.finish({"status": "ok"})
+        self.finish({"data": "ok"})
 
 
 class CallbackHandler(BaseHandler):
@@ -33,21 +34,23 @@ class CallbackHandler(BaseHandler):
         body = self.request.body
         if not body:
             self.set_status(HTTPStatus.BAD_REQUEST)
-            return self.finish({"message": "Request body is required"})
+            return self.finish({"error": "Request body is required"})
 
         try:
             memory = SharedMemory(token)
         except FileNotFoundError:
             self.set_status(HTTPStatus.NOT_FOUND)
-            return self.finish({"message": f"Invalid token: {token}"})
+            error = f"Invalid token: {token}"
+            logging.warning(error)
+            return self.finish({"error": error})
 
         try:
             body += b"\0"  # mark the end of the buffer
             memory.buf[: len(body)] = body
         except ValueError:
             self.set_status(HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-            message = f"Request body has {len(body)} bytes, but only {memory.size} are allowed"
-            return self.finish({"message": message})
+            error = f"Request body has {len(body)} bytes, but only {memory.size} are allowed"
+            return self.finish({"error": error})
         finally:
             memory.close()
 
@@ -66,7 +69,7 @@ def setup_handlers(server_app: ServerApp) -> None:
     server_app.log.info(f"Handlers registered in {base_url}")
 
 
-def create_handlers(base_url="/") -> list[tuple[str, callable]]:
+def create_handlers(base_url="") -> list[tuple[str, callable]]:
     """
     Create the handlers for the Jupyter server.
     :param base_url: The base URL for the handlers.

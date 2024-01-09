@@ -55,7 +55,8 @@
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         const body = await parsePromise(func(...args));
-        return callbackAPI(token, body);
+        const responseText = await callbackAPI(token, body);
+        console.log(`Callback ${token} => ${responseText}`);
     };
 
     console.log(`Registering Boa callbacks`);
