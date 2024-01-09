@@ -76,6 +76,6 @@ def create_handlers(base_url="") -> list[tuple[str, callable]]:
     :return: The list of handlers.
     """
     return [
-        (rf"{base_url}$", StatusHandler),
+        (rf"{base_url}/?$", StatusHandler),
         (rf"{base_url}/callback/({TOKEN_REGEX})$", CallbackHandler),
     ]

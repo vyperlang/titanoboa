@@ -31,20 +31,15 @@ class BrowserSigner:
     A BrowserSigner is a class that can be used to sign transactions in IPython/JupyterLab.
     """
 
-    installed = False
-
     def __init__(self, address=None):
         """
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        if not self.installed:
-            # delay frontend initialization until the first instance is created
-            if IN_GOOGLE_COLAB:
-                start_server()
+        if IN_GOOGLE_COLAB:
+            start_server()
 
-            install_jupyter_javascript_triggers()
-            type(self).installed = True
+        install_jupyter_javascript_triggers()
 
         if address:
             self.address = address

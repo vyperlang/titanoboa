@@ -3,8 +3,6 @@ import logging
 
 from tornado.web import Application
 
-from boa.integrations.jupyter.handlers import create_handlers
-
 IN_GOOGLE_COLAB = importlib.util.find_spec("google.colab")
 
 
@@ -14,6 +12,7 @@ def start_server(port=8888) -> None:
     This is used in Google Colab, where the server extension is not supported.
     """
     # import here to avoid circular import
+    from boa.integrations.jupyter.handlers import create_handlers
 
     app = Application(create_handlers())
     try:
