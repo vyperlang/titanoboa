@@ -1,6 +1,7 @@
 import importlib.util
 import logging
 import re
+from functools import cached_property
 from http import HTTPStatus
 
 from tornado.web import Application, RequestHandler
@@ -25,24 +26,30 @@ def start_server(port=8888) -> None:
 
 
 class ColabHandler(RequestHandler):
-    _ORIGIN = re.compile(r"https://.*\.googleusercontent\.com")
+    _ORIGIN_PATTERN = re.compile(r"https://.*\.googleusercontent\.com")
 
     def get_current_user(self):
         return True  # todo: check if user is authenticated
 
-    def set_default_headers(self):
-        origin = self.request.headers["Origin"] or self.request.host
-        if not self._ORIGIN.match(origin):
-            error = f"Only requests from {self._ORIGIN.pattern} are allowed, not from {origin}"
-            self.set_status(HTTPStatus.FORBIDDEN)
-            return self.finish({"error": error})
+    @cached_property
+    def origin(self):
+        return self.request.headers["Origin"] or self.request.host
 
-        self.set_header("Access-Control-Allow-Origin", origin)
+    def set_default_headers(self):
+        if not self._ORIGIN_PATTERN.match(self.origin):
+            logging.warning(
+                f"Only requests from {self._ORIGIN_PATTERN.pattern} are allowed, "
+                f"not from {self.origin}"
+            )
+            return
+
+        self.set_header("Access-Control-Allow-Origin", self.origin)
 
     def options(self, *args):
-        self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.set_header("Access-Control-Request-Credentials", "true")
-        self.set_header("Access-Control-Allow-Private-Network", "true")
-        self.set_header("Access-Control-Allow-Headers", "*")
+        if self._ORIGIN_PATTERN.match(self.origin):
+            self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.set_header("Access-Control-Request-Credentials", "true")
+            self.set_header("Access-Control-Allow-Private-Network", "true")
+            self.set_header("Access-Control-Allow-Headers", "*")
         self.set_status(HTTPStatus.NO_CONTENT)
         self.finish()
