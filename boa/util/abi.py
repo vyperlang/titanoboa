@@ -3,9 +3,9 @@ from typing import Any
 
 from eth.codecs.abi.decoder import Decoder
 from eth.codecs.abi.encoder import Encoder
+from eth.codecs.abi.exceptions import ABIError
 from eth.codecs.abi.nodes import ABITypeNode
 from eth.codecs.abi.parser import Parser
-from eth_abi import is_encodable
 
 _parsers: dict[str, ABITypeNode] = {}
 
@@ -27,4 +27,8 @@ def abi_decode(schema: str, data: bytes) -> Any:
 
 
 def is_abi_encodable(abi_type: str, data: Any) -> bool:
-    return is_encodable(abi_type, data)
+    try:
+        abi_encode(abi_type, data)
+        return True
+    except ABIError:
+        return False

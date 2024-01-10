@@ -58,7 +58,9 @@ class ABIContract(BaseEVMContract):
         :param computation: the computation object returned by `execute_code`
         :param abi_type: the ABI type of the return value.
         """
-        if computation.is_error or (abi_type and not computation.output):
+        # when there's no contract in the address, the computation output is empty
+        is_missing_output = bool(abi_type and not computation.output)
+        if computation.is_error or is_missing_output:
             return self.handle_error(computation)
 
         schema = f"({_format_abi_type(abi_type)})"
