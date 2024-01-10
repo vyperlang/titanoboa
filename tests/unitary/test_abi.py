@@ -5,10 +5,10 @@ import yaml
 from vyper.compiler.output import build_abi_output
 
 import boa
-from boa.contracts.abi.contract import ABIContractFactory
+from boa.boa_error import BoaError
+from boa.contracts.abi.abi_contract import ABIContractFactory
 from boa.contracts.abi.function import ABIFunction
 from boa.environment import Address
-from boa.util.exceptions import BoaError
 
 
 @pytest.fixture()
@@ -23,7 +23,7 @@ def load_via_abi():
 
 
 @pytest.fixture()
-def load_solidity(get_filepath):
+def load_solidity_from_yaml(get_filepath):
     """
     Fixture to load a solidity contract from a yaml file.
     The file is expected to include the "abi" and "bytecode" fields.
@@ -44,17 +44,17 @@ def load_solidity(get_filepath):
 @pytest.mark.parametrize(
     "selector,value", [("from", "123"), ("global", "global"), ("local", "local")]
 )
-def test_python_keywords(load_solidity, selector, value):
+def test_python_keywords(load_solidity_from_yaml, selector, value):
     """
     Test that solidity contract can be used even if they use protected keywords.
     """
-    contract = load_solidity("python_keywords")
+    contract = load_solidity_from_yaml("python_keywords")
     assert getattr(contract, selector)(value) is None
     assert getattr(contract, f"_{selector}")() == value
 
 
-def test_solidity_overloading(load_solidity):
-    contract = load_solidity("overload")
+def test_solidity_overloading(load_solidity_from_yaml):
+    contract = load_solidity_from_yaml("overload")
     with pytest.raises(Exception) as exc_info:
         contract.f(0)
     (error,) = exc_info.value.args
@@ -139,9 +139,7 @@ def test(n: uint256) -> uint256:
     with pytest.raises(BoaError) as exc_info:
         c.test(0)
     ((error,),) = exc_info.value.args
-    assert re.match(
-        r"^ +\(unknown location in .*\.test\(uint256\) -> \['uint256']\)$", error
-    )
+    assert re.match(r"^ +\(.*\.test\(uint256\) -> \['uint256']\)$", error)
 
     with pytest.raises(Exception) as exc_info:
         c.test(1, 2)

@@ -8,7 +8,7 @@ from boa.contracts.abi import _encode_addresses, _format_abi_type, _parse_abi_ty
 from boa.util.abi import abi_encode, is_abi_encodable
 
 if TYPE_CHECKING:
-    from boa.contracts.abi.contract import ABIContract
+    from boa.contracts.abi.abi_contract import ABIContract
 
 
 class ABIFunction:

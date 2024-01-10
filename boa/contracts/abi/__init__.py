@@ -1,10 +1,6 @@
-from collections import defaultdict
-from typing import Any, Callable, Iterable, TypeVar, Union
+from typing import Any, Union
 
 from boa.environment import Address
-
-T = TypeVar("T")
-K = TypeVar("K")
 
 
 def _encode_addresses(values: list) -> list:
@@ -17,7 +13,7 @@ def _encode_addresses(values: list) -> list:
     return [getattr(arg, "address", arg) for arg in values]
 
 
-def _decode_addresses(abi_type: Union[list, str], decoded: Any) -> Any:
+def _decode_addresses(abi_type: list | str, decoded: Any) -> Any:
     """
     Converts addresses received from the EVM into `Address` objects, recursively.
     :param abi_type: ABI type name. This should be a list if `decoded` is also a list.
@@ -31,7 +27,7 @@ def _decode_addresses(abi_type: Union[list, str], decoded: Any) -> Any:
     return decoded
 
 
-def _parse_abi_type(abi: dict) -> Union[list, str]:
+def _parse_abi_type(abi: dict) -> list | str:
     """
     Parses an ABI type into a list of types.
     :param abi: The ABI type to parse.
@@ -51,16 +47,3 @@ def _format_abi_type(types: list) -> str:
         item if isinstance(item, str) else f"({_format_abi_type(item)})"
         for item in types
     )
-
-
-def group_by(sequence: Iterable[T], key: Callable[[T], K]) -> dict[K, list[T]]:
-    """
-    Groups a sequence of items by a key function.
-    :param sequence: The sequence to group.
-    :param key: The key function.
-    :return: A dictionary mapping keys to a list of items with that key.
-    """
-    result = defaultdict(list)
-    for item in sequence:
-        result[key(item)].append(item)
-    return result

@@ -1,17 +1,17 @@
+from collections import defaultdict
 from functools import cached_property
-from operator import attrgetter
 from os.path import basename
-from typing import Any, Optional, Union
+from typing import Any, Optional
 from warnings import warn
 
 from eth.abc import ComputationAPI
 
-from boa.contracts.abi import _decode_addresses, _format_abi_type, group_by
+from boa.contracts.abi import _decode_addresses, _format_abi_type
 from boa.contracts.abi.function import ABIFunction, ABIOverload
 from boa.contracts.evm_contract import BaseEVMContract
+from boa.contracts.stack_trace import StackTrace, _handle_child_trace
 from boa.environment import Address
 from boa.util.abi import abi_decode
-from boa.util.exceptions import StackTrace, _handle_child_trace
 
 
 class ABIContract(BaseEVMContract):
@@ -35,7 +35,11 @@ class ABIContract(BaseEVMContract):
                 stacklevel=2,
             )
 
-        for name, group in group_by(self._functions, attrgetter("name")).items():
+        overloads = defaultdict(list)
+        for f in functions:
+            overloads[f.name].append(f)
+
+        for name, group in overloads.items():
             setattr(self, name, ABIOverload.create(group, self))
 
         self._address = Address(address)
@@ -68,7 +72,7 @@ class ABIContract(BaseEVMContract):
         calldata_method_id = bytes(computation.msg.data[:4])
         if calldata_method_id in self.method_id_map:
             function = self.method_id_map[calldata_method_id]
-            msg = f"  (unknown location in {self}.{function.full_signature})"
+            msg = f"  ({self}.{function.full_signature})"
         else:
             # Method might not be specified in the ABI
             msg = f"  (unknown method id {self}.0x{calldata_method_id.hex()})"
@@ -110,7 +114,7 @@ class ABIContractFactory:
         ]
         return cls(basename(name), functions, filename=name)
 
-    def at(self, address: Union[Address, str]) -> ABIContract:
+    def at(self, address: Address | str) -> ABIContract:
         """
         Create an ABI contract object for a deployed contract at `address`.
         """

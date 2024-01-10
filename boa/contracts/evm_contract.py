@@ -2,8 +2,9 @@ from typing import Optional
 
 from eth.abc import ComputationAPI
 
+from boa.boa_error import BoaError
 from boa.environment import Address, Env
-from boa.util.exceptions import BoaError, strip_internal_frames
+from boa.util.exceptions import strip_internal_frames
 
 
 class BaseEVMContract:

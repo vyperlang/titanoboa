@@ -3,7 +3,7 @@ import pytest
 from hypothesis import given
 
 import boa
-from boa.util.exceptions import BoaError
+from boa.boa_error import BoaError
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -135,7 +135,5 @@ def foo(x: ERC20, from_: address):
         c.foo(crvusd, t)
 
     bt = c.stack_trace()
-    # something like
-    # (unknown location in <...>.transferFrom(address,address,uint256))
-    assert "unknown location in" in bt[0]
+    assert "crvusd_abi.json interface at 0x" in bt[0]
     assert "transferFrom(address,address,uint256)" in bt[0]

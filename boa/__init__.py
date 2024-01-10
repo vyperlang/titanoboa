@@ -1,7 +1,8 @@
 import contextlib
 import sys
 
-from boa.contracts.vyper.contract import check_boa_error_matches
+from boa.boa_error import BoaError
+from boa.contracts.vyper.vyper_contract import check_boa_error_matches
 from boa.debugger import BoaDebug
 from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
 from boa.interpret import (
@@ -15,7 +16,6 @@ from boa.interpret import (
 )
 from boa.precompile import precompile
 from boa.test.strategies import fuzz
-from boa.util.exceptions import BoaError
 
 # turn off tracebacks if we are in repl
 # https://stackoverflow.com/a/64523765
