@@ -64,12 +64,22 @@ def decode_vyper_object(mem, typ):
         if typ.is_signed:
             return unsigned_to_signed(ret, 256)
         return ret
-    if isinstance(typ, BytesT):
+
+    if isinstance(typ, (BytesT, StringT, DArrayT)):
         length = int.from_bytes(mem[:32], "big")
-        return mem[32 : 32 + length].tobytes()
-    if isinstance(typ, StringT):
-        length = int.from_bytes(mem[:32], "big")
-        return mem[32 : 32 + length].tobytes().decode("utf-8")
+        if length > typ.length:
+            return None  # array uninitialized; bail to avoid performance issues
+
+        if isinstance(typ, DArrayT):
+            n = typ.subtype.memory_bytes_required
+            return [
+                decode_vyper_object(mem[offset : offset + n], typ.subtype)
+                for offset in range(32, 32 + length * n, n)
+            ]
+
+        ret = mem[32 : 32 + length].tobytes()
+        return ret.decode("utf-8") if isinstance(typ, StringT) else ret
+
     if isinstance(typ, SArrayT):
         length = typ.count
         n = typ.subtype.memory_bytes_required
@@ -77,17 +87,6 @@ def decode_vyper_object(mem, typ):
             decode_vyper_object(mem[i * n : i * n + n], typ.subtype)
             for i in range(length)
         ]
-    if isinstance(typ, DArrayT):
-        length = int.from_bytes(mem[:32], "big")
-        if length > typ.length:
-            return []  # array is not initialized yet, memory can have garbage
-        n = typ.subtype.memory_bytes_required
-        ofst = 32
-        ret = []
-        for _ in range(length):
-            ret.append(decode_vyper_object(mem[ofst : ofst + n], typ.subtype))
-            ofst += n
-        return ret
     if isinstance(typ, StructT):
         ret = _Struct(typ.name)
         ofst = 0

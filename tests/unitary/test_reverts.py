@@ -117,22 +117,23 @@ def test_compiler_reason_does_not_stop_dev_reason(contract):
             contract.bar(3)
 
 
-def test_variable_not_declared():
+@pytest.mark.parametrize("type_", ["DynArray[uint8, 8]", "String[8]", "Bytes[8]"])
+def test_variable_not_initialized_when_error(type_):
     contract = boa.loads(
-        """
+        f"""
 struct Test:
-    token: DynArray[uint8, 8]
+    data: {type_}
 
 data: public(HashMap[address, Test])
 
 @external
-def foo(x: uint8) -> uint8:
+def foo(x: uint8):
     assert x == 0, "x is not 0"
-    asset_types: DynArray[uint8, 8]  = self.data[msg.sender].token
-    return x
+    uninitialized: {type_}  = self.data[msg.sender].data
     """
     )
     with pytest.raises(BoaError) as error_context:
         contract.foo(1)
 
-    assert error_context.value.args[0].last_frame.frame_detail["asset_types"] == []
+    frame = error_context.value.args[0].last_frame
+    assert frame.frame_detail["uninitialized"] is None
