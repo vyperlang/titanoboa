@@ -1,12 +1,16 @@
 import json
 import textwrap
 from pathlib import Path
+from typing import Any, Union
 
 import vyper
 from vyper.cli.vyper_compile import get_interface_codes
 from vyper.compiler.phases import CompilerData
 
+from boa.environment import Address
+from boa.explorer import fetch_abi_from_etherscan
 from boa.util.disk_cache import DiskCache
+from boa.vyper.compiler_utils import anchor_compiler_settings
 from boa.vyper.contract import (
     ABIContractFactory,
     BoaError,
@@ -15,7 +19,7 @@ from boa.vyper.contract import (
     VyperDeployer,
 )
 
-_Contract = VyperContract | VyperBlueprint
+_Contract = Union[VyperContract, VyperBlueprint]
 
 
 _disk_cache = None
@@ -47,7 +51,8 @@ def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerDat
     def func():
         ifaces = _ifaces()
         ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
-        _ = ret.bytecode_runtime  # force compilation to happen
+        with anchor_compiler_settings(ret):
+            _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret
 
     return _disk_cache.caching_lookup(str((kwargs, source_code)), func)
@@ -111,6 +116,14 @@ def load_partial(filename: str, compiler_args=None) -> VyperDeployer:  # type: i
         return loads_partial(
             f.read(), name=filename, filename=filename, compiler_args=compiler_args
         )
+
+
+def from_etherscan(
+    address: Any, name=None, uri="https://api.etherscan.io/api", api_key=None
+):
+    addr = Address(address)
+    abi = fetch_abi_from_etherscan(addr, uri, api_key)
+    return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 
 __all__ = ["BoaError"]

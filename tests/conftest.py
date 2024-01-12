@@ -1,6 +1,11 @@
 import os
 
+import hypothesis
 import pytest
+
+# disable hypothesis deadline globally
+hypothesis.settings.register_profile("ci", deadline=None)
+hypothesis.settings.load_profile("ci")
 
 
 @pytest.fixture(scope="module")

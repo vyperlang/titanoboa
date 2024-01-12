@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 import requests
 
 try:
@@ -9,6 +11,14 @@ TIMEOUT = 60  # default timeout for http requests in seconds
 
 
 # some utility functions
+
+
+def trim_dict(kv):
+    return {k: v for (k, v) in kv.items() if bool(v)}
+
+
+def fixup_dict(kv):
+    return {k: to_hex(v) for (k, v) in trim_dict(kv).items()}
 
 
 def to_hex(s: int) -> str:
@@ -49,10 +59,18 @@ class EthereumRPC:
         self._rpc_url = url
         self._session = requests.Session()
 
-    def fetch(self, method, params):
-        # the obvious thing to do here is dispatch into fetch_multi.
-        # but some providers (alchemy) can't handle batched requests
-        # for certain endpoints (debug_traceTransaction).
+        # declare app name to frame.sh
+        self._session.headers["Origin"] = "Titanoboa"
+
+    @property
+    def url_base(self):
+        # return a version of the URL which has everything past the "base"
+        # url stripped out (content which you might not want to end up
+        # in logs)
+        parse_result = urlparse(self._rpc_url)
+        return f"{parse_result.scheme}://{parse_result.netloc}"
+
+    def _raw_fetch_single(self, method, params):
         req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
         # print(req)
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
@@ -62,6 +80,12 @@ class EthereumRPC:
         if "error" in res:
             raise RPCError.from_json(res["error"])
         return res["result"]
+
+    def fetch(self, method, params):
+        # the obvious thing to do here is dispatch into fetch_multi.
+        # but some providers (alchemy) can't handle batched requests
+        # for certain endpoints (debug_traceTransaction).
+        return self._raw_fetch_single(method, params)
 
     def fetch_multi(self, payloads):
         reqs = [(i, m, p) for i, (m, p) in enumerate(payloads)]

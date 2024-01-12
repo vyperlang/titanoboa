@@ -112,6 +112,64 @@ High-Level Functionality
         >>> boa.loads_partial(src, "Foo")
         <boa.vyper.contract.VyperDeployer object at ...>
 
+
+.. function:: load_abi(filename: str, name: str = None) -> ABIContractFactory
+
+    Return a :py:class:`ABIContractFactory` from an ABI file (.json)
+
+    :param filename: The file containing the ABI as a JSON string (something like ``my_abi.json``)
+    :param name: The name of the contract.
+    :returns: A :py:class:`ABIContractFactory` factory instance.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> filename = "foo.json"
+        >>> boa.load_abi(src, name="Foo")
+        <boa.vyper.contract.ABIContractFactory at 0x7ff0f14a1550>
+
+
+.. function:: loads_abi(json_str: str, name: str = None) -> ABIContractFactory
+
+    Return a :py:class:`ABIContractFactory` from an ABI string
+
+    :param json_str: The ABI as a JSON string (something which can be passed to ``json.loads()``)
+    :param name: The name of the contract.
+    :returns: A :py:class:`ABIContractFactory` factory instance.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> src = """[{"stateMutability": "nonpayable", "type": "function", "name": "foo", "inputs": [{"name": "", "type": "bytes"}], "outputs": [{"name": "", "type": "bytes"}]}]"""
+        >>> boa.loads_abi(src, name="Foo")
+        <boa.vyper.contract.ABIContractFactory at 0x7ff0f14a1550>
+
+
+.. function:: from_etherscan(address: str | bytes | Address, name: str = None, uri: str = "https://api.etherscan.io/api", api_key: str = None) -> ABIContract
+
+    Fetch the ABI for an address from etherscan and return an :py:class:`ABIContract`
+
+    :param address: The address. Can be str, bytes or Address
+    :param name: (Optional) The name of the contract.
+    :returns: A :py:class:`ABIContract` instance.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        >>> import boa, os
+        >>> boa.env.fork(os.environ["ALCHEMY_MAINNET_ENDPOINT"])
+        >>> crvusd = boa.from_etherscan("0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E", name="crvUSD")
+        >>> crvusd
+        <crvUSD interface at 0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E>
+        >>> crvusd.totalSupply()
+        730773174461124520709282012
+
+
 .. function:: eval(statement: str) -> Any
 
     Evaluate a Vyper statement in the context of a contract with no state.

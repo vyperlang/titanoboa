@@ -1,55 +1,78 @@
+import contextlib
 import textwrap
 
 import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
 from vyper.ast.utils import parse_to_ast
+from vyper.codegen.core import anchor_opt_level
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
-from vyper.compiler.settings import OptimizationLevel
+from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import InvalidType
-from vyper.ir import compile_ir as compile_ir
+from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.utils import get_exact_type_from_node
-from vyper.utils import method_id_int
 
 from boa.vyper import _METHOD_ID_VAR
+from boa.vyper.ir_executor import executor_from_ir
 
 
-def _compile_vyper_function(vyper_function, contract):
+@contextlib.contextmanager
+def anchor_compiler_settings(compiler_data):
+    settings = compiler_data.settings
+    with anchor_opt_level(settings.optimize), anchor_evm_version(settings.evm_version):
+        yield
+
+
+def compile_vyper_function(vyper_function, contract):
     """Compiles a vyper function and appends it to the top of the IR of a
     contract. This is useful for vyper `eval` and internal functions, where
     the runtime bytecode must be changed to add more runtime functionality
     (such as eval, and calling internal functions)
+    (performance note: this function is very very slow!)
     """
 
     compiler_data = contract.compiler_data
-    global_ctx = contract.global_ctx
-    ifaces = compiler_data.interface_codes
-    ast = parse_to_ast(vyper_function, ifaces)
-    vy_ast.folding.fold(ast)
 
-    # override namespace and add wrapper code at the top
-    with contract.override_vyper_namespace():
-        analysis.add_module_namespace(ast, ifaces)
-        analysis.validate_functions(ast)
+    with anchor_compiler_settings(compiler_data):
+        global_ctx = contract.global_ctx
+        ifaces = compiler_data.interface_codes
+        ast = parse_to_ast(vyper_function, ifaces)
+        vy_ast.folding.fold(ast)
 
-    ast = ast.body[0]
-    func_t = ast._metadata["type"]
+        # override namespace and add wrapper code at the top
+        with contract.override_vyper_namespace():
+            analysis.add_module_namespace(ast, ifaces)
+            analysis.validate_functions(ast)
 
-    external_func_info = generate_ir_for_function(ast, global_ctx, False)
-    ir = external_func_info.common_ir
+        ast = ast.body[0]
+        func_t = ast._metadata["type"]
 
-    base_signature = func_t.abi_signature_for_kwargs([])
-    ir = IRnode.from_list(["with", _METHOD_ID_VAR, method_id_int(base_signature), ir])
-    assembly = compile_ir.compile_to_assembly(ir, optimize=OptimizationLevel.NONE)
+        external_func_info = generate_ir_for_function(ast, global_ctx, False)
+        ir = external_func_info.common_ir
 
-    # extend IR with contract's unoptimized assembly
-    assembly.extend(contract.unoptimized_assembly)
-    compile_ir._optimize_assembly(assembly)
-    bytecode, source_map = compile_ir.assembly_to_evm(assembly)
-    bytecode += contract.data_section
-    typ = func_t.return_type
+        entry_label = func_t._ir_info.external_function_base_entry_label
 
-    return ast, bytecode, source_map, typ
+        ir = ["seq", ["goto", entry_label], ir]
+
+        # use a dummy method id
+        ir = ["with", _METHOD_ID_VAR, 0, ir]
+
+        # first mush it with the rest of the IR in the contract to ensure
+        # all labels are present, and then optimize all together
+        # (use unoptimized IR, ir_executor can't handle optimized selector tables)
+        _, contract_runtime = contract.unoptimized_ir
+        ir = IRnode.from_list(["seq", ir, contract_runtime])
+        ir = optimizer.optimize(ir)
+
+        assembly = compile_ir.compile_to_assembly(ir)
+        bytecode, source_map = compile_ir.assembly_to_evm(assembly)
+        bytecode += contract.data_section
+        typ = func_t.return_type
+
+        # generate the IR executor
+        ir_executor = executor_from_ir(ir, compiler_data)
+
+        return ast, ir_executor, bytecode, source_map, typ
 
 
 def generate_bytecode_for_internal_fn(fn):
@@ -87,7 +110,7 @@ def generate_bytecode_for_internal_fn(fn):
             {fn_call}
     """
     )
-    return _compile_vyper_function(wrapper_code, contract)[1:]
+    return compile_vyper_function(wrapper_code, contract)
 
 
 def generate_bytecode_for_arbitrary_stmt(source_code, contract):
@@ -118,4 +141,4 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
             {debug_body}
     """
     )
-    return _compile_vyper_function(wrapper_code, contract)[1:]
+    return compile_vyper_function(wrapper_code, contract)

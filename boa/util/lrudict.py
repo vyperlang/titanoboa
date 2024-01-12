@@ -16,6 +16,8 @@ class lrudict(dict):
 
     # set based on a lambda
     def setdefault_lambda(self, k, fn):
-        if k in self:
+        try:
             return self[k]
-        self[k] = fn()
+        except KeyError:
+            self[k] = (ret := fn(k))
+            return ret

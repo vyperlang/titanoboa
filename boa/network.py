@@ -2,14 +2,23 @@
 import contextlib
 import time
 import warnings
+from dataclasses import dataclass
 from functools import cached_property
 from math import ceil
 
 from eth_account import Account
-from eth_utils import to_canonical_address, to_checksum_address
+from requests.exceptions import HTTPError
 
-from boa.environment import Env
-from boa.rpc import EthereumRPC, RPCError, to_bytes, to_hex, to_int
+from boa.environment import Address, Env
+from boa.rpc import (
+    EthereumRPC,
+    RPCError,
+    fixup_dict,
+    to_bytes,
+    to_hex,
+    to_int,
+    trim_dict,
+)
 
 
 class TraceObject:
@@ -37,16 +46,37 @@ class TraceObject:
             return "error" in self.raw_trace
 
 
-def trim_dict(kv):
-    return {k: v for (k, v) in kv.items() if bool(v)}
-
-
-def _fixup_dict(kv):
-    return {k: to_hex(v) for (k, v) in trim_dict(kv).items()}
-
-
 class _EstimateGasFailed(Exception):
     pass
+
+
+@dataclass
+class TransactionSettings:
+    # when calculating the base fee, the number of blocks N ahead
+    # to compute a cap for the Nth block.
+    # defaults to 4 (4 blocks ahead, pending block's baseFee * ~1.6)
+    # but can be tweaked. if you get errors like
+    # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
+    # try increasing the constant.
+    # do not recommend setting below 0.
+    base_fee_estimator_constant: int = 4
+
+    # amount of time to wait, in seconds before giving up on a transaction
+    poll_timeout: float = 240.0
+
+
+@dataclass
+class ExternalAccount:
+    address: Address
+    _rpc: EthereumRPC
+
+    def __post_init__(self):
+        self.address = Address(self.address)
+
+    def send_transaction(self, tx_data):
+        txhash = self._rpc.fetch("eth_sendTransaction", [tx_data])
+        # format to be the same as what BrowserSigner returns
+        return {"hash": txhash}
 
 
 class NetworkEnv(Env):
@@ -55,6 +85,9 @@ class NetworkEnv(Env):
     It runs non-mutable (view or pure) functions via eth_call,
     mutable functions and contract creation via eth_sendRawTransaction.
     """
+
+    # always prefetch state in network mode
+    _fork_try_prefetch_state = True
 
     def __init__(self, rpc_url, accounts=None):
         super().__init__()
@@ -68,6 +101,8 @@ class NetworkEnv(Env):
         self.eoa = None
 
         self._gas_price = None
+
+        self.tx_settings = TransactionSettings()
 
     @cached_property
     def _rpc_has_snapshot(self):
@@ -94,10 +129,27 @@ class NetworkEnv(Env):
             # wipe forked state
             self._reset_fork(blkid)
 
+    # add account, or "Account-like" object. MUST expose
+    # `sign_transaction` or `send_transaction` method!
     def add_account(self, account: Account, force_eoa=False):
         self._accounts[account.address] = account  # type: ignore
         if self.eoa is None or force_eoa:
             self.eoa = account.address  # type: ignore
+
+    def add_accounts_from_rpc(self, rpc: str | EthereumRPC) -> None:
+        if isinstance(rpc, str):
+            rpc = EthereumRPC(rpc)
+
+        # address strings, ex. ["0x0e5437b1b3448d22c07caed31e5bcdc4ec5284a9"]
+        addresses = rpc.fetch("eth_accounts", [])
+        if not addresses:
+            # strip out content in the URL which might not want to get into logs
+            warnings.warn(
+                f"No accounts fetched from <{rpc.url_base}>! (URL partially masked for privacy)",
+                stacklevel=2,
+            )
+        for address in addresses:
+            self.add_account(ExternalAccount(_rpc=rpc, address=address))  # type: ignore
 
     def set_eoa(self, eoa: Account) -> None:
         self.add_account(eoa, force_eoa=True)
@@ -108,15 +160,7 @@ class NetworkEnv(Env):
             return self._gas_price
         return to_int(self._rpc.fetch("eth_gasPrice", []))
 
-    # when calculating the base fee, the number of blocks N ahead
-    # to compute a cap for the Nth block.
-    # defaults to 0 (no blocks ahead, just use pending block's baseFee)
-    # but can be tweaked if you get errors like
-    # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
-
-    BASE_FEE_ESTIMATOR_CONSTANT = 0
-
-    def get_fee_info(self) -> tuple[str, str, str, str]:
+    def get_eip1559_fee(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
         reqs = [
             ("eth_getBlockByNumber", ["pending", False]),
@@ -129,16 +173,20 @@ class NetworkEnv(Env):
         # Each block increases the base fee by 1/8 at most.
         # here we have the next block's base fee, compute a cap for the
         # next N blocks here.
-        blocks_ahead = self.BASE_FEE_ESTIMATOR_CONSTANT
+        blocks_ahead = self.tx_settings.base_fee_estimator_constant
         base_fee_estimate = ceil(to_int(base_fee) * (9 / 8) ** blocks_ahead)
 
         max_fee = to_hex(base_fee_estimate + to_int(max_priority_fee))
         return to_hex(base_fee_estimate), max_priority_fee, max_fee, chain_id
 
+    def get_static_fee(self) -> tuple[str, str]:
+        # non eip-1559 transaction
+        return self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])])
+
     def _check_sender(self, address):
         if address is None:
             raise ValueError("No sender!")
-        return to_checksum_address(address)
+        return Address(address)
 
     # OVERRIDES
     def execute_code(
@@ -151,8 +199,11 @@ class NetworkEnv(Env):
         override_bytecode=None,
         contract=None,
         is_modifying=True,
+        ir_executor=None,  # maybe just have **kwargs to collect extra kwargs
     ):
         # call execute_code for tracing side effects
+        # note: we could get a perf improvement if we ran this in
+        # the background while waiting on RPC network calls
         computation = super().execute_code(
             to_address=to_address,
             sender=sender,
@@ -165,12 +216,12 @@ class NetworkEnv(Env):
 
         sender = self._check_sender(self._get_sender(sender))
 
-        data = to_hex(data)
+        hexdata = to_hex(data)
 
         if is_modifying:
             try:
                 receipt, trace = self._send_txn(
-                    from_=sender, to=to_address, value=value, gas=gas, data=data
+                    from_=sender, to=to_address, value=value, gas=gas, data=hexdata
                 )
             except _EstimateGasFailed:
                 # no need to actually run the txn.
@@ -194,13 +245,13 @@ class NetworkEnv(Env):
                     )
 
         else:
-            args = _fixup_dict(
+            args = fixup_dict(
                 {
                     "from": sender,
                     "to": to_address,
                     "gas": gas,
                     "value": value,
-                    "data": data,
+                    "data": hexdata,
                 }
             )
             returnvalue = self._rpc.fetch("eth_call", [args, "latest"])
@@ -239,7 +290,7 @@ class NetworkEnv(Env):
             from_=sender, value=value, gas=gas, data=bytecode
         )
 
-        create_address = to_canonical_address(receipt["contractAddress"])
+        create_address = Address(receipt["contractAddress"])
 
         deployed_bytecode = local_bytecode
 
@@ -257,12 +308,15 @@ class NetworkEnv(Env):
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
 
         # TODO get contract info in here
-        print(f"contract deployed at {to_checksum_address(create_address)}")
+        print(f"contract deployed at {create_address}")
 
         return create_address, deployed_bytecode
 
-    def _wait_for_tx_trace(self, tx_hash, timeout=60, poll_latency=0.25):
+    def _wait_for_tx_trace(self, tx_hash, poll_latency=0.25):
         start = time.time()
+
+        timeout = self.tx_settings.poll_timeout
+
         while True:
             receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
             if receipt is not None:
@@ -278,26 +332,39 @@ class NetworkEnv(Env):
 
     @cached_property
     def _tracer(self):
+        def _warn_no_tracer():
+            warnings.warn(
+                "debug_traceTransaction not available! "
+                "titanoboa will try hard to interact with the network, but "
+                "this means that titanoboa is not able to do certain "
+                "safety checks at runtime. it is recommended to switch "
+                "to a node or provider with debug_traceTransaction.",
+                stacklevel=3,
+            )
+
         try:
             txn_hash = "0x" + "00" * 32
             # alchemy only can do callTracer, plus it has lowest
             # overhead.
             call_tracer = {"tracer": "callTracer", "onlyTopCall": True}
             self._rpc.fetch("debug_traceTransaction", [txn_hash, call_tracer])
+
         except RPCError as e:
-            if e.code == -32601:
-                warnings.warn(
-                    "debug_traceTransaction not available! "
-                    "titanoboa will try hard to interact with the network, but "
-                    "this means that titanoboa is not able to do certain "
-                    "safety checks at runtime. it is recommended to switch "
-                    "to a node or provider with debug_traceTransaction.",
-                    stacklevel=2,
-                )
-                return None
             # can't handle callTracer, use default (i.e. structLogs)
             if e.code == -32602:
                 return {}
+
+            # catchall - just don't have a tracer
+            # note on error codes:
+            # -32600 is alchemy unpaid tier error message
+            # -32601 is infura error message (if i recall correctly)
+            _warn_no_tracer()
+            return None
+
+        except HTTPError:
+            _warn_no_tracer()
+            return None
+
         return call_tracer
 
     def _get_nonce(self, addr):
@@ -315,32 +382,36 @@ class NetworkEnv(Env):
         self.vm.state._account_db._rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
-        tx_data = _fixup_dict(
+        tx_data = fixup_dict(
             {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         )
 
-        base_fee, max_priority_fee, max_fee, chain_id = self.get_fee_info()
         try:
             # eip-1559 txn
+            (base_fee, max_priority_fee, max_fee, chain_id) = self.get_eip1559_fee()
             tx_data["maxPriorityFeePerGas"] = max_priority_fee
             tx_data["maxFeePerGas"] = max_fee
             tx_data["chainId"] = chain_id
-        except RPCError:
-            tx_data["gasPrice"] = to_hex(self.get_gas_price())
+        except (RPCError, KeyError):
+            gas_price, chain_id = self.get_static_fee()
+            tx_data["gasPrice"] = gas_price
+            tx_data["chainId"] = chain_id
 
         tx_data["nonce"] = self._get_nonce(from_)
 
-        try:
-            tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
-        except RPCError as e:
-            if e.code == 3:
-                # execution failed at estimateGas, probably the txn reverted
-                raise _EstimateGasFailed()
-            raise e from e
+        if gas is None:
+            try:
+                tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
+            except RPCError as e:
+                if e.code == 3:
+                    # execution failed at estimateGas, probably the txn reverted
+                    raise _EstimateGasFailed()
+                raise e from e
 
         if from_ not in self._accounts:
             raise ValueError(f"Account not available: {from_}")
         account = self._accounts[from_]
+
         if hasattr(account, "sign_transaction"):
             signed = account.sign_transaction(tx_data)
 
