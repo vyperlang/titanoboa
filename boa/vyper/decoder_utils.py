@@ -50,6 +50,11 @@ class _Struct(dict):
     def __repr__(self):
         return f"{self.struct_name}({super().__repr__()})"
 
+def _get_length(mem, bound):
+    ret = int.from_bytes(mem[:32], "big")
+    if ret > bound:
+        return bound + 1 # uninitialized variable; fill with garbage
+    return ret
 
 def decode_vyper_object(mem, typ):
     if isinstance(typ, BytesM_T):
@@ -64,28 +69,25 @@ def decode_vyper_object(mem, typ):
         if typ.is_signed:
             return unsigned_to_signed(ret, 256)
         return ret
-
-    if isinstance(typ, (BytesT, StringT, DArrayT)):
-        length = int.from_bytes(mem[:32], "big")
-        if length > typ.length:
-            length = 0  # array uninitialized; pretend it is empty for performance
-
-        if isinstance(typ, DArrayT):
-            n = typ.subtype.memory_bytes_required
-            return [
-                decode_vyper_object(mem[offset : offset + n], typ.subtype)
-                for offset in range(32, 32 + length * n, n)
-            ]
-
-        ret = mem[32 : 32 + length].tobytes()
-        return ret.decode("utf-8") if isinstance(typ, StringT) else ret
-
+    if isinstance(typ, StringT):
+        length = _get_length(mem[:32], typ.length)
+        return mem[32 : 32 + length].tobytes().decode("utf-8")
+    if isinstance(typ, BytesT):
+        length = _get_length(mem[:32], typ.length)
+        return mem[32 : 32 + length].tobytes()
     if isinstance(typ, SArrayT):
         length = typ.count
         n = typ.subtype.memory_bytes_required
         return [
             decode_vyper_object(mem[i * n : i * n + n], typ.subtype)
             for i in range(length)
+        ]
+    if isinstance(typ, DArrayT):
+        length = _get_length(mem[:32], typ.length)
+        n = typ.subtype.memory_bytes_required
+        return [
+            decode_vyper_object(mem[offset : offset + n], typ.subtype)
+            for offset in range(32, 32 + length * n, n)
         ]
     if isinstance(typ, StructT):
         ret = _Struct(typ.name)
