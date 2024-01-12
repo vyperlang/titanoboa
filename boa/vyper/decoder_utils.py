@@ -68,7 +68,7 @@ def decode_vyper_object(mem, typ):
     if isinstance(typ, (BytesT, StringT, DArrayT)):
         length = int.from_bytes(mem[:32], "big")
         if length > typ.length:
-            return None  # array uninitialized; bail to avoid performance issues
+            length = 0  # array uninitialized; pretend it is empty for performance
 
         if isinstance(typ, DArrayT):
             n = typ.subtype.memory_bytes_required
