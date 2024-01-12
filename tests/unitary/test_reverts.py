@@ -3,6 +3,7 @@ import contextlib
 import pytest
 
 import boa
+from boa import BoaError
 
 source_code = """
 @external
@@ -114,3 +115,24 @@ def test_compiler_reason_does_not_stop_dev_reason(contract):
     with check_raises():
         with boa.reverts(compiler="safeadd"):
             contract.bar(3)
+
+
+def test_variable_not_declared():
+    contract = boa.loads(
+        """
+struct Test:
+    token: DynArray[uint8, 8]
+
+data: public(HashMap[address, Test])
+
+@external
+def foo(x: uint8) -> uint8:
+    assert x == 0, "x is not 0"
+    asset_types: DynArray[uint8, 8]  = self.data[msg.sender].token
+    return x
+    """
+    )
+    with pytest.raises(BoaError) as error_context:
+        contract.foo(1)
+
+    assert error_context.value.args[0].last_frame.frame_detail["asset_types"] == []
