@@ -53,7 +53,10 @@ class _Struct(dict):
 def _get_length(mem, bound):
     ret = int.from_bytes(mem[:32], "big")
     if ret > bound:
-        return bound + 1 # uninitialized variable; fill with garbage
+        # perf -- this is an uninitialized variable; length and data are
+        # both garbage. truncate length to the bound of the container of
+        # this type. the data will still be garbage, but we avoid OOM.
+        return bound
     return ret
 
 def decode_vyper_object(mem, typ):
