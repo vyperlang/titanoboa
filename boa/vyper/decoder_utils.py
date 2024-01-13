@@ -50,6 +50,14 @@ class _Struct(dict):
     def __repr__(self):
         return f"{self.struct_name}({super().__repr__()})"
 
+def _get_length(mem, bound):
+    ret = int.from_bytes(mem[:32], "big")
+    if ret > bound:
+        # perf -- this is an uninitialized variable; length and data are
+        # both garbage. truncate length to the bound of the container of
+        # this type. the data will still be garbage, but we avoid OOM.
+        return bound
+    return ret
 
 def decode_vyper_object(mem, typ):
     if isinstance(typ, BytesM_T):
@@ -65,10 +73,10 @@ def decode_vyper_object(mem, typ):
             return unsigned_to_signed(ret, 256)
         return ret
     if isinstance(typ, BytesT):
-        length = int.from_bytes(mem[:32], "big")
+        length = _get_length(mem[:32], typ.length)
         return mem[32 : 32 + length].tobytes()
     if isinstance(typ, StringT):
-        length = int.from_bytes(mem[:32], "big")
+        length = _get_length(mem[:32], typ.length)
         return mem[32 : 32 + length].tobytes().decode("utf-8")
     if isinstance(typ, SArrayT):
         length = typ.count
@@ -78,7 +86,7 @@ def decode_vyper_object(mem, typ):
             for i in range(length)
         ]
     if isinstance(typ, DArrayT):
-        length = int.from_bytes(mem[:32], "big")
+        length = _get_length(mem[:32], typ.length)
         n = typ.subtype.memory_bytes_required
         ofst = 32
         ret = []
