@@ -85,10 +85,12 @@ def decode_vyper_object(mem, typ):
     if isinstance(typ, DArrayT):
         length = _get_length(mem[:32], typ.length)
         n = typ.subtype.memory_bytes_required
-        return [
-            decode_vyper_object(mem[offset : offset + n], typ.subtype)
-            for offset in range(32, 32 + length * n, n)
-        ]
+        ofst = 32
+        ret = []
+        for _ in range(length):
+            ret.append(decode_vyper_object(mem[ofst : ofst + n], typ.subtype))
+            ofst += n
+        return ret
     if isinstance(typ, StructT):
         ret = _Struct(typ.name)
         ofst = 0
