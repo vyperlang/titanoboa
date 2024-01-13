@@ -69,11 +69,11 @@ def decode_vyper_object(mem, typ):
         if typ.is_signed:
             return unsigned_to_signed(ret, 256)
         return ret
+    if isinstance(typ, BytesT):
+        length = _get_length(mem[:32], typ.length)
     if isinstance(typ, StringT):
         length = _get_length(mem[:32], typ.length)
         return mem[32 : 32 + length].tobytes().decode("utf-8")
-    if isinstance(typ, BytesT):
-        length = _get_length(mem[:32], typ.length)
         return mem[32 : 32 + length].tobytes()
     if isinstance(typ, SArrayT):
         length = typ.count
