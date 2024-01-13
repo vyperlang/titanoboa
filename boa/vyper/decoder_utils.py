@@ -71,10 +71,10 @@ def decode_vyper_object(mem, typ):
         return ret
     if isinstance(typ, BytesT):
         length = _get_length(mem[:32], typ.length)
+        return mem[32 : 32 + length].tobytes()
     if isinstance(typ, StringT):
         length = _get_length(mem[:32], typ.length)
         return mem[32 : 32 + length].tobytes().decode("utf-8")
-        return mem[32 : 32 + length].tobytes()
     if isinstance(typ, SArrayT):
         length = typ.count
         n = typ.subtype.memory_bytes_required
