@@ -10,18 +10,15 @@ from jupyter_server.serverapp import ServerApp
 from jupyter_server.utils import url_path_join
 from tornado.web import authenticated
 
-from boa.integrations.jupyter.colab import IN_GOOGLE_COLAB, ColabHandler
 from boa.integrations.jupyter.constants import PLUGIN_NAME, TOKEN_REGEX
 
-BaseHandler = ColabHandler if IN_GOOGLE_COLAB else APIHandler
 
-
-class StatusHandler(BaseHandler):
+class StatusHandler(APIHandler):
     def get(self):
         self.finish({"data": "ok"})
 
 
-class CallbackHandler(BaseHandler):
+class CallbackHandler(APIHandler):
     """
     Handler that receives a POST from jupyter.js when user interacts with their browser wallet.
     The token is used to identify the SharedMemory object to write the callback data to.

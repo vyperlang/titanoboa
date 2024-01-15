@@ -2,6 +2,7 @@
 This module implements the BrowserSigner class, which is used to sign transactions
 in IPython/JupyterLab/Google Colab.
 """
+import importlib.util
 import json
 import logging
 from asyncio import get_running_loop, sleep
@@ -12,7 +13,6 @@ from typing import Any
 import nest_asyncio
 from IPython.display import Javascript, display
 
-from .colab import IN_GOOGLE_COLAB, start_server
 from .constants import (
     ADDRESS_JSON_LENGTH,
     ADDRESS_TIMEOUT_MESSAGE,
@@ -38,9 +38,6 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        if IN_GOOGLE_COLAB:
-            start_server()
-
         install_jupyter_javascript_triggers()
 
         if address:
@@ -86,11 +83,11 @@ def _create_memory_and_wait(
     token = _generate_token()
     javascript = snippet(token, **kwargs)
 
-    if IN_GOOGLE_COLAB:
+    if importlib.util.find_spec("google.colab"):
         from google.colab.output import eval_js
 
         result = eval_js(javascript.data)
-        return json.loads(result)
+        return _parse_result(json.loads(result))
 
     memory = SharedMemory(name=token, create=True, size=memory_size)
     logging.warning(f"Waiting for {token} of size {memory_size}")
@@ -136,7 +133,10 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str):
     )
     task = loop.create_task(future)
     loop.run_until_complete(task)
-    result = task.result()
+    return _parse_result(task.result())
+
+
+def _parse_result(result: dict) -> dict:
     if "data" in result:
         return result["data"]
 
