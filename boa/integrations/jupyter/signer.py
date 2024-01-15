@@ -14,13 +14,12 @@ import nest_asyncio
 from IPython.display import Javascript, display
 
 from .constants import (
-    ADDRESS_JSON_LENGTH,
     ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
     CALLBACK_TOKEN_TIMEOUT,
+    MEMORY_LENGTH,
     NUL,
     PLUGIN_NAME,
-    TRANSACTION_JSON_LENGTH,
     TRANSACTION_TIMEOUT_MESSAGE,
 )
 from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
@@ -41,14 +40,8 @@ class BrowserSigner:
         if address:
             self.address = address
         else:
-            # wait for the address to be set via the API, otherwise boa crashes
-            memory_size = (
-                ADDRESS_JSON_LENGTH + 3
-            )  # address + quotes from json encode + \0
             self.address = _create_memory_and_wait(
-                _load_signer_snippet,
-                memory_size=memory_size,
-                timeout_message=ADDRESS_TIMEOUT_MESSAGE,
+                _load_signer_snippet, timeout_message=ADDRESS_TIMEOUT_MESSAGE
             )
 
     def send_transaction(self, tx_data: dict) -> dict:
@@ -61,20 +54,16 @@ class BrowserSigner:
         """
         sign_data = _create_memory_and_wait(
             _sign_transaction_snippet,
-            memory_size=TRANSACTION_JSON_LENGTH,
             timeout_message=TRANSACTION_TIMEOUT_MESSAGE,
             tx_data=tx_data,
         )
         return convert_frontend_dict(sign_data)
 
 
-def _create_memory_and_wait(
-    snippet: callable, memory_size: int, timeout_message: str, **kwargs
-) -> dict:
+def _create_memory_and_wait(snippet: callable, timeout_message: str, **kwargs) -> dict:
     """
     Create a SharedMemory object and wait for it to be filled with data.
     :param snippet: A function that given a token and some kwargs, returns a Javascript snippet.
-    :param memory_size: The size of the SharedMemory object to create.
     :param kwargs: The arguments to pass to the Javascript snippet.
     :return: The result of the Javascript snippet sent to the API.
     """
@@ -89,8 +78,8 @@ def _create_memory_and_wait(
         result = eval_js(javascript.data)
         return _parse_result(json.loads(result))
 
-    memory = SharedMemory(name=token, create=True, size=memory_size)
-    logging.warning(f"Waiting for {token} of size {memory_size}")
+    memory = SharedMemory(name=token, create=True, size=MEMORY_LENGTH)
+    logging.info(f"Waiting for {token}")
     try:
         memory.buf[:1] = NUL
         display(javascript)
