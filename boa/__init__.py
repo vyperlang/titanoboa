@@ -76,7 +76,3 @@ def _jupyter_server_extension_points() -> list[dict]:
     where to find the `_load_jupyter_server_extension` function.
     """
     return [{"module": "boa.integrations.jupyter"}]
-
-
-# export extension paths for old notebook versions and Google Colab
-_jupyter_server_extension_paths = _jupyter_server_extension_points

@@ -19,20 +19,12 @@
         });
 
     const colab = window.colab ?? window.google?.colab; // in the parent window or in an iframe
-    const detectEnv = () => colab ? {
-        apiRoot: `https://localhost:8888`, // this gets proxied to the backend by Colab
-        headers: {"x-colab-tunnel": "Google"}
-    } : {
-        apiRoot: '../titanoboa_jupyterlab',
-        headers: {['X-XSRFToken']: getCookie('_xsrf')}
-    };
-
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
-        const {apiRoot, headers} = detectEnv();
+        const headers = {['X-XSRFToken']: getCookie('_xsrf')};
         const init = {method: 'POST', body: stringify(body), headers};
-        const url = `${apiRoot}/callback/${token}`;
-        const response = await fetch(url, {...init, headers});
+        const url = `../titanoboa_jupyterlab/callback/${token}`;
+        const response = await fetch(url, init);
         return response.text();
     }
 

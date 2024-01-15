@@ -13,11 +13,6 @@ from tornado.web import authenticated
 from boa.integrations.jupyter.constants import PLUGIN_NAME, TOKEN_REGEX
 
 
-class StatusHandler(APIHandler):
-    def get(self):
-        self.finish({"data": "ok"})
-
-
 class CallbackHandler(APIHandler):
     """
     Handler that receives a POST from jupyter.js when user interacts with their browser wallet.
@@ -62,17 +57,8 @@ def setup_handlers(server_app: ServerApp) -> None:
     """
     web_app = server_app.web_app
     base_url = url_path_join(web_app.settings["base_url"], PLUGIN_NAME)
-    web_app.add_handlers(host_pattern=".*$", host_handlers=create_handlers(base_url))
+    web_app.add_handlers(
+        host_pattern=".*$",
+        host_handlers=[(rf"{base_url}/callback/({TOKEN_REGEX})$", CallbackHandler)],
+    )
     server_app.log.info(f"Handlers registered in {base_url}")
-
-
-def create_handlers(base_url="") -> list[tuple[str, callable]]:
-    """
-    Create the handlers for the Jupyter server.
-    :param base_url: The base URL for the handlers.
-    :return: The list of handlers.
-    """
-    return [
-        (rf"{base_url}/?$", StatusHandler),
-        (rf"{base_url}/callback/({TOKEN_REGEX})$", CallbackHandler),
-    ]
