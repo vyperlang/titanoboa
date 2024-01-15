@@ -84,11 +84,18 @@ def _create_memory_and_wait(
     :return: The result of the Javascript snippet sent to the API.
     """
     token = _generate_token()
+    javascript = snippet(token, **kwargs)
+
+    if IN_GOOGLE_COLAB:
+        from google.colab.output import eval_js
+
+        result = eval_js(javascript.data)
+        return json.loads(result)
+
     memory = SharedMemory(name=token, create=True, size=memory_size)
     logging.warning(f"Waiting for {token} of size {memory_size}")
     try:
         memory.buf[:1] = NUL
-        javascript = snippet(token, **kwargs)
         display(javascript)
         return _wait_buffer_set(memory.buf, timeout_message)
     finally:

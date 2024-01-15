@@ -55,6 +55,10 @@
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         const body = await parsePromise(func(...args));
+        if (colab) {
+            // Colab expects the response to be JSON
+            return JSON.stringify(body);
+        }
         const responseText = await callbackAPI(token, body);
         console.log(`Callback ${token} => ${responseText}`);
     };
