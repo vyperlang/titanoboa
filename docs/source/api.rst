@@ -535,6 +535,17 @@ Low-Level Functionality
         :param pc: The program counter to start the execution at.
         :returns: The return value from the top-level call.
 
+    .. method:: raw_call(to_address: str, sender: str | None = None, gas: int | None = None, value: int = 0, data: bytes = b"") -> bytes
+
+        Simple wrapper around `execute_code`, to execute as if the contract is being called from an EOA.
+
+        :param to_address: The contract to target.
+        :param sender: The account to set as ``tx.origin`` for the execution context and ``msg.sender`` for the top-level call.
+        :param gas: The gas limit provided for the execution (a.k.a. ``msg.gas``).
+        :param value: The ether value to attach to the execution (a.k.a ``msg.value``).
+        :param data: The data to attach to the execution (a.k.a. ``msg.data``).
+        :returns: The return value from the top-level call.
+
     .. method:: time_travel(seconds: int = None, blocks: int = None, block_delta: int = 12)
 
         Fast forward, increase the chain timestamp and block number.

@@ -3,6 +3,7 @@ import contextlib
 import pytest
 
 import boa
+from boa import BoaError
 
 source_code = """
 @external
@@ -114,3 +115,32 @@ def test_compiler_reason_does_not_stop_dev_reason(contract):
     with check_raises():
         with boa.reverts(compiler="safeadd"):
             contract.bar(3)
+
+
+@pytest.mark.parametrize(
+    "type_,empty", [("DynArray[uint8, 8]", []), ("String[8]", ""), ("Bytes[8]", b"")]
+)
+def test_no_oom_for_uninitialized_variable(type_, empty):
+    c = boa.loads(
+        f"""
+struct Test:
+    data: {type_}
+
+data: public(HashMap[address, Test])
+
+@external
+def foo(x: uint8):
+    assert x == 0, "x is not 0 (make the error string longer than 8 bytes)"
+    # unreachable
+    uninitialized: {type_}  = self.data[msg.sender].data
+    """
+    )
+    with pytest.raises(BoaError) as error_context:
+        c.foo(1)
+
+    # if we got here, there was no OOM on frame decoding
+    frame = error_context.value.args[0].last_frame
+    # note it has garbage instead of empty data.
+    assert frame.frame_detail["uninitialized"] != empty
+    # check the frame is always bounded properly.
+    assert len(frame.frame_detail["uninitialized"]) == 8
