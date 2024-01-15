@@ -38,8 +38,6 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        install_jupyter_javascript_triggers()
-
         if address:
             self.address = address
         else:
@@ -80,6 +78,8 @@ def _create_memory_and_wait(
     :param kwargs: The arguments to pass to the Javascript snippet.
     :return: The result of the Javascript snippet sent to the API.
     """
+    install_jupyter_javascript_triggers()
+
     token = _generate_token()
     javascript = snippet(token, **kwargs)
 
