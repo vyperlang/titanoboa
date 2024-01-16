@@ -72,7 +72,12 @@ def _create_memory_and_wait(snippet: callable, timeout_message: str, **kwargs) -
     token = _generate_token()
     javascript = snippet(token, **kwargs)
 
-    if importlib.util.find_spec("google.colab"):
+    try:
+        has_google = importlib.util.find_spec("google.colab")
+    except ModuleNotFoundError:
+        has_google = False
+
+    if has_google:
         from google.colab.output import eval_js
 
         result = eval_js(javascript.data)
