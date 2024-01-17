@@ -10,15 +10,7 @@ from eth_account import Account
 from requests.exceptions import HTTPError
 
 from boa.environment import Address, Env
-from boa.rpc import (
-    EthereumRPC,
-    RPCError,
-    fixup_dict,
-    to_bytes,
-    to_hex,
-    to_int,
-    trim_dict,
-)
+from boa.rpc import EthereumRPC, RPCError, fixup_dict, to_bytes, to_hex, to_int, trim_dict
 
 
 class TraceObject:

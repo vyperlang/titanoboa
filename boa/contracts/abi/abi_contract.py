@@ -9,10 +9,10 @@ from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
 from boa.contracts.base_evm_contract import _BaseEVMContract
-from boa.contracts.stack_trace import StackTrace, _handle_child_trace
+from boa.contracts.stack_trace import BoaError, StackTrace, _handle_child_trace
 from boa.contracts.utils import decode_addresses, encode_addresses
 from boa.environment import Address
-from boa.util.abi import abi_decode, abi_encode, is_abi_encodable, ABIError
+from boa.util.abi import ABIError, abi_decode, abi_encode, is_abi_encodable
 
 
 class ABIFunction:
