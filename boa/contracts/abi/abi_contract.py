@@ -12,7 +12,7 @@ from boa.contracts.base_evm_contract import _BaseEVMContract
 from boa.contracts.stack_trace import StackTrace, _handle_child_trace
 from boa.contracts.utils import decode_addresses, encode_addresses
 from boa.environment import Address
-from boa.util.abi import abi_decode, abi_encode, is_abi_encodable
+from boa.util.abi import abi_decode, abi_encode, is_abi_encodable, ABIError
 
 
 class ABIFunction:
@@ -226,12 +226,15 @@ class ABIContract(_BaseEVMContract):
         :param abi_type: the ABI type of the return value.
         """
         # when there's no contract in the address, the computation output is empty
-        is_missing_output = bool(abi_type and not computation.output)
-        if computation.is_error or is_missing_output:
+        if computation.is_error:
             return self.handle_error(computation)
 
         schema = f"({_format_abi_type(abi_type)})"
-        decoded = abi_decode(schema, computation.output)
+        try:
+            decoded = abi_decode(schema, computation.output)
+        except ABIError as e:
+            raise BoaError(self.stack_trace(computation)) from e
+
         return tuple(decode_addresses(typ, val) for typ, val in zip(abi_type, decoded))
 
     def stack_trace(self, computation: ComputationAPI) -> StackTrace:
