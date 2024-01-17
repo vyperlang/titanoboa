@@ -66,3 +66,11 @@ def reverts(*args, **kwargs):
 
 def eval(code):
     return loads("").eval(code)
+
+
+def _jupyter_server_extension_points() -> list[dict]:
+    """
+    Returns a list of dictionaries with metadata describing
+    where to find the `_load_jupyter_server_extension` function.
+    """
+    return [{"module": "boa.integrations.jupyter"}]
