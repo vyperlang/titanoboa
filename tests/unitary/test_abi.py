@@ -5,9 +5,8 @@ import yaml
 from vyper.compiler.output import build_abi_output
 
 import boa
-from boa.boa_error import BoaError
-from boa.contracts.abi.abi_contract import ABIContractFactory
-from boa.contracts.abi.function import ABIFunction
+from boa import BoaError
+from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
 from boa.environment import Address
 
 
@@ -59,11 +58,26 @@ def test_solidity_overloading(load_solidity_from_yaml):
         contract.f(0)
     (error,) = exc_info.value.args
     assert (
-        "Ambiguous call to f. Arguments can be encoded to multiple overloads: (int8), (uint256)."
-        == error
+        "Ambiguous call to f. Arguments can be encoded to multiple overloads: "
+        "f(int8), f(uint256). (Hint: try using `disambiguate_signature=` "
+        "to disambiguate)." == error
     )
     assert contract.f(-1) == -1
     assert contract.f(1000) == 1000
+
+
+@pytest.mark.parametrize("abi_signature", ["f(int8)", "f(uint256)"])
+def test_solidity_overloading_given_type(load_solidity_from_yaml, abi_signature):
+    contract = load_solidity_from_yaml("overload")
+    assert contract.f(0, disambiguate_signature=abi_signature) == 0
+
+
+def test_solidity_bad_overloading_given_type(load_solidity_from_yaml):
+    contract = load_solidity_from_yaml("overload")
+    with pytest.raises(Exception) as exc_info:
+        contract.f(0, disambiguate_signature="(int256)")
+    (error,) = exc_info.value.args
+    assert "Could not find matching f function for given arguments." == error
 
 
 def test_address(load_via_abi):

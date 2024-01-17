@@ -3,7 +3,7 @@ import pytest
 from hypothesis import given
 
 import boa
-from boa.boa_error import BoaError
+from boa import BoaError
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 

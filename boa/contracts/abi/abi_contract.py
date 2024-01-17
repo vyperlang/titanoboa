@@ -1,20 +1,187 @@
 from collections import defaultdict
 from functools import cached_property
 from os.path import basename
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from warnings import warn
 
 from eth.abc import ComputationAPI
+from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
+from vyper.utils import method_id
 
-from boa.contracts.abi import _decode_addresses, _format_abi_type
-from boa.contracts.abi.function import ABIFunction, ABIOverload
-from boa.contracts.evm_contract import BaseEVMContract
+from boa.contracts.base_evm_contract import _BaseEVMContract
 from boa.contracts.stack_trace import StackTrace, _handle_child_trace
+from boa.contracts.utils import decode_addresses, encode_addresses
 from boa.environment import Address
-from boa.util.abi import abi_decode
+from boa.util.abi import abi_decode, abi_encode, is_abi_encodable
 
 
-class ABIContract(BaseEVMContract):
+class ABIFunction:
+    """A single function in an ABI. It does not include overloads."""
+
+    def __init__(self, abi: dict, contract_name: str):
+        """
+        :param abi: the ABI entry for this function
+        :param contract_name: the name of the contract this function belongs to
+        """
+        self._abi = abi
+        self._contract_name = contract_name
+        self._function_visibility = FunctionVisibility.EXTERNAL
+        self._mutability = StateMutability.from_abi(abi)
+        self.contract: Optional["ABIContract"] = None
+
+    @property
+    def name(self) -> str:
+        return self._abi["name"]
+
+    @cached_property
+    def argument_types(self) -> list:
+        return [_abi_from_json(i) for i in self._abi["inputs"]]
+
+    @property
+    def argument_count(self) -> int:
+        return len(self.argument_types)
+
+    @property
+    def signature(self) -> str:
+        return f"({_format_abi_type(self.argument_types)})"
+
+    @cached_property
+    def return_type(self) -> list:
+        return [_abi_from_json(o) for o in self._abi["outputs"]]
+
+    @property
+    def full_signature(self) -> str:
+        return f"{self.name}{self.signature}"
+
+    @property
+    def pretty_signature(self) -> str:
+        return f"{self.name}{self.signature} -> {self.return_type}"
+
+    @cached_property
+    def method_id(self) -> bytes:
+        return method_id(self.name + self.signature)
+
+    def __repr__(self) -> str:
+        return f"ABI {self._contract_name}.{self.pretty_signature}"
+
+    def __str__(self) -> str:
+        return repr(self)
+
+    @property
+    def is_mutable(self) -> bool:
+        return self._mutability > StateMutability.VIEW
+
+    def is_encodable(self, *args, **kwargs) -> bool:
+        """Check whether this function accepts the given arguments after eventual encoding."""
+        if len(kwargs) + len(args) != self.argument_count:
+            return False
+        parsed_args = self._merge_kwargs(*args, **kwargs)
+        return all(
+            is_abi_encodable(abi_type, arg)
+            for abi_type, arg in zip(self.argument_types, parsed_args)
+        )
+
+    def _merge_kwargs(self, *args, **kwargs) -> list:
+        """Merge positional and keyword arguments into a single list."""
+        if len(kwargs) + len(args) != self.argument_count:
+            raise TypeError(
+                f"Bad args to `{repr(self)}` "
+                f"(expected {self.argument_count} arguments, got {len(args)})"
+            )
+        try:
+            kwarg_inputs = self._abi["inputs"][len(args) :]
+            merged = list(args) + [kwargs.pop(i["name"]) for i in kwarg_inputs]
+        except KeyError as e:
+            error = f"Missing keyword argument {e} for `{self.signature}`. Passed {args} {kwargs}"
+            raise TypeError(error)
+
+        # allow address objects to be passed in place of addresses
+        return encode_addresses(merged)
+
+    def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
+        """Calls the function with the given arguments based on the ABI contract."""
+        if not self.contract or not self.contract.env:
+            raise Exception(f"Cannot call {self} without deploying contract.")
+
+        args = self._merge_kwargs(*args, **kwargs)
+        computation = self.contract.env.execute_code(
+            to_address=self.contract.address,
+            sender=sender,
+            data=self.method_id + abi_encode(self.signature, args),
+            value=value,
+            gas=gas,
+            is_modifying=self.is_mutable,
+            contract=self.contract,
+        )
+
+        match self.contract.marshal_to_python(computation, self.return_type):
+            case ():
+                return None
+            case (single,):
+                return single
+            case multiple:
+                return tuple(multiple)
+
+
+class ABIOverload:
+    """
+    Represents a set of functions that have the same name but different
+    argument types. This is used to implement function overloading.
+    """
+
+    @staticmethod
+    def create(
+        functions: list[ABIFunction], contract: "ABIContract"
+    ) -> Union["ABIOverload", ABIFunction]:
+        """
+        Create an ABIOverload if there are multiple functions, otherwise
+        return the single function.
+        :param functions: a list of functions with the same name
+        :param contract: the ABIContract that these functions belong to
+        """
+        for f in functions:
+            f.contract = contract
+        if len(functions) == 1:
+            return functions[0]
+        return ABIOverload(functions)
+
+    def __init__(self, functions: list[ABIFunction]):
+        self.functions = functions
+
+    @cached_property
+    def name(self) -> str:
+        return self.functions[0].name
+
+    def __call__(self, *args, disambiguate_signature=None, **kwargs):
+        """
+        Call the function that matches the given arguments.
+        :raises Exception: if a single function is not found
+        """
+        if disambiguate_signature is None:
+            matches = [f for f in self.functions if f.is_encodable(*args, **kwargs)]
+        else:
+            matches = [
+                f for f in self.functions if disambiguate_signature == f.full_signature
+            ]
+            assert len(matches) <= 1, "ABI signature must be unique"
+
+        match matches:
+            case [function]:
+                return function(*args, **kwargs)
+            case []:
+                raise Exception(
+                    f"Could not find matching {self.name} function for given arguments."
+                )
+            case multiple:
+                raise Exception(
+                    f"Ambiguous call to {self.name}. "
+                    f"Arguments can be encoded to multiple overloads: "
+                    f"{', '.join(self.name + f.signature for f in multiple)}. "
+                    f"(Hint: try using `disambiguate_signature=` to disambiguate)."
+                )
+
+
+class ABIContract(_BaseEVMContract):
     """A contract that has been deployed to the blockchain and created via an ABI."""
 
     def __init__(
@@ -65,7 +232,7 @@ class ABIContract(BaseEVMContract):
 
         schema = f"({_format_abi_type(abi_type)})"
         decoded = abi_decode(schema, computation.output)
-        return tuple(_decode_addresses(typ, val) for typ, val in zip(abi_type, decoded))
+        return tuple(decode_addresses(typ, val) for typ, val in zip(abi_type, decoded))
 
     def stack_trace(self, computation: ComputationAPI) -> StackTrace:
         """
@@ -74,7 +241,7 @@ class ABIContract(BaseEVMContract):
         calldata_method_id = bytes(computation.msg.data[:4])
         if calldata_method_id in self.method_id_map:
             function = self.method_id_map[calldata_method_id]
-            msg = f"  ({self}.{function.full_signature})"
+            msg = f"  ({self}.{function.pretty_signature})"
         else:
             # Method might not be specified in the ABI
             msg = f"  (unknown method id {self}.0x{calldata_method_id.hex()})"
@@ -124,3 +291,25 @@ class ABIContractFactory:
         contract = ABIContract(self._name, self._functions, address, self._filename)
         contract.env.register_contract(address, contract)
         return contract
+
+
+def _abi_from_json(abi: dict) -> list | str:
+    """
+    Parses an ABI type into a list of types.
+    :param abi: The ABI type to parse.
+    :return: A list of types or a single type.
+    """
+    if "components" in abi:
+        assert abi["type"] == "tuple"  # sanity check
+        return [_abi_from_json(item) for item in abi["components"]]
+    return abi["type"]
+
+
+def _format_abi_type(types: list) -> str:
+    """
+    Converts a list of ABI types into a comma-separated string.
+    """
+    return ",".join(
+        item if isinstance(item, str) else f"({_format_abi_type(item)})"
+        for item in types
+    )

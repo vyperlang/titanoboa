@@ -32,8 +32,8 @@ from vyper.semantics.analysis.data_positions import set_data_positions
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
-from boa.boa_error import BoaError
-from boa.contracts.evm_contract import BaseEVMContract
+from boa import BoaError
+from boa.contracts.base_evm_contract import _BaseEVMContract
 from boa.contracts.stack_trace import StackTrace, _handle_child_trace
 from boa.contracts.vyper.ast_utils import (
     ast_map_of,
@@ -114,7 +114,7 @@ class VyperDeployer:
 
 
 # a few lines of shared code between VyperBlueprint and VyperContract
-class _BaseVyperContract(BaseEVMContract):
+class _BaseVyperContract(_BaseEVMContract):
     def __init__(
         self,
         compiler_data: CompilerData,

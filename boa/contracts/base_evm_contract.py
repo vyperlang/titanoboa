@@ -2,12 +2,12 @@ from typing import Optional
 
 from eth.abc import ComputationAPI
 
-from boa.boa_error import BoaError
+from boa import BoaError
 from boa.environment import Address, Env
 from boa.util.exceptions import strip_internal_frames
 
 
-class BaseEVMContract:
+class _BaseEVMContract:
     """
     Base class for EVM (Ethereum Virtual Machine) contract:
     This includes ABI and Vyper contract.

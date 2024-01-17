@@ -1,7 +1,7 @@
 import contextlib
 import sys
 
-from boa.boa_error import BoaError
+from boa.contracts.stack_trace import BoaError
 from boa.contracts.vyper.vyper_contract import check_boa_error_matches
 from boa.debugger import BoaDebug
 from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
