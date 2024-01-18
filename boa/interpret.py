@@ -9,7 +9,11 @@ from vyper.compiler.phases import CompilerData
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
 from boa.contracts.vyper.compiler_utils import anchor_compiler_settings
-from boa.contracts.vyper.vyper_contract import VyperBlueprint, VyperContract, VyperDeployer
+from boa.contracts.vyper.vyper_contract import (
+    VyperBlueprint,
+    VyperContract,
+    VyperDeployer,
+)
 from boa.environment import Address
 from boa.explorer import fetch_abi_from_etherscan
 from boa.util.disk_cache import DiskCache
