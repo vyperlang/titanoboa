@@ -117,7 +117,13 @@ class AccountDBFork(AccountDB):
         block_identifier = rpc_kwargs.pop("block_identifier", "safe")
         self._rpc = CachingRPC.get_rpc(**rpc_kwargs)
 
-        if block_identifier not in ("safe", "latest", "finalized", "pending", "earliest"):
+        if block_identifier not in (
+            "safe",
+            "latest",
+            "finalized",
+            "pending",
+            "earliest",
+        ):
             block_identifier = to_hex(block_identifier)
 
         # do not cache - use raw_fetch
