@@ -445,7 +445,7 @@ Low-Level Functionality
         Fork the state of an external node allowing local simulation of state mutations.
 
         :param provider: The URL of the node provider to fork the state of.
-        :param block_identifier: The block identifier to fork the state at.
+        :param block_identifier: The block identifier to fork the state at. The value may be an integer, bytes, an hexadecimal string or a pre-defined block identifier (``"earliest"`` , ``"latest"``, ``"pending"``, ``"safe"`` or ``"finalized"``). Defaults to ``"safe"``.
 
         .. rubric:: Example
 
