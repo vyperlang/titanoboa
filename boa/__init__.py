@@ -8,6 +8,7 @@ from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
 from boa.interpret import (
     BoaError,
     from_etherscan,
+    from_etherscan_abi,
     load,
     load_abi,
     load_partial,
