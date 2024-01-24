@@ -344,7 +344,12 @@ class titanoboa_computation:
         # print("ENTER", Address(msg.code_address or bytes([0]*20)), contract)
         if contract is None or not cls.env._fast_mode_enabled:
             # print("SLOW MODE")
-            return super().apply_computation(state, msg, tx_ctx)
+            computation = super().apply_computation(state, msg, tx_ctx)
+            if computation.is_error:
+                # After the computation is applied with an error the state is reverted
+                # Before the revert, save the contract representation for the error message
+                setattr(computation, "_boa_contract_repr_before_revert", repr(contract))
+            return computation
 
         with cls(state, msg, tx_ctx) as computation:
             try:
@@ -364,6 +369,9 @@ class titanoboa_computation:
         # return computation outside of with block; computation.__exit__
         # swallows exceptions (including Revert).
         return computation
+
+    def get_contract_repr(self, contract):
+        return getattr(self, "_boa_contract_repr_before_revert", None) or repr(contract)
 
 
 # Message object with extra attrs we can use to thread things through

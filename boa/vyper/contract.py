@@ -196,7 +196,7 @@ class DevReason:
 @dataclass
 class ErrorDetail:
     vm_error: VMError
-    contract: "VyperContract"
+    contract_repr: str  # string representation of the contract for the error
     error_detail: str  # compiler provided error detail
     dev_reason: DevReason
     frame_detail: FrameDetail
@@ -217,7 +217,7 @@ class ErrorDetail:
 
         return cls(
             vm_error=computation.error,
-            contract=contract,
+            contract_repr=computation.get_contract_repr(contract),
             error_detail=error_detail,
             dev_reason=reason,
             frame_detail=frame_detail,
@@ -235,7 +235,7 @@ class ErrorDetail:
         return repr(err)
 
     def __str__(self):
-        msg = f"{self.contract}\n"
+        msg = f"{self.contract_repr}\n"
 
         if self.error_detail is not None:
             msg += f" <compiler: {self.error_detail}>"
