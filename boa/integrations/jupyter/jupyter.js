@@ -14,8 +14,8 @@
     const getCookie = (name) => (document.cookie.match(`\\b${name}=([^;]*)\\b`))?.[1];
     const parsePromise = promise =>
         promise.then(data => ({data})).catch(e => {
-            console.error(e.stack || e.message);
-            return {error: e.message};
+            console.log(e.message, e.stack);
+            return { error: e.message };
         });
 
     const colab = window.colab ?? window.google?.colab; // in the parent window or in an iframe
@@ -31,7 +31,6 @@
     /** Load the signer via ethers user */
     const loadSigner = async () => {
         const provider = getEthersProvider();
-        console.log(`Loading the user's signer`);
         const signer = await provider.getSigner();
         return signer.getAddress();
     };
@@ -39,7 +38,6 @@
     /** Sign a transaction via ethers */
     async function signTransaction(transaction) {
         const provider = getEthersProvider();
-        console.log('Starting to sign transaction');
         const signer = await provider.getSigner();
         return signer.sendTransaction(transaction);
     }
@@ -50,15 +48,14 @@
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         const body = await parsePromise(func(...args));
+        console.log(`${func.name}(${args.join(',')}) = ${body};`);
         if (colab) {
             // Colab expects the response to be JSON
             return JSON.stringify(body);
         }
-        const responseText = await callbackAPI(token, body);
-        console.log(`Callback ${token} => ${responseText}`);
+        return await callbackAPI(token, body);
     };
 
-    console.log(`Registering Boa callbacks`);
     // expose functions to window, so they can be called from the BrowserSigner
     window._titanoboa = {
         loadSigner: handleCallback(loadSigner),
