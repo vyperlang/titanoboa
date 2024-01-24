@@ -311,6 +311,7 @@ class titanoboa_computation:
             self._gas_meter._set_code(self.code)
 
         self._child_pcs = []
+        self._contract_repr_before_revert = None
 
     def add_child_computation(self, child_computation):
         super().add_child_computation(child_computation)
@@ -348,7 +349,7 @@ class titanoboa_computation:
             if computation.is_error:
                 # After the computation is applied with an error the state is reverted
                 # Before the revert, save the contract representation for the error message
-                setattr(computation, "_boa_contract_repr_before_revert", repr(contract))
+                computation._contract_repr_before_revert = repr(contract)
             return computation
 
         with cls(state, msg, tx_ctx) as computation:
@@ -371,7 +372,7 @@ class titanoboa_computation:
         return computation
 
     def get_contract_repr(self, contract):
-        return getattr(self, "_boa_contract_repr_before_revert", None) or repr(contract)
+        return self._contract_repr_before_revert or repr(contract)
 
 
 # Message object with extra attrs we can use to thread things through
