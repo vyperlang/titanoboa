@@ -44,6 +44,9 @@
         return signer.sendTransaction(transaction);
     }
 
+    const rpc = (method, params) => getEthersProvider().send(method, params);
+    const multiRpc = (payloads) => getEthersProvider().send('eth_call', payloads);
+
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         const body = await parsePromise(func(...args));
@@ -59,6 +62,8 @@
     // expose functions to window, so they can be called from the BrowserSigner
     window._titanoboa = {
         loadSigner: handleCallback(loadSigner),
-        signTransaction: handleCallback(signTransaction)
+        signTransaction: handleCallback(signTransaction),
+        rpc: handleCallback(rpc),
+        multiRpc: handleCallback(multiRpc),
     };
 })();

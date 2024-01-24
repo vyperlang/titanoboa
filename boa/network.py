@@ -11,6 +11,7 @@ from requests.exceptions import HTTPError
 
 from boa.environment import Address, Env
 from boa.rpc import (
+    RPC,
     EthereumRPC,
     RPCError,
     fixup_dict,
@@ -89,14 +90,19 @@ class NetworkEnv(Env):
     # always prefetch state in network mode
     _fork_try_prefetch_state = True
 
-    def __init__(self, rpc_url, accounts=None):
+    def __init__(
+        self, rpc_url: str = None, accounts: dict[str, Account] = None, rpc: RPC = None
+    ):
         super().__init__()
 
-        self._rpc = EthereumRPC(rpc_url)
+        if bool(rpc) == bool(rpc_url):
+            raise ValueError("rpc_url or rpc must be provided, but not both.")
+
+        self._rpc = rpc or EthereumRPC(rpc_url)
 
         self._reset_fork()
 
-        self._accounts: dict[str, Account] = accounts or {}
+        self._accounts = accounts or {}
 
         self.eoa = None
 
@@ -145,7 +151,7 @@ class NetworkEnv(Env):
         if not addresses:
             # strip out content in the URL which might not want to get into logs
             warnings.warn(
-                f"No accounts fetched from <{rpc.url_base}>! (URL partially masked for privacy)",
+                f"No accounts fetched from <{rpc.name}>! (URL partially masked for privacy)",
                 stacklevel=2,
             )
         for address in addresses:

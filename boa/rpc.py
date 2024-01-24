@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 
 import requests
@@ -54,7 +55,24 @@ class RPCError(Exception):
         return cls(message=data["message"], code=data["code"])
 
 
-class EthereumRPC:
+class RPC(ABC):
+    """Base interface for RPC implementations"""
+
+    @property
+    @abstractmethod
+    def name(self):
+        ...
+
+    @abstractmethod
+    def fetch(self, method, params):
+        ...
+
+    @abstractmethod
+    def fetch_multi(self, payloads):
+        ...
+
+
+class EthereumRPC(RPC):
     def __init__(self, url: str):
         self._rpc_url = url
         self._session = requests.Session()
@@ -63,7 +81,7 @@ class EthereumRPC:
         self._session.headers["Origin"] = "Titanoboa"
 
     @property
-    def url_base(self):
+    def name(self):
         # return a version of the URL which has everything past the "base"
         # url stripped out (content which you might not want to end up
         # in logs)

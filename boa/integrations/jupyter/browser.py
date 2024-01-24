@@ -2,10 +2,10 @@
 This module implements the BrowserSigner class, which is used to sign transactions
 in IPython/JupyterLab/Google Colab.
 """
-import importlib.util
 import json
 import logging
 from asyncio import get_running_loop, sleep
+from itertools import chain
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
 from typing import Any
@@ -13,6 +13,8 @@ from typing import Any
 import nest_asyncio
 from IPython.display import Javascript, display
 
+from ...network import NetworkEnv
+from ...rpc import RPC
 from .constants import (
     ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
@@ -20,6 +22,7 @@ from .constants import (
     MEMORY_LENGTH,
     NUL,
     PLUGIN_NAME,
+    RPC_TIMEOUT_MESSAGE,
     TRANSACTION_TIMEOUT_MESSAGE,
 )
 from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
@@ -40,8 +43,8 @@ class BrowserSigner:
         if address:
             self.address = address
         else:
-            self.address = _create_memory_and_wait(
-                _load_signer_snippet, timeout_message=ADDRESS_TIMEOUT_MESSAGE
+            self.address = _javascript_call(
+                "loadSigner", timeout_message=ADDRESS_TIMEOUT_MESSAGE
             )
 
     def send_transaction(self, tx_data: dict) -> dict:
@@ -52,17 +55,61 @@ class BrowserSigner:
         :param tx_data: The transaction data to sign.
         :return: The signed transaction data.
         """
-        sign_data = _create_memory_and_wait(
-            _sign_transaction_snippet,
-            timeout_message=TRANSACTION_TIMEOUT_MESSAGE,
-            tx_data=tx_data,
+        sign_data = _javascript_call(
+            "signTransaction", tx_data, timeout_message=TRANSACTION_TIMEOUT_MESSAGE
         )
         return convert_frontend_dict(sign_data)
 
 
-def _create_memory_and_wait(snippet: callable, timeout_message: str, **kwargs) -> dict:
+class BrowserEnv(NetworkEnv):
     """
-    Create a SharedMemory object and wait for it to be filled with data.
+    An Env object which can be swapped in via `boa.set_env()`.
+    It runs non-mutable (view or pure) functions via eth_call,
+    mutable functions and contract creation via eth_sendRawTransaction.
+    """
+
+    def __init__(self, account=None):
+        """
+        :param account: The account to use for signing transactions.
+        By default, it will be requested from the browser via the `BrowserSigner`.
+        """
+        super().__init__(rpc=BrowserRpc())
+        self.add_account(account or BrowserSigner())
+
+    def _reset_fork(self, block_identifier="latest"):
+        pass  # called by the super constructor, but fork is unsupported
+
+    def fork(self, url, reset_traces=True, **kwargs):
+        raise NotImplementedError("Fork is not supported in the browser")
+
+
+class BrowserRpc(RPC):
+    """
+    An RPC object that sends requests to the browser via Javascript.
+    """
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def fetch(self, method: str, params: Any):
+        return _javascript_call(
+            "rpc", method, params, timeout_message=RPC_TIMEOUT_MESSAGE
+        )
+
+    def fetch_multi(self, payloads: list[tuple[str, Any]]):
+        return _javascript_call(
+            "multiRpc", payloads, timeout_message=RPC_TIMEOUT_MESSAGE
+        )
+
+
+def _javascript_call(js_func: str, *args, timeout_message: str) -> dict:
+    """
+    This function attempts to call a Javascript function in the browser and then
+    wait for the result to be sent back to the API.
+    - Inside Google Colab, it uses the eval_js function to call the Javascript function.
+    - Outside, it uses a SharedMemory object and polls until the frontend called our API.
+    A custom timeout message is useful for user feedback.
     :param snippet: A function that given a token and some kwargs, returns a Javascript snippet.
     :param kwargs: The arguments to pass to the Javascript snippet.
     :return: The result of the Javascript snippet sent to the API.
@@ -70,24 +117,22 @@ def _create_memory_and_wait(snippet: callable, timeout_message: str, **kwargs) -
     install_jupyter_javascript_triggers()
 
     token = _generate_token()
-    javascript = snippet(token, **kwargs)
+    args_str = ", ".join(json.dumps(p) for p in chain([token], args))
+    js_code = f"window._titanoboa.{js_func}({args_str}).catch(console.trace)"
 
     try:
-        has_google = importlib.util.find_spec("google.colab")
-    except ModuleNotFoundError:
-        has_google = False
-
-    if has_google:
         from google.colab.output import eval_js
 
-        result = eval_js(javascript.data)
-        return _parse_result(json.loads(result))
+        result = eval_js(js_code)
+        return _parse_js_result(json.loads(result))
+    except ImportError:
+        pass  # not in Google Colab, use SharedMemory instead
 
     memory = SharedMemory(name=token, create=True, size=MEMORY_LENGTH)
     logging.info(f"Waiting for {token}")
     try:
         memory.buf[:1] = NUL
-        display(javascript)
+        display(Javascript(js_code))
         return _wait_buffer_set(memory.buf, timeout_message)
     finally:
         memory.unlink()  # get rid of the SharedMemory object after it's been used
@@ -127,24 +172,12 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str):
     )
     task = loop.create_task(future)
     loop.run_until_complete(task)
-    return _parse_result(task.result())
+    return _parse_js_result(task.result())
 
 
-def _parse_result(result: dict) -> dict:
+def _parse_js_result(result: dict) -> dict:
     if "data" in result:
         return result["data"]
 
     # raise the error in the Jupyter cell so that the user can see it
     raise Exception(result["error"])
-
-
-def _load_signer_snippet(token: str) -> Javascript:
-    """Run loadSigner in the browser."""
-    return Javascript(f"window._titanoboa.loadSigner('{token}');")
-
-
-def _sign_transaction_snippet(token: str, tx_data):
-    """Run signTransaction in the browser."""
-    return Javascript(
-        f"window._titanoboa.signTransaction('{token}', {json.dumps(tx_data)});"
-    )

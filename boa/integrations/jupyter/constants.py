@@ -11,3 +11,4 @@ TRANSACTION_TIMEOUT_MESSAGE = (
     "Timeout waiting for user to confirm transaction in the browser wallet plug-in."
 )
 ADDRESS_TIMEOUT_MESSAGE = "Timeout loading browser browser wallet plug-in."
+RPC_TIMEOUT_MESSAGE = "Timeout waiting for response from RPC."
