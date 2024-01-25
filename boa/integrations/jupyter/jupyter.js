@@ -22,7 +22,7 @@
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
         const headers = {['X-XSRFToken']: getCookie('_xsrf')};
-        const init = {method: 'POST', body: stringify(body), headers};
+        const init = {method: 'POST', body, headers};
         const url = `../titanoboa_jupyterlab/callback/${token}`;
         const response = await fetch(url, init);
         return response.text();
@@ -47,13 +47,9 @@
 
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
-        const body = await parsePromise(func(...args));
-        console.log(`${func.name}(${args.join(',')}) = ${body};`);
-        if (colab) {
-            // Colab expects the response to be JSON
-            return JSON.stringify(body);
-        }
-        return await callbackAPI(token, body);
+        const body = stringify(await parsePromise(func(...args)));
+        console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`); // todo: comment out
+        return colab ? body : callbackAPI(token, body);
     };
 
     // expose functions to window, so they can be called from the BrowserSigner

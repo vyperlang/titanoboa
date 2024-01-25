@@ -119,6 +119,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> dict:
     token = _generate_token()
     args_str = ", ".join(json.dumps(p) for p in chain([token], args))
     js_code = f"window._titanoboa.{js_func}({args_str}).catch(console.trace)"
+    logging.warning(f"Calling {js_func} with {args_str}")  # TODO: remove
 
     try:
         from google.colab.output import eval_js
