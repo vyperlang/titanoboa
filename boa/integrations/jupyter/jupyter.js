@@ -15,6 +15,7 @@
     const parsePromise = promise =>
         promise.then(data => ({data})).catch(e => {
             console.log(e.message, e.stack);
+            debugger; // todo: remove
             return { error: e.message };
         });
 
