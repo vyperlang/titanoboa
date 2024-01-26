@@ -56,7 +56,7 @@
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         const body = stringify(await parsePromise(func(...args)));
-        console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`); // todo: comment out
+        console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         return colab ? body : callbackAPI(token, body);
     };
 
