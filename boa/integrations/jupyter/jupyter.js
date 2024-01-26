@@ -18,11 +18,7 @@
     const getCookie = (name) => (document.cookie.match(`\\b${name}=([^;]*)\\b`))?.[1];
 
     /** Converts a success/failed promise into an object with either a data or error field */
-    const parsePromise = promise =>
-        promise.then(data => ({data})).catch(e => {
-            console.log(e.message, e.stack);
-            return {error: e.message};
-        });
+    const parsePromise = promise => promise.then(data => ({data})).catch(error => ({error}));
 
     const colab = window.colab ?? window.google?.colab; // in the parent window or in an iframe
     /** Calls the callback endpoint with the given token and body */
@@ -50,11 +46,10 @@
     const rpc = (provider, method, params) => getEthersProvider().send(method, params);
 
     /** Call multiple RPCs in sequence, eth_call(payloads) does not work well */
-    const multiRpc = (provider, payloads) =>
-        payloads.reduce(async (previousPromise, [method, params]) =>
-            [...await previousPromise, await rpc(provider, method, params)],
-            Promise.resolve([]),
-        );
+    const multiRpc = (provider, payloads) => payloads.reduce(
+        async (previousPromise, [method, params]) => [...await previousPromise, await rpc(provider, method, params)],
+        Promise.resolve([]),
+    );
 
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {

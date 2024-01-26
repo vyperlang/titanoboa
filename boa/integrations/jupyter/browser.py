@@ -8,13 +8,13 @@ from asyncio import get_running_loop, sleep
 from itertools import chain
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
-from typing import Any
+from typing import Any, Awaitable
 
 import nest_asyncio
 from IPython.display import Javascript, display
 
 from ...network import NetworkEnv
-from ...rpc import RPC
+from ...rpc import RPC, RPCError
 from .constants import (
     ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
@@ -92,18 +92,18 @@ class BrowserRpc(RPC):
     def name(self):
         return type(self).__name__
 
-    def fetch(self, method: str, params: Any):
+    def fetch(self, method: str, params: Any) -> Any:
         return _javascript_call(
             "rpc", method, params, timeout_message=RPC_TIMEOUT_MESSAGE
         )
 
-    def fetch_multi(self, payloads: list[tuple[str, Any]]):
+    def fetch_multi(self, payloads: list[tuple[str, Any]]) -> list[Any]:
         return _javascript_call(
             "multiRpc", payloads, timeout_message=RPC_TIMEOUT_MESSAGE
         )
 
 
-def _javascript_call(js_func: str, *args, timeout_message: str) -> dict:
+def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     """
     This function attempts to call a Javascript function in the browser and then
     wait for the result to be sent back to the API.
@@ -119,7 +119,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> dict:
     token = _generate_token()
     args_str = ", ".join(json.dumps(p) for p in chain([token], args))
     js_code = f"window._titanoboa.{js_func}({args_str}).catch(console.trace)"
-    logging.warning(f"Calling {js_func} with {args_str}")  # TODO: remove
+    # logging.warning(f"Calling {js_func} with {args_str}")
 
     try:
         from google.colab.output import eval_js
@@ -144,7 +144,7 @@ def _generate_token():
     return f"{PLUGIN_NAME}_{urandom(CALLBACK_TOKEN_BYTES).hex()}"
 
 
-def _wait_buffer_set(buffer: memoryview, timeout_message: str):
+def _wait_buffer_set(buffer: memoryview, timeout_message: str) -> Any:
     """
     Wait for the SharedMemory object to be filled with data.
     :param buffer: The buffer to wait for.
@@ -152,7 +152,7 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str):
     :return: The contents of the buffer.
     """
 
-    async def _wait_buffer_set(deadline: float) -> Any:
+    async def _wait_buffer_set(deadline: float) -> Awaitable[dict[str, Any]]:
         """
         Wait until the SharedMemory object is not empty.
         :param deadline: The deadline to wait for.
@@ -176,9 +176,12 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str):
     return _parse_js_result(task.result())
 
 
-def _parse_js_result(result: dict) -> dict:
+def _parse_js_result(result: dict) -> Any:
     if "data" in result:
         return result["data"]
 
     # raise the error in the Jupyter cell so that the user can see it
-    raise Exception(result["error"])
+    error = result["error"]
+    raise RPCError(
+        message=error.get("message", error), code=error.get("code", "CALLBACK_ERROR")
+    )
