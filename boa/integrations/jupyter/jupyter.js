@@ -3,12 +3,14 @@
  * BrowserSigner to the frontend.
  */
 (() => {
+    let provider;
     const getEthersProvider = () => {
+        if (provider) return provider;
         const {ethereum} = window;
         if (!ethereum) {
-            throw new Error('No Ethereum browser plugin found');
+            throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
         }
-        return new ethers.BrowserProvider(ethereum);
+        return provider = new ethers.BrowserProvider(ethereum);
     };
 
     /** Stringify data, converting big ints to strings */
@@ -31,29 +33,29 @@
     }
 
     /** Load the signer via ethers user */
-    const loadSigner = async (provider) => {
-        const signer = await provider.getSigner();
+    const loadSigner = async () => {
+        const signer = await getEthersProvider().getSigner();
         return signer.getAddress();
     };
 
     /** Sign a transaction via ethers */
-    async function signTransaction(provider, transaction) {
-        const signer = await provider.getSigner();
+    async function signTransaction(transaction) {
+        const signer = await getEthersProvider().getSigner();
         return signer.sendTransaction(transaction);
     }
 
     /** Call an RPC method via ethers */
-    const rpc = (provider, method, params) => getEthersProvider().send(method, params);
+    const rpc = (method, params) => getEthersProvider().send(method, params);
 
-    /** Call multiple RPCs in sequence, eth_call(payloads) does not work well */
-    const multiRpc = (provider, payloads) => payloads.reduce(
-        async (previousPromise, [method, params]) => [...await previousPromise, await rpc(provider, method, params)],
+    /** Call multiple RPCs in sequence */
+    const multiRpc = (payloads) => payloads.reduce(
+        async (previousPromise, [method, params]) => [...await previousPromise, await rpc(method, params)],
         Promise.resolve([]),
     );
 
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
-        const body = stringify(await parsePromise(func(getEthersProvider(), ...args)));
+        const body = stringify(await parsePromise(func(...args)));
         console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`); // todo: comment out
         return colab ? body : callbackAPI(token, body);
     };
