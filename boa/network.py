@@ -293,11 +293,7 @@ class NetworkEnv(Env):
         sender = self._check_sender(self._get_sender(sender))
 
         receipt, trace = self._send_txn(
-            from_=sender,
-            value=value,
-            gas=gas,
-            data=bytecode,
-            to=local_address,  # local address required for gas estimation
+            from_=sender, value=value, gas=gas, data=bytecode
         )
 
         create_address = Address(receipt["contractAddress"])
