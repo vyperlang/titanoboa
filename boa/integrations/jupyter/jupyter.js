@@ -10,13 +10,18 @@
         }
         return new ethers.BrowserProvider(ethereum);
     };
+
+    /** Stringify data, converting big ints to strings */
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+
+    /** Get the value of a cookie with the given name */
     const getCookie = (name) => (document.cookie.match(`\\b${name}=([^;]*)\\b`))?.[1];
+
+    /** Converts a success/failed promise into an object with either a data or error field */
     const parsePromise = promise =>
         promise.then(data => ({data})).catch(e => {
             console.log(e.message, e.stack);
-            debugger; // todo: remove
-            return { error: e.message };
+            return {error: e.message};
         });
 
     const colab = window.colab ?? window.google?.colab; // in the parent window or in an iframe
@@ -30,25 +35,30 @@
     }
 
     /** Load the signer via ethers user */
-    const loadSigner = async () => {
-        const provider = getEthersProvider();
+    const loadSigner = async (provider) => {
         const signer = await provider.getSigner();
         return signer.getAddress();
     };
 
     /** Sign a transaction via ethers */
-    async function signTransaction(transaction) {
-        const provider = getEthersProvider();
+    async function signTransaction(provider, transaction) {
         const signer = await provider.getSigner();
         return signer.sendTransaction(transaction);
     }
 
-    const rpc = (method, params) => getEthersProvider().send(method, params);
-    const multiRpc = (payloads) => getEthersProvider().send('eth_call', payloads);
+    /** Call an RPC method via ethers */
+    const rpc = (provider, method, params) => getEthersProvider().send(method, params);
+
+    /** Call multiple RPCs in sequence, eth_call(payloads) does not work well */
+    const multiRpc = (provider, payloads) =>
+        payloads.reduce(async (previousPromise, [method, params]) =>
+            [...await previousPromise, await rpc(provider, method, params)],
+            Promise.resolve([]),
+        );
 
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
-        const body = stringify(await parsePromise(func(...args)));
+        const body = stringify(await parsePromise(func(getEthersProvider(), ...args)));
         console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`); // todo: comment out
         return colab ? body : callbackAPI(token, body);
     };
