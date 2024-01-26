@@ -1,6 +1,6 @@
 name: unitary
 
-on: ["push", "pull_request"]
+on: ["push"]
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,6 +55,7 @@ jobs:
       # XXX: are these actually unit tests?
       - name: Run Fork Mode Tests
         run: pytest -n auto tests/integration/fork/
+        if: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
         env:
           MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
 
