@@ -19,10 +19,10 @@ from .constants import (
     ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
     CALLBACK_TOKEN_TIMEOUT,
-    MEMORY_LENGTH,
     NUL,
     PLUGIN_NAME,
     RPC_TIMEOUT_MESSAGE,
+    SHARED_MEMORY_LENGTH,
     TRANSACTION_TIMEOUT_MESSAGE,
 )
 from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
@@ -129,7 +129,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     except ImportError:
         pass  # not in Google Colab, use SharedMemory instead
 
-    memory = SharedMemory(name=token, create=True, size=MEMORY_LENGTH)
+    memory = SharedMemory(name=token, create=True, size=SHARED_MEMORY_LENGTH)
     logging.info(f"Waiting for {token}")
     try:
         memory.buf[:1] = NUL

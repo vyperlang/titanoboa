@@ -10,7 +10,7 @@ from jupyter_server.serverapp import ServerApp
 from jupyter_server.utils import url_path_join
 from tornado.web import authenticated
 
-from boa.integrations.jupyter.constants import PLUGIN_NAME, TOKEN_REGEX
+from boa.integrations.jupyter.constants import NUL, PLUGIN_NAME, TOKEN_REGEX
 
 
 class CallbackHandler(APIHandler):
@@ -37,11 +37,13 @@ class CallbackHandler(APIHandler):
             return self.finish({"error": error})
 
         try:
-            body += b"\0"  # mark the end of the buffer
-            memory.buf[: len(body)] = body
+            memory.buf[: len(body) + 1] = body + NUL
         except ValueError:
             self.set_status(HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-            error = f"Request body has {len(body)} bytes, but only {memory.size} are allowed"
+            max_len = memory.size - len(NUL)
+            error = (
+                f"Request body has {len(body)} bytes, but only {max_len} are allowed"
+            )
             return self.finish({"error": error})
         finally:
             memory.close()
