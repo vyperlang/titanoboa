@@ -307,7 +307,7 @@ class NetworkEnv(Env):
                 "of sync with the network or a bug in titanoboa!",
                 stacklevel=2,
             )
-            # return what the node returned anyways.
+            # return what the node returned anyway
             deployed_bytecode = trace.returndata_bytes
 
         if local_address != create_address:
