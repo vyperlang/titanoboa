@@ -1,5 +1,6 @@
 # an Environment which interacts with a real (prod or test) chain
 import contextlib
+import logging
 import time
 import warnings
 from dataclasses import dataclass
@@ -404,6 +405,9 @@ class NetworkEnv(Env):
             tx_data["chainId"] = chain_id
 
         tx_data["nonce"] = self._get_nonce(from_)
+        logging.warning(
+            f"Deploying remote to with sender {from_} nonce {tx_data['nonce']}"
+        )
 
         if gas is None:
             try:

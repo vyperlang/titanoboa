@@ -615,6 +615,9 @@ class Env:
             nonce = self.vm.state.get_nonce(sender)
             self.vm.state.increment_nonce(sender)
             target_address = Address(generate_contract_address(sender, nonce))
+            logging.warning(
+                f"Deploying local to {target_address} with sender {sender} nonce {nonce}"
+            )
 
         msg = Message(
             to=constants.CREATE_CONTRACT_ADDRESS,  # i.e., b""
