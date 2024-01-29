@@ -734,7 +734,10 @@ class VyperContract(_BaseContract):
 
     def handle_error(self, computation):
         try:
-            raise BoaError(self.stack_trace(computation))
+            trace = (
+                self.stack_trace(computation) if BoaError.STACK_TRACE else StackTrace()
+            )
+            raise BoaError(trace)
         except BoaError as b:
             # modify the error so the traceback starts in userland.
             # inspired by answers in https://stackoverflow.com/q/1603940/
@@ -1222,6 +1225,7 @@ class _InjectVyperFunction(VyperFunction):
 
 @dataclass
 class BoaError(Exception):
+    STACK_TRACE = True  # whether to generate a stack trace
     stack_trace: StackTrace
 
     # perf TODO: don't materialize the stack trace until we need it,

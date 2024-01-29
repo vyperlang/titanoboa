@@ -1,7 +1,6 @@
 import contextlib
 import sys
-
-import eth.exceptions
+from unittest.mock import patch
 
 from boa.debugger import BoaDebug
 from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
@@ -58,12 +57,14 @@ patch_opcode(0xA6, _breakpoint)
 
 @contextlib.contextmanager
 def reverts(*args, **kwargs):
-    try:
-        yield
-        raise ValueError("Did not revert")
-    except BoaError as b:
-        if args or kwargs:
-            check_boa_error_matches(b, *args, **kwargs)
+    needs_trace = bool(args or kwargs)
+    with patch("boa.vyper.contract.BoaError.STACK_TRACE", needs_trace):
+        try:
+            yield
+            raise ValueError("Did not revert")
+        except BoaError as b:
+            if needs_trace:
+                check_boa_error_matches(b, *args, **kwargs)
 
 
 def eval(code):
