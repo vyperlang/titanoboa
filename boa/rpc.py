@@ -22,7 +22,7 @@ def fixup_dict(kv):
     return {k: to_hex(v) for (k, v) in trim_dict(kv).items()}
 
 
-def to_hex(s: int) -> str:
+def to_hex(s: int | bytes | str) -> str:
     if isinstance(s, int):
         return hex(s)
     if isinstance(s, bytes):

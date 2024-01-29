@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from requests import HTTPError
 
@@ -17,7 +17,7 @@ from eth.vm.interrupt import MissingBytecode
 from eth.vm.message import Message
 from eth_utils import int_to_big_endian, to_canonical_address, to_checksum_address
 
-from boa.rpc import EthereumRPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
+from boa.rpc import RPC, EthereumRPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
 
 TIMEOUT = 60  # default timeout for http requests in seconds
@@ -29,11 +29,10 @@ DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork.db"
 _EMPTY = b""  # empty rlp stuff
 
 
-class CachingRPC(EthereumRPC):
-    def __init__(self, url: str, cache_file: str = DEFAULT_CACHE_DIR):
-        super().__init__(url)
-
+class CachingRPC(RPC):
+    def __init__(self, rpc: RPC, cache_file: str = DEFAULT_CACHE_DIR):
         # (default to memory db plyvel not found or cache_file is None)
+        self._rpc = rpc
         self._init_mem_db()
         if cache_file is not None:
             try:
@@ -66,7 +65,7 @@ class CachingRPC(EthereumRPC):
         if (url, cache_file) in cls._loaded:
             return cls._loaded[(url, cache_file)]
 
-        ret = cls(url, cache_file)
+        ret = cls(EthereumRPC(url), cache_file)
         cls._loaded[(url, cache_file)] = ret
         return ret
 
@@ -74,32 +73,29 @@ class CachingRPC(EthereumRPC):
     def _mk_key(self, method: str, params: Any) -> Any:
         return json.dumps({"method": method, "params": params}).encode("utf-8")
 
-    # note: overrides super().fetch!
     def fetch(self, method, params):
         # dispatch into fetch_multi for caching behavior.
         (res,) = self.fetch_multi([(method, params)])
         return res
 
     # caching fetch of multiple payloads
-    # note: overrides super().fetch_multi!
     def fetch_multi(self, payload):
         ret = {}
-        ks = []
+        keys = []
         batch = []
-        for i, (method, params) in enumerate(payload):
-            k = self._mk_key(method, params)
+        for payload_index, (method, params) in enumerate(payload):
+            key = self._mk_key(method, params)
             try:
-                ret[i] = json.loads(self._db[k])
+                ret[payload_index] = json.loads(self._db[key])
             except KeyError:
-                ks.append(k)
-                batch.append((i, method, params))
+                keys.append((key, payload_index))
+                batch.append((method, params))
 
         if len(batch) > 0:
-            res = self._raw_fetch_multi(batch)
-            for i, s in res.items():
-                k = ks[i]
-                ret[i] = s
-                self._db[k] = json.dumps(s).encode("utf-8")
+            for batch_index, result in enumerate(self._rpc.fetch_multi(batch)):
+                key, payload_index = keys[batch_index]
+                ret[payload_index] = result
+                self._db[key] = json.dumps(result).encode("utf-8")
 
         return [ret[i] for i in range(len(ret))]
 
@@ -107,22 +103,17 @@ class CachingRPC(EthereumRPC):
 # AccountDB which dispatches to an RPC when we don't have the
 # data locally
 class AccountDBFork(AccountDB):
-    _rpc_init_kwargs: Dict[str, Any] = {}
+    _rpc: Optional[RPC] = None
+    _block_identifier: str = "safe"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        rpc_kwargs = self._rpc_init_kwargs.copy()
-
-        block_identifier = rpc_kwargs.pop("block_identifier", "safe")
-        self._rpc = CachingRPC.get_rpc(**rpc_kwargs)
-
-        if block_identifier not in ("safe", "latest", "finalized"):
-            block_identifier = to_hex(block_identifier)
+        self._rpc = type(self)._rpc  # copy from class
 
         # do not cache - use raw_fetch
-        self._block_info = self._rpc._raw_fetch_single(
-            "eth_getBlockByNumber", [block_identifier, False]
+        self._block_info = self._rpc.fetch(
+            "eth_getBlockByNumber", [self._block_identifier, False]
         )
         self._block_number = to_int(self._block_info["number"])
 
@@ -188,9 +179,7 @@ class AccountDBFork(AccountDB):
         # arguments with this specific block before
         try:
             tracer = {"tracer": "prestateTracer"}
-            res = self._rpc._raw_fetch_single(
-                "debug_traceCall", [args, self._block_id, tracer]
-            )
+            res = self._rpc.fetch("debug_traceCall", [args, self._block_id, tracer])
         except (RPCError, HTTPError):
             return
 

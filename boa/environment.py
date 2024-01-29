@@ -22,11 +22,12 @@ from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
+from boa.rpc import to_hex
 from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
-from boa.vm.fork import AccountDBFork
+from boa.vm.fork import AccountDBFork, CachingRPC
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 
@@ -468,9 +469,19 @@ class Env:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork(self, url, reset_traces=True, **kwargs):
-        kwargs["url"] = url
-        AccountDBFork._rpc_init_kwargs = kwargs
+    def fork(
+        self, url=None, rpc=None, reset_traces=True, block_identifier="safe", **kwargs
+    ):
+        if bool(rpc) == bool(url):
+            raise ValueError("One of `rpc` or `url` should be set")
+
+        AccountDBFork._rpc = CachingRPC(rpc) if rpc else CachingRPC.get_rpc(url)
+        AccountDBFork._block_identifier = (
+            block_identifier
+            if block_identifier in ("safe", "latest", "finalized")
+            else to_hex(block_identifier)
+        )
+
         self._fork_mode = True
         self.vm.__class__._state_class.account_db_class = AccountDBFork
         self._init_vm(reset_traces=reset_traces)

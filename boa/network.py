@@ -381,7 +381,7 @@ class NetworkEnv(Env):
         # use "latest" to make sure we are forking with up-to-date state
         # but use reset_traces=False to help with storage dumps
         super().fork(
-            self._rpc._rpc_url,
+            rpc=self._rpc,
             reset_traces=False,
             block_identifier=block_identifier,
             cache_file=None,

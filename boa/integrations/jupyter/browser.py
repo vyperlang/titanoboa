@@ -76,12 +76,6 @@ class BrowserEnv(NetworkEnv):
         super().__init__(rpc=BrowserRpc())
         self.add_account(account or BrowserSigner())
 
-    def _reset_fork(self, block_identifier="latest"):
-        pass  # called by the super constructor, but fork is unsupported
-
-    def fork(self, url, reset_traces=True, **kwargs):
-        raise NotImplementedError("Fork is not supported in the browser")
-
 
 class BrowserRpc(RPC):
     """
