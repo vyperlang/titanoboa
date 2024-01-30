@@ -734,9 +734,7 @@ class VyperContract(_BaseContract):
 
     def handle_error(self, computation):
         try:
-            trace = (
-                self.stack_trace(computation) if BoaError.STACK_TRACE else StackTrace()
-            )
+            trace = self.stack_trace(computation)
             raise BoaError(trace)
         except BoaError as b:
             # modify the error so the traceback starts in userland.
@@ -744,6 +742,8 @@ class VyperContract(_BaseContract):
             raise strip_internal_frames(b) from None
 
     def stack_trace(self, computation=None):
+        if not BoaError.STACK_TRACE:
+            return StackTrace()
         computation = computation or self._computation
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation)

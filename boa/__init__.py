@@ -58,13 +58,16 @@ patch_opcode(0xA6, _breakpoint)
 @contextlib.contextmanager
 def reverts(*args, **kwargs):
     needs_trace = bool(args or kwargs)
-    with patch("boa.vyper.contract.BoaError.STACK_TRACE", needs_trace):
-        try:
-            yield
-            raise ValueError("Did not revert")
-        except BoaError as b:
-            if needs_trace:
-                check_boa_error_matches(b, *args, **kwargs)
+    previous_trace = BoaError.STACK_TRACE
+    BoaError.STACK_TRACE = needs_trace
+    try:
+        yield
+        raise ValueError("Did not revert")
+    except BoaError as b:
+        if needs_trace:
+            check_boa_error_matches(b, *args, **kwargs)
+    finally:
+        BoaError.STACK_TRACE = previous_trace
 
 
 def eval(code):
