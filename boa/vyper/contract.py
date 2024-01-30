@@ -734,8 +734,7 @@ class VyperContract(_BaseContract):
 
     def handle_error(self, computation):
         try:
-            trace = self.stack_trace(computation)
-            raise BoaError(trace)
+            raise BoaError(self.stack_trace(computation))
         except BoaError as b:
             # modify the error so the traceback starts in userland.
             # inspired by answers in https://stackoverflow.com/q/1603940/
