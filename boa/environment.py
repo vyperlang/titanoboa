@@ -344,7 +344,7 @@ class titanoboa_computation:
         contract = cls.env._lookup_contract_fast(addr) if addr else None
 
         def finalize(c):
-            if c.is_error:
+            if c.is_error and cls.env._generate_stack_traces:
                 # After the computation is applied with an error the state is
                 # reverted. Before the revert, save the contract repr for the
                 # error message
