@@ -19,7 +19,7 @@ def crvusd_contract(api_key):
 
 
 @pytest.fixture(scope="module")
-def proxy_contract():
+def proxy_contract(api_key):
     contract = boa.from_etherscan(voting_agent, name="VotingAgent", api_key=api_key)
     
     return contract
