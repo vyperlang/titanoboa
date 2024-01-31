@@ -50,6 +50,7 @@ class _Struct(dict):
     def __repr__(self):
         return f"{self.struct_name}({super().__repr__()})"
 
+
 def _get_length(mem, bound):
     ret = int.from_bytes(mem[:32], "big")
     if ret > bound:
@@ -58,6 +59,7 @@ def _get_length(mem, bound):
         # this type. the data will still be garbage, but we avoid OOM.
         return bound
     return ret
+
 
 def decode_vyper_object(mem, typ):
     if isinstance(typ, BytesM_T):

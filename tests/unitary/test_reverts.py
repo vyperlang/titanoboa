@@ -144,3 +144,22 @@ def foo(x: uint8):
     assert frame.frame_detail["uninitialized"] != empty
     # check the frame is always bounded properly.
     assert len(frame.frame_detail["uninitialized"]) == 8
+
+
+def test_revert_check_storage():
+    c = boa.loads(
+        """
+counter: public(uint256)
+@external
+def add():
+    self.counter += 1
+    assert self.counter == 0
+    """
+    )
+    try:
+        assert c.add()
+    except BoaError as e:
+        assert "<storage: counter=1>" in str(e)
+
+    assert 0 == c._storage.counter.get()
+    assert 0 == c.counter()
