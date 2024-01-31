@@ -10,15 +10,11 @@ from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
 from boa.environment import Address
 
 
-@pytest.fixture()
-def load_via_abi():
-    def _load(code):
-        vyper_contract = boa.loads(code)
-        abi = build_abi_output(vyper_contract.compiler_data)
-        abi_contract = ABIContractFactory.from_abi_dict(abi).at(vyper_contract.address)
-        return abi_contract, vyper_contract
-
-    return _load
+def load_via_abi(code):
+    vyper_contract = boa.loads(code)
+    abi = build_abi_output(vyper_contract.compiler_data)
+    abi_contract = ABIContractFactory.from_abi_dict(abi).at(vyper_contract.address)
+    return abi_contract, vyper_contract
 
 
 @pytest.fixture()
@@ -80,7 +76,7 @@ def test_solidity_bad_overloading_given_type(load_solidity_from_yaml):
     assert "Could not find matching f function for given arguments." == error
 
 
-def test_address(load_via_abi):
+def test_address():
     code = """
 @external
 def test(_a: address) -> address:
@@ -93,7 +89,7 @@ def test(_a: address) -> address:
     assert isinstance(result, Address)
 
 
-def test_dynarray(load_via_abi):
+def test_dynarray():
     code = """
 @external
 @view
@@ -110,7 +106,7 @@ def test(_a: DynArray[uint256, 100]) -> (DynArray[address, 2], uint256):
     assert deployer_contract.test(given) == expected
 
 
-def test_overloading(load_via_abi):
+def test_overloading():
     code = """
 @external
 def test(a: uint128 = 0, b: uint128 = 0) -> uint128:
@@ -142,7 +138,7 @@ def test_bad_address():
         ABIContractFactory.from_abi_dict([]).at(boa.env.eoa)
 
 
-def test_abi_reverts(load_via_abi):
+def test_abi_reverts():
     code = """
 @external
 def test(n: uint256) -> uint256:
@@ -169,7 +165,7 @@ def test_abi_not_deployed():
     assert "Cannot call ABI c.test() -> [] without deploying contract." == error
 
 
-def test_method_not_in_abi(load_via_abi):
+def test_method_not_in_abi():
     code = """
 @external
 def test(n: uint256) -> uint256:
