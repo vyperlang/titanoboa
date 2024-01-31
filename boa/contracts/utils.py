@@ -6,7 +6,7 @@ from boa.environment import Address
 def encode_addresses(values: list) -> list:
     """
     Converts any object with an 'address' field into the address itself.
-    This is to allow `Address` objects to be used.
+    This is to allow contract objects to be used where addresses are expected
     :param values: A list of values
     :return: The same list of values, with addresses converted.
     """
