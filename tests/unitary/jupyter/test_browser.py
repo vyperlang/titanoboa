@@ -162,6 +162,34 @@ def test_browser_rpc_error(
     assert str(exc_info.value) == "-32000: Reverted"
 
 
+def test_browser_rpc_server_error(
+    token, browser, display_mock, mock_callback, mock_inject_javascript, account
+):
+    env = browser.BrowserEnv(account)
+
+    original_error = {
+        "message": "server error",
+        "code": -41002,
+        "data": "net/http: timeout awaiting response headers",
+    }
+    error = {
+        "code": -32603,
+        "data": {"originalError": original_error},
+        "message": "server error",
+    }
+    outer_error = {
+        "code": "UNKNOWN_ERROR",
+        "error": error,
+        "payload": {},
+        "shortMessage": "could not coalesce error",
+    }
+    rpc_message = {"error": outer_error}
+    mock_callback(rpc_message)
+    with pytest.raises(browser.RPCError) as exc_info:
+        env.get_gas_price()
+    assert str(exc_info.value) == "-32603: server error"
+
+
 def test_browser_js_error(
     token, browser, display_mock, mock_callback, mock_inject_javascript, account
 ):

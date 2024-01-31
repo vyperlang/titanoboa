@@ -176,7 +176,7 @@ def _parse_js_result(result: dict) -> Any:
 
     # raise the error in the Jupyter cell so that the user can see it
     error = result["error"]
-    error = error.get("info", {}).get("error", error)
+    error = error.get("info", error).get("error", error)
     raise RPCError(
         message=error.get("message", error), code=error.get("code", "CALLBACK_ERROR")
     )
