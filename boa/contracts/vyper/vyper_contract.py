@@ -33,8 +33,11 @@ from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
 from boa import BoaError
-from boa.contracts.base_evm_contract import _BaseEVMContract
-from boa.contracts.stack_trace import StackTrace, _handle_child_trace
+from boa.contracts.base_evm_contract import (
+    StackTrace,
+    _BaseEVMContract,
+    _handle_child_trace,
+)
 from boa.contracts.vyper.ast_utils import (
     ast_map_of,
     get_fn_ancestor_from_node,
