@@ -55,6 +55,10 @@ class CachingRPC(RPC):
     def _init_mem_db(self):
         self._db = MemoryDB(lrudict(1024 * 1024))
 
+    @property
+    def name(self):
+        return self._rpc.name
+
     @classmethod
     def get_rpc(cls, url, cache_file=DEFAULT_CACHE_DIR):
         if os.getpid() != cls._pid:

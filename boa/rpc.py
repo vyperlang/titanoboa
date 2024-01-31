@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -55,21 +55,21 @@ class RPCError(Exception):
         return cls(message=data["message"], code=data["code"])
 
 
-class RPC(ABC):
-    """Base interface for RPC implementations"""
+class RPC:
+    """
+    Base interface for RPC implementations.
+    This abstract class does not use ABC for performance reasons.
+    """
 
     @property
-    @abstractmethod
-    def name(self):
-        ...
+    def name(self) -> str:
+        raise NotImplementedError
 
-    @abstractmethod
-    def fetch(self, method, params):
-        ...
+    def fetch(self, method: str, params: Any) -> Any:
+        raise NotImplementedError
 
-    @abstractmethod
-    def fetch_multi(self, payloads):
-        ...
+    def fetch_multi(self, payloads: list[tuple[str, Any]]) -> list[Any]:
+        raise NotImplementedError
 
 
 class EthereumRPC(RPC):
