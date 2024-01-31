@@ -126,11 +126,4 @@ def from_etherscan(
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 
-def from_etherscan_abi(
-    address: Any, name=None, uri="https://api.etherscan.io/api", api_key=None
-):
-    addr = Address(address)
-    return fetch_abi_from_etherscan(addr, uri, api_key)
-
-
-__all__ = ["BoaError"]
+__all__ = []
