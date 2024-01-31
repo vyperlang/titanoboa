@@ -20,7 +20,7 @@ class _BaseEVMContract:
         address: Optional[Address] = None,
     ):
         self.env = env or Env.get_singleton()
-        self._address = address  # this is overridden by subclasses
+        self._address = address  # this can be overridden by subclasses
         self.filename = filename
 
     def stack_trace(self, computation: ComputationAPI):
