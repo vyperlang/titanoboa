@@ -12,8 +12,10 @@ from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.utils import get_exact_type_from_node
 
-from boa.vyper import _METHOD_ID_VAR
-from boa.vyper.ir_executor import executor_from_ir
+from boa.contracts.vyper.ir_executor import executor_from_ir
+
+# id used internally for method id name
+_METHOD_ID_VAR = "_calldata_method_id"
 
 
 @contextlib.contextmanager

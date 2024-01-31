@@ -5,8 +5,8 @@ import vyper.ast as vy_ast
 from vyper.ir import compile_ir
 
 import boa.interpret
+from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
 from boa.environment import Env
-from boa.vyper.ast_utils import get_fn_ancestor_from_node
 
 
 def coverage_init(registry, options):

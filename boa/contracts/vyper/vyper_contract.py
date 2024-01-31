@@ -22,34 +22,46 @@ from vyper.codegen.function_definitions.common import ExternalFuncIR, InternalFu
 from vyper.codegen.global_context import GlobalContext
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
+from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
 from vyper.compiler.settings import OptimizationLevel
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.semantics.types import AddressT, EventT, HashMapT, TupleT
-from vyper.semantics.types.function import ContractFunctionT
+from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
-from boa.environment import Address, Env
-from boa.profiling import LineProfile, cache_gas_used_for_computation
-from boa.util.abi import abi_decode, abi_encode
-from boa.util.exceptions import strip_internal_frames
-from boa.util.lrudict import lrudict
-from boa.vm.gas_meters import ProfilingGasMeter
-from boa.vm.utils import to_bytes, to_int
-from boa.vyper import _METHOD_ID_VAR
-from boa.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
-from boa.vyper.compiler_utils import (
+from boa import BoaError
+from boa.contracts.base_evm_contract import (
+    StackTrace,
+    _BaseEVMContract,
+    _handle_child_trace,
+)
+from boa.contracts.vyper.ast_utils import (
+    ast_map_of,
+    get_fn_ancestor_from_node,
+    reason_at,
+)
+from boa.contracts.vyper.compiler_utils import (
+    _METHOD_ID_VAR,
     anchor_compiler_settings,
     compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
-from boa.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
-from boa.vyper.event import Event, RawEvent
-from boa.vyper.ir_executor import executor_from_ir
+from boa.contracts.vyper.decoder_utils import (
+    ByteAddressableStorage,
+    decode_vyper_object,
+)
+from boa.contracts.vyper.event import Event, RawEvent
+from boa.contracts.vyper.ir_executor import executor_from_ir
+from boa.environment import Address, Env
+from boa.profiling import LineProfile, cache_gas_used_for_computation
+from boa.util.abi import abi_decode, abi_encode
+from boa.util.lrudict import lrudict
+from boa.vm.gas_meters import ProfilingGasMeter
+from boa.vm.utils import to_bytes, to_int
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -105,29 +117,24 @@ class VyperDeployer:
 
 
 # a few lines of shared code between VyperBlueprint and VyperContract
-class _BaseContract:
-    def __init__(self, compiler_data, env=None, filename=None):
+class _BaseVyperContract(_BaseEVMContract):
+    def __init__(
+        self,
+        compiler_data: CompilerData,
+        env: Optional[Env] = None,
+        filename: Optional[str] = None,
+    ):
+        super().__init__(env, filename)
         self.compiler_data = compiler_data
 
         with anchor_compiler_settings(self.compiler_data):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
-        if env is None:
-            env = Env.get_singleton()
-
-        self.env = env
-
-        self.filename = filename
-
-    @property
-    def address(self):
-        return self._address
-
 
 # create a blueprint for use with `create_from_blueprint`.
 # uses a ERC5202 preamble, when calling `create_from_blueprint` will
 # need to use `code_offset=3`
-class VyperBlueprint(_BaseContract):
+class VyperBlueprint(_BaseVyperContract):
     def __init__(
         self,
         compiler_data,
@@ -251,43 +258,6 @@ class ErrorDetail:
                 msg += f" {self.frame_detail}"
 
         return msg
-
-
-class StackTrace(list):
-    def __str__(self):
-        return "\n\n".join(str(x) for x in self)
-
-    @property
-    def last_frame(self):
-        return self[-1]
-
-
-def trace_for_unknown_contract(computation, env):
-    ret = StackTrace(
-        [f"<Unknown location in unknown contract {computation.msg.code_address.hex()}>"]
-    )
-    return _handle_child_trace(computation, env, ret)
-
-
-def _handle_child_trace(computation, env, return_trace):
-    if len(computation.children) == 0:
-        return return_trace
-    if not computation.children[-1].is_error:
-        return return_trace
-    child = computation.children[-1]
-
-    # TODO: maybe should be:
-    # child_obj = (
-    #   env.lookup_contract(child.msg.code_address)
-    #   or env._code_registry.get(child.msg.code)
-    # )
-    child_obj = env.lookup_contract(child.msg.code_address)
-
-    if child_obj is None:
-        child_trace = trace_for_unknown_contract(child, env)
-    else:
-        child_trace = child_obj.stack_trace(child)
-    return StackTrace(child_trace + return_trace)
 
 
 # "pattern match" a BoaError. tries to match fields of the error
@@ -473,14 +443,14 @@ class ImmutablesModel:
         return repr(self.dump())
 
 
-class VyperContract(_BaseContract):
+class VyperContract(_BaseVyperContract):
     def __init__(
         self,
         compiler_data,
         *args,
         env=None,
         override_address=None,
-        # whether or not to skip constructor
+        # whether to skip constructor
         skip_initcode=False,
         created_from=None,
         filename=None,
@@ -733,14 +703,6 @@ class VyperContract(_BaseContract):
 
         return vyper_object(ret, vyper_typ)
 
-    def handle_error(self, computation):
-        try:
-            raise BoaError(self.stack_trace(computation))
-        except BoaError as b:
-            # modify the error so the traceback starts in userland.
-            # inspired by answers in https://stackoverflow.com/q/1603940/
-            raise strip_internal_frames(b) from None
-
     def stack_trace(self, computation=None):
         if not self.env._generate_stack_traces:
             return StackTrace()
@@ -893,9 +855,7 @@ class VyperContract(_BaseContract):
                 ir_executor=ir_executor,
             )
 
-            ret = self.marshal_to_python(c, typ)
-
-            return ret
+            return self.marshal_to_python(c, typ)
 
     # inject a function into this VyperContract without affecting the
     # contract's source code. useful for testing private functionality
@@ -918,6 +878,7 @@ class VyperContract(_BaseContract):
 
 class VyperFunction:
     def __init__(self, fn_ast, contract):
+        super().__init__()
         self.fn_ast = fn_ast
         self.contract = contract
         self.env = contract.env
@@ -1076,140 +1037,6 @@ class VyperInternalFunction(VyperFunction):
         return source_map
 
 
-# a contract which we only have the ABI for.
-# TODO refactor:
-# right now inherits functionality from VyperContract
-# but would be better to put this in like BaseContract
-# and have both BaseContract => InterfaceContract
-# and separately BaseContract => VyperContract
-class ABIContract(VyperContract):
-    def __init__(self, name, functions, events, address, created_from=None, env=None):
-        if env is None:
-            env = Env.get_singleton()
-        self.env = env
-
-        self._name = name
-        self._events = events
-        self._functions = functions
-
-        for func_t in self._functions:
-            setattr(self, func_t.name, ABIFunction(func_t, self))
-
-        self._address = Address(address)
-        self.created_from = created_from
-
-        self._source_map = {"pc_pos_map": {}}  # override
-
-    @cached_property
-    def method_id_map(self):
-        ret = {}
-        for func_t in self._functions:
-            for abi_sig, method_id_int in func_t.method_ids.items():
-                method_id_bytes = method_id_int.to_bytes(4, "big")
-                assert method_id_bytes not in ret  # vyper guarantees unique method ids
-                ret[method_id_bytes] = abi_sig
-        return ret
-
-    def stack_trace(self, computation=None):
-        computation = computation or self._computation
-        calldata_method_id = bytes(computation.msg.data[:4])
-
-        if calldata_method_id in self.method_id_map:
-            msg = f"  (unknown location in {self}.{self.method_id_map[calldata_method_id]})"
-        else:
-            # Method might not be specified in the ABI
-            msg = f"  (unknown method id {self}.0x{calldata_method_id.hex()})"
-
-        return_trace = StackTrace([msg])
-        return _handle_child_trace(computation, self.env, return_trace)
-
-    @property
-    def deployer(self):
-        return ABIContractFactory(self._name, self._functions, self._events)
-
-    def __repr__(self):
-        ret = f"<{self._name} interface at {self.address}>"
-
-        if self.created_from is not None:
-            ret += f" (created by {self.created_from})"
-
-        return ret
-
-    # OVERRIDE
-    @cached_property
-    def event_for(self):
-        return {e.event_id: e for e in self._events}
-
-
-# name Factory instead of Deployer because it doesn't actually do any
-# contract deployment.
-class ABIContractFactory:
-    def __init__(self, name, functions, events):
-        self._name = name
-        self._functions = functions
-        self._events = events
-
-    @classmethod
-    def from_abi_dict(cls, abi, name=None):
-        if name is None:
-            name = "<anonymous contract>"
-
-        functions = [
-            ContractFunctionT.from_abi(i) for i in abi if i.get("type") == "function"
-        ]
-
-        # warn on functions with same name
-        _tmp = set()
-        for f in functions:
-            if f.name in _tmp:
-                warnings.warn(
-                    f"{name} overloads {f.name}! overloaded methods "
-                    "might not work correctly at this time",
-                    stacklevel=1,
-                )
-            _tmp.add(f.name)
-
-        events = [EventT.from_abi(i) for i in abi if i.get("type") == "event"]
-
-        return cls(name, functions, events)
-
-    def at(self, address) -> ABIContract:
-        address = Address(address)
-
-        ret = ABIContract(self._name, self._functions, self._events, address)
-
-        bytecode = ret.env.vm.state.get_code(address.canonical_address)
-        if bytecode == b"":
-            warnings.warn(
-                "requested {ret} but there is no bytecode at that address!",
-                stacklevel=2,
-            )
-
-        ret.env.register_contract(address, ret)
-
-        return ret
-
-
-class ABIFunction(VyperFunction):
-    def __init__(self, func_t, contract):
-        self.contract = contract
-        self.env = contract.env
-        self._func_t = func_t
-
-    def __repr__(self):
-        return f"{self.contract._name}.{self._func_t.name}"
-
-    # OVERRIDE
-    @property
-    def func_t(self):
-        return self._func_t
-
-    # OVERRIDE
-    @cached_property
-    def _source_map(self):
-        return {"pc_pos_map": {}}
-
-
 class _InjectVyperFunction(VyperFunction):
     def __init__(self, contract, fn_source):
         ast, ir_executor, bytecode, source_map, _ = compile_vyper_function(
@@ -1221,20 +1048,6 @@ class _InjectVyperFunction(VyperFunction):
         self._override_bytecode = bytecode
         self._ir_executor = ir_executor
         self._source_map = source_map
-
-
-@dataclass
-class BoaError(Exception):
-    stack_trace: StackTrace
-
-    # perf TODO: don't materialize the stack trace until we need it,
-    # i.e. BoaError ctor only takes what is necessary to construct the
-    # stack trace but does not require the actual stack trace itself.
-    def __str__(self):
-        frame = self.stack_trace.last_frame
-        err = frame.vm_error
-        err.args = (frame.pretty_vm_reason, *err.args[1:])
-        return f"{err}\n\n{self.stack_trace}"
 
 
 _typ_cache = {}
