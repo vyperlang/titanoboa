@@ -215,9 +215,10 @@ class ErrorDetail:
             )
         frame_detail = contract.debug_frame(computation)
 
+        contract_repr = computation._contract_repr_before_revert or repr(contract)
         return cls(
             vm_error=computation.error,
-            contract_repr=computation.get_contract_repr(contract),
+            contract_repr=contract_repr
             error_detail=error_detail,
             dev_reason=reason,
             frame_detail=frame_detail,
