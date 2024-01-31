@@ -57,8 +57,8 @@ patch_opcode(0xA6, _breakpoint)
 @contextlib.contextmanager
 def reverts(*args, **kwargs):
     needs_trace = bool(args or kwargs)
-    previous_trace = BoaError.STACK_TRACE
-    BoaError.STACK_TRACE = needs_trace
+    previous_trace = env._generate_stack_traces
+    env._generate_stack_traces = needs_trace
     try:
         yield
         raise ValueError("Did not revert")
@@ -66,7 +66,7 @@ def reverts(*args, **kwargs):
         if needs_trace:
             check_boa_error_matches(b, *args, **kwargs)
     finally:
-        BoaError.STACK_TRACE = previous_trace
+        env._generate_stack_traces = previous_trace
 
 
 def eval(code):

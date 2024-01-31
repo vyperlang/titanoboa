@@ -402,6 +402,7 @@ class Env:
     _fast_mode_enabled = False
     _fork_mode = False
     _fork_try_prefetch_state = False
+    _generate_stack_traces = True
 
     def __init__(self):
         self.chain = _make_chain()

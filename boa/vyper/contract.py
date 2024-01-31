@@ -741,7 +741,7 @@ class VyperContract(_BaseContract):
             raise strip_internal_frames(b) from None
 
     def stack_trace(self, computation=None):
-        if not BoaError.STACK_TRACE:
+        if not self.env._generate_stack_traces:
             return StackTrace()
         computation = computation or self._computation
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
@@ -1224,7 +1224,6 @@ class _InjectVyperFunction(VyperFunction):
 
 @dataclass
 class BoaError(Exception):
-    STACK_TRACE = True  # whether to generate a stack trace
     stack_trace: StackTrace
 
     # perf TODO: don't materialize the stack trace until we need it,
