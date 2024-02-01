@@ -45,6 +45,18 @@ def set_env(new_env):
     Env._singleton = new_env
 
 
+def set_browser_env(address=None):
+    from boa.network import NetworkEnv
+
+    set_env(NetworkEnv.browser(address))
+
+
+def set_network_env(url):
+    from boa.network import NetworkEnv
+
+    set_env(NetworkEnv(url))
+
+
 def reset_env():
     set_env(Env())
 

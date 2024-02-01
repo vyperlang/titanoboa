@@ -20,7 +20,12 @@
     const getCookie = (name) => (document.cookie.match(`\\b${name}=([^;]*)\\b`))?.[1];
 
     /** Converts a success/failed promise into an object with either a data or error field */
-    const parsePromise = promise => promise.then(data => ({data})).catch(error => ({error}));
+    const parsePromise = promise => promise.then(data => ({data})).catch(error => ({
+        error: Object.keys(error).length ? error : {
+            message: error.message, // the default error object doesn't have enumerable properties
+            stack: error.stack
+        }
+    }));
 
     const colab = window.colab ?? window.google?.colab; // in the parent window or in an iframe
     /** Calls the callback endpoint with the given token and body */

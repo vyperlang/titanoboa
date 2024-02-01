@@ -13,7 +13,6 @@ from typing import Any, Awaitable
 import nest_asyncio
 from IPython.display import Javascript, display
 
-from ...network import NetworkEnv
 from ...rpc import RPC, RPCError
 from .constants import (
     ADDRESS_TIMEOUT_MESSAGE,
@@ -59,22 +58,6 @@ class BrowserSigner:
             "signTransaction", tx_data, timeout_message=TRANSACTION_TIMEOUT_MESSAGE
         )
         return convert_frontend_dict(sign_data)
-
-
-class BrowserEnv(NetworkEnv):
-    """
-    An Env object which can be swapped in via `boa.set_env()`.
-    It runs non-mutable (view or pure) functions via eth_call,
-    mutable functions and contract creation via eth_sendRawTransaction.
-    """
-
-    def __init__(self, account=None):
-        """
-        :param account: The account to use for signing transactions.
-        By default, it will be requested from the browser via the `BrowserSigner`.
-        """
-        super().__init__(rpc=BrowserRpc())
-        self.add_account(account or BrowserSigner())
 
 
 class BrowserRpc(RPC):

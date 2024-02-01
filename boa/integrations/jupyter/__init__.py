@@ -1,4 +1,4 @@
-from boa.integrations.jupyter.browser import BrowserEnv, BrowserRpc, BrowserSigner
+from boa.integrations.jupyter.browser import BrowserRpc, BrowserSigner
 from boa.integrations.jupyter.constants import PLUGIN_NAME
 from boa.integrations.jupyter.handlers import setup_handlers
 
@@ -18,7 +18,6 @@ _load_jupyter_server_extension = load_jupyter_server_extension
 
 __all__ = [
     BrowserSigner,
-    BrowserEnv,
     BrowserRpc,
     load_jupyter_server_extension,
     _load_jupyter_server_extension,

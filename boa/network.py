@@ -1,6 +1,5 @@
 # an Environment which interacts with a real (prod or test) chain
 import contextlib
-import logging
 import time
 import warnings
 from dataclasses import dataclass
@@ -160,6 +159,14 @@ class NetworkEnv(Env):
 
     def set_eoa(self, eoa: Account) -> None:
         self.add_account(eoa, force_eoa=True)
+
+    @classmethod
+    def browser(cls, address=None):
+        from boa.integrations.jupyter import BrowserRpc, BrowserSigner
+
+        env = cls(rpc=BrowserRpc())
+        env.set_eoa(BrowserSigner(address))
+        return env
 
     # overrides
     def get_gas_price(self) -> int:
@@ -325,9 +332,14 @@ class NetworkEnv(Env):
         timeout = self.tx_settings.poll_timeout
 
         while True:
-            receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
-            if receipt is not None:
-                break
+            try:
+                receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
+                if receipt is not None:
+                    break
+            except RPCError as e:
+                # This error happens in the BrowserSigner while transaction isn't mined
+                if str(e) != "-32603: server error":
+                    raise
             if time.time() + poll_latency > start + timeout:
                 raise ValueError(f"Timed out waiting for ({tx_hash})")
             time.sleep(poll_latency)
@@ -405,9 +417,6 @@ class NetworkEnv(Env):
             tx_data["chainId"] = chain_id
 
         tx_data["nonce"] = self._get_nonce(from_)
-        logging.warning(
-            f"Deploying remote to with sender {from_} nonce {tx_data['nonce']}"
-        )
 
         if gas is None:
             try:

@@ -626,9 +626,6 @@ class Env:
             nonce = self.vm.state.get_nonce(sender)
             self.vm.state.increment_nonce(sender)
             target_address = Address(generate_contract_address(sender, nonce))
-            logging.warning(
-                f"Deploying local to {target_address} with sender {sender} nonce {nonce}"
-            )
 
         msg = Message(
             to=constants.CREATE_CONTRACT_ADDRESS,  # i.e., b""
@@ -764,6 +761,13 @@ class Env:
 
         self.vm.patch.timestamp += seconds
         self.vm.patch.block_number += blocks
+
+    def set_browser(self, address=None):
+        from boa.integrations.jupyter import BrowserRpc, BrowserSigner
+
+        self._rpc = BrowserRpc()
+        self.set_eoa(BrowserSigner(address))
+        return self
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
