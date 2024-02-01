@@ -56,4 +56,18 @@ def test_raise_exception(simple_contract, t):
         simple_contract.raise_exception(t)
 
 
+# Prefetch is disabled currently since anvil doesn't support `prestateTracer`.
+# This test will fail when anvil is fixed so we can re-enable prefetching.
+# See fixture `networked_env`
+def test_debug_traceCall_tracer_ignored(simple_contract):
+    assert simple_contract.totalSupply() == STARTING_SUPPLY
+
+    boa.env._fork_try_prefetch_state = True
+    with pytest.raises(ValueError) as excinfo:
+        boa.loads(code, STARTING_SUPPLY)
+    assert "when sending a str, it must be a hex string. Got: 'failed'" == str(
+        excinfo.value
+    )
+
+
 # XXX: probably want to test deployment revert behavior
