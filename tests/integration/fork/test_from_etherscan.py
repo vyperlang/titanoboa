@@ -1,10 +1,12 @@
 import os
+
 import pytest
 
 import boa
 
 crvusd = "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E"
 voting_agent = "0xE478de485ad2fe566d49342Cbd03E49ed7DB3356"
+
 
 @pytest.fixture(scope="module")
 def api_key():
@@ -14,14 +16,14 @@ def api_key():
 @pytest.fixture(scope="module")
 def crvusd_contract(api_key):
     contract = boa.from_etherscan(crvusd, name="crvUSD", api_key=api_key)
-    
+
     return contract
 
 
 @pytest.fixture(scope="module")
 def proxy_contract(api_key):
     contract = boa.from_etherscan(voting_agent, name="VotingAgent", api_key=api_key)
-    
+
     return contract
 
 
