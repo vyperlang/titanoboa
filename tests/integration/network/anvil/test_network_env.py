@@ -63,11 +63,13 @@ def test_debug_traceCall_tracer_ignored(simple_contract):
     assert simple_contract.totalSupply() == STARTING_SUPPLY
 
     boa.env._fork_try_prefetch_state = True
-    with pytest.raises(ValueError) as excinfo:
-        boa.loads(code, STARTING_SUPPLY)
-    assert "when sending a str, it must be a hex string. Got: 'failed'" == str(
-        excinfo.value
-    )
+    try:
+        with pytest.raises(ValueError) as excinfo:
+            boa.loads(code, STARTING_SUPPLY)
+        expected = "when sending a str, it must be a hex string. Got: 'failed'"
+        assert expected == str(excinfo.value)
+    finally:
+        boa.env._fork_try_prefetch_state = False
 
 
 # XXX: probably want to test deployment revert behavior
