@@ -80,7 +80,7 @@ def anvil_env(free_port):
 # max coverage across VM implementations?
 @pytest.fixture(scope="module", autouse=True)
 def networked_env(accounts, anvil_env):
-    for account in accounts:
-        anvil_env.add_account(account)
     with boa.swap_env(anvil_env):
-        yield anvil_env
+        for account in accounts:
+            boa.env.add_account(account)
+        yield
