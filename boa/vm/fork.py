@@ -17,13 +17,14 @@ from eth.vm.interrupt import MissingBytecode
 from eth.vm.message import Message
 from eth_utils import int_to_big_endian, to_canonical_address, to_checksum_address
 
-from boa.rpc import RPC, EthereumRPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
+from boa.rpc import RPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
 
 TIMEOUT = 60  # default timeout for http requests in seconds
 
 
 DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork.db"
+_PREDEFINED_BLOCKS = {"safe", "latest", "finalized", "pending", "earliest"}
 
 
 _EMPTY = b""  # empty rlp stuff
@@ -59,18 +60,21 @@ class CachingRPC(RPC):
     def name(self):
         return self._rpc.name
 
-    @classmethod
-    def get_rpc(cls, url, cache_file=DEFAULT_CACHE_DIR):
+    def __new__(cls, rpc, cache_file=DEFAULT_CACHE_DIR):
+        if isinstance(rpc, cls):
+            return rpc
+
         if os.getpid() != cls._pid:
             # we are in a fork. reload everything so that fds are not corrupted
             cls._loaded = {}
             cls._pid = os.getpid()
 
-        if (url, cache_file) in cls._loaded:
-            return cls._loaded[(url, cache_file)]
+        if (rpc.name, cache_file) in cls._loaded:
+            return cls._loaded[(rpc.name, cache_file)]
 
-        ret = cls(EthereumRPC(url), cache_file)
-        cls._loaded[(url, cache_file)] = ret
+        ret = super().__new__(cls)
+        ret.__init__(rpc, cache_file)
+        cls._loaded[(rpc.name, cache_file)] = ret
         return ret
 
     # a stupid key for the kv store
@@ -87,18 +91,20 @@ class CachingRPC(RPC):
         ret = {}
         keys = []
         batch = []
-        for payload_index, (method, params) in enumerate(payload):
+        for item_ix, (method, params) in enumerate(payload):
             key = self._mk_key(method, params)
             try:
-                ret[payload_index] = json.loads(self._db[key])
+                ret[item_ix] = json.loads(self._db[key])
             except KeyError:
-                keys.append((key, payload_index))
+                keys.append((key, item_ix))
                 batch.append((method, params))
 
         if len(batch) > 0:
-            for batch_index, rpc_result in enumerate(self._rpc.fetch_multi(batch)):
-                key, payload_index = keys[batch_index]
-                ret[payload_index] = rpc_result
+            # fetch_multi is called only with the missing payloads
+            # map the results back to the original indices
+            for result_ix, rpc_result in enumerate(self._rpc.fetch_multi(batch)):
+                key, item_ix = keys[result_ix]
+                ret[item_ix] = rpc_result
                 self._db[key] = json.dumps(rpc_result).encode("utf-8")
 
         return [ret[i] for i in range(len(ret))]
@@ -108,16 +114,21 @@ class CachingRPC(RPC):
 # data locally
 class AccountDBFork(AccountDB):
     _rpc: Optional[RPC] = None
-    _block_identifier: str = "safe"
+    _rpc_init_kwargs: Dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._rpc = type(self)._rpc  # copy from class
+        rpc_kwargs = self._rpc_init_kwargs.copy()
 
-        # do not cache - use raw_fetch
+        block_identifier = rpc_kwargs.pop("block_identifier", "safe")
+        self._rpc = CachingRPC(self._rpc, **rpc_kwargs)
+
+        if block_identifier not in _PREDEFINED_BLOCKS:
+            block_identifier = to_hex(block_identifier)
+
         self._block_info = self._rpc.fetch(
-            "eth_getBlockByNumber", [self._block_identifier, False]
+            "eth_getBlockByNumber", [block_identifier, False]
         )
         self._block_number = to_int(self._block_info["number"])
 

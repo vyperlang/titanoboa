@@ -22,16 +22,14 @@ from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
 
-from boa.rpc import to_hex
+from boa.rpc import EthereumRPC
 from boa.util.abi import abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.util.lrudict import lrudict
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
-from boa.vm.fork import AccountDBFork, CachingRPC
+from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
-
-_PREDEFINED_BLOCKS = {"safe", "latest", "finalized", "pending", "earliest"}
 
 
 def enable_pyevm_verbose_logging():
@@ -482,8 +480,7 @@ class Env:
             unpatch_pyevm_state_object(self.vm.state)
 
     def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
-        rpc = CachingRPC.get_rpc(url, **kwargs)
-        return self.fork_rpc(rpc, reset_traces, block_identifier)
+        return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
 
     def fork_rpc(self, rpc=None, reset_traces=True, block_identifier="safe", **kwargs):
         """
@@ -494,11 +491,10 @@ class Env:
         :param kwargs: Additional arguments for the RPC
         """
         AccountDBFork._rpc = rpc
-        AccountDBFork._block_identifier = (
-            block_identifier
-            if block_identifier in _PREDEFINED_BLOCKS
-            else to_hex(block_identifier)
-        )
+        AccountDBFork._rpc_init_kwargs = {
+            "block_identifier": block_identifier,
+            **kwargs,
+        }
 
         self._fork_mode = True
         self.vm.__class__._state_class.account_db_class = AccountDBFork

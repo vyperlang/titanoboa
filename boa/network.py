@@ -20,7 +20,6 @@ from boa.rpc import (
     to_int,
     trim_dict,
 )
-from boa.vm.fork import CachingRPC
 
 
 class TraceObject:
@@ -94,7 +93,14 @@ class NetworkEnv(Env):
     def __init__(self, rpc: str | RPC, accounts: dict[str, Account] = None):
         super().__init__()
 
-        self._rpc = EthereumRPC(rpc) if isinstance(rpc, str) else rpc
+        if isinstance(rpc, str):
+            warnings.warn(
+                "NetworkEnv(url) is deprecated. Use boa.set_network_env(url) instead.",
+                stacklevel=2,
+            )
+            rpc = EthereumRPC(rpc)
+
+        self._rpc = rpc
 
         self._reset_fork()
 
@@ -157,12 +163,8 @@ class NetworkEnv(Env):
         self.add_account(eoa, force_eoa=True)
 
     @classmethod
-    def browser(cls, address=None):
-        from boa.integrations.jupyter import BrowserRPC, BrowserSigner
-
-        env = cls(rpc=CachingRPC(BrowserRPC()))
-        env.set_eoa(BrowserSigner(address))
-        return env
+    def from_url(cls, url: str) -> "NetworkEnv":
+        return cls(EthereumRPC(url))
 
     # overrides
     def get_gas_price(self) -> int:
@@ -394,7 +396,7 @@ class NetworkEnv(Env):
             block_identifier=block_identifier,
             cache_file=None,
         )
-        self._rpc._init_mem_db()
+        self.vm.state._account_db._rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = fixup_dict(

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from eth_account import Account
 
-from boa.network import NetworkEnv
+import boa
 
 
 @pytest.fixture()
@@ -32,6 +32,12 @@ def mock_inject_javascript():
         "boa.integrations.jupyter.browser.install_jupyter_javascript_triggers"
     ) as inject_mock:
         yield inject_mock
+
+
+@pytest.fixture()
+def env(browser, account, mock_fork):
+    boa.set_browser_env(account)
+    return boa.env
 
 
 def find_response(mock_calls, func_to_body_dict):
@@ -101,9 +107,13 @@ def mock_callback(mocked_token, browser, display_mock):
 
 
 @pytest.fixture()
-def mock_get_block_by_number(mock_callback):
+def mock_fork(mock_callback):
+    mock_callback("evm_snapshot", "0x123")
+    mock_callback("evm_revert", "0x123")
     data = {"number": "0x123", "timestamp": "0x65bbb460"}
     mock_callback("eth_getBlockByNumber", data)
+    yield
+    boa.reset_env()
 
 
 @pytest.fixture()
@@ -161,18 +171,18 @@ def test_browser_signer_colab(
     display_mock.assert_not_called()
 
 
-def test_browser(
+def test_set_browser_env(
     browser,
     display_mock,
     mock_inject_javascript,
     account,
     mock_callback,
-    mock_get_block_by_number,
+    mock_fork,
+    env,
 ):
-    env = NetworkEnv.browser(account)
     assert env.eoa == account
-    display_mock.assert_called_once()
-    mock_inject_javascript.assert_called_once()
+    assert display_mock.call_count == 4
+    assert mock_inject_javascript.call_count == 4
 
 
 def test_browser_loads_signer(
@@ -182,12 +192,14 @@ def test_browser_loads_signer(
     mock_callback,
     mock_inject_javascript,
     account,
-    mock_get_block_by_number,
+    mock_fork,
 ):
     mock_callback("loadSigner", account.address)
-    env = NetworkEnv.browser()
-    assert env.eoa == account.address
-    assert type(env._accounts[env.eoa]).__name__ == browser.BrowserSigner.__name__
+    boa.set_browser_env()
+    assert boa.env.eoa == account.address
+    assert (
+        type(boa.env._accounts[boa.env.eoa]).__name__ == browser.BrowserSigner.__name__
+    )
     mock_inject_javascript.assert_called()
 
 
@@ -198,16 +210,15 @@ def test_browser_rpc(
     mock_callback,
     mock_inject_javascript,
     account,
-    mock_get_block_by_number,
+    mock_fork,
+    env,
 ):
-    env = NetworkEnv.browser(account)
-
     mock_callback("eth_gasPrice", "0x123")
     assert env.get_gas_price() == 291
 
-    assert display_mock.call_count == 3
+    assert display_mock.call_count == 6
     (js,), _ = display_mock.call_args
-    assert f'multiRpc("{token}", [["eth_gasPrice", []]])' in js.data
+    assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
     mock_inject_javascript.assert_called()
 
 
@@ -218,10 +229,9 @@ def test_browser_rpc_error(
     mock_callback,
     mock_inject_javascript,
     account,
-    mock_get_block_by_number,
+    mock_fork,
+    env,
 ):
-    env = NetworkEnv.browser(account)
-
     rpc_error = {"code": -32000, "message": "Reverted"}
     mock_callback(
         "eth_gasPrice", error={"message": "error", "info": {"error": rpc_error}}
@@ -238,10 +248,9 @@ def test_browser_rpc_server_error(
     mock_callback,
     mock_inject_javascript,
     account,
-    mock_get_block_by_number,
+    mock_fork,
+    env,
 ):
-    env = NetworkEnv.browser(account)
-
     error = {
         "code": "UNKNOWN_ERROR",
         "error": {"code": -32603, "message": "server error"},
@@ -253,7 +262,13 @@ def test_browser_rpc_server_error(
 
 
 def test_browser_js_error(
-    token, browser, display_mock, mock_callback, mock_inject_javascript, account
+    token,
+    browser,
+    display_mock,
+    mock_callback,
+    mock_inject_javascript,
+    account,
+    mock_fork,
 ):
     mock_callback("loadSigner", error={"message": "custom message", "stack": ""})
     with pytest.raises(browser.RPCError) as exc_info:

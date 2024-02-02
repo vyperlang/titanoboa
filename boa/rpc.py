@@ -112,6 +112,7 @@ class EthereumRPC(RPC):
 
     # raw fetch - dispatch the args via http request
     # TODO: maybe use async for all of this
+    # TODO: This method may be merged with `fetch_multi` in the future
     def _raw_fetch_multi(self, payloads):
         req = []
         # print(payloads)
