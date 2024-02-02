@@ -96,10 +96,10 @@ class CachingRPC(RPC):
                 batch.append((method, params))
 
         if len(batch) > 0:
-            for batch_index, result in enumerate(self._rpc.fetch_multi(batch)):
+            for batch_index, rpc_result in enumerate(self._rpc.fetch_multi(batch)):
                 key, payload_index = keys[batch_index]
-                ret[payload_index] = result
-                self._db[key] = json.dumps(result).encode("utf-8")
+                ret[payload_index] = rpc_result
+                self._db[key] = json.dumps(rpc_result).encode("utf-8")
 
         return [ret[i] for i in range(len(ret))]
 

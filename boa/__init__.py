@@ -14,6 +14,7 @@ from boa.interpret import (
     loads_abi,
     loads_partial,
 )
+from boa.network import NetworkEnv
 from boa.precompile import precompile
 from boa.test.strategies import fuzz
 
@@ -44,14 +45,12 @@ def set_env(new_env):
 
 
 def set_browser_env(address=None):
-    from boa.network import NetworkEnv
-
+    """Set the environment to use the browser's network in Jupyter/Colab"""
     set_env(NetworkEnv.browser(address))
 
 
 def set_network_env(url):
-    from boa.network import NetworkEnv
-
+    """Set the environment to use a custom network URL"""
     set_env(NetworkEnv(url))
 
 

@@ -168,11 +168,6 @@ class NetworkEnv(Env):
         env.set_eoa(BrowserSigner(address))
         return env
 
-    def fork(self, url=None, rpc=None, *args, **kwargs):
-        if url or rpc:
-            return super().fork(url=url, rpc=rpc, *args, **kwargs)
-        return super().fork(rpc=self._rpc, *args, **kwargs)
-
     # overrides
     def get_gas_price(self) -> int:
         if self._gas_price is not None:
@@ -393,6 +388,12 @@ class NetworkEnv(Env):
 
     def _get_nonce(self, addr):
         return self._rpc.fetch("eth_getTransactionCount", [addr, "latest"])
+
+    def fork(self, url=None, rpc=None, *args, **kwargs):
+        """Override of the fork method to use the same rpc object by default"""
+        if url or rpc:
+            return super().fork(url=url, rpc=rpc, *args, **kwargs)
+        return super().fork(rpc=self._rpc, *args, **kwargs)
 
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state

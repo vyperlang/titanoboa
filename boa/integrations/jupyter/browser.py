@@ -8,7 +8,7 @@ from asyncio import get_running_loop, sleep
 from itertools import chain
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
-from typing import Any, Awaitable
+from typing import Any, Awaitable, Callable, Optional
 
 import nest_asyncio
 from IPython.display import Javascript, display
@@ -25,6 +25,13 @@ from .constants import (
     TRANSACTION_TIMEOUT_MESSAGE,
 )
 from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
+
+try:
+    from google.colab.output import eval_js as colab_eval_js
+except ImportError:
+    colab_eval_js: Optional[
+        Callable[[str], str]
+    ] = None  # not in Google Colab, use SharedMemory instead
 
 nest_asyncio.apply()
 
@@ -98,13 +105,9 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     js_code = f"window._titanoboa.{js_func}({args_str}).catch(console.trace)"
     # logging.warning(f"Calling {js_func} with {args_str}")
 
-    try:
-        from google.colab.output import eval_js
-
-        result = eval_js(js_code)
+    if colab_eval_js:
+        result = colab_eval_js(js_code)
         return _parse_js_result(json.loads(result))
-    except ImportError:
-        pass  # not in Google Colab, use SharedMemory instead
 
     memory = SharedMemory(name=token, create=True, size=SHARED_MEMORY_LENGTH)
     logging.info(f"Waiting for {token}")

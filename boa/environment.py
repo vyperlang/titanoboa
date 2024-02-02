@@ -483,10 +483,20 @@ class Env:
     def fork(
         self, url=None, rpc=None, reset_traces=True, block_identifier="safe", **kwargs
     ):
+        """
+        Fork the environment to a local chain.
+        :param url: URL of the chain to fork from
+        :param rpc: RPC to fork from
+        :param reset_traces: Reset the traces
+        :param block_identifier: Block identifier to fork from
+        :param kwargs: Additional arguments for the RPC
+        """
         if bool(rpc) == bool(url):
             raise ValueError("One of `rpc` or `url` should be set")
 
-        AccountDBFork._rpc = CachingRPC(rpc) if rpc else CachingRPC.get_rpc(url)
+        AccountDBFork._rpc = (
+            CachingRPC(rpc, **kwargs) if rpc else CachingRPC.get_rpc(url, **kwargs)
+        )
         AccountDBFork._block_identifier = (
             block_identifier
             if block_identifier in self._predefined_blocks
@@ -772,13 +782,6 @@ class Env:
 
         self.vm.patch.timestamp += seconds
         self.vm.patch.block_number += blocks
-
-    def set_browser(self, address=None):
-        from boa.integrations.jupyter import BrowserRpc, BrowserSigner
-
-        self._rpc = BrowserRpc()
-        self.set_eoa(BrowserSigner(address))
-        return self
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}

@@ -35,17 +35,27 @@ def mock_inject_javascript():
 
 
 def find_response(mock_calls, func_to_body_dict):
+    """
+    Find the response in the mock calls to the display function.
+    :param mock_calls: The calls to the display function.
+    :param func_to_body_dict: A dictionary that maps function names to their responses.
+        The keys represent either an RPC function or a JS function.
+    :return: The response to the last call to the display function.
+    """
     (javascript,) = [call for call in mock_calls if call.args][-1].args
     js_func, js_args = re.match(
         r"window._titanoboa.([a-zA-Z0-9_]+)\(([^)]*)\)", javascript.data
     ).groups()
     if js_func not in ("rpc", "multiRpc"):
+        # JS function
         return func_to_body_dict[js_func]
 
     first_arg = json.loads(f"[{js_args}]")[1]  # ignore the token
     if js_func == "rpc":
+        # Single RPC call
         return func_to_body_dict[first_arg]
 
+    # Multi RPC call, gather all the responses or error if any of them is an error
     responses = [func_to_body_dict[name] for name, _ in first_arg]
     error = next((r["error"] for r in responses if r.get("error")), None)
     if error:
@@ -68,6 +78,7 @@ def mock_callback(mocked_token, browser, display_mock):
             """
             Mock the asyncio.create_task function to run the future immediately.
             :param fn_name: The name of the function to mock.
+                Either a JS function or an RPC function name.
             :param data: The response to return.
             :param error: The error to return.
             """
