@@ -60,6 +60,7 @@ def test_raise_exception(simple_contract, t):
 # This test will fail when anvil is fixed, so we can re-enable prefetching.
 # See fixture `anvil_env`
 def test_debug_traceCall_tracer_ignored(simple_contract):
+    assert boa.env._fork_try_prefetch_state is False
     assert simple_contract.totalSupply() == STARTING_SUPPLY
 
     boa.env._fork_try_prefetch_state = True
