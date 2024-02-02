@@ -96,7 +96,10 @@ class EthereumRPC(RPC):
         parse_result = urlparse(self._rpc_url)
         return f"{parse_result.scheme}://{parse_result.netloc} (URL partially masked for privacy)"
 
-    def _raw_fetch_single(self, method, params):
+    def fetch(self, method, params):
+        # the obvious thing to do here is dispatch into fetch_multi.
+        # but some providers (alchemy) can't handle batched requests
+        # for certain endpoints (debug_traceTransaction).
         req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
         # print(req)
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
@@ -107,35 +110,18 @@ class EthereumRPC(RPC):
             raise RPCError.from_json(res["error"])
         return res["result"]
 
-    def fetch(self, method, params):
-        # the obvious thing to do here is dispatch into fetch_multi.
-        # but some providers (alchemy) can't handle batched requests
-        # for certain endpoints (debug_traceTransaction).
-        return self._raw_fetch_single(method, params)
-
     def fetch_multi(self, payloads):
-        reqs = [(i, m, p) for i, (m, p) in enumerate(payloads)]
-        res = self._raw_fetch_multi(reqs)
-        return [res[i] for i in range(len(res))]
+        request = [
+            {"jsonrpc": "2.0", "method": method, "params": params, "id": i}
+            for i, (method, params) in enumerate(payloads)
+        ]
+        response = self._session.post(self._rpc_url, json=request, timeout=TIMEOUT)
+        response.raise_for_status()
 
-    # raw fetch - dispatch the args via http request
-    # TODO: maybe use async for all of this
-    # TODO: This method may be merged with `fetch_multi` in the future
-    def _raw_fetch_multi(self, payloads):
-        req = []
-        # print(payloads)
-        for i, method, params in payloads:
-            req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
-        res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
-        res.raise_for_status()
-        res = json.loads(res.text)
+        results = {}  # keep results in a dict to preserve order
+        for item in json.loads(response.text):
+            if "error" in item:
+                raise RPCError.from_json(item["error"])
+            results[item["id"]] = item["result"]
 
-        ret = {}
-        for t in res:
-            if "error" in t:
-                raise RPCError.from_json(t["error"])
-            ret[t["id"]] = t["result"]
-
-        # print(ret)
-
-        return ret
+        return [results[i] for i in range(len(payloads))]
