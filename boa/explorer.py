@@ -2,9 +2,8 @@ import json
 
 import requests
 
-from boa.environment import Address
-
 SESSION = requests.Session()
+
 
 def _fetch_etherscan(uri: str, api_key: str = None, **params) -> dict:
     if api_key is not None:
