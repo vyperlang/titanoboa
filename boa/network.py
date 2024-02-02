@@ -20,6 +20,7 @@ from boa.rpc import (
     to_int,
     trim_dict,
 )
+from boa.vm.fork import CachingRPC
 
 
 class TraceObject:
@@ -90,15 +91,10 @@ class NetworkEnv(Env):
     # always prefetch state in network mode
     _fork_try_prefetch_state = True
 
-    def __init__(
-        self, rpc_url: str = None, accounts: dict[str, Account] = None, rpc: RPC = None
-    ):
+    def __init__(self, rpc: str | RPC, accounts: dict[str, Account] = None):
         super().__init__()
 
-        if bool(rpc) == bool(rpc_url):
-            raise ValueError("rpc_url or rpc must be provided, but not both.")
-
-        self._rpc = rpc or EthereumRPC(rpc_url)
+        self._rpc = EthereumRPC(rpc) if isinstance(rpc, str) else rpc
 
         self._reset_fork()
 
@@ -162,9 +158,9 @@ class NetworkEnv(Env):
 
     @classmethod
     def browser(cls, address=None):
-        from boa.integrations.jupyter import BrowserRpc, BrowserSigner
+        from boa.integrations.jupyter import BrowserRPC, BrowserSigner
 
-        env = cls(rpc=BrowserRpc())
+        env = cls(rpc=CachingRPC(BrowserRPC()))
         env.set_eoa(BrowserSigner(address))
         return env
 
@@ -338,7 +334,7 @@ class NetworkEnv(Env):
                     break
             except RPCError as e:
                 # This error happens in the BrowserSigner while transaction isn't mined
-                if str(e) != "-32603: server error":
+                if e.code == -32603:  # server error
                     raise
             if time.time() + poll_latency > start + timeout:
                 raise ValueError(f"Timed out waiting for ({tx_hash})")
@@ -389,19 +385,16 @@ class NetworkEnv(Env):
     def _get_nonce(self, addr):
         return self._rpc.fetch("eth_getTransactionCount", [addr, "latest"])
 
-    def fork(self, url=None, rpc=None, *args, **kwargs):
-        """Override of the fork method to use the same rpc object by default"""
-        if url or rpc:
-            return super().fork(url=url, rpc=rpc, *args, **kwargs)
-        return super().fork(rpc=self._rpc, *args, **kwargs)
-
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state
         # but use reset_traces=False to help with storage dumps
-        self.fork(
-            reset_traces=False, block_identifier=block_identifier, cache_file=None
+        self.fork_rpc(
+            self._rpc,
+            reset_traces=False,
+            block_identifier=block_identifier,
+            cache_file=None,
         )
-        self.vm.state._account_db._rpc._init_mem_db()
+        self._rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = fixup_dict(

@@ -3,7 +3,7 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    let provider;
+    let provider; // cache the provider to avoid re-creating it every time
     const getEthersProvider = () => {
         if (provider) return provider;
         const {ethereum} = window;
@@ -55,13 +55,13 @@
     /** Call multiple RPCs in sequence */
     const multiRpc = (payloads) => payloads.reduce(
         async (previousPromise, [method, params]) => [...await previousPromise, await rpc(method, params)],
-        Promise.resolve([]),
+        [],
     );
 
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         const body = stringify(await parsePromise(func(...args)));
-        console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
+        // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         return colab ? body : callbackAPI(token, body);
     };
 

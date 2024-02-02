@@ -31,6 +31,8 @@ from boa.vm.fork import AccountDBFork, CachingRPC
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 
+_PREDEFINED_BLOCKS = {"safe", "latest", "finalized", "pending", "earliest"}
+
 
 def enable_pyevm_verbose_logging():
     logging.basicConfig()
@@ -404,7 +406,6 @@ class Env:
     _fast_mode_enabled = False
     _fork_mode = False
     _fork_try_prefetch_state = False
-    _predefined_blocks = {"safe", "latest", "finalized", "pending", "earliest"}
 
     def __init__(self):
         self.chain = _make_chain()
@@ -480,26 +481,22 @@ class Env:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork(
-        self, url=None, rpc=None, reset_traces=True, block_identifier="safe", **kwargs
-    ):
+    def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
+        rpc = CachingRPC.get_rpc(url, **kwargs)
+        return self.fork_rpc(rpc, reset_traces, block_identifier)
+
+    def fork_rpc(self, rpc=None, reset_traces=True, block_identifier="safe", **kwargs):
         """
         Fork the environment to a local chain.
-        :param url: URL of the chain to fork from
         :param rpc: RPC to fork from
         :param reset_traces: Reset the traces
         :param block_identifier: Block identifier to fork from
         :param kwargs: Additional arguments for the RPC
         """
-        if bool(rpc) == bool(url):
-            raise ValueError("One of `rpc` or `url` should be set")
-
-        AccountDBFork._rpc = (
-            CachingRPC(rpc, **kwargs) if rpc else CachingRPC.get_rpc(url, **kwargs)
-        )
+        AccountDBFork._rpc = rpc
         AccountDBFork._block_identifier = (
             block_identifier
-            if block_identifier in self._predefined_blocks
+            if block_identifier in _PREDEFINED_BLOCKS
             else to_hex(block_identifier)
         )
 

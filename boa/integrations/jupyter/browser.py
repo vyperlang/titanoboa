@@ -8,12 +8,13 @@ from asyncio import get_running_loop, sleep
 from itertools import chain
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable
 
 import nest_asyncio
 from IPython.display import Javascript, display
 
-from ...rpc import RPC, RPCError
+from boa.rpc import RPC, RPCError
+
 from .constants import (
     ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
@@ -29,9 +30,8 @@ from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
 try:
     from google.colab.output import eval_js as colab_eval_js
 except ImportError:
-    colab_eval_js: Optional[
-        Callable[[str], str]
-    ] = None  # not in Google Colab, use SharedMemory instead
+    colab_eval_js = None  # not in Google Colab, use SharedMemory instead
+
 
 nest_asyncio.apply()
 
@@ -67,7 +67,7 @@ class BrowserSigner:
         return convert_frontend_dict(sign_data)
 
 
-class BrowserRpc(RPC):
+class BrowserRPC(RPC):
     """
     An RPC object that sends requests to the browser via Javascript.
     """
@@ -102,7 +102,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
 
     token = _generate_token()
     args_str = ", ".join(json.dumps(p) for p in chain([token], args))
-    js_code = f"window._titanoboa.{js_func}({args_str}).catch(console.trace)"
+    js_code = f"window._titanoboa.{js_func}({args_str})"
     # logging.warning(f"Calling {js_func} with {args_str}")
 
     if colab_eval_js:
@@ -132,12 +132,7 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str) -> Any:
     :return: The contents of the buffer.
     """
 
-    async def _wait_buffer_set(deadline: float) -> Awaitable[dict[str, Any]]:
-        """
-        Wait until the SharedMemory object is not empty.
-        :param deadline: The deadline to wait for.
-        :return: The result of the Javascript snippet sent to the API.
-        """
+    async def _async_wait(deadline: float) -> Awaitable[dict[str, Any]]:
         inner_loop = get_running_loop()
         while buffer.tobytes().startswith(NUL):
             if inner_loop.time() > deadline:
@@ -148,9 +143,7 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str) -> Any:
         return json.loads(message_bytes.decode())
 
     loop = get_running_loop()
-    future = _wait_buffer_set(
-        deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds()
-    )
+    future = _async_wait(deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds())
     task = loop.create_task(future)
     loop.run_until_complete(task)
     return _parse_js_result(task.result())

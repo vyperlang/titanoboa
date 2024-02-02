@@ -59,7 +59,7 @@ def find_response(mock_calls, func_to_body_dict):
     responses = [func_to_body_dict[name] for name, _ in first_arg]
     error = next((r["error"] for r in responses if r.get("error")), None)
     if error:
-        return error
+        return {"error": error}
     return {"data": [r["data"] for r in responses]}
 
 
@@ -207,7 +207,7 @@ def test_browser_rpc(
 
     assert display_mock.call_count == 3
     (js,), _ = display_mock.call_args
-    assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
+    assert f'multiRpc("{token}", [["eth_gasPrice", []]])' in js.data
     mock_inject_javascript.assert_called()
 
 
@@ -259,8 +259,3 @@ def test_browser_js_error(
     with pytest.raises(browser.RPCError) as exc_info:
         browser.BrowserSigner()
     assert str(exc_info.value) == "CALLBACK_ERROR: custom message"
-
-
-def test_env_bad_args(browser, account, mock_get_block_by_number):
-    with pytest.raises(ValueError):
-        NetworkEnv()
