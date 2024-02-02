@@ -1,6 +1,6 @@
 name: unitary
 
-on: ["push"]
+on: ["push", "pull_request"]
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -54,7 +54,6 @@ jobs:
 
       - name: Run Fork Mode Tests
         run: pytest -n auto tests/integration/fork/
-        if: secrets.ALCHEMY_MAINNET_ENDPOINT
         env:
           MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
@@ -66,7 +65,6 @@ jobs:
       - name: Run Sepolia Tests
         # disable xdist, otherwise they can contend for tx nonce
         run: pytest -n 0 tests/integration/network/sepolia/
-        if: secrets.SEPOLIA_PKEY
         env:
           SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
           SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
