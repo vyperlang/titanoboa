@@ -73,8 +73,12 @@ class BrowserRPC(RPC):
     """
 
     @property
+    def identifier(self) -> str:
+        return type(self).__name__  # every instance does the same
+
+    @property
     def name(self):
-        return type(self).__name__
+        return self.identifier
 
     def fetch(self, method: str, params: Any) -> Any:
         return _javascript_call(

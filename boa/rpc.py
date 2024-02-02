@@ -62,6 +62,10 @@ class RPC:
     """
 
     @property
+    def identifier(self) -> str:
+        raise NotImplementedError
+
+    @property
     def name(self) -> str:
         raise NotImplementedError
 
@@ -81,12 +85,16 @@ class EthereumRPC(RPC):
         self._session.headers["Origin"] = "Titanoboa"
 
     @property
+    def identifier(self):
+        return self._rpc_url
+
+    @property
     def name(self):
         # return a version of the URL which has everything past the "base"
         # url stripped out (content which you might not want to end up
         # in logs)
         parse_result = urlparse(self._rpc_url)
-        return f"{parse_result.scheme}://{parse_result.netloc}"
+        return f"{parse_result.scheme}://{parse_result.netloc} (URL partially masked for privacy)"
 
     def _raw_fetch_single(self, method, params):
         req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}

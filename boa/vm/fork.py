@@ -57,6 +57,10 @@ class CachingRPC(RPC):
         self._db = MemoryDB(lrudict(1024 * 1024))
 
     @property
+    def identifier(self) -> str:
+        return self._rpc.identifier
+
+    @property
     def name(self):
         return self._rpc.name
 
@@ -69,12 +73,12 @@ class CachingRPC(RPC):
             cls._loaded = {}
             cls._pid = os.getpid()
 
-        if (rpc.name, cache_file) in cls._loaded:
-            return cls._loaded[(rpc.name, cache_file)]
+        if (rpc.identifier, cache_file) in cls._loaded:
+            return cls._loaded[(rpc.identifier, cache_file)]
 
         ret = super().__new__(cls)
         ret.__init__(rpc, cache_file)
-        cls._loaded[(rpc.name, cache_file)] = ret
+        cls._loaded[(rpc.identifier, cache_file)] = ret
         return ret
 
     # a stupid key for the kv store

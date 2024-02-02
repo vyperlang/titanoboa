@@ -152,10 +152,7 @@ class NetworkEnv(Env):
         addresses = rpc.fetch("eth_accounts", [])
         if not addresses:
             # strip out content in the URL which might not want to get into logs
-            warnings.warn(
-                f"No accounts fetched from <{rpc.name}>! (URL partially masked for privacy)",
-                stacklevel=2,
-            )
+            warnings.warn(f"No accounts fetched from <{rpc.name}>!", stacklevel=2)
         for address in addresses:
             self.add_account(ExternalAccount(_rpc=rpc, address=address))  # type: ignore
 
