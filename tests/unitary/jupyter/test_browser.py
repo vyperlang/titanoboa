@@ -40,6 +40,12 @@ def env(browser, account, mock_fork):
     return boa.env
 
 
+@pytest.fixture(autouse=True)
+def reset_env():  # Do not pollute other tests
+    yield
+    boa.reset_env()
+
+
 def find_response(mock_calls, func_to_body_dict):
     """
     Find the response in the mock calls to the display function.
@@ -216,7 +222,7 @@ def test_browser_rpc(
     mock_callback("eth_gasPrice", "0x123")
     assert env.get_gas_price() == 291
 
-    assert display_mock.call_count == 6
+    assert display_mock.call_count == 5
     (js,), _ = display_mock.call_args
     assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
     mock_inject_javascript.assert_called()

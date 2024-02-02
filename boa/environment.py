@@ -13,6 +13,7 @@ import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
 from eth.chains.mainnet import MainnetChain
+from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
@@ -440,6 +441,8 @@ class Env:
         self.vm = self.chain.get_vm()
 
         self.vm.patch = VMPatcher(self.vm)
+        # revert any previous AccountDBFork patching
+        self.vm.__class__._state_class.account_db_class = AccountDB
 
         c = type(
             "TitanoboaComputation",
