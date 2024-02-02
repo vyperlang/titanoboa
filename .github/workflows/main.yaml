@@ -52,12 +52,12 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      # XXX: are these actually unit tests?
       - name: Run Fork Mode Tests
         run: pytest -n auto tests/integration/fork/
         if: secrets.ALCHEMY_MAINNET_ENDPOINT
         env:
           MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
 
       - name: Run Networked Tests against anvil
         # run separately to clarify its dependency on outside binary

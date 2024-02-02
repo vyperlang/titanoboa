@@ -9,7 +9,7 @@ from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
 from hypothesis.strategies._internal.deferred import DeferredStrategy
 
-from boa.vyper.contract import VyperFunction
+from boa.contracts.vyper.vyper_contract import VyperFunction
 
 # hypothesis fuzzing strategies, adapted from brownie 0.19.2 (86258c7bd)
 # in the future these may be superseded by eth-stdlib.

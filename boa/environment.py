@@ -312,6 +312,7 @@ class titanoboa_computation:
             self._gas_meter._set_code(self.code)
 
         self._child_pcs = []
+        self._contract_repr_before_revert = None
 
     def add_child_computation(self, child_computation):
         super().add_child_computation(child_computation)
@@ -342,10 +343,19 @@ class titanoboa_computation:
     def apply_computation(cls, state, msg, tx_ctx):
         addr = msg.code_address
         contract = cls.env._lookup_contract_fast(addr) if addr else None
-        # print("ENTER", Address(msg.code_address or bytes([0]*20)), contract)
+
+        def finalize(c):
+            if c.is_error:
+                # After the computation is applied with an error the state is
+                # reverted. Before the revert, save the contract repr for the
+                # error message
+                c._contract_repr_before_revert = repr(contract)
+            return c
+
         if contract is None or not cls.env._fast_mode_enabled:
             # print("SLOW MODE")
-            return super().apply_computation(state, msg, tx_ctx)
+            computation = super().apply_computation(state, msg, tx_ctx)
+            return finalize(computation)
 
         with cls(state, msg, tx_ctx) as computation:
             try:
@@ -364,7 +374,7 @@ class titanoboa_computation:
 
         # return computation outside of with block; computation.__exit__
         # swallows exceptions (including Revert).
-        return computation
+        return finalize(computation)
 
 
 # Message object with extra attrs we can use to thread things through
@@ -394,6 +404,7 @@ class Env:
     _fast_mode_enabled = False
     _fork_mode = False
     _fork_try_prefetch_state = False
+    _predefined_blocks = {"safe", "latest", "finalized", "pending", "earliest"}
 
     def __init__(self):
         self.chain = _make_chain()
@@ -478,7 +489,7 @@ class Env:
         AccountDBFork._rpc = CachingRPC(rpc) if rpc else CachingRPC.get_rpc(url)
         AccountDBFork._block_identifier = (
             block_identifier
-            if block_identifier in ("safe", "latest", "finalized")
+            if block_identifier in self._predefined_blocks
             else to_hex(block_identifier)
         )
 

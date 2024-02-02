@@ -7,8 +7,8 @@ from textwrap import dedent
 from eth_utils import to_checksum_address
 from rich.table import Table
 
+from boa.contracts.vyper.ast_utils import get_fn_name_from_lineno, get_line
 from boa.environment import Env
-from boa.vyper.ast_utils import get_fn_name_from_lineno, get_line
 
 
 @dataclass(unsafe_hash=True)
