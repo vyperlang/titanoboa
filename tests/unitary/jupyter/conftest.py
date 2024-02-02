@@ -21,7 +21,12 @@ def replace_modules():
 
 
 @pytest.fixture()
-def jupyter_module_mock(replace_modules):
+def tornado_mock(replace_modules):
+    replace_modules({"tornado.web": MagicMock(authenticated=lambda x: x)})
+
+
+@pytest.fixture()
+def jupyter_module_mock(replace_modules, tornado_mock):
     jupyter_mock = MagicMock()
     utils = jupyter_mock.utils
     serverapp = jupyter_mock.serverapp
@@ -43,6 +48,7 @@ def jupyter_module_mock(replace_modules):
 @pytest.fixture()
 def nest_asyncio_mock(replace_modules):
     mock = MagicMock()
+    mock.authenticated = lambda x: x
     replace_modules({"nest_asyncio": mock})
     return mock
 

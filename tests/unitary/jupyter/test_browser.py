@@ -3,7 +3,7 @@ import re
 from asyncio import get_event_loop
 from multiprocessing.shared_memory import SharedMemory
 from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from eth_account import Account
@@ -119,10 +119,10 @@ def account():
 
 
 @pytest.fixture()
-def colab_eval_mock(replace_modules):
-    colab_output_mock = MagicMock()
-    replace_modules({"google.colab.output": colab_output_mock})
-    return colab_output_mock.eval_js
+def colab_eval_mock(browser):
+    colab_eval_mock = MagicMock()
+    with patch.object(browser, "colab_eval_js", colab_eval_mock):
+        yield colab_eval_mock
 
 
 def test_nest_applied(nest_asyncio_mock, browser):
@@ -149,7 +149,7 @@ def test_browser_signer_no_address(
 
 
 def test_browser_signer_colab(
-    mocked_token, browser, colab_eval_mock, mock_inject_javascript, display_mock
+    colab_eval_mock, mocked_token, browser, mock_inject_javascript, display_mock
 ):
     colab_eval_mock.return_value = json.dumps({"data": "0x123"})
     signer = browser.BrowserSigner()
