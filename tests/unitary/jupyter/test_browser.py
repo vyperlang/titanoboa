@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 import pytest
 from eth_account import Account
 
+from boa.network import NetworkEnv
+
 
 @pytest.fixture()
 def display_mock(replace_modules):
@@ -52,7 +54,7 @@ def find_response(mock_calls, func_to_body_dict):
 
 
 @pytest.fixture()
-def mock_callback(mocked_token, browser):
+def mock_callback(mocked_token, browser, display_mock):
     """Returns a function that allows mocking the result of the frontend callback."""
 
     with mock.patch(
@@ -69,11 +71,11 @@ def mock_callback(mocked_token, browser):
             :param data: The response to return.
             :param error: The error to return.
             """
-            func_to_body_dict[fn_name] = {"data": data, "error": error}
+            func_to_body_dict[fn_name] = {"error": error} if error else {"data": data}
 
             def create_task(future):
                 """Set the memory buffer and run the async task that checks it"""
-                response = find_response(browser.display.mock_calls, func_to_body_dict)
+                response = find_response(display_mock.mock_calls, func_to_body_dict)
                 body = json.dumps(response).encode() + b"\0"
 
                 memory = SharedMemory(name=mocked_token)
@@ -89,9 +91,8 @@ def mock_callback(mocked_token, browser):
 
 @pytest.fixture()
 def mock_get_block_by_number(mock_callback):
-    mock_callback(
-        "eth_getBlockByNumber", {"number": "0x123", "timestamp": "0x65bbb460"}
-    )
+    data = {"number": "0x123", "timestamp": "0x65bbb460"}
+    mock_callback("eth_getBlockByNumber", data)
 
 
 @pytest.fixture()
@@ -127,7 +128,7 @@ def test_browser_signer_given_address(browser, display_mock, mock_inject_javascr
 def test_browser_signer_no_address(
     mocked_token, browser, display_mock, mock_callback, mock_inject_javascript
 ):
-    mock_callback({"data": "0x123"})
+    mock_callback("loadSigner", "0x123")
     signer = browser.BrowserSigner()
     assert signer.address == "0x123"
     display_mock.assert_called_once()
@@ -149,7 +150,7 @@ def test_browser_signer_colab(
     display_mock.assert_not_called()
 
 
-def test_browser_env(
+def test_browser(
     browser,
     display_mock,
     mock_inject_javascript,
@@ -157,13 +158,13 @@ def test_browser_env(
     mock_callback,
     mock_get_block_by_number,
 ):
-    env = browser.NetworkEnv.browser(account)
+    env = NetworkEnv.browser(account)
     assert env.eoa == account
     display_mock.assert_called_once()
     mock_inject_javascript.assert_called_once()
 
 
-def test_browser_env_loads_signer(
+def test_browser_loads_signer(
     token,
     browser,
     display_mock,
@@ -173,13 +174,13 @@ def test_browser_env_loads_signer(
     mock_get_block_by_number,
 ):
     mock_callback("loadSigner", account.address)
-    env = browser.NetworkEnv.browser()
+    env = NetworkEnv.browser()
     assert env.eoa == account.address
     assert type(env._accounts[env.eoa]).__name__ == browser.BrowserSigner.__name__
     mock_inject_javascript.assert_called()
 
 
-def test_browser_env_rpc(
+def test_browser_rpc(
     token,
     browser,
     display_mock,
@@ -188,52 +189,53 @@ def test_browser_env_rpc(
     account,
     mock_get_block_by_number,
 ):
-    env = browser.NetworkEnv.browser(account)
+    env = NetworkEnv.browser(account)
 
-    mock_callback({"data": "0x123"})
+    mock_callback("eth_gasPrice", "0x123")
     assert env.get_gas_price() == 291
 
-    display_mock.assert_called_once()
+    assert display_mock.call_count == 3
     (js,), _ = display_mock.call_args
     assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
     mock_inject_javascript.assert_called()
 
 
 def test_browser_rpc_error(
-    token, browser, display_mock, mock_callback, mock_inject_javascript, account
+    token,
+    browser,
+    display_mock,
+    mock_callback,
+    mock_inject_javascript,
+    account,
+    mock_get_block_by_number,
 ):
-    env = browser.NetworkEnv.browser(account)
+    env = NetworkEnv.browser(account)
 
     rpc_error = {"code": -32000, "message": "Reverted"}
-    mock_callback({"error": {"message": "error", "info": {"error": rpc_error}}})
+    mock_callback(
+        "eth_gasPrice", error={"message": "error", "info": {"error": rpc_error}}
+    )
     with pytest.raises(browser.RPCError) as exc_info:
         env.get_gas_price()
     assert str(exc_info.value) == "-32000: Reverted"
 
 
 def test_browser_rpc_server_error(
-    token, browser, display_mock, mock_callback, mock_inject_javascript, account
+    token,
+    browser,
+    display_mock,
+    mock_callback,
+    mock_inject_javascript,
+    account,
+    mock_get_block_by_number,
 ):
-    env = browser.NetworkEnv.browser(account)
+    env = NetworkEnv.browser(account)
 
-    original_error = {
-        "message": "server error",
-        "code": -41002,
-        "data": "net/http: timeout awaiting response headers",
-    }
     error = {
-        "code": -32603,
-        "data": {"originalError": original_error},
-        "message": "server error",
-    }
-    outer_error = {
         "code": "UNKNOWN_ERROR",
-        "error": error,
-        "payload": {},
-        "shortMessage": "could not coalesce error",
+        "error": {"code": -32603, "message": "server error"},
     }
-    rpc_message = {"error": outer_error}
-    mock_callback(rpc_message)
+    mock_callback("eth_gasPrice", error=error)
     with pytest.raises(browser.RPCError) as exc_info:
         env.get_gas_price()
     assert str(exc_info.value) == "-32603: server error"
@@ -242,12 +244,12 @@ def test_browser_rpc_server_error(
 def test_browser_js_error(
     token, browser, display_mock, mock_callback, mock_inject_javascript, account
 ):
-    mock_callback({"error": {"message": "custom message", "stack": ""}})
+    mock_callback("loadSigner", error={"message": "custom message", "stack": ""})
     with pytest.raises(browser.RPCError) as exc_info:
         browser.BrowserSigner()
     assert str(exc_info.value) == "CALLBACK_ERROR: custom message"
 
 
-def test_browser_env_no_fork(browser, account):
-    with pytest.raises(NotImplementedError):
-        browser.NetworkEnv.browser(account).fork("")
+def test_env_bad_args(browser, account, mock_get_block_by_number):
+    with pytest.raises(ValueError):
+        NetworkEnv()

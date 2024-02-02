@@ -168,6 +168,11 @@ class NetworkEnv(Env):
         env.set_eoa(BrowserSigner(address))
         return env
 
+    def fork(self, url=None, rpc=None, *args, **kwargs):
+        if url or rpc:
+            return super().fork(url=url, rpc=rpc, *args, **kwargs)
+        return super().fork(rpc=self._rpc, *args, **kwargs)
+
     # overrides
     def get_gas_price(self) -> int:
         if self._gas_price is not None:
@@ -392,11 +397,8 @@ class NetworkEnv(Env):
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state
         # but use reset_traces=False to help with storage dumps
-        super().fork(
-            rpc=self._rpc,
-            reset_traces=False,
-            block_identifier=block_identifier,
-            cache_file=None,
+        self.fork(
+            reset_traces=False, block_identifier=block_identifier, cache_file=None
         )
         self.vm.state._account_db._rpc._init_mem_db()
 
