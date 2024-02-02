@@ -60,6 +60,11 @@ def anvil_env(free_port):
                 break
             except requests.exceptions.ConnectionError:
                 time.sleep(0.1)
+
+        # Anvil ignores the tracer argument, therefore returning invalid data.
+        # see https://github.com/foundry-rs/foundry/issues/6882
+        anvil_env._fork_try_prefetch_state = False
+
         yield NetworkEnv(anvil_uri)
     finally:
         anvil.terminate()
@@ -77,10 +82,5 @@ def anvil_env(free_port):
 def networked_env(accounts, anvil_env):
     for account in accounts:
         anvil_env.add_account(account)
-
-    # Anvil ignores the tracer argument, therefore returning invalid data.
-    # see test_debug_traceCall_tracer_ignored and https://github.com/foundry-rs/foundry/issues/6882
-    anvil_env._fork_try_prefetch_state = False
-
     with boa.swap_env(anvil_env):
         yield anvil_env

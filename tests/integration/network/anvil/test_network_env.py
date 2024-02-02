@@ -57,8 +57,8 @@ def test_raise_exception(simple_contract, t):
 
 
 # Prefetch is disabled currently since anvil doesn't support `prestateTracer`.
-# This test will fail when anvil is fixed so we can re-enable prefetching.
-# See fixture `networked_env`
+# This test will fail when anvil is fixed, so we can re-enable prefetching.
+# See fixture `anvil_env`
 def test_debug_traceCall_tracer_ignored(simple_contract):
     assert simple_contract.totalSupply() == STARTING_SUPPLY
 
