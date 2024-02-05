@@ -40,17 +40,16 @@
         return response.text();
     }
 
+    const getSigner = () => getEthersProvider().getSigner();
+
     /** Load the signer via ethers user */
-    const loadSigner = async () => {
-        const signer = await getEthersProvider().getSigner();
-        return signer.getAddress();
-    };
+    const loadSigner = () => getSigner().then(s => s.getAddress());
 
     /** Sign a transaction via ethers */
-    async function signTransaction(transaction) {
-        const signer = await getEthersProvider().getSigner();
-        return signer.sendTransaction(transaction);
-    }
+    const signTransaction = transaction => getSigner().then(s => s.signTransaction(transaction));
+
+    /** Sign a typed data via ethers */
+    const signTypedData = (domain, types, value) => getSigner().then(s => s.signTypedData(domain, types, value));
 
     /** Call an RPC method via ethers */
     const rpc = (method, params) => getEthersProvider().send(method, params);
@@ -91,6 +90,7 @@
     window._titanoboa = {
         loadSigner: handleCallback(loadSigner),
         signTransaction: handleCallback(signTransaction),
+        signTypedData: handleCallback(signTypedData),
         waitForTransactionReceipt: handleCallback(waitForTransactionReceipt),
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),

@@ -6,7 +6,6 @@ from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
-from eth_account import Account
 
 import boa
 
@@ -124,6 +123,7 @@ def mock_fork(mock_callback):
 
 @pytest.fixture()
 def browser(nest_asyncio_mock, jupyter_module_mock):
+    # Import the browser module after the mocks have been set up
     from boa.integrations.jupyter import browser
 
     return browser
@@ -131,7 +131,7 @@ def browser(nest_asyncio_mock, jupyter_module_mock):
 
 @pytest.fixture()
 def account():
-    return Account.create()
+    return boa.env.generate_address()
 
 
 @pytest.fixture()
@@ -150,6 +150,16 @@ def test_browser_signer_given_address(browser, display_mock, mock_inject_javascr
     assert signer.address == "0x1234"
     display_mock.assert_not_called()
     mock_inject_javascript.assert_not_called()
+
+
+def test_browser_sign_typed_data(
+    browser, display_mock, mock_inject_javascript, mock_callback
+):
+    signer = browser.BrowserSigner(boa.env.generate_address())
+    signature = boa.env.generate_address()
+    mock_callback("signTypedData", signature)
+    data = signer.sign_typed_data({"name": "My App"}, {"types": []}, {"data": "0x1234"})
+    assert data == signature
 
 
 def test_browser_signer_no_address(
