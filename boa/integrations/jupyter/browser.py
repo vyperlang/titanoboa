@@ -53,6 +53,21 @@ class BrowserSigner:
                 "loadSigner", timeout_message=ADDRESS_TIMEOUT_MESSAGE
             )
 
+    @property
+    def chain_id(self):
+        return _javascript_call(
+            "rpc", "eth_chainId", timeout_message=RPC_TIMEOUT_MESSAGE
+        )
+
+    @chain_id.setter
+    def chain_id(self, chain_id):
+        _javascript_call(
+            "rpc",
+            "wallet_switchEthereumChain",
+            [{"chainId": chain_id}],
+            timeout_message=RPC_TIMEOUT_MESSAGE,
+        )
+
     def send_transaction(self, tx_data: dict) -> dict:
         """
         Implements the Account class' send_transaction method.
