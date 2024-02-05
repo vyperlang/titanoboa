@@ -218,7 +218,7 @@ def test_browser_chain_id(token, browser, display_mock, mock_callback):
     assert display_mock.call_count == 2
     (js,), _ = display_mock.call_args
     assert (
-        f'rpc("{token}", "wallet_switchEthereumChain", {{"chainId": "0x456"}})'
+        f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x456"}}])'
         in js.data
     )
 
