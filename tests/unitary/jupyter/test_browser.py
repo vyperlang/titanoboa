@@ -6,6 +6,7 @@ from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
+from eth_account import Account
 
 import boa
 
@@ -131,7 +132,7 @@ def browser(nest_asyncio_mock, jupyter_module_mock):
 
 @pytest.fixture()
 def account():
-    return boa.env.generate_address()
+    return Account.create()
 
 
 @pytest.fixture()
