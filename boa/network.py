@@ -327,14 +327,9 @@ class NetworkEnv(Env):
         timeout = self.tx_settings.poll_timeout
 
         while True:
-            try:
-                receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
-                if receipt is not None:
-                    break
-            except RPCError as e:
-                # This error happens in the BrowserSigner while transaction isn't mined
-                if e.code == -32603:  # server error
-                    raise
+            receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
+            if receipt is not None:
+                break
             if time.time() + poll_latency > start + timeout:
                 raise ValueError(f"Timed out waiting for ({tx_hash})")
             time.sleep(poll_latency)

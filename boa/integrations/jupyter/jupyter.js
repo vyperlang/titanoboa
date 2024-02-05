@@ -27,6 +27,9 @@
         }
     }));
 
+    /** Async sleep for the given time */
+    const sleep = time => new Promise(resolve => setTimeout(resolve, time));
+
     const colab = window.colab ?? window.google?.colab; // in the parent window or in an iframe
     /** Calls the callback endpoint with the given token and body */
     async function callbackAPI(token, body) {
@@ -52,6 +55,25 @@
     /** Call an RPC method via ethers */
     const rpc = (method, params) => getEthersProvider().send(method, params);
 
+    /** Wait until the transaction is mined */
+    const waitForTransactionReceipt = async (params, timeout, wait = 1000) => {
+        try {
+            const result = await rpc('eth_getTransactionReceipt', params);
+            if (result) {
+                return result;
+            }
+        } catch (err) { // ignore "server error" (happens while transaction is mined)
+            if (err?.info?.error?.code !== -32603) {
+                throw err;
+            }
+        }
+        if (timeout < wait) {
+            throw new Error('Timeout waiting for transaction receipt');
+        }
+        await sleep(wait);
+        return waitForTransactionReceipt(params, timeout - wait, wait);
+    };
+
     /** Call multiple RPCs in sequence */
     const multiRpc = (payloads) => payloads.reduce(
         async (previousPromise, [method, params]) => [...await previousPromise, await rpc(method, params)],
@@ -69,6 +91,7 @@
     window._titanoboa = {
         loadSigner: handleCallback(loadSigner),
         signTransaction: handleCallback(signTransaction),
+        waitForTransactionReceipt: handleCallback(waitForTransactionReceipt),
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),
     };

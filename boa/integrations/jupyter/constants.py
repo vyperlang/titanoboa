@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 NUL = b"\0"
-CALLBACK_TOKEN_TIMEOUT = timedelta(minutes=3)
+CALLBACK_TOKEN_TIMEOUT = timedelta(minutes=4)  # matches default TransactionSettings
 SHARED_MEMORY_LENGTH = 50 * 1024 + len(NUL)  # Size of the shared memory object
 CALLBACK_TOKEN_BYTES = 32
 ETHERS_JS_URL = "https://cdnjs.cloudflare.com/ajax/libs/ethers/6.9.0/ethers.umd.min.js"
