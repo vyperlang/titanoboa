@@ -92,7 +92,7 @@ class CachingRPC(RPC):
 
     def fetch_uncached(self, method, params):
         # due to __new__, underlying rpc is never CachingRPC
-        return self._rpc.fetch(method, params)
+        return self._rpc.fetch_uncached(method, params)
 
     # caching fetch of multiple payloads
     def fetch_multi(self, payload):
