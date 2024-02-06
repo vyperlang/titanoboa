@@ -119,12 +119,6 @@ class Address(str):  # (PYEVM_Address):
         cls._cache[address] = self
         return self
 
-    # def __hash__(self):
-    #    return hash(self.checksum_address)
-
-    # def __eq__(self, other):
-    #    return super().__eq__(self, other)
-
     def __repr__(self):
         checksum_addr = super().__repr__()
         return f"_Address({checksum_addr})"

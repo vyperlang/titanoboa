@@ -1048,7 +1048,23 @@ class _InjectVyperFunction(VyperFunction):
         self._source_map = source_map
 
 
-_typ_cache = {}
+_str_wrapper = type("str_wrapper", (str,), {})
+
+
+class _AddressWrapper(_str_wrapper):
+    """
+    A wrapper around str that adds a canonical_address property to mimic `Address`.
+    This is necessary because `Address` overrides `__new__`, so it always returns
+    an Address instance that cannot be modified.
+    """
+
+    def __new__(cls, *args, **kwargs):
+        self = super().__new__(cls, *args, **kwargs)
+        self.canonical_address = Address(self).canonical_address
+        return self
+
+
+_typ_cache = {Address: _AddressWrapper, str: _str_wrapper}
 
 
 def vyper_object(val, vyper_type):
@@ -1058,7 +1074,7 @@ def vyper_object(val, vyper_type):
     vt = type(val)
     if vt is bool:
         # https://stackoverflow.com/q/2172189
-        # bool is not ambiguous wrt vyper type anyways.
+        # bool is not ambiguous wrt vyper type anyway.
         return val
 
     if vt not in _typ_cache:

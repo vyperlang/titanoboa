@@ -89,21 +89,32 @@ def test(_a: address) -> address:
     assert isinstance(result, Address)
 
 
-def test_dynarray():
+def test_address_nested():
     code = """
+struct Test:
+    address: address
+    number: uint256
+
 @external
 @view
-def test(_a: DynArray[uint256, 100]) -> (DynArray[address, 2], uint256):
-    return [msg.sender, msg.sender], _a[0]
+def test(_a: DynArray[uint256, 100]) -> ((DynArray[Test, 2], uint256), uint256):
+    first: DynArray[Test, 2] = [
+        Test({address: msg.sender, number: _a[0]}),
+        Test({address: msg.sender, number: _a[1]}),
+    ]
+    return (first, _a[2]), _a[3]
     """
     abi_contract, vyper_contract = load_via_abi(code)
     deployer_contract = abi_contract.deployer.at(abi_contract.address)
     given = [1, 2, 3, 4, 5]
     sender = Address(boa.env.eoa)
-    expected = ([sender, sender], 1)
+    expected = (([(sender, 1), (sender, 2)], 3), 4)
+    abi_result = abi_contract.test(given)
+    assert abi_result == expected
+    assert isinstance(abi_result[0][0][0][0], Address)
+
     assert vyper_contract.test(given) == expected
-    assert abi_contract.test(given) == expected
-    assert deployer_contract.test(given) == expected
+    assert deployer_contract.test(given) == abi_result
 
 
 def test_overloading():
