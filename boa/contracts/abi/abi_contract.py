@@ -294,11 +294,11 @@ class ABIContractFactory:
         return contract
 
 
-def _abi_from_json(abi: dict) -> list | str:
+def _abi_from_json(abi: dict) -> str:
     """
-    Parses an ABI type into a list of types.
+    Parses an ABI type into its schema string.
     :param abi: The ABI type to parse.
-    :return: A list of types or a single type.
+    :return: The schema string for the given abi type.
     """
     if "components" in abi:
         assert abi["type"] in ("tuple", "tuple[]")  # sanity check
