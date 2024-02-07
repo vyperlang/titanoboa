@@ -214,7 +214,7 @@ def test_browser_chain_id(token, browser, display_mock, mock_callback):
     mock_callback("eth_chainId", "0x123")
     assert signer.chain_id == "0x123"
     mock_callback("wallet_switchEthereumChain")
-    signer.chain_id = "0x456"
+    signer.set_chain_id("0x456")
     assert display_mock.call_count == 2
     (js,), _ = display_mock.call_args
     assert (

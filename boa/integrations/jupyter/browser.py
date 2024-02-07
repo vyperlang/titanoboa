@@ -59,8 +59,7 @@ class BrowserSigner:
             "rpc", "eth_chainId", timeout_message=RPC_TIMEOUT_MESSAGE
         )
 
-    @chain_id.setter
-    def chain_id(self, chain_id):
+    def set_chain_id(self, chain_id):
         _javascript_call(
             "rpc",
             "wallet_switchEthereumChain",
