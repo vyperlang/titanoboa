@@ -300,9 +300,13 @@ def _abi_from_json(abi: dict) -> str:
     :return: The schema string for the given abi type.
     """
     if "components" in abi:
-        assert abi["type"] in ("tuple", "tuple[]")  # sanity check
-        components = [_abi_from_json(item) for item in abi["components"]]
-        return abi["type"].replace("tuple", f"({','.join(components)})")
+        components = ",".join([_abi_from_json(item) for item in abi["components"]])
+        if abi["type"] == "tuple":
+            return f"({components})"
+        if abi["type"] == "tuple[]":
+            return f"({components})[]"
+        raise ValueError("Components found in non-tuple type " + abi["type"])
+
     return abi["type"]
 
 

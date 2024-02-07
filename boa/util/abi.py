@@ -46,6 +46,11 @@ class Address(str):  # (PYEVM_Address):
 
 
 class ABIEncoder(Encoder):
+    """
+    Custom encoder that extracts the address from an `Address` object
+    and passes the result to the base encoder.
+    """
+
     @classmethod
     def visit_AddressNode(cls, node: nodes.AddressNode, value) -> bytes:
         value = getattr(value, "address", value)
@@ -53,6 +58,10 @@ class ABIEncoder(Encoder):
 
 
 class ABIDecoder(Decoder):
+    """
+    Custom decoder that wraps address results into an `Address` object.
+    """
+
     @classmethod
     def visit_AddressNode(
         cls, node: nodes.AddressNode, value: bytes, checksum: bool = True, **kwargs: Any
