@@ -1,6 +1,6 @@
 from typing import Any
 
-from boa.environment import Address
+from boa.util.abi import Address
 
 
 def encode_addresses(values: list) -> list:

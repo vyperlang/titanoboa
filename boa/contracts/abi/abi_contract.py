@@ -15,8 +15,7 @@ from boa.contracts.base_evm_contract import (
     _handle_child_trace,
 )
 from boa.contracts.utils import decode_addresses, encode_addresses
-from boa.environment import Address
-from boa.util.abi import ABIError, abi_decode, abi_encode, is_abi_encodable
+from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
 
 
 class ABIFunction:
@@ -199,7 +198,7 @@ class ABIContract(_BaseEVMContract):
         super().__init__(env, filename=filename, address=address)
         self._name = name
         self._functions = functions
-        self._bytecode = self.env.vm.state.get_code(address.canonical_address)
+        self._bytecode = self.env.evm.get_code(address)
         if not self._bytecode:
             warn(
                 f"Requested {self} but there is no bytecode at that address!",

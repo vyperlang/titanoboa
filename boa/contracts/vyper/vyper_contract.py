@@ -56,9 +56,9 @@ from boa.contracts.vyper.decoder_utils import (
 )
 from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
-from boa.environment import Address, Env
+from boa.environment import Env
 from boa.profiling import LineProfile, cache_gas_used_for_computation
-from boa.util.abi import abi_decode, abi_encode
+from boa.util.abi import Address, abi_decode, abi_encode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -106,8 +106,7 @@ class VyperDeployer:
             skip_initcode=True,
             filename=self.filename,
         )
-        vm = ret.env.vm
-        bytecode = vm.state.get_code(address.canonical_address)
+        bytecode = ret.env.evm.get_code(address)
 
         ret._set_bytecode(bytecode)
 
@@ -349,7 +348,7 @@ class StorageVar:
     def __init__(self, contract, slot, typ):
         self.contract = contract
         self.addr = self.contract._address.canonical_address
-        self.accountdb = contract.env.vm.state._account_db
+        self.accountdb = contract.env.evm.get_account_db()
         self.slot = slot
         self.typ = typ
 
@@ -370,8 +369,8 @@ class StorageVar:
     def get(self, truncate_limit=None):
         if isinstance(self.typ, HashMapT):
             ret = {}
-            for k in self.contract.env.sstore_trace.get(self.addr, {}):
-                path = unwrap_storage_key(self.contract.env.sha3_trace, k)
+            for k in self.contract.env.evm.sstore_trace.get(self.addr, {}):
+                path = unwrap_storage_key(self.contract.env.evm.sha3_trace, k)
                 if to_int(path[0]) != self.slot:
                     continue
 
@@ -687,7 +686,7 @@ class VyperContract(_BaseVyperContract):
             self.handle_error(computation)
 
         # cache gas used for call if profiling is enabled
-        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        gas_meter = self.env.get_gas_meter_class()
         if gas_meter == ProfilingGasMeter:
             cache_gas_used_for_computation(self, computation)
 
