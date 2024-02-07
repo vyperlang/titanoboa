@@ -110,6 +110,7 @@ def test(_a: DynArray[uint256, 100]) -> ((DynArray[Test, 2], uint256), uint256):
     sender = Address(boa.env.eoa)
     expected = (([(sender, 1), (sender, 2)], 3), 4)
     abi_result = abi_contract.test(given)
+
     assert abi_result == expected
     assert isinstance(abi_result[0][0][0][0], Address)
 
