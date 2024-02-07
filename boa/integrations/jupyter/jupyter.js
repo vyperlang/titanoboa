@@ -86,7 +86,10 @@
     const handleCallback = func => async (token, ...args) => {
         const body = stringify(await parsePromise(func(...args)));
         // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
-        return colab ? body : callbackAPI(token, body);
+        if (colab) {
+            return body;
+        }
+        await callbackAPI(token, body);
     };
 
     // expose functions to window, so they can be called from the BrowserSigner
