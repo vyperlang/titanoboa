@@ -7,7 +7,7 @@ from vyper.compiler.output import build_abi_output
 import boa
 from boa import BoaError
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
-from boa.environment import Address
+from boa.util.abi import Address
 
 
 def load_via_abi(code):

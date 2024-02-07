@@ -14,8 +14,7 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
-from boa.environment import Address
-from boa.util.abi import ABIError, abi_decode, abi_encode, is_abi_encodable
+from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
 
 
 class ABIFunction:

@@ -56,9 +56,9 @@ from boa.contracts.vyper.decoder_utils import (
 )
 from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
-from boa.environment import Address, Env
+from boa.environment import Env
 from boa.profiling import LineProfile, cache_gas_used_for_computation
-from boa.util.abi import abi_decode, abi_encode
+from boa.util.abi import Address, abi_decode, abi_encode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -1048,23 +1048,7 @@ class _InjectVyperFunction(VyperFunction):
         self._source_map = source_map
 
 
-_str_wrapper = type("str_wrapper", (str,), {})
-
-
-class _AddressWrapper(_str_wrapper):
-    """
-    A wrapper around str that adds a canonical_address property to mimic `Address`.
-    This is necessary because `Address` overrides `__new__`, so it always returns
-    an Address instance that cannot be modified.
-    """
-
-    def __new__(cls, *args, **kwargs):
-        self = super().__new__(cls, *args, **kwargs)
-        self.canonical_address = Address(self).canonical_address
-        return self
-
-
-_typ_cache = {Address: _AddressWrapper, str: _str_wrapper}
+_typ_cache = {}
 
 
 def vyper_object(val, vyper_type):
@@ -1072,9 +1056,9 @@ def vyper_object(val, vyper_type):
     # and tag it with _vyper_type metadata
 
     vt = type(val)
-    if vt is bool:
+    if vt is bool or vt is Address:
         # https://stackoverflow.com/q/2172189
-        # bool is not ambiguous wrt vyper type anyway.
+        # bool is not ambiguous wrt vyper type anyways.
         return val
 
     if vt not in _typ_cache:
