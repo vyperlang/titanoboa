@@ -403,8 +403,9 @@ class Env:
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
     _fast_mode_enabled = False
-    _fork_mode = False
     _fork_try_prefetch_state = False
+
+    _account_db_class = AccountDB
 
     def __init__(self):
         self.chain = _make_chain()
@@ -441,8 +442,7 @@ class Env:
         self.vm = self.chain.get_vm()
 
         self.vm.patch = VMPatcher(self.vm)
-        # revert any previous AccountDBFork patching
-        self.vm.__class__._state_class.account_db_class = AccountDB
+        self.vm.__class__._state_class.account_db_class = self._account_db_class
 
         c = type(
             "TitanoboaComputation",
@@ -499,14 +499,17 @@ class Env:
             **kwargs,
         }
 
-        self._fork_mode = True
-        self.vm.__class__._state_class.account_db_class = AccountDBFork
+        self._account_db_class = AccountDBFork
         self._init_vm(reset_traces=reset_traces)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
         self.vm.patch.block_number = int(block_info["number"], 16)
         # TODO patch the other stuff
+
+    @property
+    def _fork_mode(self):
+        return self._account_db_class == AccountDBFork
 
     def set_gas_meter_class(self, cls: type) -> None:
         self.vm.state.computation_class._gas_meter_class = cls
