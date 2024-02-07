@@ -57,7 +57,7 @@ class RPCError(Exception):
 
 class RPC:
     """
-    Base interface for RPC implementations.
+    Base class for RPC implementations.
     This abstract class does not use ABC for performance reasons.
     """
 
@@ -68,6 +68,9 @@ class RPC:
     @property
     def name(self) -> str:
         raise NotImplementedError
+
+    def fetch_uncached(self, method, params):
+        return self.fetch(method, params)
 
     def fetch(self, method: str, params: Any) -> Any:
         raise NotImplementedError

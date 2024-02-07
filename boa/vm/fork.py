@@ -90,6 +90,9 @@ class CachingRPC(RPC):
         (res,) = self.fetch_multi([(method, params)])
         return res
 
+    def fetch_uncached(self, method, params):
+        return self._rpc.fetch_uncached(method, params)
+
     # caching fetch of multiple payloads
     def fetch_multi(self, payload):
         ret = {}
@@ -126,12 +129,12 @@ class AccountDBFork(AccountDB):
         rpc_kwargs = self._rpc_init_kwargs.copy()
 
         block_identifier = rpc_kwargs.pop("block_identifier", "safe")
-        self._rpc = CachingRPC(self._rpc, **rpc_kwargs)
+        self._rpc: CachingRPC = CachingRPC(self._rpc, **rpc_kwargs)
 
         if block_identifier not in _PREDEFINED_BLOCKS:
             block_identifier = to_hex(block_identifier)
 
-        self._block_info = self._rpc.fetch(
+        self._block_info = self._rpc.fetch_uncached(
             "eth_getBlockByNumber", [block_identifier, False]
         )
         self._block_number = to_int(self._block_info["number"])
@@ -198,7 +201,9 @@ class AccountDBFork(AccountDB):
         # arguments with this specific block before
         try:
             tracer = {"tracer": "prestateTracer"}
-            res = self._rpc.fetch("debug_traceCall", [args, self._block_id, tracer])
+            res = self._rpc.fetch_uncached(
+                "debug_traceCall", [args, self._block_id, tracer]
+            )
         except (RPCError, HTTPError):
             return
 
