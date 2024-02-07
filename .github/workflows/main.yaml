@@ -24,9 +24,7 @@ jobs:
           cache: "pip"
 
       - name: Install Requirements
-        run: |
-          pip install -r dev-requirements.txt
-          pip install .
+        run: pip install -r dev-requirements.txt
 
       - name: Run Unit Tests
         run: pytest -n auto --cov=boa --cov-report term-missing:skip-covered --cov-fail-under=35 tests/unitary/
