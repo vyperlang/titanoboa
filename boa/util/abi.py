@@ -45,7 +45,7 @@ class Address(str):  # (PYEVM_Address):
         return f"_Address({checksum_addr})"
 
 
-class ABIEncoder(Encoder):
+class _ABIEncoder(Encoder):
     """
     Custom encoder that extracts the address from an `Address` object
     and passes the result to the base encoder.
@@ -57,7 +57,7 @@ class ABIEncoder(Encoder):
         return super().visit_AddressNode(node, value)
 
 
-class ABIDecoder(Decoder):
+class _ABIDecoder(Decoder):
     """
     Custom decoder that wraps address results into an `Address` object.
     """
@@ -79,11 +79,11 @@ def _get_parser(schema: str):
 
 
 def abi_encode(schema: str, data: Any) -> bytes:
-    return ABIEncoder.encode(_get_parser(schema), data)
+    return _ABIEncoder.encode(_get_parser(schema), data)
 
 
 def abi_decode(schema: str, data: bytes) -> Any:
-    return ABIDecoder.decode(_get_parser(schema), data)
+    return _ABIDecoder.decode(_get_parser(schema), data)
 
 
 def is_abi_encodable(abi_type: str, data: Any) -> bool:
