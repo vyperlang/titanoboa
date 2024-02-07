@@ -56,22 +56,24 @@
     const rpc = (method, params) => getEthersProvider().send(method, params);
 
     /** Wait until the transaction is mined */
-    const waitForTransactionReceipt = async (params, timeout, wait = 1000) => {
-        try {
-            const result = await rpc('eth_getTransactionReceipt', params);
-            if (result) {
-                return result;
+    const waitForTransactionReceipt = async (params, timeout, poll_latency) => {
+        while (true) {
+            try {
+                const result = await rpc('eth_getTransactionReceipt', params);
+                if (result) {
+                    return result;
+                }
+            } catch (err) { // ignore "server error" (happens while transaction is mined)
+                if (err?.info?.error?.code !== -32603) {
+                    throw err;
+                }
             }
-        } catch (err) { // ignore "server error" (happens while transaction is mined)
-            if (err?.info?.error?.code !== -32603) {
-                throw err;
+            if (timeout < poll_latency) {
+                throw new Error('Timeout waiting for transaction receipt');
             }
+            await sleep(poll_latency);
+            timeout -= poll_latency;
         }
-        if (timeout < wait) {
-            throw new Error('Timeout waiting for transaction receipt');
-        }
-        await sleep(wait);
-        return waitForTransactionReceipt(params, timeout - wait, wait);
     };
 
     /** Call multiple RPCs in sequence */
@@ -84,7 +86,10 @@
     const handleCallback = func => async (token, ...args) => {
         const body = stringify(await parsePromise(func(...args)));
         // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
-        return colab ? body : callbackAPI(token, body);
+        if (colab) {
+            return body;
+        }
+        await callbackAPI(token, body);
     };
 
     // expose functions to window, so they can be called from the BrowserSigner

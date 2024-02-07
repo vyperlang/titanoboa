@@ -33,16 +33,8 @@ from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
 from boa import BoaError
-from boa.contracts.base_evm_contract import (
-    StackTrace,
-    _BaseEVMContract,
-    _handle_child_trace,
-)
-from boa.contracts.vyper.ast_utils import (
-    ast_map_of,
-    get_fn_ancestor_from_node,
-    reason_at,
-)
+from boa.contracts.base_evm_contract import StackTrace, _BaseEVMContract, _handle_child_trace
+from boa.contracts.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
     anchor_compiler_settings,
@@ -50,15 +42,12 @@ from boa.contracts.vyper.compiler_utils import (
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
-from boa.contracts.vyper.decoder_utils import (
-    ByteAddressableStorage,
-    decode_vyper_object,
-)
+from boa.contracts.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
 from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
-from boa.environment import Address, Env
+from boa.environment import Env
 from boa.profiling import LineProfile, cache_gas_used_for_computation
-from boa.util.abi import abi_decode, abi_encode
+from boa.util.abi import Address, abi_decode, abi_encode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -1056,7 +1045,7 @@ def vyper_object(val, vyper_type):
     # and tag it with _vyper_type metadata
 
     vt = type(val)
-    if vt is bool:
+    if vt is bool or vt is Address:
         # https://stackoverflow.com/q/2172189
         # bool is not ambiguous wrt vyper type anyways.
         return val
