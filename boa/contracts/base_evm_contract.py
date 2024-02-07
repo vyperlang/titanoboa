@@ -3,7 +3,8 @@ from typing import Optional
 
 from eth.abc import ComputationAPI
 
-from boa.environment import Address, Env
+from boa.environment import Env
+from boa.util.abi import Address
 from boa.util.exceptions import strip_internal_frames
 
 

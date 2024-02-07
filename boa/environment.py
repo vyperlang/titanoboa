@@ -6,7 +6,7 @@ import logging
 import random
 import sys
 import warnings
-from typing import Annotated, Any, Iterator, Optional, Tuple
+from typing import Any, Iterator, Optional, Tuple
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -20,11 +20,10 @@ from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
-from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
+from eth_utils import setup_DEBUG2_logging
 
-from boa.util.abi import abi_decode
+from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
-from boa.util.lrudict import lrudict
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -92,42 +91,6 @@ class VMPatcher:
             for s, _ in self._patchables:
                 for attr in s:
                     setattr(self, attr, snap[attr])
-
-
-# XXX: inherit from bytes directly so that we can pass it to py-evm?
-# inherit from `str` so that ABI encoder / decoder can work without failing
-class Address(str):  # (PYEVM_Address):
-    # converting between checksum and canonical addresses is a hotspot;
-    # this class contains both and caches recently seen conversions
-    __slots__ = ("canonical_address",)
-    _cache = lrudict(1024)
-
-    canonical_address: Annotated[PYEVM_Address, "canonical address"]
-
-    def __new__(cls, address):
-        if isinstance(address, Address):
-            return address
-
-        try:
-            return cls._cache[address]
-        except KeyError:
-            pass
-
-        checksum_address = to_checksum_address(address)
-        self = super().__new__(cls, checksum_address)
-        self.canonical_address = to_canonical_address(address)
-        cls._cache[address] = self
-        return self
-
-    # def __hash__(self):
-    #    return hash(self.checksum_address)
-
-    # def __eq__(self, other):
-    #    return super().__eq__(self, other)
-
-    def __repr__(self):
-        checksum_addr = super().__repr__()
-        return f"_Address({checksum_addr})"
 
 
 # make mypy happy
