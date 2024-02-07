@@ -56,7 +56,7 @@
     const rpc = (method, params) => getEthersProvider().send(method, params);
 
     /** Wait until the transaction is mined */
-    const waitForTransactionReceipt = async (params, timeout, wait = 1000) => {
+    const waitForTransactionReceipt = async (params, timeout, poll_latency) => {
         try {
             const result = await rpc('eth_getTransactionReceipt', params);
             if (result) {
@@ -67,11 +67,11 @@
                 throw err;
             }
         }
-        if (timeout < wait) {
+        if (timeout < poll_latency) {
             throw new Error('Timeout waiting for transaction receipt');
         }
-        await sleep(wait);
-        return waitForTransactionReceipt(params, timeout - wait, wait);
+        await sleep(poll_latency);
+        return waitForTransactionReceipt(params, timeout - poll_latency, poll_latency);
     };
 
     /** Call multiple RPCs in sequence */

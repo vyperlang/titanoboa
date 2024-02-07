@@ -81,17 +81,6 @@ class BrowserRPC(RPC):
         return self.identifier
 
     def fetch(self, method: str, params: Any) -> Any:
-        if method == "eth_getTransactionReceipt":
-            # we do the polling in the browser to avoid too many callbacks
-            # each callback generates currently 10px empty space in the frontend
-            timeout_ms = CALLBACK_TOKEN_TIMEOUT.total_seconds() * 1000
-            return _javascript_call(
-                "waitForTransactionReceipt",
-                params,
-                timeout_ms,
-                timeout_message=RPC_TIMEOUT_MESSAGE,
-            )
-
         return _javascript_call(
             "rpc", method, params, timeout_message=RPC_TIMEOUT_MESSAGE
         )
@@ -99,6 +88,18 @@ class BrowserRPC(RPC):
     def fetch_multi(self, payloads: list[tuple[str, Any]]) -> list[Any]:
         return _javascript_call(
             "multiRpc", payloads, timeout_message=RPC_TIMEOUT_MESSAGE
+        )
+
+    def wait_for_tx_receipt(self, tx_hash, timeout: float, poll_latency=0.25):
+        # we do the polling in the browser to avoid too many callbacks
+        # each callback generates currently 10px empty space in the frontend
+        timeout_ms, pool_latency_ms = timeout * 1000, poll_latency * 1000
+        return _javascript_call(
+            "waitForTransactionReceipt",
+            tx_hash,
+            timeout_ms,
+            pool_latency_ms,
+            timeout_message=RPC_TIMEOUT_MESSAGE,
         )
 
 

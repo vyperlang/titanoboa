@@ -1,6 +1,5 @@
 # an Environment which interacts with a real (prod or test) chain
 import contextlib
-import time
 import warnings
 from dataclasses import dataclass
 from functools import cached_property
@@ -322,24 +321,6 @@ class NetworkEnv(Env):
 
         return create_address, deployed_bytecode
 
-    def _wait_for_tx_trace(self, tx_hash, poll_latency=0.25):
-        start = time.time()
-
-        timeout = self.tx_settings.poll_timeout
-
-        while True:
-            receipt = self._rpc.fetch("eth_getTransactionReceipt", [tx_hash])
-            if receipt is not None:
-                break
-            if time.time() + poll_latency > start + timeout:
-                raise ValueError(f"Timed out waiting for ({tx_hash})")
-            time.sleep(poll_latency)
-
-        trace = None
-        if self._tracer is not None:
-            trace = self._rpc.fetch("debug_traceTransaction", [tx_hash, self._tracer])
-        return receipt, trace
-
     @cached_property
     def _tracer(self):
         def _warn_no_tracer():
@@ -437,7 +418,13 @@ class NetworkEnv(Env):
         # TODO real logging
         print(f"tx broadcasted: {tx_hash}")
 
-        receipt, trace = self._wait_for_tx_trace(tx_hash)
+        receipt = self._rpc.wait_for_tx_receipt(tx_hash, self.tx_settings.poll_timeout)
+
+        trace = None
+        if self._tracer is not None:
+            trace = self._rpc.fetch_uncached(
+                "debug_traceTransaction", [tx_hash, self._tracer]
+            )
 
         print(f"{tx_hash} mined in block {receipt['blockHash']}!")
 

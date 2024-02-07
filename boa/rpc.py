@@ -1,3 +1,4 @@
+import time
 from typing import Any
 from urllib.parse import urlparse
 
@@ -77,6 +78,17 @@ class RPC:
 
     def fetch_multi(self, payloads: list[tuple[str, Any]]) -> list[Any]:
         raise NotImplementedError
+
+    def wait_for_tx_receipt(self, tx_hash, timeout: float, poll_latency=0.25):
+        start = time.time()
+
+        while True:
+            receipt = self.fetch_uncached("eth_getTransactionReceipt", [tx_hash])
+            if receipt is not None:
+                return receipt
+            if time.time() + poll_latency > start + timeout:
+                raise ValueError(f"Timed out waiting for ({tx_hash})")
+            time.sleep(poll_latency)
 
 
 class EthereumRPC(RPC):
