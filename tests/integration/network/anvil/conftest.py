@@ -61,6 +61,10 @@ def anvil_env(free_port):
             except requests.exceptions.ConnectionError:
                 time.sleep(0.1)
 
+        # Anvil ignores the tracer argument, therefore returning invalid data.
+        # see https://github.com/foundry-rs/foundry/issues/6882
+        anvil_env._fork_try_prefetch_state = False
+
         yield NetworkEnv(anvil_uri)
     finally:
         anvil.terminate()

@@ -209,10 +209,7 @@ class AccountDBFork(AccountDB):
 
         # everything is returned in hex
         for address, v in res.items():
-            try:
-                address = to_canonical_address(address)
-            except ValueError:
-                return
+            address = to_canonical_address(address)
 
             # set account if we don't already have it
             if self._get_account_helper(address) is None:
