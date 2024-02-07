@@ -1,3 +1,4 @@
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -21,7 +22,7 @@ def fixup_dict(kv):
     return {k: to_hex(v) for (k, v) in trim_dict(kv).items()}
 
 
-def to_hex(s: int) -> str:
+def to_hex(s: int | bytes | str) -> str:
     if isinstance(s, int):
         return hex(s)
     if isinstance(s, bytes):
@@ -54,7 +55,31 @@ class RPCError(Exception):
         return cls(message=data["message"], code=data["code"])
 
 
-class EthereumRPC:
+class RPC:
+    """
+    Base class for RPC implementations.
+    This abstract class does not use ABC for performance reasons.
+    """
+
+    @property
+    def identifier(self) -> str:
+        raise NotImplementedError
+
+    @property
+    def name(self) -> str:
+        raise NotImplementedError
+
+    def fetch_uncached(self, method, params):
+        return self.fetch(method, params)
+
+    def fetch(self, method: str, params: Any) -> Any:
+        raise NotImplementedError
+
+    def fetch_multi(self, payloads: list[tuple[str, Any]]) -> list[Any]:
+        raise NotImplementedError
+
+
+class EthereumRPC(RPC):
     def __init__(self, url: str):
         self._rpc_url = url
         self._session = requests.Session()
@@ -63,14 +88,21 @@ class EthereumRPC:
         self._session.headers["Origin"] = "Titanoboa"
 
     @property
-    def url_base(self):
+    def identifier(self):
+        return self._rpc_url
+
+    @property
+    def name(self):
         # return a version of the URL which has everything past the "base"
         # url stripped out (content which you might not want to end up
         # in logs)
         parse_result = urlparse(self._rpc_url)
-        return f"{parse_result.scheme}://{parse_result.netloc}"
+        return f"{parse_result.scheme}://{parse_result.netloc} (URL partially masked for privacy)"
 
-    def _raw_fetch_single(self, method, params):
+    def fetch(self, method, params):
+        # the obvious thing to do here is dispatch into fetch_multi.
+        # but some providers (alchemy) can't handle batched requests
+        # for certain endpoints (debug_traceTransaction).
         req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
         # print(req)
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
@@ -81,34 +113,18 @@ class EthereumRPC:
             raise RPCError.from_json(res["error"])
         return res["result"]
 
-    def fetch(self, method, params):
-        # the obvious thing to do here is dispatch into fetch_multi.
-        # but some providers (alchemy) can't handle batched requests
-        # for certain endpoints (debug_traceTransaction).
-        return self._raw_fetch_single(method, params)
-
     def fetch_multi(self, payloads):
-        reqs = [(i, m, p) for i, (m, p) in enumerate(payloads)]
-        res = self._raw_fetch_multi(reqs)
-        return [res[i] for i in range(len(res))]
+        request = [
+            {"jsonrpc": "2.0", "method": method, "params": params, "id": i}
+            for i, (method, params) in enumerate(payloads)
+        ]
+        response = self._session.post(self._rpc_url, json=request, timeout=TIMEOUT)
+        response.raise_for_status()
 
-    # raw fetch - dispatch the args via http request
-    # TODO: maybe use async for all of this
-    def _raw_fetch_multi(self, payloads):
-        req = []
-        # print(payloads)
-        for i, method, params in payloads:
-            req.append({"jsonrpc": "2.0", "method": method, "params": params, "id": i})
-        res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
-        res.raise_for_status()
-        res = json.loads(res.text)
+        results = {}  # keep results in a dict to preserve order
+        for item in json.loads(response.text):
+            if "error" in item:
+                raise RPCError.from_json(item["error"])
+            results[item["id"]] = item["result"]
 
-        ret = {}
-        for t in res:
-            if "error" in t:
-                raise RPCError.from_json(t["error"])
-            ret[t["id"]] = t["result"]
-
-        # print(ret)
-
-        return ret
+        return [results[i] for i in range(len(payloads))]

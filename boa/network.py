@@ -11,6 +11,7 @@ from requests.exceptions import HTTPError
 
 from boa.environment import Env
 from boa.rpc import (
+    RPC,
     EthereumRPC,
     RPCError,
     fixup_dict,
@@ -90,14 +91,21 @@ class NetworkEnv(Env):
     # always prefetch state in network mode
     _fork_try_prefetch_state = True
 
-    def __init__(self, rpc_url, accounts=None):
+    def __init__(self, rpc: str | RPC, accounts: dict[str, Account] = None):
         super().__init__()
 
-        self._rpc = EthereumRPC(rpc_url)
+        if isinstance(rpc, str):
+            warnings.warn(
+                "NetworkEnv(url) is deprecated. Use boa.set_network_env(url) instead.",
+                stacklevel=2,
+            )
+            rpc = EthereumRPC(rpc)
+
+        self._rpc = rpc
 
         self._reset_fork()
 
-        self._accounts: dict[str, Account] = accounts or {}
+        self._accounts = accounts or {}
 
         self.eoa = None
 
@@ -145,15 +153,16 @@ class NetworkEnv(Env):
         addresses = rpc.fetch("eth_accounts", [])
         if not addresses:
             # strip out content in the URL which might not want to get into logs
-            warnings.warn(
-                f"No accounts fetched from <{rpc.url_base}>! (URL partially masked for privacy)",
-                stacklevel=2,
-            )
+            warnings.warn(f"No accounts fetched from <{rpc.name}>!", stacklevel=2)
         for address in addresses:
             self.add_account(ExternalAccount(_rpc=rpc, address=address))  # type: ignore
 
     def set_eoa(self, eoa: Account) -> None:
         self.add_account(eoa, force_eoa=True)
+
+    @classmethod
+    def from_url(cls, url: str) -> "NetworkEnv":
+        return cls(EthereumRPC(url))
 
     # overrides
     def get_gas_price(self) -> int:
@@ -302,7 +311,7 @@ class NetworkEnv(Env):
                 "of sync with the network or a bug in titanoboa!",
                 stacklevel=2,
             )
-            # return what the node returned anyways.
+            # return what the node returned anyway
             deployed_bytecode = trace.returndata_bytes
 
         if local_address != create_address:
@@ -374,8 +383,8 @@ class NetworkEnv(Env):
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state
         # but use reset_traces=False to help with storage dumps
-        super().fork(
-            self._rpc._rpc_url,
+        self.fork_rpc(
+            self._rpc,
             reset_traces=False,
             block_identifier=block_identifier,
             cache_file=None,

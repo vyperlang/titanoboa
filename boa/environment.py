@@ -13,6 +13,7 @@ import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
 from eth.chains.mainnet import MainnetChain
+from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
@@ -22,6 +23,7 @@ from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from eth_utils import setup_DEBUG2_logging
 
+from boa.rpc import EthereumRPC
 from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
@@ -364,8 +366,9 @@ class Env:
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
     _fast_mode_enabled = False
-    _fork_mode = False
     _fork_try_prefetch_state = False
+
+    _account_db_class = AccountDB
 
     def __init__(self):
         self.chain = _make_chain()
@@ -402,6 +405,7 @@ class Env:
         self.vm = self.chain.get_vm()
 
         self.vm.patch = VMPatcher(self.vm)
+        self.vm.__class__._state_class.account_db_class = self._account_db_class
 
         c = type(
             "TitanoboaComputation",
@@ -441,17 +445,34 @@ class Env:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork(self, url, reset_traces=True, **kwargs):
-        kwargs["url"] = url
-        AccountDBFork._rpc_init_kwargs = kwargs
-        self._fork_mode = True
-        self.vm.__class__._state_class.account_db_class = AccountDBFork
+    def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
+        return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
+
+    def fork_rpc(self, rpc=None, reset_traces=True, block_identifier="safe", **kwargs):
+        """
+        Fork the environment to a local chain.
+        :param rpc: RPC to fork from
+        :param reset_traces: Reset the traces
+        :param block_identifier: Block identifier to fork from
+        :param kwargs: Additional arguments for the RPC
+        """
+        AccountDBFork._rpc = rpc
+        AccountDBFork._rpc_init_kwargs = {
+            "block_identifier": block_identifier,
+            **kwargs,
+        }
+
+        self._account_db_class = AccountDBFork
         self._init_vm(reset_traces=reset_traces)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
         self.vm.patch.block_number = int(block_info["number"], 16)
         # TODO patch the other stuff
+
+    @property
+    def _fork_mode(self):
+        return self._account_db_class == AccountDBFork
 
     def set_gas_meter_class(self, cls: type) -> None:
         self.vm.state.computation_class._gas_meter_class = cls
