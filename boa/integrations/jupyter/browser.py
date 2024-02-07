@@ -53,8 +53,7 @@ class BrowserSigner:
                 "loadSigner", timeout_message=ADDRESS_TIMEOUT_MESSAGE
             )
 
-    @property
-    def chain_id(self):
+    def get_chain_id(self):
         return _javascript_call(
             "rpc", "eth_chainId", timeout_message=RPC_TIMEOUT_MESSAGE
         )
