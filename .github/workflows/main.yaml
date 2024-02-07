@@ -29,7 +29,7 @@ jobs:
           pip install .
 
       - name: Run Unit Tests
-        run: pytest -n auto tests/unitary/
+        run: pytest -n auto --cov=boa --cov-report term-missing:skip-covered --cov-fail-under=35 tests/unitary/
 
   integration:
     name: "integration tests (forked and networked modes)"
