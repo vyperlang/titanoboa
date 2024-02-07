@@ -9,7 +9,7 @@ from math import ceil
 from eth_account import Account
 from requests.exceptions import HTTPError
 
-from boa.environment import Address, Env
+from boa.environment import Env
 from boa.rpc import (
     RPC,
     EthereumRPC,
@@ -20,6 +20,7 @@ from boa.rpc import (
     to_int,
     trim_dict,
 )
+from boa.util.abi import Address
 
 
 class TraceObject:
