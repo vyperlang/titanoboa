@@ -44,6 +44,16 @@ def set_env(new_env):
     Env._singleton = new_env
 
 
+def set_browser_env(address=None):
+    """Set the environment to use the browser's network in Jupyter/Colab"""
+    # import locally because jupyter is generally not installed
+    from boa.integrations.jupyter import BrowserRPC, BrowserSigner
+
+    env = NetworkEnv(rpc=BrowserRPC())
+    env.set_eoa(BrowserSigner(address))
+    set_env(env)
+
+
 def set_network_env(url):
     """Set the environment to use a custom network URL"""
     set_env(NetworkEnv.from_url(url))
