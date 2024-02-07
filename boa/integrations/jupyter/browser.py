@@ -46,7 +46,7 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        if address:
+        if address is not None:
             self.address = address
         else:
             self.address = _javascript_call(
@@ -90,7 +90,7 @@ class BrowserRPC(RPC):
             "multiRpc", payloads, timeout_message=RPC_TIMEOUT_MESSAGE
         )
 
-    def wait_for_tx_receipt(self, tx_hash, timeout: float, poll_latency=0.25):
+    def wait_for_tx_receipt(self, tx_hash, timeout: float, poll_latency=1):
         # we do the polling in the browser to avoid too many callbacks
         # each callback generates currently 10px empty space in the frontend
         timeout_ms, pool_latency_ms = timeout * 1000, poll_latency * 1000

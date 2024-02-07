@@ -57,21 +57,23 @@
 
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (params, timeout, poll_latency) => {
-        try {
-            const result = await rpc('eth_getTransactionReceipt', params);
-            if (result) {
-                return result;
+        while (true) {
+            try {
+                const result = await rpc('eth_getTransactionReceipt', params);
+                if (result) {
+                    return result;
+                }
+            } catch (err) { // ignore "server error" (happens while transaction is mined)
+                if (err?.info?.error?.code !== -32603) {
+                    throw err;
+                }
             }
-        } catch (err) { // ignore "server error" (happens while transaction is mined)
-            if (err?.info?.error?.code !== -32603) {
-                throw err;
+            if (timeout < poll_latency) {
+                throw new Error('Timeout waiting for transaction receipt');
             }
+            await sleep(poll_latency);
+            timeout -= poll_latency;
         }
-        if (timeout < poll_latency) {
-            throw new Error('Timeout waiting for transaction receipt');
-        }
-        await sleep(poll_latency);
-        return waitForTransactionReceipt(params, timeout - poll_latency, poll_latency);
     };
 
     /** Call multiple RPCs in sequence */
