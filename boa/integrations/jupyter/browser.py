@@ -66,6 +66,24 @@ class BrowserSigner:
         )
         return convert_frontend_dict(sign_data)
 
+    def sign_typed_data(
+        self, domain: dict[str, Any], types: dict[str, list], value: dict[str, Any]
+    ) -> str:
+        """
+        Sign typed data value with types data structure for domain using the EIP-712 specification.
+        :param domain: The domain data structure.
+        :param types: The types data structure.
+        :param value: The value to sign.
+        :return: The signature.
+        """
+        return _javascript_call(
+            "signTypedData",
+            domain,
+            types,
+            value,
+            timeout_message=TRANSACTION_TIMEOUT_MESSAGE,
+        )
+
 
 class BrowserRPC(RPC):
     """
