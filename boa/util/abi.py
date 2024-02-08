@@ -1,6 +1,7 @@
 # wrapper module around whatever encoder we are using
 from typing import Annotated, Any
 
+from eth.codecs.abi import nodes
 from eth.codecs.abi.decoder import Decoder
 from eth.codecs.abi.encoder import Encoder
 from eth.codecs.abi.exceptions import ABIError
@@ -10,6 +11,8 @@ from eth_typing import Address as PYEVM_Address
 from eth_utils import to_canonical_address, to_checksum_address
 
 from boa.util.lrudict import lrudict
+
+_parsers: dict[str, ABITypeNode] = {}
 
 
 # XXX: inherit from bytes directly so that we can pass it to py-evm?
@@ -37,18 +40,34 @@ class Address(str):  # (PYEVM_Address):
         cls._cache[address] = self
         return self
 
-    # def __hash__(self):
-    #    return hash(self.checksum_address)
-
-    # def __eq__(self, other):
-    #    return super().__eq__(self, other)
-
     def __repr__(self):
         checksum_addr = super().__repr__()
         return f"_Address({checksum_addr})"
 
 
-_parsers: dict[str, ABITypeNode] = {}
+class _ABIEncoder(Encoder):
+    """
+    Custom encoder that extracts the address from an `Address` object
+    and passes the result to the base encoder.
+    """
+
+    @classmethod
+    def visit_AddressNode(cls, node: nodes.AddressNode, value) -> bytes:
+        value = getattr(value, "address", value)
+        return super().visit_AddressNode(node, value)
+
+
+class _ABIDecoder(Decoder):
+    """
+    Custom decoder that wraps address results into an `Address` object.
+    """
+
+    @classmethod
+    def visit_AddressNode(
+        cls, node: nodes.AddressNode, value: bytes, checksum: bool = True, **kwargs: Any
+    ) -> "Address":
+        ret = super().visit_AddressNode(node, value)
+        return Address(ret)
 
 
 def _get_parser(schema: str):
@@ -60,11 +79,11 @@ def _get_parser(schema: str):
 
 
 def abi_encode(schema: str, data: Any) -> bytes:
-    return Encoder.encode(_get_parser(schema), data)
+    return _ABIEncoder.encode(_get_parser(schema), data)
 
 
 def abi_decode(schema: str, data: bytes) -> Any:
-    return Decoder.decode(_get_parser(schema), data)
+    return _ABIDecoder.decode(_get_parser(schema), data)
 
 
 def is_abi_encodable(abi_type: str, data: Any) -> bool:

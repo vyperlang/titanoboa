@@ -7,13 +7,14 @@ import contextlib
 import logging
 import sys
 import warnings
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Type
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
 from eth.chains.mainnet import MainnetChain
+from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
 from eth.typing import JournalDBCheckpoint
@@ -24,6 +25,7 @@ from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Hash32
 from eth_utils import setup_DEBUG2_logging
 
+from boa.rpc import RPC
 from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
@@ -360,10 +362,20 @@ class PyEVM:
         self.chain = _make_chain()
         self.sha3_trace = {}
         self.sstore_trace = {}
-        self._init_vm(env, reset_traces=True, fast_mode_enabled=fast_mode_enabled)
+        self.env = env
+        self._init_vm(
+            env, AccountDB, reset_traces=True, fast_mode_enabled=fast_mode_enabled
+        )
 
-    def _init_vm(self, env, reset_traces: bool, fast_mode_enabled: bool):
+    def _init_vm(
+        self,
+        env,
+        account_db_class: Type[AccountDB],
+        reset_traces: bool,
+        fast_mode_enabled: bool,
+    ):
         self.vm = self.chain.get_vm()
+        self._set_account_db_class(account_db_class)
 
         self.vm.patch = VMPatcher(self.vm)
 
@@ -404,16 +416,24 @@ class PyEVM:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork(self, url, reset_traces: bool, fast_mode_enabled: bool, **kwargs):
-        kwargs["url"] = url
+    def fork_rpc(self, rpc: RPC, reset_traces: bool, fast_mode_enabled: bool, **kwargs):
+        AccountDBFork._rpc = rpc
         AccountDBFork._rpc_init_kwargs = kwargs
-        self.vm.__class__._state_class.account_db_class = AccountDBFork
-        self._init_vm(reset_traces, fast_mode_enabled)
+        self._init_vm(self.env, AccountDBFork, reset_traces, fast_mode_enabled)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
         self.vm.patch.block_number = int(block_info["number"], 16)
         # TODO patch the other stuff
+
+        self.vm.state._account_db._rpc._init_mem_db()
+
+    @property
+    def is_forked(self):
+        return self.vm.__class__._state_class.account_db_class == AccountDBFork
+
+    def _set_account_db_class(self, account_db_class: type):
+        self.vm.__class__._state_class.account_db_class = account_db_class
 
     def get_gas_meter_class(self):
         return self.vm.state.computation_class._gas_meter_class

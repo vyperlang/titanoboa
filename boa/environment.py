@@ -1,6 +1,9 @@
 """
 The entry point for managing the execution environment.
 """
+# the main "entry point" for patching py-evm.
+# handles low level details around state and py-evm tracing.
+
 import contextlib
 import random
 from typing import Any, Optional, Tuple
@@ -8,6 +11,7 @@ from typing import Any, Optional, Tuple
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
+from boa.rpc import EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
@@ -22,7 +26,6 @@ class Env:
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
     _fast_mode_enabled = False
-    _fork_mode = False
     _fork_try_prefetch_state = False
 
     def __init__(self):
@@ -55,14 +58,31 @@ class Env:
         self._fast_mode_enabled = flag
         self.evm.enable_fast_mode(flag)
 
-    def fork(self, url, reset_traces=True, **kwargs):
-        self._fork_mode = True
-        self.evm.fork(
-            url, reset_traces, fast_mode_enabled=self._fast_mode_enabled, **kwargs
+    def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
+        return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
+
+    def fork_rpc(self, rpc=None, reset_traces=True, block_identifier="safe", **kwargs):
+        """
+        Fork the environment to a local chain.
+        :param rpc: RPC to fork from
+        :param reset_traces: Reset the traces
+        :param block_identifier: Block identifier to fork from
+        :param kwargs: Additional arguments for the RPC
+        """
+        self.evm.fork_rpc(
+            rpc,
+            reset_traces,
+            fast_mode_enabled=self._fast_mode_enabled,
+            block_identifier=block_identifier,
+            **kwargs,
         )
 
     def get_gas_meter_class(self):
         return self.evm.get_gas_meter_class()
+
+    @property
+    def _fork_mode(self):
+        return self.evm.is_forked
 
     def set_gas_meter_class(self, cls: type) -> None:
         self.evm.set_gas_meter_class(cls)

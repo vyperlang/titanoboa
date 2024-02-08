@@ -1055,7 +1055,7 @@ def vyper_object(val, vyper_type):
     # and tag it with _vyper_type metadata
 
     vt = type(val)
-    if vt is bool:
+    if vt is bool or vt is Address:
         # https://stackoverflow.com/q/2172189
         # bool is not ambiguous wrt vyper type anyways.
         return val
