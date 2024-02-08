@@ -402,8 +402,10 @@ class Env:
     def _set_account_db_class(self, account_db_class: type):
         self.vm.__class__._state_class.account_db_class = account_db_class
 
-    def _init_vm(self, reset_traces=True):
+    def _init_vm(self, reset_traces=True, account_db_class=AccountDB):
         self.vm = self.chain.get_vm()
+
+        self._set_account_db_class(account_db_class)
 
         self.vm.patch = VMPatcher(self.vm)
 
@@ -462,8 +464,7 @@ class Env:
             **kwargs,
         }
 
-        self._set_account_db_class(AccountDBFork)
-        self._init_vm(reset_traces=reset_traces)
+        self._init_vm(reset_traces=reset_traces, account_db_class=AccountDBFork)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
