@@ -209,13 +209,12 @@ def test_browser_loads_signer(
     mock_inject_javascript.assert_called()
 
 
-def test_browser_chain_id(token, browser, display_mock, mock_callback):
-    signer = browser.BrowserSigner(boa.env.generate_address())
+def test_browser_chain_id(token, env, display_mock, mock_callback):
     mock_callback("eth_chainId", "0x123")
-    assert signer.get_chain_id() == "0x123"
+    assert env.get_chain_id() == "0x123"
     mock_callback("wallet_switchEthereumChain")
-    signer.set_chain_id("0x456")
-    assert display_mock.call_count == 2
+    env.set_chain_id("0x456")
+    assert display_mock.call_count == 6
     (js,), _ = display_mock.call_args
     assert (
         f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x456"}}])'

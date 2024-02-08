@@ -15,6 +15,7 @@ from IPython.display import Javascript, display
 
 from boa.rpc import RPC, RPCError
 
+from ... import NetworkEnv
 from .constants import (
     ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
@@ -52,19 +53,6 @@ class BrowserSigner:
             self.address = _javascript_call(
                 "loadSigner", timeout_message=ADDRESS_TIMEOUT_MESSAGE
             )
-
-    def get_chain_id(self):
-        return _javascript_call(
-            "rpc", "eth_chainId", timeout_message=RPC_TIMEOUT_MESSAGE
-        )
-
-    def set_chain_id(self, chain_id):
-        _javascript_call(
-            "rpc",
-            "wallet_switchEthereumChain",
-            [{"chainId": chain_id}],
-            timeout_message=RPC_TIMEOUT_MESSAGE,
-        )
 
     def send_transaction(self, tx_data: dict) -> dict:
         """
@@ -112,6 +100,30 @@ class BrowserRPC(RPC):
             tx_hash,
             timeout_ms,
             pool_latency_ms,
+            timeout_message=RPC_TIMEOUT_MESSAGE,
+        )
+
+
+class BrowserEnv(NetworkEnv):
+    """
+    A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
+    """
+
+    def __init__(self, address=None):
+        super().__init__(rpc=BrowserRPC())
+        self.signer = BrowserSigner(address)
+        self.set_eoa(self.signer)
+
+    def get_chain_id(self):
+        return _javascript_call(
+            "rpc", "eth_chainId", timeout_message=RPC_TIMEOUT_MESSAGE
+        )
+
+    def set_chain_id(self, chain_id):
+        _javascript_call(
+            "rpc",
+            "wallet_switchEthereumChain",
+            [{"chainId": chain_id}],
             timeout_message=RPC_TIMEOUT_MESSAGE,
         )
 
