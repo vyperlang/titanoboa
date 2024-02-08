@@ -126,6 +126,7 @@ class BrowserEnv(NetworkEnv):
             [{"chainId": chain_id}],
             timeout_message=RPC_TIMEOUT_MESSAGE,
         )
+        self._reset_fork()
 
 
 def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
