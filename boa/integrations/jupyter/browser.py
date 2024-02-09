@@ -13,10 +13,7 @@ from typing import Any
 import nest_asyncio
 from IPython.display import Javascript, display
 
-from boa.rpc import RPC, RPCError
-
-from ... import NetworkEnv
-from .constants import (
+from boa.integrations.jupyter.constants import (
     ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
     CALLBACK_TOKEN_TIMEOUT,
@@ -26,7 +23,12 @@ from .constants import (
     SHARED_MEMORY_LENGTH,
     TRANSACTION_TIMEOUT_MESSAGE,
 )
-from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
+from boa.integrations.jupyter.utils import (
+    convert_frontend_dict,
+    install_jupyter_javascript_triggers,
+)
+from boa.network import NetworkEnv
+from boa.rpc import RPC, RPCError
 
 try:
     from google.colab.output import eval_js as colab_eval_js
