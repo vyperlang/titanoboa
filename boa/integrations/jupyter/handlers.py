@@ -22,7 +22,20 @@ class CallbackHandler(APIHandler):
     """
 
     @authenticated  # ensure only authorized users can request the server
+    def get(self, token: str):
+        """Checks if a SharedMemory object with the given token exists."""
+        try:
+            memory = SharedMemory(token)
+        except FileNotFoundError:
+            self.set_status(HTTPStatus.NOT_FOUND)
+            return self.finish({"error": f"Invalid token: {token}"})
+        memory.close()
+        self.set_status(HTTPStatus.NO_CONTENT)
+        return self.finish()
+
+    @authenticated  # ensure only authorized users can request the server
     def post(self, token: str):
+        """Writes the request body to the SharedMemory object identified by the token."""
         body = self.request.body
         if not body:
             self.set_status(HTTPStatus.BAD_REQUEST)
