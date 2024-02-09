@@ -401,10 +401,8 @@ class Env:
 
     def _init_vm(self, reset_traces=True, account_db_class=AccountDB):
         self.vm = self.chain.get_vm()
+        self.vm.__class__._state_class.account_db_class = account_db_class
         self.vm.patch = VMPatcher(self.vm)
-
-        # revert any previous AccountDBFork patching
-        self._set_account_db_class(AccountDB)
 
         c = type(
             "TitanoboaComputation",
@@ -471,9 +469,6 @@ class Env:
     @property
     def _fork_mode(self):
         return self.vm.__class__._state_class.account_db_class == AccountDBFork
-
-    def _set_account_db_class(self, account_db_class: type):
-        self.vm.__class__._state_class.account_db_class = account_db_class
 
     def set_gas_meter_class(self, cls: type) -> None:
         self.vm.state.computation_class._gas_meter_class = cls
