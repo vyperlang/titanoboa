@@ -399,14 +399,9 @@ class Env:
     def get_gas_price(self):
         return self._gas_price or 0
 
-    def _set_account_db_class(self, account_db_class: type):
-        self.vm.__class__._state_class.account_db_class = account_db_class
-
     def _init_vm(self, reset_traces=True, account_db_class=AccountDB):
         self.vm = self.chain.get_vm()
-
-        self._set_account_db_class(account_db_class)
-
+        self.vm.__class__._state_class.account_db_class = account_db_class
         self.vm.patch = VMPatcher(self.vm)
 
         c = type(

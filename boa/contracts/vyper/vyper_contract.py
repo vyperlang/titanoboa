@@ -33,8 +33,16 @@ from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
 from boa import BoaError
-from boa.contracts.base_evm_contract import StackTrace, _BaseEVMContract, _handle_child_trace
-from boa.contracts.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node, reason_at
+from boa.contracts.base_evm_contract import (
+    StackTrace,
+    _BaseEVMContract,
+    _handle_child_trace,
+)
+from boa.contracts.vyper.ast_utils import (
+    ast_map_of,
+    get_fn_ancestor_from_node,
+    reason_at,
+)
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
     anchor_compiler_settings,
@@ -42,7 +50,10 @@ from boa.contracts.vyper.compiler_utils import (
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
-from boa.contracts.vyper.decoder_utils import ByteAddressableStorage, decode_vyper_object
+from boa.contracts.vyper.decoder_utils import (
+    ByteAddressableStorage,
+    decode_vyper_object,
+)
 from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env

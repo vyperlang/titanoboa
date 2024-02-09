@@ -13,9 +13,7 @@ from typing import Any
 import nest_asyncio
 from IPython.display import Javascript, display
 
-from boa.rpc import RPC, RPCError
-
-from .constants import (
+from boa.integrations.jupyter.constants import (
     ADDRESS_TIMEOUT_MESSAGE,
     CALLBACK_TOKEN_BYTES,
     CALLBACK_TOKEN_TIMEOUT,
@@ -25,7 +23,12 @@ from .constants import (
     SHARED_MEMORY_LENGTH,
     TRANSACTION_TIMEOUT_MESSAGE,
 )
-from .utils import convert_frontend_dict, install_jupyter_javascript_triggers
+from boa.integrations.jupyter.utils import (
+    convert_frontend_dict,
+    install_jupyter_javascript_triggers,
+)
+from boa.network import NetworkEnv
+from boa.rpc import RPC, RPCError
 
 try:
     from google.colab.output import eval_js as colab_eval_js
@@ -119,6 +122,31 @@ class BrowserRPC(RPC):
             pool_latency_ms,
             timeout_message=RPC_TIMEOUT_MESSAGE,
         )
+
+
+class BrowserEnv(NetworkEnv):
+    """
+    A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
+    """
+
+    def __init__(self, address=None):
+        super().__init__(rpc=BrowserRPC())
+        self.signer = BrowserSigner(address)
+        self.set_eoa(self.signer)
+
+    def get_chain_id(self):
+        return _javascript_call(
+            "rpc", "eth_chainId", timeout_message=RPC_TIMEOUT_MESSAGE
+        )
+
+    def set_chain_id(self, chain_id):
+        _javascript_call(
+            "rpc",
+            "wallet_switchEthereumChain",
+            [{"chainId": chain_id}],
+            timeout_message=RPC_TIMEOUT_MESSAGE,
+        )
+        self._reset_fork()
 
 
 def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
