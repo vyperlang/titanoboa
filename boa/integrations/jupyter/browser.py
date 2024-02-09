@@ -65,7 +65,7 @@ class BrowserSigner:
         :return: The signed transaction data.
         """
         sign_data = _javascript_call(
-            "signTransaction", tx_data, timeout_message=TRANSACTION_TIMEOUT_MESSAGE
+            "sendTransaction", tx_data, timeout_message=TRANSACTION_TIMEOUT_MESSAGE
         )
         return convert_frontend_dict(sign_data)
 
