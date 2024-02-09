@@ -1,24 +1,21 @@
 name: unitary
 
-on: ["push", "pull_request"]
-
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+on: pull_request_target
 
 jobs:
   unitary:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: [ "3.10", "3.11" ]
 
     name: "unit tests: python ${{ matrix.python-version }}"
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
@@ -31,15 +28,14 @@ jobs:
       - name: Run Unit Tests
         run: pytest -n auto tests/unitary/
 
-  integration:
-    name: "integration tests (forked and networked modes)"
+  anvil:
+    name: "integration tests (networked against anvil)"
     runs-on: ubuntu-latest
-    # only run in single process, so there is no contention for sepolia tx nonce
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setup Python 3.11
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
@@ -52,15 +48,43 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Run Networked Tests against anvil
+        # run separately to clarify its dependency on outside binary
+        run: pytest -n auto tests/integration/network/anvil/
+
+  integration:
+    name: "integration tests (fork mode and Sepolia)"
+    runs-on: ubuntu-latest
+    # only run in single process, so there is no contention for sepolia tx nonce
+    steps:
+      - name: Check if the user is a contributor
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { actor: username, repo: { owner, repo } } = context;
+            const collaborator = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+            if (!collaborator.data.user.permissions.push) {
+              core.setFailed(username + ' is not a contributor');
+            }
+
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Requirements
+        run: |
+          pip install -r dev-requirements.txt
+          pip install .
+
       - name: Run Fork Mode Tests
         run: pytest -n auto tests/integration/fork/
         env:
           MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
-
-      - name: Run Networked Tests against anvil
-        # run separately to clarify its dependency on outside binary
-        run: pytest -n auto tests/integration/network/anvil/
 
       - name: Run Sepolia Tests
         # disable xdist, otherwise they can contend for tx nonce
