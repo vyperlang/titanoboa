@@ -86,6 +86,7 @@
         if (!colab) {
             // Check if the cell was already executed. In Colab, eval_js() doesn't replay.
             const response = await fetch(`../titanoboa_jupyterlab/callback/${token}`);
+            // !response.ok indicates the cell has already been executed
             if (!response.ok) return;
         }
 
