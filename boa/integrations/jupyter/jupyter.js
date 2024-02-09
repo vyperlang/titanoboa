@@ -13,10 +13,6 @@
         return provider = new ethers.BrowserProvider(ethereum);
     };
 
-    /** Keep track of executed cells to avoid re-executing them on page reload */
-    const executed = JSON.parse(localStorage.getItem('boa.executed') || '[]');
-    window.onbeforeunload = () => localStorage.setItem('boa.executed', JSON.stringify(executed.slice(executed.length - 100)));
-
     /** Stringify data, converting big ints to strings */
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
 
