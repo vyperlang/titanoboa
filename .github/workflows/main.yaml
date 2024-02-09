@@ -63,7 +63,6 @@ jobs:
     name: "integration tests (fork mode and Sepolia)"
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'pull_request_target'
-    # only run in single process, so there is no contention for sepolia tx nonce
     steps:
       - name: Check if the user is a contributor
         uses: actions/github-script@v7
