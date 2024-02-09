@@ -207,11 +207,15 @@ class AccountDBFork(AccountDB):
         except (RPCError, HTTPError):
             return
 
+        snapshot = self.record()
+
         # everything is returned in hex
         for address, v in res.items():
             try:
                 address = to_canonical_address(address)
             except ValueError:
+                # the trace we have been given is invalid, roll back changes
+                self.discard(snapshot)
                 return
 
             # set account if we don't already have it
@@ -235,6 +239,7 @@ class AccountDBFork(AccountDB):
                 key = int_to_big_endian(slot)
                 if not self._helper_have_storage(address, slot):
                     account_store._journal_storage[key] = rlp.encode(value)  # type: ignore
+        self.lock_changes()
 
     def get_code(self, address):
         try:
