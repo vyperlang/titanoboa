@@ -76,7 +76,7 @@ def find_response(mock_calls, func_to_body_dict):
 
 
 @pytest.fixture()
-def mock_callback(mocked_token, browser, display_mock):
+def mock_callback(mocked_token, browser, display_mock, mock_inject_javascript):
     """Returns a function that allows mocking the result of the frontend callback."""
 
     with mock.patch(
@@ -124,6 +124,7 @@ def mock_fork(mock_callback):
 
 @pytest.fixture()
 def browser(nest_asyncio_mock, jupyter_module_mock):
+    # Import the browser module after the mocks have been set up
     from boa.integrations.jupyter import browser
 
     return browser
@@ -150,6 +151,16 @@ def test_browser_signer_given_address(browser, display_mock, mock_inject_javascr
     assert signer.address == "0x1234"
     display_mock.assert_not_called()
     mock_inject_javascript.assert_not_called()
+
+
+def test_browser_sign_typed_data(
+    browser, display_mock, mock_inject_javascript, mock_callback
+):
+    signer = browser.BrowserSigner(boa.env.generate_address())
+    signature = boa.env.generate_address()
+    mock_callback("signTypedData", signature)
+    data = signer.sign_typed_data({"name": "My App"}, {"types": []}, {"data": "0x1234"})
+    assert data == signature
 
 
 def test_browser_signer_no_address(
@@ -209,6 +220,19 @@ def test_browser_loads_signer(
     mock_inject_javascript.assert_called()
 
 
+def test_browser_chain_id(token, env, display_mock, mock_callback):
+    mock_callback("eth_chainId", "0x123")
+    assert env.get_chain_id() == "0x123"
+    mock_callback("wallet_switchEthereumChain")
+    env.set_chain_id("0x456")
+    assert display_mock.call_count == 7
+    (js,), _ = display_mock.call_args_list[-2]
+    assert (
+        f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x456"}}])'
+        in js.data
+    )
+
+
 def test_browser_rpc(
     token,
     browser,
@@ -229,14 +253,7 @@ def test_browser_rpc(
 
 
 def test_browser_rpc_error(
-    token,
-    browser,
-    display_mock,
-    mock_callback,
-    mock_inject_javascript,
-    account,
-    mock_fork,
-    env,
+    token, browser, display_mock, mock_callback, account, mock_fork, env
 ):
     rpc_error = {"code": -32000, "message": "Reverted"}
     mock_callback(
@@ -248,14 +265,7 @@ def test_browser_rpc_error(
 
 
 def test_browser_rpc_server_error(
-    token,
-    browser,
-    display_mock,
-    mock_callback,
-    mock_inject_javascript,
-    account,
-    mock_fork,
-    env,
+    token, browser, display_mock, mock_callback, account, mock_fork, env
 ):
     error = {
         "code": "UNKNOWN_ERROR",
@@ -268,13 +278,7 @@ def test_browser_rpc_server_error(
 
 
 def test_browser_js_error(
-    token,
-    browser,
-    display_mock,
-    mock_callback,
-    mock_inject_javascript,
-    account,
-    mock_fork,
+    token, browser, display_mock, mock_callback, account, mock_fork
 ):
     mock_callback("loadSigner", error={"message": "custom message", "stack": ""})
     with pytest.raises(browser.RPCError) as exc_info:

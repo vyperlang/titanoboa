@@ -40,31 +40,30 @@
         return response.text();
     }
 
+    const getSigner = () => getEthersProvider().getSigner();
+
     /** Load the signer via ethers user */
-    const loadSigner = async () => {
-        const signer = await getEthersProvider().getSigner();
-        return signer.getAddress();
-    };
+    const loadSigner = () => getSigner().then(s => s.getAddress());
 
     /** Sign a transaction via ethers */
-    async function signTransaction(transaction) {
-        const signer = await getEthersProvider().getSigner();
-        return signer.sendTransaction(transaction);
-    }
+    const sendTransaction = transaction => getSigner().then(s => s.sendTransaction(transaction));
+
+    /** Sign a typed data via ethers */
+    const signTypedData = (domain, types, value) => getSigner().then(s => s.signTypedData(domain, types, value));
 
     /** Call an RPC method via ethers */
     const rpc = (method, params) => getEthersProvider().send(method, params);
 
     /** Wait until the transaction is mined */
-    const waitForTransactionReceipt = async (params, timeout, poll_latency) => {
+    const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
         while (true) {
             try {
-                const result = await rpc('eth_getTransactionReceipt', params);
+                const result = await rpc('eth_getTransactionReceipt', [tx_hash]);
                 if (result) {
                     return result;
                 }
             } catch (err) { // ignore "server error" (happens while transaction is mined)
-                if (err?.info?.error?.code !== -32603) {
+                if ((err?.info || err)?.error?.code !== -32603) {
                     throw err;
                 }
             }
@@ -84,6 +83,13 @@
 
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
+        if (!colab) {
+            // Check if the cell was already executed. In Colab, eval_js() doesn't replay.
+            const response = await fetch(`../titanoboa_jupyterlab/callback/${token}`);
+            // !response.ok indicates the cell has already been executed
+            if (!response.ok) return;
+        }
+
         const body = stringify(await parsePromise(func(...args)));
         // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {
@@ -95,7 +101,8 @@
     // expose functions to window, so they can be called from the BrowserSigner
     window._titanoboa = {
         loadSigner: handleCallback(loadSigner),
-        signTransaction: handleCallback(signTransaction),
+        sendTransaction: handleCallback(sendTransaction),
+        signTypedData: handleCallback(signTypedData),
         waitForTransactionReceipt: handleCallback(waitForTransactionReceipt),
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),
