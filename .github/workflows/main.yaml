@@ -29,7 +29,11 @@ jobs:
       - name: Run Unit Tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest -n auto --cov=boa --cov-report term-missing:skip-covered --cov-fail-under=35 tests/unitary/
+          # pass internals to pytest-cov, we are testing a pytest plugin: See https://github.com/pytest-dev/pytest-cov/blob/2c9f2170/docs/plugins.rst
+          COV_CORE_SOURCE: boa
+          COV_CORE_CONFIG: .coveragerc
+          COV_CORE_DATAFILE: .coverage.eager
+        run: pytest --cov=boa --cov-append --cov-report term-missing:skip-covered --cov-fail-under=70 tests/unitary/
 
   integration:
     name: "integration tests (forked and networked modes)"
