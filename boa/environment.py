@@ -6,13 +6,14 @@ import logging
 import random
 import sys
 import warnings
-from typing import Annotated, Any, Iterator, Optional, Tuple
+from typing import Any, Iterator, Optional, Tuple
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
 from eth.chains.mainnet import MainnetChain
+from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
@@ -20,11 +21,11 @@ from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
-from eth_utils import setup_DEBUG2_logging, to_canonical_address, to_checksum_address
+from eth_utils import setup_DEBUG2_logging
 
-from boa.util.abi import abi_decode
+from boa.rpc import EthereumRPC
+from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
-from boa.util.lrudict import lrudict
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -92,42 +93,6 @@ class VMPatcher:
             for s, _ in self._patchables:
                 for attr in s:
                     setattr(self, attr, snap[attr])
-
-
-# XXX: inherit from bytes directly so that we can pass it to py-evm?
-# inherit from `str` so that ABI encoder / decoder can work without failing
-class Address(str):  # (PYEVM_Address):
-    # converting between checksum and canonical addresses is a hotspot;
-    # this class contains both and caches recently seen conversions
-    __slots__ = ("canonical_address",)
-    _cache = lrudict(1024)
-
-    canonical_address: Annotated[PYEVM_Address, "canonical address"]
-
-    def __new__(cls, address):
-        if isinstance(address, Address):
-            return address
-
-        try:
-            return cls._cache[address]
-        except KeyError:
-            pass
-
-        checksum_address = to_checksum_address(address)
-        self = super().__new__(cls, checksum_address)
-        self.canonical_address = to_canonical_address(address)
-        cls._cache[address] = self
-        return self
-
-    # def __hash__(self):
-    #    return hash(self.checksum_address)
-
-    # def __eq__(self, other):
-    #    return super().__eq__(self, other)
-
-    def __repr__(self):
-        checksum_addr = super().__repr__()
-        return f"_Address({checksum_addr})"
 
 
 # make mypy happy
@@ -401,7 +366,6 @@ class Env:
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
     _fast_mode_enabled = False
-    _fork_mode = False
     _fork_try_prefetch_state = False
 
     def __init__(self):
@@ -435,9 +399,9 @@ class Env:
     def get_gas_price(self):
         return self._gas_price or 0
 
-    def _init_vm(self, reset_traces=True):
+    def _init_vm(self, reset_traces=True, account_db_class=AccountDB):
         self.vm = self.chain.get_vm()
-
+        self.vm.__class__._state_class.account_db_class = account_db_class
         self.vm.patch = VMPatcher(self.vm)
 
         c = type(
@@ -478,17 +442,33 @@ class Env:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork(self, url, reset_traces=True, **kwargs):
-        kwargs["url"] = url
-        AccountDBFork._rpc_init_kwargs = kwargs
-        self._fork_mode = True
-        self.vm.__class__._state_class.account_db_class = AccountDBFork
-        self._init_vm(reset_traces=reset_traces)
+    def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
+        return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
+
+    def fork_rpc(self, rpc=None, reset_traces=True, block_identifier="safe", **kwargs):
+        """
+        Fork the environment to a local chain.
+        :param rpc: RPC to fork from
+        :param reset_traces: Reset the traces
+        :param block_identifier: Block identifier to fork from
+        :param kwargs: Additional arguments for the RPC
+        """
+        AccountDBFork._rpc = rpc
+        AccountDBFork._rpc_init_kwargs = {
+            "block_identifier": block_identifier,
+            **kwargs,
+        }
+
+        self._init_vm(reset_traces=reset_traces, account_db_class=AccountDBFork)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
         self.vm.patch.block_number = int(block_info["number"], 16)
         # TODO patch the other stuff
+
+    @property
+    def _fork_mode(self):
+        return self.vm.__class__._state_class.account_db_class == AccountDBFork
 
     def set_gas_meter_class(self, cls: type) -> None:
         self.vm.state.computation_class._gas_meter_class = cls

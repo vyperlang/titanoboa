@@ -3,9 +3,7 @@
 all: lint build
 
 lint:
-	black -C -t py310 boa/ tests/
-	isort boa/ tests/
-	flake8 boa/ tests/
+	pre-commit run --all-files
 	mypy --install-types --non-interactive --follow-imports=silent --ignore-missing-imports --implicit-optional -p boa
 
 build:

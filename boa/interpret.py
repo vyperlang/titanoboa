@@ -14,8 +14,8 @@ from boa.contracts.vyper.vyper_contract import (
     VyperContract,
     VyperDeployer,
 )
-from boa.environment import Address
 from boa.explorer import fetch_abi_from_etherscan
+from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
 
 _Contract = Union[VyperContract, VyperBlueprint]

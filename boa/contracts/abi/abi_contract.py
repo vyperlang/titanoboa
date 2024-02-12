@@ -14,9 +14,7 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
-from boa.contracts.utils import decode_addresses, encode_addresses
-from boa.environment import Address
-from boa.util.abi import ABIError, abi_decode, abi_encode, is_abi_encodable
+from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
 
 
 class ABIFunction:
@@ -94,13 +92,10 @@ class ABIFunction:
             )
         try:
             kwarg_inputs = self._abi["inputs"][len(args) :]
-            merged = list(args) + [kwargs.pop(i["name"]) for i in kwarg_inputs]
+            return list(args) + [kwargs.pop(i["name"]) for i in kwarg_inputs]
         except KeyError as e:
             error = f"Missing keyword argument {e} for `{self.signature}`. Passed {args} {kwargs}"
             raise TypeError(error)
-
-        # allow address objects to be passed in place of addresses
-        return encode_addresses(merged)
 
     def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
         """Calls the function with the given arguments based on the ABI contract."""
@@ -235,11 +230,9 @@ class ABIContract(_BaseEVMContract):
 
         schema = f"({_format_abi_type(abi_type)})"
         try:
-            decoded = abi_decode(schema, computation.output)
+            return abi_decode(schema, computation.output)
         except ABIError as e:
             raise BoaError(self.stack_trace(computation)) from e
-
-        return tuple(decode_addresses(typ, val) for typ, val in zip(abi_type, decoded))
 
     def stack_trace(self, computation: ComputationAPI) -> StackTrace:
         """
@@ -300,15 +293,20 @@ class ABIContractFactory:
         return contract
 
 
-def _abi_from_json(abi: dict) -> list | str:
+def _abi_from_json(abi: dict) -> str:
     """
-    Parses an ABI type into a list of types.
+    Parses an ABI type into its schema string.
     :param abi: The ABI type to parse.
-    :return: A list of types or a single type.
+    :return: The schema string for the given abi type.
     """
     if "components" in abi:
-        assert abi["type"] == "tuple"  # sanity check
-        return [_abi_from_json(item) for item in abi["components"]]
+        components = ",".join([_abi_from_json(item) for item in abi["components"]])
+        if abi["type"] == "tuple":
+            return f"({components})"
+        if abi["type"] == "tuple[]":
+            return f"({components})[]"
+        raise ValueError("Components found in non-tuple type " + abi["type"])
+
     return abi["type"]
 
 
