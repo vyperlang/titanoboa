@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Tuple, cast
+from typing import Any, Dict, Tuple
 
 from requests import HTTPError
 
@@ -202,7 +202,7 @@ class AccountDBFork(AccountDB):
         # arguments with this specific block before
         try:
             tracer = {"tracer": "prestateTracer"}
-            res = cast(RPC, self._caching_rpc).fetch_uncached(
+            res = self._caching_rpc.fetch_uncached(
                 "debug_traceCall", [args, self._block_id, tracer]
             )
         except (RPCError, HTTPError):
