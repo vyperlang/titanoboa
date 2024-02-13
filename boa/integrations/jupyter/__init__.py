@@ -16,7 +16,7 @@ def load_jupyter_server_extension(server_app):
 _load_jupyter_server_extension = load_jupyter_server_extension
 
 
-__all__ = [
+__all__ = [  # type: ignore
     BrowserSigner,
     BrowserRPC,
     BrowserEnv,
