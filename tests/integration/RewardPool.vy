@@ -3,7 +3,7 @@
 @author Curve Finance, Yearn Finance
 @license MIT
 """
-from vyper.interfaces import ERC20
+from ethereum.ercs import ERC20
 
 interface VotingYFI:
     def user_point_epoch(addr: address) -> uint256: view
@@ -93,7 +93,7 @@ def _checkpoint_token():
     this_week: uint256 = t / WEEK * WEEK
     next_week: uint256 = 0
 
-    for i in range(20):
+    for i: uint256 in range(20):
         next_week = this_week + WEEK
         if block.timestamp < next_week:
             if since_last == 0 and block.timestamp == t:
@@ -129,7 +129,7 @@ def checkpoint_token():
 def _find_timestamp_epoch(ve: address, _timestamp: uint256) -> uint256:
     _min: uint256 = 0
     _max: uint256 = VEYFI.epoch()
-    for i in range(128):
+    for i: uint256 in range(128):
         if _min >= _max:
             break
         _mid: uint256 = (_min + _max + 2) / 2
@@ -146,7 +146,7 @@ def _find_timestamp_epoch(ve: address, _timestamp: uint256) -> uint256:
 def _find_timestamp_user_epoch(ve: address, user: address, _timestamp: uint256, max_user_epoch: uint256) -> uint256:
     _min: uint256 = 0
     _max: uint256 = max_user_epoch
-    for i in range(128):
+    for i: uint256 in range(128):
         if _min >= _max:
             break
         _mid: uint256 = (_min + _max + 2) / 2
@@ -180,7 +180,7 @@ def _checkpoint_total_supply():
     rounded_timestamp: uint256 = block.timestamp / WEEK * WEEK
     VEYFI.checkpoint()
 
-    for i in range(20):
+    for i: uint256 in range(20):
         if t > rounded_timestamp:
             break
         else:
@@ -245,7 +245,7 @@ def _claim(addr: address, last_token_time: uint256) -> uint256:
     old_user_point: Point = empty(Point)
 
     # Iterate over weeks
-    for i in range(50):
+    for i: uint256 in range(50):
         if week_cursor >= last_token_time:
             break
 
@@ -280,7 +280,7 @@ def _claim(addr: address, last_token_time: uint256) -> uint256:
 
 
 @external
-@nonreentrant('lock')
+@nonreentrant
 def claim(user: address = msg.sender, relock: bool = False) -> uint256:
     """
     @notice Claim fees for a user

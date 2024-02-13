@@ -122,7 +122,7 @@ def test_fork_write(crvusd, n):
 def test_abi_stack_trace(crvusd):
     c = boa.loads(
         """
-from vyper.interfaces import ERC20
+from ethereum.ercs import ERC20
 @external
 def foo(x: ERC20, from_: address):
     x.transferFrom(from_, self, 100)
