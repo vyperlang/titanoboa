@@ -76,7 +76,7 @@ point_history: public(HashMap[address, HashMap[uint256, Point]])  # epoch -> uns
 slope_changes: public(HashMap[address, HashMap[uint256, int128]])  # time -> signed slope change
 
 
-@external
+@deploy
 def __init__(token: ERC20, reward_pool: RewardPool):
     """
     @notice Contract constructor

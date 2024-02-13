@@ -2,7 +2,7 @@ from vyper.interfaces import ERC20
 
 BLUEPRINT: immutable(address)
 
-@external
+@deploy
 def __init__(blueprint_address: address):
     BLUEPRINT = blueprint_address
 

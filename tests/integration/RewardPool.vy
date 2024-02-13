@@ -64,7 +64,7 @@ token_last_balance: public(uint256)
 ve_supply: public(HashMap[uint256, uint256])
 
 
-@external
+@deploy
 def __init__(veyfi: VotingYFI, start_time: uint256):
     """
     @notice Contract constructor
