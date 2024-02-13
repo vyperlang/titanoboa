@@ -12,7 +12,6 @@ from typing import Any, Optional
 import vyper
 import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
-import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
 from vyper.ast.parse import parse_to_ast
@@ -29,8 +28,8 @@ from vyper.compiler.settings import OptimizationLevel
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.analysis.data_positions import set_data_positions
-from vyper.semantics.types import AddressT, HashMapT, TupleT
+from vyper.semantics.analysis.base import VarInfo
+from vyper.semantics.types import AddressT, HashMapT, SelfT, TupleT
 from vyper.utils import method_id
 
 from boa import BoaError
@@ -489,6 +488,11 @@ class VyperContract(_BaseVyperContract):
                 continue
             setattr(self.internal, fn.name, VyperInternalFunction(fn, self))
 
+        # TODO: set library methods as class.internal attributes?
+
+        # not sure if this is accurate in the presence of modules
+        self._function_id = len(self.module_t.function_defs)
+
         self._storage = StorageModel(self)
 
         self._eval_cache = lrudict(0x1000)
@@ -727,16 +731,31 @@ class VyperContract(_BaseVyperContract):
     @cached_property
     def _ast_module(self):
         module = copy.deepcopy(self.compiler_data.annotated_vyper_module)
+        self._cache_namespace(module._metadata["namespace"])
 
     # the global namespace is expensive to compute, so cache it
     def _cache_namespace(self, namespace):
         # copy.copy doesn't really work on Namespace objects, copy by hand
         ret = vy_ns.Namespace()
-        ret._scopes = copy.deepcopy(namespace._scopes)
+        ret._scopes = [set()]
         for s in namespace._scopes:
+            ret.append(set())
             for n in s:
                 ret[n] = namespace[n]
+
+        # recreate the "self" object because it gets removed from the global
+        # namespace at the end of validate_semantics. do not try this at home!
+        self_t = SelfT()
+        for s, t in self.module_t.members.items():
+            self_t.add_member(s, t)
+        ret["self"] = VarInfo(self_t)
+        ret._scopes[-1].remove("self")
+        ret._scopes[0].add("self")
         self._vyper_namespace = ret
+
+    def _get_function_id(self):
+        self._function_id += 1
+        return self._function_id
 
     @contextlib.contextmanager
     def override_vyper_namespace(self):
@@ -789,7 +808,7 @@ class VyperContract(_BaseVyperContract):
         with anchor_opt_level(OptimizationLevel.NONE), anchor_evm_version(
             self.compiler_data.settings.evm_version
         ):
-            return generate_ir_for_module(self.compiler_data.module_t)
+            return generate_ir_for_module(self.module_t)
 
     @cached_property
     def ir_executor(self):

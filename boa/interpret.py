@@ -5,8 +5,8 @@ from typing import Any, Union
 
 import vyper
 from vyper.cli.vyper_compile import get_search_paths
-from vyper.compiler.phases import CompilerData
 from vyper.compiler.input_bundle import FileInput, FilesystemInputBundle
+from vyper.compiler.phases import CompilerData
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
 from boa.contracts.vyper.compiler_utils import anchor_compiler_settings
@@ -40,19 +40,26 @@ def set_search_path(path: list[str]):
     _search_path = path
 
 
-def compiler_data(source_code: str, contract_name: str, filename: str, **kwargs) -> CompilerData:
+def compiler_data(
+    source_code: str, contract_name: str, filename: str, **kwargs
+) -> CompilerData:
     global _disk_cache, _search_path
 
     # TODO: figure out how caching works with modules.
     if True:
-        file_input = FileInput(source_code=source_code, source_id=-1, path=Path(contract_name), resolved_path=Path(contract_name))
+        file_input = FileInput(
+            source_code=source_code,
+            source_id=-1,
+            path=Path(contract_name),
+            resolved_path=Path(contract_name),
+        )
         search_paths = get_search_paths(_search_path)
         input_bundle = FilesystemInputBundle(search_paths)
         return CompilerData(file_input, input_bundle, **kwargs)
 
     def func():
         raise Exception("unreachable")
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
+        ret = CompilerData(source_code, contract_name, **kwargs)
         with anchor_compiler_settings(ret):
             _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret

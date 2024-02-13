@@ -5,8 +5,12 @@ import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
 from vyper.ast.parse import parse_to_ast
 from vyper.codegen.core import anchor_opt_level
-from vyper.codegen.function_definitions import generate_ir_for_external_function
+from vyper.codegen.function_definitions import (
+    generate_ir_for_external_function,
+    generate_ir_for_internal_function,
+)
 from vyper.codegen.ir_node import IRnode
+from vyper.codegen.module import _globally_reachable_functions
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
@@ -36,19 +40,18 @@ def compile_vyper_function(vyper_function, contract):
     compiler_data = contract.compiler_data
 
     with anchor_compiler_settings(compiler_data):
-        module_t = contract.global_ctx
-        ifaces = compiler_data.interface_codes
-        ast = parse_to_ast(vyper_function, ifaces)
-        vy_ast.folding.fold(ast)
+        module_t = contract.module_t
+        ast = parse_to_ast(vyper_function)
 
         # override namespace and add wrapper code at the top
         with contract.override_vyper_namespace():
-            analysis.add_module_namespace(ast, ifaces)
-            analysis.validate_functions(ast)
+            analysis.validate_semantics(ast, compiler_data.input_bundle)
 
         ast = ast.body[0]
-        func_t = ast._metadata["type"]
+        func_t = ast._metadata["func_type"]
 
+        if func_t._function_id is None:
+            func_t._function_id = contract._get_function_id()
         funcinfo = generate_ir_for_external_function(ast, module_t)
         ir = funcinfo.common_ir
 
@@ -63,7 +66,20 @@ def compile_vyper_function(vyper_function, contract):
         # all labels are present, and then optimize all together
         # (use unoptimized IR, ir_executor can't handle optimized selector tables)
         _, contract_runtime = contract.unoptimized_ir
-        ir = IRnode.from_list(["seq", ir, contract_runtime])
+        ir_list = ["seq", ir, contract_runtime]
+        reachable = func_t.reachable_internal_functions
+        already_compiled = _globally_reachable_functions(module_t.function_defs)
+        missing_functions = reachable.difference(already_compiled)
+        # TODO: cache function compilations or something
+        for f in missing_functions:
+            assert f.ast_def is not None
+            if f._function_id is None:
+                f._function_id = contract._get_function_id()
+            ir_list.append(
+                generate_ir_for_internal_function(f.ast_def, module_t, False).func_ir
+            )
+
+        ir = IRnode.from_list(ir_list)
         ir = optimizer.optimize(ir)
 
         assembly = compile_ir.compile_to_assembly(ir)

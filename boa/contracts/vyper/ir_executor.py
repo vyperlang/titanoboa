@@ -25,9 +25,11 @@ _keccak_cache = lrudict(256)
 def keccak256(x):
     return _keccak_cache.setdefault_lambda(x, keccak)
 
+
 def _mkalphanum(string):
     # map a string to only-alphanumeric chars
-    return "".join([c if c.isalnum() else "_" for c in s])
+    return "".join([c if c.isalnum() else "_" for c in string])
+
 
 @dataclass
 class _Line:
@@ -98,12 +100,11 @@ class CompileContext:
         return f"var_{name}_{self.var_id}"
 
     @cached_property
-    def contract_path(self):
-        return PurePath(self.vyper_compiler_data.contract_path).name
+    def contract_name(self):
+        return _mkalphanum(PurePath(self.vyper_compiler_data.contract_path).name)
 
     def translate_label(self, label):
-        name = _mkalphanum(self.contract_path)
-        return f"{self.contract_path}_{self.uuid}_{label}"
+        return _mkalphanum(f"{self.contract_name}_{self.uuid}_{label}")
 
     def add_unique_symbol(self, symbol):
         if symbol in self.unique_symbols:
@@ -239,7 +240,7 @@ class IRExecutor:
     def _compile(self, context):
         raise RuntimeError("must be overridden in subclass!")
 
-    def compile_main(self, contract_path=""):
+    def compile_main(self, contract_name=""):
         self.builder.extend("import vyper.utils\nimport _operator")
 
         main_name = self.compile_ctx.translate_label("main")
@@ -251,7 +252,7 @@ class IRExecutor:
             self.builder.extend("\n\n")
             func.compile_func()
 
-        py_file = contract_path + str(self.compile_ctx.uuid) + ".py"
+        py_file = f"{contract_name}{self.compile_ctx.uuid}.py"
 
         # uncomment for debugging the python code:
         # with open(py_file, "w") as f:
@@ -1128,13 +1129,14 @@ def _ensure_source_pos(ir_node, source_pos=None, error_msg=None):
 
 def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
     _ensure_source_pos(ir_node)
-    ret = _executor_from_ir(ir_node, CompileContext(vyper_compiler_data))
+    ctx = CompileContext(vyper_compiler_data)
+    ret = _executor_from_ir(ir_node, ctx)
 
     ret = ret.analyze()
 
     # TODO: rename this, this is "something.vy", but we maybe want
     # "something.py <compiled from .vy>"
-    ret.compile_main(vyper_compiler_data.contract_path)
+    ret.compile_main(ctx.contract_name)
     return ret
 
 
