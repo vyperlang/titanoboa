@@ -3,9 +3,9 @@ import textwrap
 
 import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
-from vyper.ast.utils import parse_to_ast
+from vyper.ast.parse import parse_to_ast
 from vyper.codegen.core import anchor_opt_level
-from vyper.codegen.function_definitions import generate_ir_for_function
+from vyper.codegen.function_definitions import generate_ir_for_external_function
 from vyper.codegen.ir_node import IRnode
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import InvalidType
@@ -36,7 +36,7 @@ def compile_vyper_function(vyper_function, contract):
     compiler_data = contract.compiler_data
 
     with anchor_compiler_settings(compiler_data):
-        global_ctx = contract.global_ctx
+        module_t = contract.global_ctx
         ifaces = compiler_data.interface_codes
         ast = parse_to_ast(vyper_function, ifaces)
         vy_ast.folding.fold(ast)
@@ -49,8 +49,8 @@ def compile_vyper_function(vyper_function, contract):
         ast = ast.body[0]
         func_t = ast._metadata["type"]
 
-        external_func_info = generate_ir_for_function(ast, global_ctx, False)
-        ir = external_func_info.common_ir
+        funcinfo = generate_ir_for_external_function(ast, module_t)
+        ir = funcinfo.common_ir
 
         entry_label = func_t._ir_info.external_function_base_entry_label
 

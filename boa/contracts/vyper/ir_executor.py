@@ -13,7 +13,7 @@ from eth.exceptions import WriteProtection
 from eth_hash.auto import keccak
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
-from vyper.utils import mkalphanum, unsigned_to_signed
+from vyper.utils import unsigned_to_signed
 
 from boa.util.lrudict import lrudict
 from boa.vm.fast_mem import FastMem
@@ -25,6 +25,9 @@ _keccak_cache = lrudict(256)
 def keccak256(x):
     return _keccak_cache.setdefault_lambda(x, keccak)
 
+def _mkalphanum(string):
+    # map a string to only-alphanumeric chars
+    return "".join([c if c.isalnum() else "_" for c in s])
 
 @dataclass
 class _Line:
@@ -95,11 +98,12 @@ class CompileContext:
         return f"var_{name}_{self.var_id}"
 
     @cached_property
-    def contract_name(self):
-        return mkalphanum(PurePath(self.vyper_compiler_data.contract_name).name)
+    def contract_path(self):
+        return PurePath(self.vyper_compiler_data.contract_path).name
 
     def translate_label(self, label):
-        return f"{self.contract_name}_{self.uuid}_{label}"
+        name = _mkalphanum(self.contract_path)
+        return f"{self.contract_path}_{self.uuid}_{label}"
 
     def add_unique_symbol(self, symbol):
         if symbol in self.unique_symbols:
@@ -1130,7 +1134,7 @@ def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
 
     # TODO: rename this, this is "something.vy", but we maybe want
     # "something.py <compiled from .vy>"
-    ret.compile_main(vyper_compiler_data.contract_name)
+    ret.compile_main(vyper_compiler_data.contract_path)
     return ret
 
 

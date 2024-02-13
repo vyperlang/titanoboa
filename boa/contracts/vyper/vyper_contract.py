@@ -15,11 +15,12 @@ import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
-from vyper.ast.utils import parse_to_ast
+from vyper.ast.parse import parse_to_ast
 from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
-from vyper.codegen.function_definitions import generate_ir_for_function
-from vyper.codegen.function_definitions.common import ExternalFuncIR, InternalFuncIR
-from vyper.codegen.global_context import GlobalContext
+from vyper.codegen.function_definitions import (
+    generate_ir_for_external_function,
+    generate_ir_for_internal_function,
+)
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
@@ -406,7 +407,8 @@ class StorageVar:
 class StorageModel:
     def __init__(self, contract):
         compiler_data = contract.compiler_data
-        for k, v in compiler_data.global_ctx.variables.items():
+        # TODO: recurse into imported modules
+        for k, v in contract.module_t.variables.items():
             is_storage = not v.is_immutable and not v.is_constant
             if is_storage:
                 slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
@@ -429,7 +431,8 @@ class ImmutablesModel:
     def __init__(self, contract):
         compiler_data = contract.compiler_data
         data_section = memoryview(contract.data_section)
-        for k, v in compiler_data.global_ctx.variables.items():
+        # TODO: recurse into imported modules
+        for k, v in contract.module_t.variables.items():
             if v.is_immutable:  # check that v
                 ofst = compiler_data.storage_layout["code_layout"][k]["offset"]
                 immutable_raw_bytes = data_section[ofst:]
@@ -460,29 +463,29 @@ class VyperContract(_BaseVyperContract):
         self.created_from = created_from
 
         # add all exposed functions from the interface to the contract
-        external_fns = {
+        exposed_fns = {
             fn.name: fn
-            for fn in self.global_ctx.functions
-            if fn._metadata["type"].is_external
+            for fn in self.module_t.function_defs
+            if not fn._metadata["func_type"].is_internal
         }
 
         # set external methods as class attributes:
         self._ctor = None
-        if "__init__" in external_fns:
-            self._ctor = VyperFunction(external_fns.pop("__init__"), self)
+        if "__init__" in exposed_fns:
+            self._ctor = VyperFunction(exposed_fns.pop("__init__"), self)
 
         if skip_initcode:
             self._address = Address(override_address)
         else:
             self._address = self._run_init(*args, override_address=override_address)
 
-        for fn_name, fn in external_fns.items():
+        for fn_name, fn in exposed_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))
 
         # set internal methods as class.internal attributes:
         self.internal = lambda: None
-        for fn in self.global_ctx.functions:
-            if not fn._metadata["type"].is_internal:
+        for fn in self.module_t.function_defs:
+            if not fn._metadata["func_type"].is_internal:
                 continue
             setattr(self.internal, fn.name, VyperInternalFunction(fn, self))
 
@@ -519,7 +522,7 @@ class VyperContract(_BaseVyperContract):
 
     def __repr__(self):
         ret = (
-            f"<{self.compiler_data.contract_name} at {self.address}, "
+            f"<{self.compiler_data.contract_path} at {self.address}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
         )
 
@@ -580,7 +583,7 @@ class VyperContract(_BaseVyperContract):
         return frame_detail
 
     @property
-    def global_ctx(self):
+    def module_t(self):
         return self.compiler_data.global_ctx
 
     @property
@@ -723,30 +726,7 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def _ast_module(self):
-        module = copy.deepcopy(self.compiler_data.vyper_module)
-
-        # do the same thing as vyper_module_folded but skip getter expansion
-        with anchor_compiler_settings(self.compiler_data):
-            vy_ast.folding.fold(module)
-            with vy_ns.get_namespace().enter_scope():
-                analysis.add_module_namespace(
-                    module, self.compiler_data.interface_codes
-                )
-                analysis.validate_functions(module)
-                # we need to cache the namespace right here(!).
-                # set_data_positions will modify the type definitions in place.
-                self._cache_namespace(vy_ns.get_namespace())
-
-            vy_ast.expansion.remove_unused_statements(module)
-            # calculate slots for all storage variables, tagging
-            # the types in the namespace.
-            set_data_positions(module, storage_layout_overrides=None)
-
-            # ensure _ir_info is generated for all functions in this copied/shadow
-            # namespace
-            _ = generate_ir_for_module(GlobalContext(module))
-
-            return module
+        module = copy.deepcopy(self.compiler_data.annotated_vyper_module)
 
     # the global namespace is expensive to compute, so cache it
     def _cache_namespace(self, namespace):
@@ -786,7 +766,7 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def data_section_size(self):
-        return self.global_ctx.immutable_section_bytes
+        return self.module_t.immutable_section_bytes
 
     @cached_property
     def data_section(self):
@@ -809,7 +789,7 @@ class VyperContract(_BaseVyperContract):
         with anchor_opt_level(OptimizationLevel.NONE), anchor_evm_version(
             self.compiler_data.settings.evm_version
         ):
-            return generate_ir_for_module(self.compiler_data.global_ctx)
+            return generate_ir_for_module(self.compiler_data.module_t)
 
     @cached_property
     def ir_executor(self):
@@ -884,10 +864,10 @@ class VyperFunction:
         self.__doc__ = (
             fn_ast.doc_string.value if hasattr(fn_ast, "doc_string") else None
         )
-        self.__module__ = self.contract.compiler_data.contract_name
+        self.__module__ = self.contract.compiler_data.contract_path
 
     def __repr__(self):
-        return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
+        return f"{self.contract.compiler_data.contract_path}.{self.fn_ast.name}"
 
     def __str__(self):
         return repr(self.func_t)
@@ -898,16 +878,17 @@ class VyperFunction:
 
     @property
     def func_t(self):
-        return self.fn_ast._metadata["type"]
+        return self.fn_ast._metadata["func_type"]
 
     @cached_property
     def ir(self):
-        global_ctx = self.contract.global_ctx
+        module_t = self.contract.module_t
 
-        res = generate_ir_for_function(self.fn_ast, global_ctx, False)
-        if isinstance(res, InternalFuncIR):
+        if self.func_t.is_internal:
+            res = generate_ir_for_internal_function(self.fn_ast, module_t, False)
             ir = res.func_ir
-        elif isinstance(res, ExternalFuncIR):
+        else:
+            res = generate_ir_for_external_function(self.fn_ast, module_t)
             ir = res.common_ir
 
         return optimize(ir)

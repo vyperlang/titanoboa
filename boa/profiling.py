@@ -14,7 +14,7 @@ from boa.environment import Env
 @dataclass(unsafe_hash=True)
 class LineInfo:
     address: str
-    contract_name: str
+    contract_path: str
     lineno: int
     line_src: str
     fn_name: str
@@ -23,7 +23,7 @@ class LineInfo:
 @dataclass(unsafe_hash=True)
 class ContractMethodInfo:
     address: str
-    contract_name: str
+    contract_path: str
     fn_name: str
 
 
@@ -186,7 +186,7 @@ class LineProfile:
         for (contract, line), datum in raw_summary:
             data = ", ".join(f"{c}: {getattr(datum, c)}" for c in display_columns)
             line_src = get_line(contract.compiler_data.source_code, line)
-            x = f"{contract.address}:{contract.compiler_data.contract_name}:{line} {data}"
+            x = f"{contract.address}:{contract.compiler_data.contract_path}:{line} {data}"
             tmp.append((x, line_src))
 
         just = max(len(t[0]) for t in tmp)
@@ -204,7 +204,7 @@ class LineProfile:
             # here we use net_gas to include child computation costs:
             line_info = LineInfo(
                 address=contract.address,
-                contract_name=contract.compiler_data.contract_name,
+                contract_path=contract.compiler_data.contract_path,
                 lineno=line,
                 line_src=get_line(contract.compiler_data.source_code, line),
                 fn_name=fn_name,
@@ -225,7 +225,7 @@ class _String(str):
 def cache_gas_used_for_computation(contract, computation):
     profile = contract.line_profile(computation)
     env = contract.env
-    contract_name = contract.compiler_data.contract_name
+    contract_path = contract.compiler_data.contract_path
 
     # -------------------- CACHE CALL PROFILE --------------------
     # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
@@ -242,7 +242,7 @@ def cache_gas_used_for_computation(contract, computation):
         fn_name = fn.name
 
     fn = ContractMethodInfo(
-        contract_name=contract_name,
+        contract_path=contract_path,
         address=to_checksum_address(contract.address),
         fn_name=fn_name,
     )
@@ -334,7 +334,7 @@ def get_call_profile_table(env: Env) -> Table:
             cname = ""
             caddr = ""
             if c == 0:
-                cname = profile.contract_name
+                cname = profile.contract_path
                 caddr = address
             fn_name = profile.fn_name
             table.add_row(cname, caddr, fn_name, *stats.net_gas_stats.get_str_repr())
@@ -347,7 +347,7 @@ def get_call_profile_table(env: Env) -> Table:
 def get_line_profile_table(env: Env) -> Table:
     contracts: dict = {}
     for lp, gas_data in env._cached_line_profiles.items():
-        contract_uid = (lp.contract_name, lp.address)
+        contract_uid = (lp.contract_path, lp.address)
 
         # add spaces so numbers take up equal space
         lineno = str(lp.lineno).rjust(3)
@@ -358,8 +358,8 @@ def get_line_profile_table(env: Env) -> Table:
         )
 
     table = _create_table(for_line_profile=True)
-    for (contract_name, contract_address), fn_data in contracts.items():
-        contract_file_path = os.path.split(contract_name)
+    for (contract_path, contract_address), fn_data in contracts.items():
+        contract_file_path = os.path.split(contract_path)
         contract_data_str = (
             f"Path: {contract_file_path[0]}\n"
             f"Name: {contract_file_path[1]}\n"
@@ -385,7 +385,7 @@ def get_line_profile_table(env: Env) -> Table:
                 if code.endswith("\n"):
                     code = code[:-1]
                 stats = Stats(gas_used)
-                data = (contract_name, fn_name, code, *stats.get_str_repr())
+                data = (contract_path, fn_name, code, *stats.get_str_repr())
                 l_profile.append(data)
 
             # sorted by mean (x[4]):
