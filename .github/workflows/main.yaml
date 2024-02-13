@@ -24,7 +24,9 @@ jobs:
           cache: "pip"
 
       - name: Install Requirements
-        run: pip install -r dev-requirements.txt
+        run: |
+          pip install -r dev-requirements.txt
+          pip install .
 
       - name: Run Unit Tests
         env:
