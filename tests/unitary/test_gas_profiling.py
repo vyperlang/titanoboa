@@ -50,7 +50,7 @@ def variable_loop_contract():
 @view
 def foo(a: uint256, b: uint256, c: uint256) -> uint256:
     d: uint256 = 0
-    for j in range(1000):
+    for j: uint256 in range(1000):
         d = d + a + b
         if d > c:
             break
@@ -60,7 +60,7 @@ def foo(a: uint256, b: uint256, c: uint256) -> uint256:
 @view
 def _barfoo(a: uint256, b: uint256, c: uint256) -> uint256:
     d: uint256 = 0
-    for j in range(1000):
+    for j: uint256 in range(1000):
         d = d * a / b
         if d > c:
             break

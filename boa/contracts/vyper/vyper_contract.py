@@ -862,7 +862,7 @@ class VyperContract(_BaseVyperContract):
 
         # get an AST so we know the fn name; work is doubled in
         # _compile_vyper_function but no way around it.
-        fn_ast = parse_to_ast(fn_source_code, {}).body[0]
+        fn_ast = parse_to_ast(fn_source_code).body[0]
         if hasattr(self.inject, fn_ast.name) and not force:
             raise ValueError(f"already injected: {fn_ast.name}")
 
