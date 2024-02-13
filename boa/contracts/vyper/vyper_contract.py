@@ -14,6 +14,7 @@ import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
+from eth.abc import ComputationAPI
 from eth.exceptions import VMError
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
@@ -446,14 +447,14 @@ class ImmutablesModel:
 class VyperContract(_BaseVyperContract):
     def __init__(
         self,
-        compiler_data,
+        compiler_data: CompilerData,
         *args,
-        env=None,
-        override_address=None,
+        env: Env = None,
+        override_address: Address = None,
         # whether to skip constructor
         skip_initcode=False,
-        created_from=None,
-        filename=None,
+        created_from: Address = None,
+        filename: str = None,
     ):
         super().__init__(compiler_data, env, filename)
 
@@ -471,10 +472,11 @@ class VyperContract(_BaseVyperContract):
         if "__init__" in external_fns:
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
-        if skip_initcode:
-            self._address = Address(override_address)
-        else:
-            self._address = self._run_init(*args, override_address=override_address)
+        self._address: Address = (
+            Address(override_address)
+            if skip_initcode
+            else self._run_init(*args, override_address=override_address)
+        )
 
         for fn_name, fn in external_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))
@@ -489,12 +491,13 @@ class VyperContract(_BaseVyperContract):
         self._storage = StorageModel(self)
 
         self._eval_cache = lrudict(0x1000)
-        self._source_map = None
-        self._computation = None
+        self._source_map: dict | None = None
+        self._computation: ComputationAPI | None = None
+        self.bytecode: bytes | None = None
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, override_address=None):
+    def _run_init(self, *args, override_address=None) -> Address:
         encoded_args = b""
         if self._ctor:
             encoded_args = self._ctor.prepare_calldata(*args)

@@ -190,7 +190,10 @@ class NetworkEnv(Env):
 
     def get_static_fee(self) -> tuple[str, str]:
         # non eip-1559 transaction
-        return self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])])
+        price, chain_id = self._rpc.fetch_multi(
+            [("eth_gasPrice", []), ("eth_chainId", [])]
+        )
+        return price, chain_id
 
     def _check_sender(self, address):
         if address is None:
@@ -370,7 +373,7 @@ class NetworkEnv(Env):
             block_identifier=block_identifier,
             cache_file=None,
         )
-        self.vm.state._account_db._rpc._init_mem_db()
+        self.vm.state._account_db._caching_rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = fixup_dict(

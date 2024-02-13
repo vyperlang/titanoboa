@@ -5,7 +5,7 @@ import requests
 SESSION = requests.Session()
 
 
-def _fetch_etherscan(uri: str, api_key: str = None, **params) -> dict:
+def _fetch_etherscan(uri: str, api_key: str | None, **params) -> dict:
     if api_key is not None:
         params["apikey"] = api_key
 
@@ -34,7 +34,7 @@ def fetch_abi_from_etherscan(
 
 # fetch the address of a contract; resolves at most one layer of indirection
 # if the address is a proxy contract.
-def _resolve_implementation_address(address: str, uri: str, api_key: str):
+def _resolve_implementation_address(address: str, uri: str, api_key: str | None):
     params = dict(module="contract", action="getsourcecode", address=address)
     data = _fetch_etherscan(uri, api_key, **params)
     source_data = data["result"][0]
@@ -42,5 +42,4 @@ def _resolve_implementation_address(address: str, uri: str, api_key: str):
     # check if the contract is a proxy
     if int(source_data["Proxy"]) == 1:
         return source_data["Implementation"]
-    else:
-        return address
+    return address

@@ -6,7 +6,7 @@ import logging
 import random
 import sys
 import warnings
-from typing import Any, Iterator, Optional, Tuple
+from typing import Any, Iterator, Optional, Tuple, TypeAlias
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -96,7 +96,7 @@ class VMPatcher:
 
 
 # make mypy happy
-_AddressType = Address | str | bytes | PYEVM_Address
+_AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
 
 
 _opcode_overrides = {}

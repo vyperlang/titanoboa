@@ -47,9 +47,9 @@ def to_bytes(hex_str: str) -> bytes:
 
 
 class RPCError(Exception):
-    def __init__(self, message, code):
+    def __init__(self, message: str, code: int):
         super().__init__(f"{code}: {message}")
-        self.code: str = code
+        self.code = code
 
     @classmethod
     def from_json(cls, data):
@@ -111,21 +111,21 @@ class EthereumRPC(RPC):
         parse_result = urlparse(self._rpc_url)
         return f"{parse_result.scheme}://{parse_result.netloc} (URL partially masked for privacy)"
 
-    def fetch(self, method, params):
+    def fetch(self, method, params) -> Any:
         # the obvious thing to do here is dispatch into fetch_multi.
         # but some providers (alchemy) can't handle batched requests
         # for certain endpoints (debug_traceTransaction).
-        req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
+        request = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
         # print(req)
-        res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
-        res.raise_for_status()
-        res = json.loads(res.text)
+        response = self._session.post(self._rpc_url, json=request, timeout=TIMEOUT)
+        response.raise_for_status()
+        response_body: dict = json.loads(response.text)
         # print(res)
-        if "error" in res:
-            raise RPCError.from_json(res["error"])
-        return res["result"]
+        if "error" in response_body:
+            raise RPCError.from_json(response_body["error"])
+        return response_body["result"]
 
-    def fetch_multi(self, payloads):
+    def fetch_multi(self, payloads) -> list:
         request = [
             {"jsonrpc": "2.0", "method": method, "params": params, "id": i}
             for i, (method, params) in enumerate(payloads)
