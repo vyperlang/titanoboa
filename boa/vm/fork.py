@@ -261,17 +261,15 @@ class AccountDBFork(AccountDB):
         # we have the storage locally in the VM already
         # cf. AccountStorageDB.get()
         store = super()._get_address_store(address)
+        store._accessed_slots.add(slot)
         key = int_to_big_endian(slot)
         db = store._journal_storage if from_journal else store._locked_changes
 
         return key in db and db[key] != _EMPTY
 
     def get_storage(self, address, slot, from_journal=True):
-        # call super to get address warming semantics
-        s = super().get_storage(address, slot, from_journal)
-
         if self._helper_have_storage(address, slot, from_journal=from_journal):
-            return s
+            return super().get_storage(address, slot, from_journal)
 
         addr = to_checksum_address(address)
         ret = self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
