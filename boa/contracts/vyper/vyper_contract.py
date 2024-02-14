@@ -107,7 +107,7 @@ class VyperDeployer:
             filename=self.filename,
         )
         vm = ret.env.vm
-        bytecode = vm.state.get_code(address.canonical_address)
+        bytecode = vm.state.get_code(address)
 
         ret._set_bytecode(bytecode)
 
@@ -348,7 +348,7 @@ def setpath(lens, path, val):
 class StorageVar:
     def __init__(self, contract, slot, typ):
         self.contract = contract
-        self.addr = self.contract._address.canonical_address
+        self.addr = self.contract._address
         self.accountdb = contract.env.vm.state._account_db
         self.slot = slot
         self.typ = typ
@@ -655,7 +655,7 @@ class VyperContract(_BaseVyperContract):
 
     def decode_log(self, e):
         log_id, address, topics, data = e
-        assert self._address.canonical_address == address
+        assert self._address == address
         event_hash = topics[0]
         event_t = self.event_for[event_hash]
 
