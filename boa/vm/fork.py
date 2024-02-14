@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from requests import HTTPError
 
@@ -50,7 +50,7 @@ class CachingRPC(RPC):
 
     # _loaded is a cache for the constructor.
     # reduces fork time after the first fork.
-    _loaded: Dict[Tuple[str, str], "CachingRPC"] = {}
+    _loaded: dict[tuple[str, str], "CachingRPC"] = {}
     _pid: int = os.getpid()  # so we can detect if our fds are bad
 
     def _init_mem_db(self):
@@ -120,8 +120,8 @@ class CachingRPC(RPC):
 # AccountDB which dispatches to an RPC when we don't have the
 # data locally
 class AccountDBFork(AccountDB):
-    _rpc: Optional[RPC] = None
-    _rpc_init_kwargs: Dict[str, Any] = {}
+    _rpc: RPC = None  # type: ignore
+    _rpc_init_kwargs: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

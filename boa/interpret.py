@@ -125,4 +125,4 @@ def from_etherscan(
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 
-__all__ = []
+__all__ = []  # type: ignore
