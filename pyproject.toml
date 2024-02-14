@@ -22,6 +22,7 @@ dependencies = [
     "eth-typing",
     "hypothesis",
     "pytest",
+    "pytest-cov",
     "rich",
 
     # required for forking:
@@ -41,7 +42,11 @@ requires = ["setuptools", "wheel"]
 include = ["boa*"]
 
 [tool.pytest.ini_options]
-markers = ["ignore_isolation: Do not preserve state during tests"]
+markers = [
+    "ignore_isolation: Do not preserve state during tests",
+    "gas_profile: Enable gas profiling.",
+    "ignore_profiling: Disable gas profiling.",
+]
 
 [tool.setuptools.package-data]
 boa = ["integrations/**/*.js"]
