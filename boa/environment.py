@@ -23,7 +23,7 @@ from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from eth_utils import setup_DEBUG2_logging
 
-from boa.rpc import EthereumRPC
+from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
@@ -442,10 +442,10 @@ class Env:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
         return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
 
-    def fork_rpc(self, rpc=None, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):
         """
         Fork the environment to a local chain.
         :param rpc: RPC to fork from
@@ -453,13 +453,8 @@ class Env:
         :param block_identifier: Block identifier to fork from
         :param kwargs: Additional arguments for the RPC
         """
-        AccountDBFork._rpc = rpc
-        AccountDBFork._rpc_init_kwargs = {
-            "block_identifier": block_identifier,
-            **kwargs,
-        }
-
-        self._init_vm(reset_traces=reset_traces, account_db_class=AccountDBFork)
+        account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
+        self._init_vm(reset_traces, account_db_class)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
