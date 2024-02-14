@@ -20,7 +20,7 @@ jobs:
 
       - name: Merge base branch
         if: github.event_name == 'pull_request_target'
-        run: git pull origin ${{ github.event.pull_request.base.ref }} --ff-only --no-edit
+        run: git pull origin ${{ github.event.pull_request.base.ref }} --no-edit
 
       - name: Setup Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -57,7 +57,7 @@ jobs:
 
       - name: Merge base branch
         if: github.event_name == 'pull_request_target'
-        run: git pull origin ${{ github.event.pull_request.base.ref }} --ff-only --no-edit
+        run: git pull origin ${{ github.event.pull_request.base.ref }} --no-edit
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -95,7 +95,7 @@ jobs:
 
       - name: Merge base branch
         if: github.event_name == 'pull_request_target'
-        run: git pull origin ${{ github.event.pull_request.base.ref }} --ff-only --no-edit
+        run: git pull origin ${{ github.event.pull_request.base.ref }} --no-edit
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
