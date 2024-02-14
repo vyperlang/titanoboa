@@ -27,7 +27,7 @@ from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
-from boa.vm.fork import AccountDBFork, CachingRPC
+from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 
@@ -453,13 +453,8 @@ class Env:
         :param block_identifier: Block identifier to fork from
         :param kwargs: Additional arguments for the RPC
         """
-        rpc = CachingRPC(rpc, **kwargs)
-
-        class CustomAccountDB(AccountDBFork):
-            def __init__(self, *args, **kwargs2):
-                super().__init__(rpc, block_identifier, *args, **kwargs2)
-
-        self._init_vm(reset_traces=reset_traces, account_db_class=CustomAccountDB)
+        account_db_class = AccountDBFork.from_rpc(rpc, block_identifier, **kwargs)
+        self._init_vm(reset_traces, account_db_class)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)

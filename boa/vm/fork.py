@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from typing import Any, Type
 
 from requests import HTTPError
 
@@ -120,6 +120,17 @@ class CachingRPC(RPC):
 # AccountDB which dispatches to an RPC when we don't have the
 # data locally
 class AccountDBFork(AccountDB):
+    @classmethod
+    def from_rpc(
+        cls, rpc: RPC, block_identifier: str, **kwargs
+    ) -> Type["AccountDBFork"]:
+        class _ConfiguredAccountDB(AccountDBFork):
+            def __init__(self, *args, **kwargs2):
+                caching_rpc = CachingRPC(rpc, **kwargs)
+                super().__init__(caching_rpc, block_identifier, *args, **kwargs2)
+
+        return _ConfiguredAccountDB
+
     def __init__(self, rpc: CachingRPC, block_identifier: str, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
