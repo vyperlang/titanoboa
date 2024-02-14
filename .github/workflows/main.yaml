@@ -47,7 +47,7 @@ jobs:
           tests/unitary/
 
   anvil:
-    name: "integration tests (networked against anvil)"
+    name: "integration tests (anvil)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +71,7 @@ jobs:
         run: pytest -n auto tests/integration/network/anvil/
 
   integration:
-    name: "integration tests (fork mode and Sepolia)"
+    name: "integration tests (Alchemy: fork mode and Sepolia)"
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'pull_request_target'
     steps:
