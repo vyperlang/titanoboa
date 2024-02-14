@@ -1,7 +1,7 @@
 from os.path import dirname, join, realpath
 
 import requests
-from IPython.core.display import Javascript, display
+from IPython.display import Javascript, display
 
 from boa.integrations.jupyter.constants import ETHERS_JS_URL
 

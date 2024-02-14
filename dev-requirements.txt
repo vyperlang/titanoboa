@@ -10,4 +10,5 @@ mypy
 pre-commit
 pytest
 pytest-xdist
+pytest-cov
 sphinx-rtd-theme

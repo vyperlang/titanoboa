@@ -12,3 +12,4 @@ venv/
 *.env
 
 .coverage
+.coverage.*

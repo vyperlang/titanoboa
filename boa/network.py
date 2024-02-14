@@ -4,7 +4,6 @@ import warnings
 from dataclasses import dataclass
 from functools import cached_property
 from math import ceil
-from typing import Any
 
 from eth_account import Account
 from requests.exceptions import HTTPError
@@ -189,9 +188,9 @@ class NetworkEnv(Env):
         max_fee = to_hex(base_fee_estimate + to_int(max_priority_fee))
         return to_hex(base_fee_estimate), max_priority_fee, max_fee, chain_id
 
-    def get_static_fee(self) -> list[Any]:
+    def get_static_fee(self) -> tuple[str, str]:
         # non eip-1559 transaction
-        return self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])])
+        return tuple(self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])]))
 
     def _check_sender(self, address: Address):
         if address is None:

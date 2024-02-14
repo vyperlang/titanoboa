@@ -6,7 +6,7 @@ The entry point for managing the execution environment.
 
 import contextlib
 import random
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, TypeAlias
 
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
@@ -17,7 +17,7 @@ from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
 
 # make mypy happy
-_AddressType = Address | str | bytes | PYEVM_Address
+_AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
 
 
 # wrapper class around py-evm which provides a "contract-centric" API
