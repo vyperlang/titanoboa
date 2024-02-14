@@ -1,6 +1,6 @@
 import hypothesis.strategies as st
 import pytest
-from hypothesis import given
+from hypothesis import given, example
 
 import boa
 from boa import BoaError
@@ -108,8 +108,17 @@ balances = {
 def test_balances(addr, balance, crvusd):
     assert crvusd.balanceOf(addr) == balance
 
+# test write 0 to fresh fork state
+def test_fork_write0(crvusd):
+    n = balances[account_a]
+    with boa.env.prank(account_a):
+        crvusd.transfer(account_b, n)
 
-@given(n=st.integers(min_value=0, max_value=balances[account_a] - 1))
+    assert crvusd.balanceOf(account_a) == 0
+    assert crvusd.balanceOf(account_b) == balances[account_b] + n
+
+
+@given(n=st.integers(min_value=0, max_value=balances[account_a]))
 def test_fork_write(crvusd, n):
     # test we can mutate the fork state
     with boa.env.prank(account_a):

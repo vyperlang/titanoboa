@@ -275,6 +275,15 @@ class AccountDBFork(AccountDB):
         ret = self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
         return to_int(ret)
 
+    def set_storage(self, address, slot, value):
+        super().set_storage(address, slot, value)
+        if value == 0:
+            # override the branch in AccountStorageDB.set() which skips
+            # writing the value into the journal
+            store = self._get_address_store(address)
+            key = int_to_big_endian(slot)
+            store._journal_storage[key] = rlp.encode(value)
+
     def account_exists(self, address):
         if super().account_exists(address):
             return True
