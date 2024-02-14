@@ -120,16 +120,10 @@ class CachingRPC(RPC):
 # AccountDB which dispatches to an RPC when we don't have the
 # data locally
 class AccountDBFork(AccountDB):
-    _rpc: RPC = None  # type: ignore
-    _rpc_init_kwargs: dict[str, Any] = {}
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, rpc: CachingRPC, block_identifier: str, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        rpc_kwargs = self._rpc_init_kwargs.copy()
-
-        block_identifier = rpc_kwargs.pop("block_identifier", "safe")
-        self._rpc: CachingRPC = CachingRPC(self._rpc, **rpc_kwargs)
+        self._rpc = rpc
 
         if block_identifier not in _PREDEFINED_BLOCKS:
             block_identifier = to_hex(block_identifier)
