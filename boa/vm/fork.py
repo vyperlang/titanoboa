@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from typing import Any, Type
 
 from requests import HTTPError
 
@@ -120,16 +120,21 @@ class CachingRPC(RPC):
 # AccountDB which dispatches to an RPC when we don't have the
 # data locally
 class AccountDBFork(AccountDB):
-    _rpc: RPC = None  # type: ignore
-    _rpc_init_kwargs: dict[str, Any] = {}
+    @classmethod
+    def class_from_rpc(
+        cls, rpc: RPC, block_identifier: str, **kwargs
+    ) -> Type["AccountDBFork"]:
+        class _ConfiguredAccountDB(AccountDBFork):
+            def __init__(self, *args, **kwargs2):
+                caching_rpc = CachingRPC(rpc, **kwargs)
+                super().__init__(caching_rpc, block_identifier, *args, **kwargs2)
 
-    def __init__(self, *args, **kwargs):
+        return _ConfiguredAccountDB
+
+    def __init__(self, rpc: CachingRPC, block_identifier: str, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        rpc_kwargs = self._rpc_init_kwargs.copy()
-
-        block_identifier = rpc_kwargs.pop("block_identifier", "safe")
-        self._rpc: CachingRPC = CachingRPC(self._rpc, **rpc_kwargs)
+        self._rpc = rpc
 
         if block_identifier not in _PREDEFINED_BLOCKS:
             block_identifier = to_hex(block_identifier)

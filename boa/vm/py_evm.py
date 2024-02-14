@@ -375,7 +375,7 @@ class PyEVM:
         fast_mode_enabled: bool,
     ):
         self.vm = self.chain.get_vm()
-        self._set_account_db_class(account_db_class)
+        self.vm.__class__._state_class.account_db_class = account_db_class
 
         self.vm.patch = VMPatcher(self.vm)
 
@@ -416,10 +416,16 @@ class PyEVM:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork_rpc(self, rpc: RPC, reset_traces: bool, fast_mode_enabled: bool, **kwargs):
-        AccountDBFork._rpc = rpc
-        AccountDBFork._rpc_init_kwargs = kwargs
-        self._init_vm(self.env, AccountDBFork, reset_traces, fast_mode_enabled)
+    def fork_rpc(
+        self,
+        rpc: RPC,
+        reset_traces: bool,
+        fast_mode_enabled: bool,
+        block_identifier: str,
+        **kwargs,
+    ):
+        account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
+        self._init_vm(self.env, account_db_class, reset_traces, fast_mode_enabled)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)

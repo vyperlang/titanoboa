@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any
 
 
 @dataclass
@@ -7,8 +7,8 @@ class Event:
     log_id: int  # internal py-evm log id, for ordering purposes
     address: str  # checksum address
     event_type: Any  # vyper.semantics.types.user.EventT
-    topics: List[Any]  # list of decoded topics
-    args: List[Any]  # list of decoded args
+    topics: list[Any]  # list of decoded topics
+    args: list[Any]  # list of decoded args
 
     def __repr__(self):
         t_i = 0

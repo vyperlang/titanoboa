@@ -6,12 +6,12 @@ The entry point for managing the execution environment.
 
 import contextlib
 import random
-from typing import Any, Optional, Tuple, TypeAlias
+from typing import Any, Optional, TypeAlias
 
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
-from boa.rpc import EthereumRPC
+from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
@@ -58,10 +58,10 @@ class Env:
         self._fast_mode_enabled = flag
         self.evm.enable_fast_mode(flag)
 
-    def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
         return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
 
-    def fork_rpc(self, rpc=None, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):
         """
         Fork the environment to a local chain.
         :param rpc: RPC to fork from
@@ -207,7 +207,7 @@ class Env:
         start_pc: int = 0,  # TODO: This isn't used
         # override the target address:
         override_address: Optional[_AddressType] = None,
-    ) -> Tuple[Address, bytes]:
+    ) -> tuple[Address, bytes]:
         sender = self._get_sender(sender)
 
         target_address = (
