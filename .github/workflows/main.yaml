@@ -59,9 +59,6 @@ jobs:
         if: github.event_name == 'pull_request_target'
         run: git pull origin ${{ github.event.pull_request.base.ref }} --ff-only --no-edit
 
-      - name: debug github context
-        run: echo "${{ toJson(github) }}"
-
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
