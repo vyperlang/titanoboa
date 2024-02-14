@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict
+from typing import Any
 
 from requests import HTTPError
 
@@ -120,8 +120,8 @@ class CachingRPC(RPC):
 # AccountDB which dispatches to an RPC when we don't have the
 # data locally
 class AccountDBFork(AccountDB):
-    _rpc: RPC | None = None
-    _rpc_init_kwargs: Dict[str, Any] = {}
+    _base_rpc: RPC | None = None
+    _rpc_init_kwargs: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -129,13 +129,13 @@ class AccountDBFork(AccountDB):
         rpc_kwargs = self._rpc_init_kwargs.copy()
 
         block_identifier = rpc_kwargs.pop("block_identifier", "safe")
-        assert self._rpc, "RPC not initialized"
-        self._caching_rpc: CachingRPC = CachingRPC(self._rpc, **rpc_kwargs)
+        assert self._base_rpc, "RPC not initialized"
+        self._rpc: CachingRPC = CachingRPC(self._base_rpc, **rpc_kwargs)
 
         if block_identifier not in _PREDEFINED_BLOCKS:
             block_identifier = to_hex(block_identifier)
 
-        self._block_info = self._caching_rpc.fetch_uncached(
+        self._block_info = self._rpc.fetch_uncached(
             "eth_getBlockByNumber", [block_identifier, False]
         )
         self._block_number = to_int(self._block_info["number"])
@@ -179,7 +179,7 @@ class AccountDBFork(AccountDB):
             ("eth_getTransactionCount", [addr, self._block_id]),
             ("eth_getCode", [addr, self._block_id]),
         ]
-        res = self._caching_rpc.fetch_multi(reqs)
+        res = self._rpc.fetch_multi(reqs)
         balance = to_int(res[0])
         nonce = to_int(res[1])
         code = to_bytes(res[2])
@@ -202,7 +202,7 @@ class AccountDBFork(AccountDB):
         # arguments with this specific block before
         try:
             tracer = {"tracer": "prestateTracer"}
-            res = self._caching_rpc.fetch_uncached(
+            res = self._rpc.fetch_uncached(
                 "debug_traceCall", [args, self._block_id, tracer]
             )
         except (RPCError, HTTPError):
@@ -246,7 +246,7 @@ class AccountDBFork(AccountDB):
         try:
             return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
-            ret = self._caching_rpc.fetch(
+            ret = self._rpc.fetch(
                 "eth_getCode", [to_checksum_address(address), self._block_id]
             )
             return to_bytes(ret)
@@ -270,9 +270,7 @@ class AccountDBFork(AccountDB):
             return s
 
         addr = to_checksum_address(address)
-        ret = self._caching_rpc.fetch(
-            "eth_getStorageAt", [addr, to_hex(slot), self._block_id]
-        )
+        ret = self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
         return to_int(ret)
 
     def account_exists(self, address):

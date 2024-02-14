@@ -373,7 +373,7 @@ class NetworkEnv(Env):
             block_identifier=block_identifier,
             cache_file=None,
         )
-        self.vm.state._account_db._caching_rpc._init_mem_db()
+        self.vm.state._account_db._rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = fixup_dict(
