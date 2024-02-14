@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
+          depth: 0
 
       - name: Merge base branch
         if: github.event_name == 'pull_request_target'
