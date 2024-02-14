@@ -96,16 +96,29 @@ class VyperDeployer:
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
 
+    def stomp(self, address: Any, data_section=None) -> "VyperContract":
+        address = Address(address)
+
+        ret = self.deploy(override_address=address, skip_initcode=True)
+        vm = ret.env.vm
+        old_bytecode = vm.state.get_code(address.canonical_address)
+        new_bytecode = self.compiler_data.bytecode_runtime
+
+        immutables_size = self.compiler_data.global_ctx.immutable_section_bytes
+        if immutables_size > 0:
+            data_section = old_bytecode[-immutables_size:]
+            new_bytecode += data_section
+
+        vm.state.set_code(address.canonical_address, new_bytecode)
+        ret.env.register_contract(address, ret)
+        ret._set_bytecode(new_bytecode)
+        return ret
+
     # TODO: allow `env=` kwargs and so on
     def at(self, address: Any) -> "VyperContract":
         address = Address(address)
 
-        ret = VyperContract(
-            self.compiler_data,
-            override_address=address,
-            skip_initcode=True,
-            filename=self.filename,
-        )
+        ret = self.deploy(override_address=address, skip_initcode=True)
         vm = ret.env.vm
         bytecode = vm.state.get_code(address.canonical_address)
 
