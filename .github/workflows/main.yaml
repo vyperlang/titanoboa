@@ -72,7 +72,6 @@ jobs:
   integration:
     name: "integration tests (Alchemy: fork mode and Sepolia)"
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'pull_request_target'
     steps:
       - name: Check if the user is a contributor
         uses: actions/github-script@v7
