@@ -453,7 +453,7 @@ class Env:
         :param block_identifier: Block identifier to fork from
         :param kwargs: Additional arguments for the RPC
         """
-        account_db_class = AccountDBFork.from_rpc(rpc, block_identifier, **kwargs)
+        account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
         self._init_vm(reset_traces, account_db_class)
         block_info = self.vm.state._account_db._block_info
 

@@ -121,7 +121,7 @@ class CachingRPC(RPC):
 # data locally
 class AccountDBFork(AccountDB):
     @classmethod
-    def from_rpc(
+    def class_from_rpc(
         cls, rpc: RPC, block_identifier: str, **kwargs
     ) -> Type["AccountDBFork"]:
         class _ConfiguredAccountDB(AccountDBFork):
