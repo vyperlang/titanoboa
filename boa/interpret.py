@@ -40,6 +40,7 @@ class BoaImporter:
             to_try = Path(prefix) / path
             try:
                 ret = load_partial(to_try)
+                # comply with PEP-302:
                 ret.__name__ = to_try.name
                 ret.__file__ = str(to_try)
                 break
