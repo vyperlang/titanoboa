@@ -39,6 +39,9 @@ def __init__(initial_supply: uint256):
     with filepath.open("w") as f:
         f.write(code)
 
+    # note that `with mock_sys_path(tmp_path)` does not work here!
+    # apparently, there are different semantics for module loading
+    # depending on if we are in the current directory or not.
     with workdir(tmp_path):
         from foo import bar
 
