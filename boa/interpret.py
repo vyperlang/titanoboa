@@ -27,7 +27,7 @@ _disk_cache = None
 
 
 class BoaImporter(importlib.abc.MetaPathFinder):
-    def find_module(self, module_name, package_path):
+    def find_module(self, fullname, package_path, target=None):
         # Return a loader
         return self
 
