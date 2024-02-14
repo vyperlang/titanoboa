@@ -43,9 +43,7 @@ class _DeferredStrategyRepr(DeferredStrategy):
 
 
 def _exclude_filter(fn: Callable) -> Callable:
-    def wrapper(
-        *args: tuple[Any, ...], exclude: Any = None, **kwargs: int
-    ) -> SearchStrategy:
+    def wrapper(*args: tuple, exclude: Any = None, **kwargs: int) -> SearchStrategy:
         strat = fn(*args, **kwargs)
         if exclude is None:
             return strat
@@ -64,7 +62,7 @@ def _exclude_filter(fn: Callable) -> Callable:
 
 def _check_numeric_bounds(
     type_str: str, min_value: NumberType, max_value: NumberType
-) -> tuple[int | float, int | float]:
+) -> tuple[NumberType, NumberType]:
     lower, upper = get_int_bounds(type_str)
     min_final = lower if min_value is None else min_value
     max_final = upper if max_value is None else max_value
