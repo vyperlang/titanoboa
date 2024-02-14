@@ -1,6 +1,6 @@
 import random
 import string
-from typing import Any, Callable, Iterable, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, Optional, Union
 
 from eth_abi.grammar import BasicType, TupleType, parse
 from eth_utils import to_checksum_address
@@ -23,7 +23,7 @@ NumberType = Union[float, int, None]
 # note: there are also utils in the vyper codebase we could use for
 # this. also, in the future we may want to replace these with strategies
 # that use vyper types instead of abi types.
-def get_int_bounds(type_str: str) -> Tuple[int, int]:
+def get_int_bounds(type_str: str) -> tuple[int, int]:
     """Returns the lower and upper bound for an integer type."""
     size = int(type_str.strip("uint") or 256)
     if size < 8 or size > 256 or size % 8:
@@ -43,7 +43,9 @@ class _DeferredStrategyRepr(DeferredStrategy):
 
 
 def _exclude_filter(fn: Callable) -> Callable:
-    def wrapper(*args: Tuple, exclude: Any = None, **kwargs: int) -> SearchStrategy:
+    def wrapper(
+        *args: tuple[Any, ...], exclude: Any = None, **kwargs: int
+    ) -> SearchStrategy:
         strat = fn(*args, **kwargs)
         if exclude is None:
             return strat
@@ -62,7 +64,7 @@ def _exclude_filter(fn: Callable) -> Callable:
 
 def _check_numeric_bounds(
     type_str: str, min_value: NumberType, max_value: NumberType
-) -> Tuple:
+) -> tuple[int | float, int | float]:
     lower, upper = get_int_bounds(type_str)
     min_final = lower if min_value is None else min_value
     max_final = upper if max_value is None else max_value
@@ -75,8 +77,8 @@ def _check_numeric_bounds(
 def _integer_strategy(
     type_str: str, min_value: Optional[int] = None, max_value: Optional[int] = None
 ) -> SearchStrategy:
-    min_value, max_value = _check_numeric_bounds(type_str, min_value, max_value)
-    return st.integers(min_value=min_value, max_value=max_value)
+    min_val, max_val = _check_numeric_bounds(type_str, min_value, max_value)
+    return st.integers(min_val, max_val)
 
 
 @_exclude_filter

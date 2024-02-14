@@ -6,7 +6,7 @@ import logging
 import random
 import sys
 import warnings
-from typing import Any, Iterator, Optional, Tuple, TypeAlias
+from typing import Any, Iterator, Optional, TypeAlias
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -593,7 +593,7 @@ class Env:
         start_pc: int = 0,
         # override the target address:
         override_address: Optional[_AddressType] = None,
-    ) -> Tuple[Address, bytes]:
+    ) -> tuple[Address, bytes]:
         if gas is None:
             gas = self.vm.state.gas_limit
 
