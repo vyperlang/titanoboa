@@ -1,3 +1,4 @@
+import importlib
 import json
 import sys
 import textwrap
@@ -25,7 +26,7 @@ _Contract = Union[VyperContract, VyperBlueprint]
 _disk_cache = None
 
 
-class BoaImporter:
+class BoaImporter(importlib.abc.MetaPathFinder):
     def find_module(self, module_name, package_path):
         # Return a loader
         return self
@@ -40,20 +41,20 @@ class BoaImporter:
             to_try = Path(prefix) / path
             try:
                 ret = load_partial(to_try)
-                # comply with PEP-302:
-                ret.__name__ = to_try.name
-                ret.__file__ = str(to_try)
                 break
             except (FileNotFoundError, NotADirectoryError):
                 pass
         else:
             raise ImportError(fullname)
 
+        # comply with PEP-302:
+        ret.__name__ = to_try.name
+        ret.__file__ = str(to_try)
         sys.modules[fullname] = ret
         return ret
 
 
-sys.meta_path.append(BoaImporter())  # type: ignore
+sys.meta_path.append(BoaImporter())
 
 
 def set_cache_dir(cache_dir="~/.cache/titanoboa"):
