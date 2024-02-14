@@ -471,9 +471,10 @@ class VyperContract(_BaseVyperContract):
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
         if skip_initcode:
-            self._address = Address(override_address)
+            addr = Address(override_address)
         else:
-            self._address = self._run_init(*args, override_address=override_address)
+            addr = self._run_init(*args, override_address=override_address)
+        self._address: Address = addr
 
         for fn_name, fn in external_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))
