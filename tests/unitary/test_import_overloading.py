@@ -1,9 +1,9 @@
-import pytest
-import sys
 import contextlib
 import os
+import sys
 
 from boa.interpret import VyperDeployer
+
 
 @contextlib.contextmanager
 def mock_sys_path(path):
@@ -14,6 +14,7 @@ def mock_sys_path(path):
     finally:
         sys.path = anchor
 
+
 @contextlib.contextmanager
 def workdir(path):
     tmp = os.getcwd()
@@ -23,6 +24,7 @@ def workdir(path):
             yield
     finally:
         os.chdir(tmp)
+
 
 def test_imports(tmp_path):
     code = """
@@ -50,5 +52,6 @@ def __init__(initial_supply: uint256):
         assert contract.totalSupply() == 100
 
         from foo import bar as baz
+
         assert isinstance(baz, VyperDeployer)
         assert baz is bar
