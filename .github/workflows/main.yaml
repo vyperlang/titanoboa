@@ -1,6 +1,6 @@
 name: unitary
 
-on: ["push", "pull_request"]
+on: [ "push", "pull_request" ]
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: [ "3.10", "3.11" ]
 
     name: "unit tests: python ${{ matrix.python-version }}"
 
@@ -29,7 +29,20 @@ jobs:
           pip install .
 
       - name: Run Unit Tests
-        run: pytest -n auto tests/unitary/
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          # pass internals to pytest-cov, since we are testing a pytest plugin.
+          # See https://github.com/pytest-dev/pytest-cov/blob/2c9f2170/docs/plugins.rst
+          COV_CORE_SOURCE: boa
+          COV_CORE_CONFIG: .coveragerc
+          COV_CORE_DATAFILE: .coverage.eager
+        run: >-
+          pytest
+          --cov=boa
+          --cov-append
+          --cov-report term-missing:skip-covered
+          --cov-fail-under=70
+          tests/unitary/
 
   integration:
     name: "integration tests (forked and networked modes)"
