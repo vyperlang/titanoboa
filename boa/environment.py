@@ -453,7 +453,7 @@ class Env:
         :param block_identifier: Block identifier to fork from
         :param kwargs: Additional arguments for the RPC
         """
-        AccountDBFork._base_rpc = rpc
+        AccountDBFork._rpc = rpc
         AccountDBFork._rpc_init_kwargs = {
             "block_identifier": block_identifier,
             **kwargs,

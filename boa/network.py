@@ -190,10 +190,7 @@ class NetworkEnv(Env):
 
     def get_static_fee(self) -> tuple[str, str]:
         # non eip-1559 transaction
-        price, chain_id = self._rpc.fetch_multi(
-            [("eth_gasPrice", []), ("eth_chainId", [])]
-        )
-        return price, chain_id
+        return tuple(self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])]))
 
     def _check_sender(self, address):
         if address is None:

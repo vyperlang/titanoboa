@@ -111,21 +111,21 @@ class EthereumRPC(RPC):
         parse_result = urlparse(self._rpc_url)
         return f"{parse_result.scheme}://{parse_result.netloc} (URL partially masked for privacy)"
 
-    def fetch(self, method, params) -> Any:
+    def fetch(self, method, params):
         # the obvious thing to do here is dispatch into fetch_multi.
         # but some providers (alchemy) can't handle batched requests
         # for certain endpoints (debug_traceTransaction).
-        request = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
+        req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
         # print(req)
-        response = self._session.post(self._rpc_url, json=request, timeout=TIMEOUT)
-        response.raise_for_status()
-        response_body: dict = json.loads(response.text)
+        res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
+        res.raise_for_status()
+        res = json.loads(res.text)
         # print(res)
-        if "error" in response_body:
-            raise RPCError.from_json(response_body["error"])
-        return response_body["result"]
+        if "error" in res:
+            raise RPCError.from_json(res["error"])
+        return res["result"]
 
-    def fetch_multi(self, payloads) -> list:
+    def fetch_multi(self, payloads):
         request = [
             {"jsonrpc": "2.0", "method": method, "params": params, "id": i}
             for i, (method, params) in enumerate(payloads)
