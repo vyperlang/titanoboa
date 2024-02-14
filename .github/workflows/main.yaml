@@ -18,6 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Merge base branch
+        if: github.event_name == 'pull_request_target'
+        run: git pull origin ${{ github.event.pull_request.base.ref }} --ff-only --no-edit
+
       - name: Setup Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -50,6 +54,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Merge base branch
+        if: github.event_name == 'pull_request_target'
+        run: git pull origin ${{ github.event.pull_request.base.ref }} --ff-only --no-edit
+
+      - name: debug github context
+        run: echo "${{ toJson(github) }}"
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -84,8 +95,10 @@ jobs:
             }
 
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Merge base branch
+        if: github.event_name == 'pull_request_target'
+        run: git pull origin ${{ github.event.pull_request.base.ref }} --ff-only --no-edit
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
