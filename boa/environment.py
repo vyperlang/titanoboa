@@ -442,7 +442,7 @@ class Env:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
         return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
 
     def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):
