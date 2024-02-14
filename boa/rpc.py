@@ -47,9 +47,9 @@ def to_bytes(hex_str: str) -> bytes:
 
 
 class RPCError(Exception):
-    def __init__(self, message, code):
+    def __init__(self, message: str, code: int):
         super().__init__(f"{code}: {message}")
-        self.code: str = code
+        self.code = code
 
     @classmethod
     def from_json(cls, data):

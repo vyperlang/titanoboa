@@ -446,14 +446,14 @@ class ImmutablesModel:
 class VyperContract(_BaseVyperContract):
     def __init__(
         self,
-        compiler_data,
+        compiler_data: CompilerData,
         *args,
-        env=None,
-        override_address=None,
+        env: Env = None,
+        override_address: Address = None,
         # whether to skip constructor
         skip_initcode=False,
-        created_from=None,
-        filename=None,
+        created_from: Address = None,
+        filename: str = None,
     ):
         super().__init__(compiler_data, env, filename)
 
@@ -475,7 +475,7 @@ class VyperContract(_BaseVyperContract):
             addr = Address(override_address)
         else:
             addr = self._run_init(*args, override_address=override_address)
-        self._address: Address = addr
+        self._address = addr
 
         for fn_name, fn in external_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))
