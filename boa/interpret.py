@@ -1,4 +1,5 @@
 import json
+import sys
 import textwrap
 from pathlib import Path
 from typing import Any, Union
@@ -22,6 +23,36 @@ _Contract = Union[VyperContract, VyperBlueprint]
 
 
 _disk_cache = None
+
+
+class BoaImporter:
+    def find_module(self, module_name, package_path):
+        # Return a loader
+        return self
+
+    def load_module(self, fullname):
+        # Return a module
+        if fullname in sys.modules:
+            return sys.modules[fullname]
+
+        path = Path(fullname.replace(".", "/")).with_suffix(".vy")
+        for prefix in sys.path:
+            to_try = Path(prefix) / path
+            try:
+                ret = load_partial(to_try)
+                ret.__name__ = to_try.name
+                ret.__file__ = str(to_try)
+                break
+            except (FileNotFoundError, NotADirectoryError):
+                pass
+        else:
+            raise ImportError(fullname)
+
+        sys.modules[fullname] = ret
+        return ret
+
+
+sys.meta_path.append(BoaImporter())  # type: ignore
 
 
 def set_cache_dir(cache_dir="~/.cache/titanoboa"):
