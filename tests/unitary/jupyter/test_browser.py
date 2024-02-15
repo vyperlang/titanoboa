@@ -12,7 +12,7 @@ import boa
 
 
 @pytest.fixture()
-def display_mock(replace_modules):
+def display_mock():
     with mock.patch("boa.integrations.jupyter.browser.display") as display_mock:
         yield display_mock
 
@@ -142,7 +142,7 @@ def colab_eval_mock(browser):
         yield colab_eval_mock
 
 
-def test_nest_applied(nest_asyncio_mock, browser):
+def test_nest_applied(nest_asyncio_mock, browser, jupyter_module_mock):
     nest_asyncio_mock.apply.assert_called_once()
 
 

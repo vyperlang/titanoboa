@@ -40,6 +40,7 @@ def jupyter_module_mock(replace_modules, tornado_mock):
             "jupyter_server.base.handlers": base_handlers,
             "jupyter_server.serverapp": serverapp,
             "jupyter_server.utils": utils,
+            "IPython.core.interactiveshell": MagicMock(),
         }
     )
     return jupyter_mock
