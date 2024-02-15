@@ -151,7 +151,15 @@ class ABIOverload:
     def name(self) -> str:
         return self.functions[0].name
 
-    def __call__(self, *args, disambiguate_signature=None, **kwargs):
+    def __call__(
+        self,
+        *args,
+        value=0,
+        gas=None,
+        sender=None,
+        disambiguate_signature=None,
+        **kwargs,
+    ):
         """
         Call the function that matches the given arguments.
         :raises Exception: if a single function is not found
@@ -166,7 +174,7 @@ class ABIOverload:
 
         match matches:
             case [function]:
-                return function(*args, **kwargs)
+                return function(*args, value=value, gas=gas, sender=sender, **kwargs)
             case []:
                 raise Exception(
                     f"Could not find matching {self.name} function for given arguments."
