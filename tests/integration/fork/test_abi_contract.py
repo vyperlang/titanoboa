@@ -148,7 +148,6 @@ def flip_from(_input: uint256) -> uint256:
     with boa.env.prank(pool):
         crvusd.approve(e, 2 ** 256 - 1)
         e.flip_from(initial_balance)
-    print(initial, crvusd.balanceOf(pool), crvusd.balanceOf(e))
     assert crvusd.balanceOf(pool) == initial_balance // 2
     assert crvusd.balanceOf(e) == initial_balance - initial_balance // 2
 
