@@ -256,27 +256,25 @@ class AccountDBFork(AccountDB):
             return to_bytes(ret)
 
     def get_storage(self, address, slot, from_journal=True):
-        # we have the storage locally in the VM already
+        # call super for address warming semantics
+        val = super().get_storage(address, slot, from_journal)
+
+        # check if we have the storage locally in the VM already
         # cf. AccountStorageDB.get()
         store = super()._get_address_store(address)
-        store._accessed_slots.add(slot)
+        db = store._journal_storage if from_journal else store._locked_changes
         key = int_to_big_endian(slot)
-
-        # Read from local storage if there are any records
-        if store._locked_changes._journal.get(key) is not None or (
-            from_journal and store._journal_storage._journal.get(key) is not None
-        ):
-            return super().get_storage(address, slot, from_journal)
+        if db.get(key, _EMPTY) != _EMPTY:
+            # we have it locally - skip rpc fetch
+            return val
 
         addr = to_checksum_address(address)
-        value = to_int(
-            self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
-        )
-        store._locked_changes[key] = rlp.encode(value)  # Save value to local storage
-        return value
+        res = self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
+        ret = to_int(res)
+        # Save value to local storage
+        store._locked_changes[key] = rlp.encode(ret)
 
-    def set_storage(self, address, slot, value):
-        super().set_storage(address, slot, value)
+        return ret
 
     def account_exists(self, address):
         if super().account_exists(address):
