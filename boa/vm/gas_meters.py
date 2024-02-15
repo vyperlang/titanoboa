@@ -9,7 +9,7 @@ class NoGasMeter:
     performance boost.
     """
 
-    def __init__(self, start_gas):
+    def __init__(self, start_gas, *args, **kwargs):
         pass
 
     def consume_gas(self, amount, reason):
