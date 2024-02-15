@@ -129,6 +129,7 @@ def test_fork_write(crvusd, n):
     assert crvusd.balanceOf(account_b) == balances[account_b] + n
 
 
+# test net gas metering negative refund
 def test_fork_write_flip(crvusd):
     e = boa.loads(
         f"""
@@ -142,7 +143,7 @@ def flip_from(_input: uint256) -> uint256:
     self.crvUSD.transferFrom(msg.sender, self, _input)
     self.crvUSD.transfer(msg.sender, _input / 2)
     return _input / 2
-"""
+    """
     )
     pool = "0x4dece678ceceb27446b35c672dc7d61f30bad69e"
     initial_balance = crvusd.balanceOf(pool)
