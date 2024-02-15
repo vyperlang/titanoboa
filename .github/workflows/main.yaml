@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.10" ]
+        python-version: [ "3.10", "3.11" ]
 
     name: "unit tests: python ${{ matrix.python-version }}"
 
@@ -26,3 +26,112 @@ jobs:
         run: |
           git fetch origin ${{ github.base_ref }}
           git merge origin/${{ github.base_ref }} --no-edit
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install Requirements
+        run: |
+          pip install -r dev-requirements.txt
+          pip install .
+
+      - name: Run Unit Tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          # pass internals to pytest-cov, since we are testing a pytest plugin.
+          # See https://github.com/pytest-dev/pytest-cov/blob/2c9f2170/docs/plugins.rst
+          COV_CORE_SOURCE: boa
+          COV_CORE_CONFIG: .coveragerc
+          COV_CORE_DATAFILE: .coverage.eager
+        run: >-
+          pytest
+          --cov=boa
+          --cov-append
+          --cov-report term-missing:skip-covered
+          --cov-fail-under=70
+          tests/unitary/
+
+  anvil:
+    name: "integration tests (anvil)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 2
+
+      - name: Merge base branch
+        if: github.event_name == 'pull_request_target'
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git merge origin/${{ github.base_ref }} --no-edit
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Requirements
+        run: |
+          pip install -r dev-requirements.txt
+          pip install .
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run Networked Tests against anvil
+        # run separately to clarify its dependency on outside binary
+        run: pytest -n auto tests/integration/network/anvil/
+
+  integration:
+    name: "integration tests (Alchemy: fork mode and Sepolia)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if the user is a contributor
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { actor: username, repo: { owner, repo } } = context;
+            const collaborator = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+            if (!collaborator.data.user.permissions.push) {
+              core.setFailed(username + ' is not a contributor');
+            }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 2
+
+      - name: Merge base branch
+        if: github.event_name == 'pull_request_target'
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git merge origin/${{ github.base_ref }} --no-edit
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Requirements
+        run: |
+          pip install -r dev-requirements.txt
+          pip install .
+
+      - name: Run Fork Mode Tests
+        run: pytest -n auto tests/integration/fork/
+        env:
+          MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+
+      - name: Run Sepolia Tests
+        # disable xdist, otherwise they can contend for tx nonce
+        run: pytest -n 0 tests/integration/network/sepolia/
+        env:
+          SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
+          SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
