@@ -262,10 +262,10 @@ class AccountDBFork(AccountDB):
         # check if we have the storage locally in the VM already
         # cf. AccountStorageDB.get()
         store = super()._get_address_store(address)
-        db = store._journal_storage if from_journal else store._locked_changes
         key = int_to_big_endian(slot)
-        if db.get(key, _EMPTY) != _EMPTY:
-            # we have it locally - skip rpc fetch
+        if store._locked_changes.get(key, _EMPTY) != _EMPTY:
+            return val
+        if from_journal and store._journal_storage.get(key, _EMPTY) != _EMPTY:
             return val
 
         addr = to_checksum_address(address)
