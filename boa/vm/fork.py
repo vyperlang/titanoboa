@@ -263,12 +263,15 @@ class AccountDBFork(AccountDB):
         key = int_to_big_endian(slot)
 
         # Read from local storage if there are any records
-        if store._locked_changes._journal.get(key) is not None or \
-                (from_journal and store._journal_storage._journal.get(key) is not None):
+        if store._locked_changes._journal.get(key) is not None or (
+            from_journal and store._journal_storage._journal.get(key) is not None
+        ):
             return super().get_storage(address, slot, from_journal)
 
         addr = to_checksum_address(address)
-        value = to_int(self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id]))
+        value = to_int(
+            self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
+        )
         store._locked_changes[key] = rlp.encode(value)  # Save value to local storage
         return value
 

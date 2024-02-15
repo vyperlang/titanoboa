@@ -17,6 +17,7 @@ from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
+from eth.vm.gas_meter import allow_negative_refund_strategy
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
@@ -28,7 +29,7 @@ from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.fork import AccountDBFork
-from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter, allow_negative_refund_strategy
+from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 
 
@@ -271,7 +272,9 @@ class titanoboa_computation:
         self.opcodes = self.opcodes.copy()
         self.opcodes.update(_opcode_overrides)
 
-        self._gas_meter = self._gas_meter_class(self.msg.gas, refund_strategy=allow_negative_refund_strategy)
+        self._gas_meter = self._gas_meter_class(
+            self.msg.gas, refund_strategy=allow_negative_refund_strategy
+        )
         if hasattr(self._gas_meter, "_set_code"):
             self._gas_meter._set_code(self.code)
 
