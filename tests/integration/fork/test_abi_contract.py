@@ -1,6 +1,6 @@
 import hypothesis.strategies as st
 import pytest
-from hypothesis import given, example
+from hypothesis import given
 
 import boa
 from boa import BoaError
@@ -107,6 +107,7 @@ balances = {
 @pytest.mark.parametrize("addr,balance", balances.items())
 def test_balances(addr, balance, crvusd):
     assert crvusd.balanceOf(addr) == balance
+
 
 # test write 0 to fresh fork state
 def test_fork_write0(crvusd):
