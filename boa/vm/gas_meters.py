@@ -1,4 +1,4 @@
-from eth.vm.gas_meter import GasMeter
+from eth.vm.gas_meter import GasMeter, allow_negative_refund_strategy
 
 
 class NoGasMeter:

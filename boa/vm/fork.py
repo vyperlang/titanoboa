@@ -255,34 +255,25 @@ class AccountDBFork(AccountDB):
             )
             return to_bytes(ret)
 
-    # helper to determine if something is in the storage db
-    # or we need to get from RPC
-    def _helper_have_storage(self, address, slot, from_journal=True):
+    def get_storage(self, address, slot, from_journal=True):
         # we have the storage locally in the VM already
         # cf. AccountStorageDB.get()
         store = super()._get_address_store(address)
         store._accessed_slots.add(slot)
         key = int_to_big_endian(slot)
-        db = store._journal_storage if from_journal else store._locked_changes
 
-        return key in db and db[key] != _EMPTY
-
-    def get_storage(self, address, slot, from_journal=True):
-        if self._helper_have_storage(address, slot, from_journal=from_journal):
+        # Read from local storage if there are any records
+        if store._locked_changes._journal.get(key) is not None or \
+                (from_journal and store._journal_storage._journal.get(key) is not None):
             return super().get_storage(address, slot, from_journal)
 
         addr = to_checksum_address(address)
-        ret = self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
-        return to_int(ret)
+        value = to_int(self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id]))
+        store._locked_changes[key] = rlp.encode(value)  # Save value to local storage
+        return value
 
     def set_storage(self, address, slot, value):
         super().set_storage(address, slot, value)
-        if value == 0:
-            # override the branch in AccountStorageDB.set() which skips
-            # writing the value into the journal
-            store = self._get_address_store(address)
-            key = int_to_big_endian(slot)
-            store._journal_storage[key] = rlp.encode(value)
 
     def account_exists(self, address):
         if super().account_exists(address):

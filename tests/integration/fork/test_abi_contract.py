@@ -129,6 +129,30 @@ def test_fork_write(crvusd, n):
     assert crvusd.balanceOf(account_b) == balances[account_b] + n
 
 
+def test_fork_write_flip(crvusd):
+    e = boa.loads(f"""
+from vyper.interfaces import ERC20
+crvUSD: ERC20
+@external
+def __init__():
+    self.crvUSD = ERC20({crvusd.address})
+@external
+def flip_from(_input: uint256) -> uint256:
+    self.crvUSD.transferFrom(msg.sender, self, _input)
+    self.crvUSD.transfer(msg.sender, _input / 2)
+    return _input / 2
+""")
+    pool = "0x4dece678ceceb27446b35c672dc7d61f30bad69e"
+    initial_balance = crvusd.balanceOf(pool)
+    initial = (initial_balance, crvusd.balanceOf(e))
+    with boa.env.prank(pool):
+        crvusd.approve(e, 2 ** 256 - 1)
+        e.flip_from(initial_balance)
+    print(initial, crvusd.balanceOf(pool), crvusd.balanceOf(e))
+    assert crvusd.balanceOf(pool) == initial_balance // 2
+    assert crvusd.balanceOf(e) == initial_balance - initial_balance // 2
+
+
 def test_abi_stack_trace(crvusd):
     c = boa.loads(
         """
