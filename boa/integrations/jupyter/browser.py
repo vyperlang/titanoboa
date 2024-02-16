@@ -29,6 +29,7 @@ from boa.integrations.jupyter.utils import (
 )
 from boa.network import NetworkEnv
 from boa.rpc import RPC, RPCError
+from boa.util.abi import Address
 
 try:
     from google.colab.output import eval_js as colab_eval_js
@@ -37,6 +38,12 @@ except ImportError:
 
 
 nest_asyncio.apply()
+
+
+if not colab_eval_js:
+    # colab creates a new iframe for every call, we need to re-inject it every time
+    # for jupyterlab we only need to do it once
+    install_jupyter_javascript_triggers()
 
 
 class BrowserSigner:
@@ -49,12 +56,10 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        if address is not None:
-            self.address = address
-        else:
-            self.address = _javascript_call(
-                "loadSigner", timeout_message=ADDRESS_TIMEOUT_MESSAGE
-            )
+        address = _javascript_call(
+            "loadSigner", address, timeout_message=ADDRESS_TIMEOUT_MESSAGE
+        )
+        self.address = Address(address)
 
     def send_transaction(self, tx_data: dict) -> dict:
         """
@@ -161,14 +166,13 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     :param kwargs: The arguments to pass to the Javascript snippet.
     :return: The result of the Javascript snippet sent to the API.
     """
-    install_jupyter_javascript_triggers()
-
     token = _generate_token()
     args_str = ", ".join(json.dumps(p) for p in chain([token], args))
-    js_code = f"window._titanoboa.{js_func}({args_str})"
+    js_code = f"window._titanoboa.{js_func}({args_str});"
     # logging.warning(f"Calling {js_func} with {args_str}")
 
     if colab_eval_js:
+        install_jupyter_javascript_triggers()
         result = colab_eval_js(js_code)
         return _parse_js_result(json.loads(result))
 
@@ -176,7 +180,8 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     logging.info(f"Waiting for {token}")
     try:
         memory.buf[:1] = NUL
-        display(Javascript(js_code))
+        hide_output_element = "element.style.display = 'none';"
+        display(Javascript(js_code + hide_output_element))
         message_bytes = _wait_buffer_set(memory.buf, timeout_message)
         return _parse_js_result(json.loads(message_bytes.decode()))
     finally:

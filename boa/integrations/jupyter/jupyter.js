@@ -3,14 +3,12 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    let provider; // cache the provider to avoid re-creating it every time
-    const getEthersProvider = () => {
-        if (provider) return provider;
+    const rpc = (method, params) => {
         const {ethereum} = window;
         if (!ethereum) {
             throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
         }
-        return provider = new ethers.BrowserProvider(ethereum);
+        return ethereum.request({method, params});
     };
 
     /** Stringify data, converting big ints to strings */
@@ -40,19 +38,21 @@
         return response.text();
     }
 
-    const getSigner = () => getEthersProvider().getSigner();
-
-    /** Load the signer via ethers user */
-    const loadSigner = () => getSigner().then(s => s.getAddress());
+    let from;
+    const loadSigner = async (address) => {
+        const accounts = await rpc('eth_requestAccounts');
+        from = accounts.includes(address) ? address : accounts[0];
+        return from;
+    };
 
     /** Sign a transaction via ethers */
-    const sendTransaction = transaction => getSigner().then(s => s.sendTransaction(transaction));
+    const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
 
     /** Sign a typed data via ethers */
-    const signTypedData = (domain, types, value) => getSigner().then(s => s.signTypedData(domain, types, value));
-
-    /** Call an RPC method via ethers */
-    const rpc = (method, params) => getEthersProvider().send(method, params);
+    const signTypedData = (domain, types, value) => rpc(
+        'eth_signTypedData_v4',
+        [from, JSON.stringify({domain, types, value})]
+    );
 
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
@@ -107,4 +107,6 @@
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),
     };
+
+    if (element) element.style.display = "none";  // hide the output element in JupyterLab
 })();
