@@ -1,0 +1,61 @@
+name: integration
+
+on:
+  pull_request_target:
+  push:
+    branches:
+      - master
+
+jobs:
+  integration:
+    name: "integration tests (Alchemy: fork mode and Sepolia)"
+    runs-on: ubuntu-latest
+    steps:
+
+      # given we use the pull_request_trigger, only allow contributors to run tests with secrets
+      - name: Check if the user is a contributor
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { actor: username, repo: { owner, repo } } = context;
+            const collaborator = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+            if (!collaborator.data.user.permissions.push) {
+              core.setFailed(username + ' is not a contributor');
+            }
+
+      # specifically check out the head ref, not the default base ref. Depth is needed for the merge step.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 2
+
+      # we want to run the tests on a merge commit, so we need to merge the base branch into the head branch
+      - name: Merge base branch
+        if: github.event_name == 'pull_request_target'
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git merge origin/${{ github.base_ref }} --no-edit
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Requirements
+        run: |
+          pip install -r dev-requirements.txt
+          pip install .
+
+      - name: Run Fork Mode Tests
+        run: pytest -n auto tests/integration/fork/
+        env:
+          MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+
+      - name: Run Sepolia Tests
+        # disable xdist, otherwise they can contend for tx nonce
+        run: pytest -n 0 tests/integration/network/sepolia/
+        env:
+          SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
+          SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
