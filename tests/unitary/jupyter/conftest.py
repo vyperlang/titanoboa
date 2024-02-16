@@ -9,10 +9,9 @@ import pytest
 def replace_modules():
     mocked_modules = {}
 
-    anchor = sys.modules
+    anchor = sys.modules.copy()
 
     def replace(modules: dict):
-        sys.modules = sys.modules.copy()
         for module, mock in modules.items():
             assert module not in sys.modules
             sys.modules[module] = mock
