@@ -9,15 +9,18 @@ import pytest
 def replace_modules():
     mocked_modules = {}
 
+    anchor = sys.modules
+
     def replace(modules: dict):
+        sys.modules = sys.modules.copy()
         for module, mock in modules.items():
             assert module not in sys.modules
             sys.modules[module] = mock
             mocked_modules[module] = mock
 
     yield replace
-    for m in mocked_modules:
-        sys.modules.pop(m)
+
+    sys.modules = anchor
 
 
 @pytest.fixture()
