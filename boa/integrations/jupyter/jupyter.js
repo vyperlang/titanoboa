@@ -3,14 +3,12 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    let provider; // cache the provider to avoid re-creating it every time
-    const getEthersProvider = () => {
-        if (provider) return provider;
+    const eth = (method, params) => {
         const {ethereum} = window;
         if (!ethereum) {
             throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
         }
-        return provider = new ethers.BrowserProvider(ethereum);
+        return ethereum.request({method, params});
     };
 
     /** Stringify data, converting big ints to strings */
@@ -40,19 +38,24 @@
         return response.text();
     }
 
-    const getSigner = () => getEthersProvider().getSigner();
-
-    /** Load the signer via ethers user */
-    const loadSigner = () => getSigner().then(s => s.getAddress());
+    let from;
+    const loadSigner = async (address) => {
+        const accounts = await eth('eth_requestAccounts');
+        from = accounts.includes(address) ? address : accounts[0];
+        return from;
+    };
 
     /** Sign a transaction via ethers */
-    const sendTransaction = transaction => getSigner().then(s => s.sendTransaction(transaction));
+    const sendTransaction = async transaction => ({"hash": await eth('eth_sendTransaction', [transaction])});
 
     /** Sign a typed data via ethers */
-    const signTypedData = (domain, types, value) => getSigner().then(s => s.signTypedData(domain, types, value));
+    const signTypedData = (domain, types, value) => eth(
+        'eth_signTypedData_v4',
+        [from, JSON.stringify({domain, types, value})]
+    );
 
     /** Call an RPC method via ethers */
-    const rpc = (method, params) => getEthersProvider().send(method, params);
+    const rpc = (method, params) => eth(method, params);
 
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
@@ -83,6 +86,7 @@
 
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
+        const start = Date.now();
         if (!colab) {
             // Check if the cell was already executed. In Colab, eval_js() doesn't replay.
             const response = await fetch(`../titanoboa_jupyterlab/callback/${token}`);
@@ -91,7 +95,8 @@
         }
 
         const body = stringify(await parsePromise(func(...args)));
-        // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
+        const duration = Date.now() - start;
+        console.log(`Boa (${duration}ms): ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {
             return body;
         }
@@ -107,4 +112,6 @@
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),
     };
+
+    if (element) element.style.display = "none";  // hide the output element in JupyterLab
 })();
