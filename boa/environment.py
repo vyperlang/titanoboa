@@ -281,6 +281,10 @@ class titanoboa_computation:
         self._child_pcs = []
         self._contract_repr_before_revert = None
 
+    @property
+    def net_gas_used(self):
+        return max(0, self.get_gas_used() - self.get_gas_refund())
+
     def add_child_computation(self, child_computation):
         super().add_child_computation(child_computation)
         # track PCs of child calls for profiling purposes
