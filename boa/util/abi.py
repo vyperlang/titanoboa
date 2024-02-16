@@ -15,9 +15,9 @@ from boa.util.lrudict import lrudict
 _parsers: dict[str, ABITypeNode] = {}
 
 
-# XXX: inherit from bytes directly so that we can pass it to py-evm?
-# inherit from `str` so that ABI encoder / decoder can work without failing
-class Address(str):  # (PYEVM_Address):
+# inherit from `str` so that users can compare with regular hex string
+# addresses
+class Address(str):
     # converting between checksum and canonical addresses is a hotspot;
     # this class contains both and caches recently seen conversions
     __slots__ = ("canonical_address",)
@@ -42,7 +42,7 @@ class Address(str):  # (PYEVM_Address):
 
     def __repr__(self):
         checksum_addr = super().__repr__()
-        return f"_Address({checksum_addr})"
+        return f"Address({checksum_addr})"
 
 
 class _ABIEncoder(Encoder):
