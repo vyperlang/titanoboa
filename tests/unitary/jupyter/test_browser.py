@@ -221,14 +221,14 @@ def test_browser_loads_signer(
 
 
 def test_browser_chain_id(token, env, display_mock, mock_callback):
-    mock_callback("eth_chainId", "0x123")
-    assert env.get_chain_id() == "0x123"
+    mock_callback("eth_chainId", "0x1234")
+    assert env.get_chain_id() == 4660
     mock_callback("wallet_switchEthereumChain")
-    env.set_chain_id("0x456")
+    env.set_chain_id(1)
     assert display_mock.call_count == 7
     (js,), _ = display_mock.call_args_list[-2]
     assert (
-        f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x456"}}])'
+        f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x1"}}])'
         in js.data
     )
 
