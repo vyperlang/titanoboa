@@ -3,13 +3,13 @@ import string
 from typing import Any, Callable, Iterable, Optional, Union
 
 from eth_abi.grammar import BasicType, TupleType, parse
-from eth_utils import to_checksum_address
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
 from hypothesis.strategies._internal.deferred import DeferredStrategy
 
 from boa.contracts.vyper.vyper_contract import VyperFunction
+from boa.util.abi import Address
 
 # hypothesis fuzzing strategies, adapted from brownie 0.19.2 (86258c7bd)
 # in the future these may be superseded by eth-stdlib.
@@ -87,25 +87,15 @@ def _decimal_strategy(
     return st.decimals(min_value=min_value, max_value=max_value, places=places)
 
 
-def format_addr(t):
-    if isinstance(t, str):
-        t = t.encode("utf-8")
-    return to_checksum_address(t.rjust(20, b"\x00"))
-
-
-def generate_random_string(n):
-    return ["".join(random.choices(string.ascii_lowercase, k=5)) for i in range(n)]
+def generate_random_strings(n):
+    return [b"".join(random.choices(string.ascii_lowercase, k=5)) for i in range(n)]
 
 
 @_exclude_filter
-def _address_strategy(length: Optional[int] = 100) -> SearchStrategy:
-    random_strings = generate_random_string(length)
+def _address_strategy() -> SearchStrategy:
     # TODO: add addresses from the environment. probably everything in
     # boa.env._contracts, boa.env._blueprints and boa.env.eoa.
-    accounts = [format_addr(i) for i in random_strings]
-    return _DeferredStrategyRepr(
-        lambda: st.sampled_from(list(accounts)[:length]), "accounts"
-    )
+    return st.binary(min_size=20, max_size=20).map(Address)
 
 
 @_exclude_filter
