@@ -18,7 +18,7 @@ _parsers: dict[str, ABITypeNode] = {}
 class Address(bytes):
     # converting between checksum and canonical addresses is a hotspot;
     # this class contains both and caches recently seen conversions
-    # TODO: maybe this belongs in its own module
+    # TODO: maybe this class belongs in its own module
     _cache = lrudict(1024)
 
     checksum_address: str
