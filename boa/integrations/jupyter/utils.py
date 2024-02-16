@@ -6,7 +6,7 @@ from IPython.display import Javascript, display
 def install_jupyter_javascript_triggers():
     """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
     cur_dir = dirname(realpath(__file__))
-    with open(join(cur_dir, "jupyter.min.js")) as f:
+    with open(join(cur_dir, "jupyter.js")) as f:
         jupyter_js = f.read()
     display(Javascript(jupyter_js))
 
