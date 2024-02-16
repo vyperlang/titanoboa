@@ -13,7 +13,6 @@ def replace_modules():
 
     def replace(modules: dict):
         for module, mock in modules.items():
-            assert module not in sys.modules
             sys.modules[module] = mock
             mocked_modules[module] = mock
 
@@ -42,7 +41,6 @@ def jupyter_module_mock(replace_modules, tornado_mock):
             "jupyter_server.base.handlers": base_handlers,
             "jupyter_server.serverapp": serverapp,
             "jupyter_server.utils": utils,
-            "IPython.core.interactiveshell": MagicMock(),
         }
     )
     return jupyter_mock

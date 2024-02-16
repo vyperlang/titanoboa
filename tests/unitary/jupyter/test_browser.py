@@ -12,9 +12,15 @@ import boa
 
 
 @pytest.fixture()
-def display_mock():
-    with mock.patch("boa.integrations.jupyter.browser.display") as display_mock:
-        yield display_mock
+def ipython_mock(replace_modules):
+    display_mock = MagicMock("IPython.display.display")
+    module_mock = MagicMock(
+        "IPython.display",
+        Javascript=lambda data: MagicMock(data=data),
+        display=display_mock,
+    )
+    replace_modules({"IPython.display": module_mock})
+    return display_mock
 
 
 @pytest.fixture()
@@ -54,6 +60,7 @@ def find_response(mock_calls, func_to_body_dict):
         The keys represent either an RPC function or a JS function.
     :return: The response to the last call to the display function.
     """
+    assert mock_calls
     (javascript,) = [call for call in mock_calls if call.args][-1].args
     js_func, js_args = re.match(
         r"window._titanoboa.([a-zA-Z0-9_]+)\(([^)]*)\)", javascript.data
@@ -123,11 +130,17 @@ def mock_fork(mock_callback):
 
 
 @pytest.fixture()
-def browser(nest_asyncio_mock, jupyter_module_mock):
+def browser(nest_asyncio_mock, jupyter_module_mock, ipython_mock):
     # Import the browser module after the mocks have been set up
     from boa.integrations.jupyter import browser
 
     return browser
+
+
+@pytest.fixture()
+def display_mock(browser):
+    browser.display.reset_mock()
+    return browser.display
 
 
 @pytest.fixture()
