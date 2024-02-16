@@ -109,7 +109,17 @@ def test_balances(addr, balance, crvusd):
     assert crvusd.balanceOf(addr) == balance
 
 
-@given(n=st.integers(min_value=0, max_value=balances[account_a] - 1))
+# test write 0 to fresh fork state
+def test_fork_write0(crvusd):
+    n = balances[account_a]
+    with boa.env.prank(account_a):
+        crvusd.transfer(account_b, n)
+
+    assert crvusd.balanceOf(account_a) == 0
+    assert crvusd.balanceOf(account_b) == balances[account_b] + n
+
+
+@given(n=st.integers(min_value=0, max_value=balances[account_a]))
 def test_fork_write(crvusd, n):
     # test we can mutate the fork state
     with boa.env.prank(account_a):
@@ -117,6 +127,31 @@ def test_fork_write(crvusd, n):
 
     assert crvusd.balanceOf(account_a) == balances[account_a] - n
     assert crvusd.balanceOf(account_b) == balances[account_b] + n
+
+
+# test net gas metering negative refund
+def test_fork_write_flip(crvusd):
+    e = boa.loads(
+        f"""
+from vyper.interfaces import ERC20
+crvUSD: ERC20
+@external
+def __init__():
+    self.crvUSD = ERC20({crvusd.address})
+@external
+def flip_from(_input: uint256) -> uint256:
+    self.crvUSD.transferFrom(msg.sender, self, _input)
+    self.crvUSD.transfer(msg.sender, _input / 2)
+    return _input / 2
+    """
+    )
+    pool = "0x4dece678ceceb27446b35c672dc7d61f30bad69e"
+    initial_balance = crvusd.balanceOf(pool)
+    with boa.env.prank(pool):
+        crvusd.approve(e, 2**256 - 1)
+        e.flip_from(initial_balance)
+    assert crvusd.balanceOf(pool) == initial_balance // 2
+    assert crvusd.balanceOf(e) == initial_balance - initial_balance // 2
 
 
 def test_abi_stack_trace(crvusd):

@@ -130,6 +130,7 @@ def test(a: uint128 = 0, b: uint128 = 0) -> uint128:
     assert c.test(a=1) == 1
     assert c.test(1, 2) == 3
     assert c.test(a=1, b=2) == 3
+    assert c.test(a=1, b=2, value=0, gas=None) == 3
 
     with pytest.raises(Exception) as exc_info:
         c.test(1, 2, 3)

@@ -27,29 +27,37 @@ _disk_cache = None
 
 
 class BoaImporter(importlib.abc.MetaPathFinder):
-    def find_module(self, fullname, package_path, target=None):
-        # Return a loader
-        return self
+    def __init__(self):
+        self._path_lookup = {}
 
+    # TODO: replace this with more modern `find_spec()`
+    def find_module(self, fullname, package_path, target=None):
+        path = Path(fullname.replace(".", "/")).with_suffix(".vy")
+
+        for prefix in sys.path:
+            to_try = Path(prefix) / path
+
+            if to_try.exists():
+                self._path_lookup[fullname] = to_try
+                return self
+
+        return None
+
+    # TODO: replace with more modern `exec_module()` and `create_module()`
     def load_module(self, fullname):
-        # Return a module
         if fullname in sys.modules:
             return sys.modules[fullname]
 
-        path = Path(fullname.replace(".", "/")).with_suffix(".vy")
-        for prefix in sys.path:
-            to_try = Path(prefix) / path
-            try:
-                ret = load_partial(to_try)
-                break
-            except (FileNotFoundError, NotADirectoryError):
-                pass
-        else:
-            raise ImportError(fullname)
+        # import system should guarantee this, but be paranoid
+        if fullname not in self._path_lookup:
+            raise ImportError(f"invariant violated: no lookup for {fullname}")
+
+        path = self._path_lookup[fullname]
+        ret = load_partial(path)
 
         # comply with PEP-302:
-        ret.__name__ = to_try.name
-        ret.__file__ = str(to_try)
+        ret.__name__ = path.name
+        ret.__file__ = str(path)
         sys.modules[fullname] = ret
         return ret
 

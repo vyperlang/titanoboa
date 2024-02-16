@@ -17,6 +17,7 @@ from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
+from eth.vm.gas_meter import allow_negative_refund_strategy
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
@@ -271,7 +272,9 @@ class titanoboa_computation:
         self.opcodes = self.opcodes.copy()
         self.opcodes.update(_opcode_overrides)
 
-        self._gas_meter = self._gas_meter_class(self.msg.gas)
+        self._gas_meter = self._gas_meter_class(
+            self.msg.gas, refund_strategy=allow_negative_refund_strategy
+        )
         if hasattr(self._gas_meter, "_set_code"):
             self._gas_meter._set_code(self.code)
 

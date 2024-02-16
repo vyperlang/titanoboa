@@ -1,4 +1,5 @@
 import os
+import sys
 from typing import Any, Type
 
 from requests import HTTPError
@@ -12,6 +13,7 @@ import rlp
 from eth.db.account import AccountDB, keccak
 from eth.db.backends.memory import MemoryDB
 from eth.db.cache import CacheDB
+from eth.db.journal import JournalDB
 from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth.vm.message import Message
@@ -28,6 +30,7 @@ _PREDEFINED_BLOCKS = {"safe", "latest", "finalized", "pending", "earliest"}
 
 
 _EMPTY = b""  # empty rlp stuff
+_HAS_KEY = b"\x01"  # could be anything
 
 
 class CachingRPC(RPC):
@@ -38,6 +41,8 @@ class CachingRPC(RPC):
         if cache_file is not None:
             try:
                 from boa.util.leveldb import LevelDB
+
+                print("(using leveldb)", file=sys.stderr)
 
                 cache_file = os.path.expanduser(cache_file)
                 # use CacheDB as an additional layer over disk
@@ -133,6 +138,8 @@ class AccountDBFork(AccountDB):
 
     def __init__(self, rpc: CachingRPC, block_identifier: str, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+
+        self._dontfetch = JournalDB(MemoryDB())
 
         self._rpc = rpc
 
@@ -255,27 +262,47 @@ class AccountDBFork(AccountDB):
             )
             return to_bytes(ret)
 
+    def discard(self, checkpoint):
+        super().discard(checkpoint)
+        self._dontfetch.discard(checkpoint)
+
+    def commit(self, checkpoint):
+        super().commit(checkpoint)
+        self._dontfetch.commit(checkpoint)
+
+    def record(self):
+        checkpoint = super().record()
+        self._dontfetch.record(checkpoint)
+        return checkpoint
+
     # helper to determine if something is in the storage db
     # or we need to get from RPC
     def _helper_have_storage(self, address, slot, from_journal=True):
-        # we have the storage locally in the VM already
-        # cf. AccountStorageDB.get()
-        store = super()._get_address_store(address)
-        key = int_to_big_endian(slot)
-        db = store._journal_storage if from_journal else store._locked_changes
+        if not from_journal:
+            db = super()._get_address_store(address)._locked_changes
+            key = int_to_big_endian(slot)
+            return db.get(key, _EMPTY) != _EMPTY
 
-        return key in db and db[key] != _EMPTY
+        key = self._get_storage_tracker_key(address, slot)
+        return self._dontfetch.get(key) == _HAS_KEY
 
     def get_storage(self, address, slot, from_journal=True):
-        # call super to get address warming semantics
-        s = super().get_storage(address, slot, from_journal)
-
+        # call super for address warming semantics
+        val = super().get_storage(address, slot, from_journal)
         if self._helper_have_storage(address, slot, from_journal=from_journal):
-            return s
+            return val
 
         addr = to_checksum_address(address)
-        ret = self._rpc.fetch("eth_getStorageAt", [addr, to_hex(slot), self._block_id])
-        return to_int(ret)
+        raw_val = self._rpc.fetch(
+            "eth_getStorageAt", [addr, to_hex(slot), self._block_id]
+        )
+        return to_int(raw_val)
+
+    def set_storage(self, address, slot, value):
+        super().set_storage(address, slot, value)
+        # mark don't fetch
+        key = self._get_storage_tracker_key(address, slot)
+        self._dontfetch[key] = _HAS_KEY
 
     def account_exists(self, address):
         if super().account_exists(address):
