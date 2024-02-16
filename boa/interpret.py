@@ -161,7 +161,7 @@ def load_partial(filename: str, compiler_args=None) -> VyperDeployer:  # type: i
 def from_etherscan(
     address: Any, name=None, uri="https://api.etherscan.io/api", api_key=None
 ):
-    addr = Address(address).checksum_address
+    addr = Address(address)
     abi = fetch_abi_from_etherscan(addr, uri, api_key)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 

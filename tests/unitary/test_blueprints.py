@@ -28,6 +28,6 @@ def test_create2_address():
     blueprint_bytecode = boa.env.vm.state.get_code(
         to_canonical_address(blueprint.address)
     )
-    assert child_contract_address.checksum_address == get_create2_address(
+    assert child_contract_address == get_create2_address(
         blueprint_bytecode, factory.address, salt
     )

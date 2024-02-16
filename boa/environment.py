@@ -127,11 +127,11 @@ def register_raw_precompile(address, fn, force=False):
     address = Address(address)
     if address in _precompiles and not force:
         raise ValueError(f"Already registered: {address}")
-    _precompiles[address] = fn
+    _precompiles[address.canonical_address] = fn
 
 
 def deregister_raw_precompile(address, force=True):
-    address = Address(address)
+    address = Address(address).canonical_address
     if address not in _precompiles and not force:
         raise ValueError("Not registered: {address}")
     _precompiles.pop(address, None)
@@ -492,14 +492,14 @@ class Env:
 
     # set balance of address in py-evm
     def set_balance(self, addr, value):
-        self.vm.state.set_balance(Address(addr), value)
+        self.vm.state.set_balance(Address(addr).canonical_address, value)
 
     # get balance of address in py-evm
     def get_balance(self, addr):
-        return self.vm.state.get_balance(Address(addr))
+        return self.vm.state.get_balance(Address(addr).canonical_address)
 
     def register_contract(self, address, obj):
-        addr = Address(address)
+        addr = Address(address).canonical_address
         self._contracts[addr] = obj
 
         # also register it in the registry for
@@ -516,13 +516,13 @@ class Env:
     def lookup_contract(self, address: _AddressType):
         if address == b"":
             return None
-        return self._contracts.get(Address(address))
+        return self._contracts.get(Address(address).canonical_address)
 
     def alias(self, address, name):
-        self._aliases[Address(address)] = name
+        self._aliases[Address(address).canonical_address] = name
 
     def lookup_alias(self, address):
-        return self._aliases[Address(address)]
+        return self._aliases[Address(address).canonical_address]
 
     # advanced: reset warm/cold counters for addresses and storage
     def _reset_access_counters(self):
@@ -577,7 +577,7 @@ class Env:
             sender = self.eoa
         if self.eoa is None:
             raise ValueError(f"{self}.eoa not defined!")
-        return Address(sender)
+        return Address(sender).canonical_address
 
     def _update_gas_used(self, gas_used: int):
         self._gas_tracker += gas_used
@@ -610,7 +610,7 @@ class Env:
             gas=gas,
             value=value,
             code=bytecode,
-            create_address=target_address,
+            create_address=target_address.canonical_address,
             data=b"",
         )
 
@@ -672,7 +672,7 @@ class Env:
 
         sender = self._get_sender(sender)
 
-        to = Address(to_address)
+        to = Address(to_address).canonical_address
 
         bytecode = override_bytecode
         if override_bytecode is None:

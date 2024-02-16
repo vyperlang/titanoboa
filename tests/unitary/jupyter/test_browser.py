@@ -157,7 +157,7 @@ def test_browser_sign_typed_data(
     browser, display_mock, mock_inject_javascript, mock_callback
 ):
     signer = browser.BrowserSigner(boa.env.generate_address())
-    signature = boa.env.generate_address().checksum_address
+    signature = boa.env.generate_address()
     mock_callback("signTypedData", signature)
     data = signer.sign_typed_data({"name": "My App"}, {"types": []}, {"data": "0x1234"})
     assert data == signature
