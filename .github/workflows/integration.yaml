@@ -1,3 +1,7 @@
+# These tests are separated into a separate file to be able to use secrets when running in a fork.
+# To avoid leaking secrets, we only allow contributors to run the tests.
+# Note that pull_request_trigger runs from the base branch, not the head branch.
+# So, we need to manually check out the head ref and merge the base branch into it.
 name: integration
 
 on:
