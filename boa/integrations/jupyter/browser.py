@@ -40,11 +40,9 @@ except ImportError:
 nest_asyncio.apply()
 
 
-logging.warning(f"Colab {bool(colab_eval_js)}")
 if not colab_eval_js:
     # colab creates a new iframe for every call, we need to re-inject it every time
     # for jupyterlab we only need to do it once
-    logging.warning("Installing Jupyter triggers")
     install_jupyter_javascript_triggers()
 
 

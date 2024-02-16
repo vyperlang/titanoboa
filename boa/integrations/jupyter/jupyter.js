@@ -96,7 +96,7 @@
 
         const body = stringify(await parsePromise(func(...args)));
         const duration = Date.now() - start;
-        console.log(`Boa (${duration}ms): ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
+        // console.log(`Boa (${duration}ms): ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {
             return body;
         }
