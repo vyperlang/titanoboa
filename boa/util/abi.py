@@ -14,6 +14,7 @@ from boa.util.lrudict import lrudict
 _parsers: dict[str, ABITypeNode] = {}
 
 
+# inherit from bytes so we don't need conversion when interacting with pyevm
 class Address(bytes):
     # converting between checksum and canonical addresses is a hotspot;
     # this class contains both and caches recently seen conversions
