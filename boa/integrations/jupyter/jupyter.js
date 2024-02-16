@@ -3,7 +3,7 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    const eth = (method, params) => {
+    const rpc = (method, params) => {
         const {ethereum} = window;
         if (!ethereum) {
             throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
@@ -40,22 +40,19 @@
 
     let from;
     const loadSigner = async (address) => {
-        const accounts = await eth('eth_requestAccounts');
+        const accounts = await rpc('eth_requestAccounts');
         from = accounts.includes(address) ? address : accounts[0];
         return from;
     };
 
     /** Sign a transaction via ethers */
-    const sendTransaction = async transaction => ({"hash": await eth('eth_sendTransaction', [transaction])});
+    const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
 
     /** Sign a typed data via ethers */
-    const signTypedData = (domain, types, value) => eth(
+    const signTypedData = (domain, types, value) => rpc(
         'eth_signTypedData_v4',
         [from, JSON.stringify({domain, types, value})]
     );
-
-    /** Call an RPC method via ethers */
-    const rpc = (method, params) => eth(method, params);
 
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
@@ -86,7 +83,6 @@
 
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
-        const start = Date.now();
         if (!colab) {
             // Check if the cell was already executed. In Colab, eval_js() doesn't replay.
             const response = await fetch(`../titanoboa_jupyterlab/callback/${token}`);
@@ -95,8 +91,7 @@
         }
 
         const body = stringify(await parsePromise(func(...args)));
-        const duration = Date.now() - start;
-        // console.log(`Boa (${duration}ms): ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
+        // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {
             return body;
         }
