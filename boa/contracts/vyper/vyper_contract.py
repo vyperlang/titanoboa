@@ -372,7 +372,10 @@ class StorageVar:
             return None  # indicate failure to caller
 
         fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
-        return decode_vyper_object(fakemem, typ)
+        ret = decode_vyper_object(fakemem, typ)
+        if isinstance(typ, AddressT):
+            ret = self._dealias(ret)
+        return ret
 
     def _dealias(self, maybe_address):
         try:
