@@ -550,7 +550,7 @@ class VyperContract(_BaseVyperContract):
     def _decode(mem, typ):
         ret = decode_vyper_object(mem, typ)
         if isinstance(typ, AddressT):
-            return f"address \"self._dealias(ret)\""
+            return f"address \"{self._dealias(ret)}\""
         return ret
 
     @cached_property
