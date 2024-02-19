@@ -102,11 +102,10 @@ class ABIFunction:
         if not self.contract or not self.contract.env:
             raise Exception(f"Cannot call {self} without deploying contract.")
 
-        args = self._merge_kwargs(*args, **kwargs)
         computation = self.contract.env.execute_code(
             to_address=self.contract.address,
             sender=sender,
-            data=self.method_id + abi_encode(self.signature, args),
+            data=self.prepare_calldata(*args, **kwargs),
             value=value,
             gas=gas,
             is_modifying=self.is_mutable,
@@ -120,6 +119,10 @@ class ABIFunction:
                 return single
             case multiple:
                 return tuple(multiple)
+
+    def prepare_calldata(self, *args, **kwargs):
+        args = self._merge_kwargs(*args, **kwargs)
+        return self.method_id + abi_encode(self.signature, args)
 
 
 class ABIOverload:
