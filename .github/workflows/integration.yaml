@@ -30,7 +30,7 @@ jobs:
       # this will check out the base branch, not the head branch
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0 # we need the history to be able to merge
 
       # now merge the head branch into the base branch, so we can run the tests with the head branch's changes
       - name: Merge head branch
