@@ -83,6 +83,11 @@ class ABIFunction:
             for abi_type, arg in zip(self.argument_types, parsed_args)
         )
 
+    def prepare_calldata(self, *args, **kwargs) -> bytes:
+        """Prepare the call data for the function call."""
+        abi_args = self._merge_kwargs(*args, **kwargs)
+        return self.method_id + abi_encode(self.signature, abi_args)
+
     def _merge_kwargs(self, *args, **kwargs) -> list:
         """Merge positional and keyword arguments into a single list."""
         if len(kwargs) + len(args) != self.argument_count:
@@ -102,11 +107,10 @@ class ABIFunction:
         if not self.contract or not self.contract.env:
             raise Exception(f"Cannot call {self} without deploying contract.")
 
-        args = self._merge_kwargs(*args, **kwargs)
         computation = self.contract.env.execute_code(
             to_address=self.contract.address,
             sender=sender,
-            data=self.method_id + abi_encode(self.signature, args),
+            data=self.prepare_calldata(*args, **kwargs),
             value=value,
             gas=gas,
             is_modifying=self.is_mutable,
@@ -151,6 +155,13 @@ class ABIOverload:
     def name(self) -> str:
         return self.functions[0].name
 
+    def prepare_calldata(self, *args, disambiguate_signature=None, **kwargs) -> bytes:
+        """Prepare the calldata for the function that matches the given arguments."""
+        function = self._pick_overload(
+            *args, disambiguate_signature=disambiguate_signature, **kwargs
+        )
+        return function.prepare_calldata(*args, **kwargs)
+
     def __call__(
         self,
         *args,
@@ -164,6 +175,15 @@ class ABIOverload:
         Call the function that matches the given arguments.
         :raises Exception: if a single function is not found
         """
+        function = self._pick_overload(
+            *args, disambiguate_signature=disambiguate_signature, **kwargs
+        )
+        return function(*args, value=value, gas=gas, sender=sender, **kwargs)
+
+    def _pick_overload(
+        self, *args, disambiguate_signature=None, **kwargs
+    ) -> ABIFunction:
+        """Pick the function that matches the given arguments."""
         if disambiguate_signature is None:
             matches = [f for f in self.functions if f.is_encodable(*args, **kwargs)]
         else:
@@ -174,7 +194,7 @@ class ABIOverload:
 
         match matches:
             case [function]:
-                return function(*args, value=value, gas=gas, sender=sender, **kwargs)
+                return function
             case []:
                 raise Exception(
                     f"Could not find matching {self.name} function for given arguments."
