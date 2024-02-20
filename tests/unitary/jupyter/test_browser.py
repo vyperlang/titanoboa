@@ -12,12 +12,6 @@ import boa
 
 
 @pytest.fixture()
-def display_mock(replace_modules):
-    with mock.patch("boa.integrations.jupyter.browser.display") as display_mock:
-        yield display_mock
-
-
-@pytest.fixture()
 def mocked_token(token):
     with mock.patch(
         "boa.integrations.jupyter.browser._generate_token"
@@ -27,15 +21,8 @@ def mocked_token(token):
 
 
 @pytest.fixture()
-def mock_inject_javascript():
-    with mock.patch(
-        "boa.integrations.jupyter.browser.install_jupyter_javascript_triggers"
-    ) as inject_mock:
-        yield inject_mock
-
-
-@pytest.fixture()
-def env(browser, account, mock_fork):
+def env(browser, account, mock_fork, mock_callback):
+    mock_callback("eth_requestAccounts", [account.address])
     boa.set_browser_env(account)
     return boa.env
 
@@ -54,6 +41,7 @@ def find_response(mock_calls, func_to_body_dict):
         The keys represent either an RPC function or a JS function.
     :return: The response to the last call to the display function.
     """
+    assert mock_calls
     (javascript,) = [call for call in mock_calls if call.args][-1].args
     js_func, js_args = re.match(
         r"window._titanoboa.([a-zA-Z0-9_]+)\(([^)]*)\)", javascript.data
@@ -76,12 +64,10 @@ def find_response(mock_calls, func_to_body_dict):
 
 
 @pytest.fixture()
-def mock_callback(mocked_token, browser, display_mock, mock_inject_javascript):
+def mock_callback(mocked_token, browser, display_mock):
     """Returns a function that allows mocking the result of the frontend callback."""
 
-    with mock.patch(
-        "boa.integrations.jupyter.browser.get_running_loop"
-    ) as mock_get_loop:
+    with mock.patch("boa.integrations.jupyter.browser.get_event_loop") as mock_get_loop:
         io_loop = mock_get_loop.return_value
         io_loop.time.return_value = 0
         func_to_body_dict = {}
@@ -104,7 +90,8 @@ def mock_callback(mocked_token, browser, display_mock, mock_inject_javascript):
                 memory = SharedMemory(name=mocked_token)
                 memory.buf[0 : len(body)] = body
                 task = MagicMock()
-                task.result.return_value = get_event_loop().run_until_complete(future)
+                loop = get_event_loop()
+                task.result.return_value = loop.run_until_complete(future)
                 return task
 
             io_loop.create_task = create_task
@@ -114,8 +101,8 @@ def mock_callback(mocked_token, browser, display_mock, mock_inject_javascript):
 
 @pytest.fixture()
 def mock_fork(mock_callback):
-    mock_callback("evm_snapshot", "0x123")
-    mock_callback("evm_revert", "0x123")
+    mock_callback("evm_snapshot", "0x123456")
+    mock_callback("evm_revert", "0x12345678")
     data = {"number": "0x123", "timestamp": "0x65bbb460"}
     mock_callback("eth_getBlockByNumber", data)
     yield
@@ -123,11 +110,17 @@ def mock_fork(mock_callback):
 
 
 @pytest.fixture()
-def browser(nest_asyncio_mock, jupyter_module_mock):
+def browser():
     # Import the browser module after the mocks have been set up
     from boa.integrations.jupyter import browser
 
     return browser
+
+
+@pytest.fixture()
+def display_mock(browser):
+    yield browser.display
+    browser.display.reset_mock()
 
 
 @pytest.fixture()
@@ -142,114 +135,70 @@ def colab_eval_mock(browser):
         yield colab_eval_mock
 
 
-def test_nest_applied(nest_asyncio_mock, browser):
-    nest_asyncio_mock.apply.assert_called_once()
+def test_nest_applied(browser):
+    browser.nest_asyncio.apply.assert_called()
 
 
-def test_browser_signer_given_address(browser, display_mock, mock_inject_javascript):
-    signer = browser.BrowserSigner("0x1234")
-    assert signer.address == "0x1234"
-    display_mock.assert_not_called()
-    mock_inject_javascript.assert_not_called()
-
-
-def test_browser_sign_typed_data(
-    browser, display_mock, mock_inject_javascript, mock_callback
-):
-    signer = browser.BrowserSigner(boa.env.generate_address())
-    signature = boa.env.generate_address()
-    mock_callback("signTypedData", signature)
-    data = signer.sign_typed_data({"name": "My App"}, {"types": []}, {"data": "0x1234"})
+def test_browser_sign_typed_data(browser, display_mock, mock_callback, env):
+    signature = env.generate_address()
+    mock_callback("eth_signTypedData_v4", signature)
+    data = env.signer.sign_typed_data(
+        {"name": "My App"}, {"types": []}, {"data": "0x1234"}
+    )
     assert data == signature
 
 
-def test_browser_signer_no_address(
-    mocked_token, browser, display_mock, mock_callback, mock_inject_javascript
-):
-    mock_callback("loadSigner", "0x123")
-    signer = browser.BrowserSigner()
-    assert signer.address == "0x123"
-    display_mock.assert_called_once()
-    (js,), _ = display_mock.call_args
-    assert f'loadSigner("{mocked_token}")' in js.data
-    mock_inject_javascript.assert_called()
+def test_browser_rpc_inject_js(mocked_token, display_mock, browser, mock_callback):
+    browser.BrowserRPC()
+    (((js1,), _),) = display_mock.call_args_list
+    assert "window._titanoboa = " in js1.data
 
 
-def test_browser_signer_colab(
-    colab_eval_mock, mocked_token, browser, mock_inject_javascript, display_mock
-):
-    colab_eval_mock.return_value = json.dumps({"data": "0x123"})
+def test_browser_signer_colab(colab_eval_mock, mocked_token, browser, display_mock):
+    address = boa.env.generate_address()
+    colab_eval_mock.return_value = json.dumps({"data": [address]})
     signer = browser.BrowserSigner()
-    assert signer.address == "0x123"
+    assert signer.address == address
     colab_eval_mock.assert_called_once()
     (js,), _ = colab_eval_mock.call_args
-    assert f'loadSigner("{mocked_token}")' in js
-    mock_inject_javascript.assert_called()
-    display_mock.assert_not_called()
-
-
-def test_set_browser_env(
-    browser,
-    display_mock,
-    mock_inject_javascript,
-    account,
-    mock_callback,
-    mock_fork,
-    env,
-):
-    assert env.eoa == account
-    assert display_mock.call_count == 4
-    assert mock_inject_javascript.call_count == 4
+    assert f'rpc("{mocked_token}", "eth_requestAccounts", [])' in js
+    display_mock.assert_called_once()
 
 
 def test_browser_loads_signer(
-    token,
-    browser,
-    display_mock,
-    mock_callback,
-    mock_inject_javascript,
-    account,
-    mock_fork,
+    token, browser, display_mock, mock_callback, account, mock_fork
 ):
-    mock_callback("loadSigner", account.address)
+    mock_callback("eth_requestAccounts", [account.address])
     boa.set_browser_env()
     assert boa.env.eoa == account.address
     assert (
         type(boa.env._accounts[boa.env.eoa]).__name__ == browser.BrowserSigner.__name__
     )
-    mock_inject_javascript.assert_called()
 
 
 def test_browser_chain_id(token, env, display_mock, mock_callback):
-    mock_callback("eth_chainId", "0x123")
-    assert env.get_chain_id() == "0x123"
+    display_mock.reset_mock()
+    mock_callback("eth_chainId", "0x1234")
+    assert env.get_chain_id() == 4660
     mock_callback("wallet_switchEthereumChain")
-    env.set_chain_id("0x456")
-    assert display_mock.call_count == 7
+    env.set_chain_id(1)
+    assert display_mock.call_count == 3
     (js,), _ = display_mock.call_args_list[-2]
     assert (
-        f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x456"}}])'
+        f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x1"}}])'
         in js.data
     )
 
 
 def test_browser_rpc(
-    token,
-    browser,
-    display_mock,
-    mock_callback,
-    mock_inject_javascript,
-    account,
-    mock_fork,
-    env,
+    token, browser, display_mock, mock_callback, account, mock_fork, env
 ):
     mock_callback("eth_gasPrice", "0x123")
     assert env.get_gas_price() == 291
 
-    assert display_mock.call_count == 5
+    assert display_mock.call_count == 6
     (js,), _ = display_mock.call_args
     assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
-    mock_inject_javascript.assert_called()
 
 
 def test_browser_rpc_error(
@@ -280,7 +229,9 @@ def test_browser_rpc_server_error(
 def test_browser_js_error(
     token, browser, display_mock, mock_callback, account, mock_fork
 ):
-    mock_callback("loadSigner", error={"message": "custom message", "stack": ""})
+    mock_callback(
+        "eth_requestAccounts", error={"message": "custom message", "stack": ""}
+    )
     with pytest.raises(browser.RPCError) as exc_info:
         browser.BrowserSigner()
     assert str(exc_info.value) == "CALLBACK_ERROR: custom message"
