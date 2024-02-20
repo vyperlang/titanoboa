@@ -14,6 +14,7 @@ jobs:
   integration:
     name: "integration tests (Alchemy: fork mode and Sepolia)"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
 
       # given we use the pull_request_trigger, only allow contributors to run tests with secrets
