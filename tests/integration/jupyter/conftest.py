@@ -1,7 +1,8 @@
 from multiprocessing.shared_memory import SharedMemory
-from os import urandom
 
 import pytest
+
+from boa.integrations.jupyter.browser import _generate_token
 
 
 @pytest.fixture()
@@ -13,9 +14,7 @@ def shared_memory_length():
 
 @pytest.fixture()
 def token():
-    from boa.integrations.jupyter.constants import CALLBACK_TOKEN_BYTES, PLUGIN_NAME
-
-    return f"{PLUGIN_NAME}_{urandom(CALLBACK_TOKEN_BYTES).hex()}"
+    return _generate_token()
 
 
 @pytest.fixture()
