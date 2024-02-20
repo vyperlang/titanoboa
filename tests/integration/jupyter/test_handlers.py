@@ -2,6 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from boa.integrations.jupyter.handlers import CallbackHandler, setup_handlers
+
 
 @pytest.fixture()
 def server_app_mock():
@@ -11,24 +13,16 @@ def server_app_mock():
 
 
 @pytest.fixture()
-def handlers():
-    from boa.integrations.jupyter import handlers
-
-    return handlers
-
-
-@pytest.fixture()
-def callback_handler(handlers):
-    handler = handlers.CallbackHandler()
-    handler.request = MagicMock()
+def callback_handler(server_app_mock):
+    request_mock = MagicMock()
+    handler = CallbackHandler(server_app_mock.web_app, request_mock)
     handler.current_user = MagicMock()
-    handler.set_status = MagicMock()
     handler.finish = MagicMock()
     return handler
 
 
-def test_setup_handlers(handlers, server_app_mock):
-    handlers.setup_handlers(server_app_mock)
+def test_setup_handlers(server_app_mock):
+    setup_handlers(server_app_mock)
     server_app_mock.web_app.add_handlers.assert_called_once()
     _, kwargs = server_app_mock.web_app.add_handlers.call_args
     assert kwargs == {
@@ -36,7 +30,7 @@ def test_setup_handlers(handlers, server_app_mock):
         "host_handlers": [
             (
                 "/base_url/titanoboa_jupyterlab/callback/(titanoboa_jupyterlab_[0-9a-fA-F]{64})$",
-                handlers.CallbackHandler,
+                CallbackHandler,
             )
         ],
     }
@@ -45,7 +39,7 @@ def test_setup_handlers(handlers, server_app_mock):
 def test_no_body(callback_handler, token):
     callback_handler.request.body = None
     callback_handler.post(token)
-    callback_handler.set_status.assert_called_once_with(400)
+    assert callback_handler.get_status() == 400
     callback_handler.finish.assert_called_once_with(
         {"error": "Request body is required"}
     )
@@ -53,7 +47,7 @@ def test_no_body(callback_handler, token):
 
 def test_invalid_token(callback_handler, token):
     callback_handler.post(token)
-    callback_handler.set_status.assert_called_once_with(404)
+    assert callback_handler.get_status() == 404
     callback_handler.finish.assert_called_once_with(
         {"error": "Invalid token: " + token}
     )
@@ -62,7 +56,7 @@ def test_invalid_token(callback_handler, token):
 def test_value_error(callback_handler, token, shared_memory, shared_memory_length):
     callback_handler.request.body = b"0" * shared_memory_length  # no space for the \0
     callback_handler.post(token)
-    callback_handler.set_status.assert_called_once_with(413)
+    assert callback_handler.get_status() == 413
     callback_handler.finish.assert_called_once_with(
         {"error": "Request body has 51201 bytes, but only 51200 are allowed"}
     )
@@ -71,5 +65,5 @@ def test_value_error(callback_handler, token, shared_memory, shared_memory_lengt
 def test_success(callback_handler, token, shared_memory):
     callback_handler.request.body = b"body"
     callback_handler.post(token)
-    callback_handler.set_status.assert_called_once_with(204)
+    assert callback_handler.get_status() == 204
     callback_handler.finish.assert_called_once_with()
