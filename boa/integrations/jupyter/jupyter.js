@@ -5,7 +5,9 @@
 (() => {
     const rpc = (method, params) => {
         const {ethereum} = window;
-        console.assert(ethereum, 'No Ethereum plugin found. Please authorize the site on your browser wallet.');
+        if (!ethereum) {
+            throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
+        }
         return ethereum.request({method, params});
     };
 
@@ -35,6 +37,22 @@
         const response = await fetch(url, init);
         return response.text();
     }
+
+    let from;
+    const loadSigner = async (address) => {
+        const accounts = await rpc('eth_requestAccounts');
+        from = accounts.includes(address) ? address : accounts[0];
+        return from;
+    };
+
+    /** Sign a transaction via ethers */
+    const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
+
+    /** Sign a typed data via ethers */
+    const signTypedData = (domain, types, value) => rpc(
+        'eth_signTypedData_v4',
+        [from, JSON.stringify({domain, types, value})]
+    );
 
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
@@ -82,6 +100,9 @@
 
     // expose functions to window, so they can be called from the BrowserSigner
     window._titanoboa = {
+        loadSigner: handleCallback(loadSigner),
+        sendTransaction: handleCallback(sendTransaction),
+        signTypedData: handleCallback(signTypedData),
         waitForTransactionReceipt: handleCallback(waitForTransactionReceipt),
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),

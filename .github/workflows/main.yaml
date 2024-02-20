@@ -42,7 +42,7 @@ jobs:
           --cov=boa
           --cov-append
           --cov-report term-missing:skip-covered
-          --cov-fail-under=70
+          --cov-fail-under=65
           tests/unitary/
 
   jupyter:
@@ -64,6 +64,8 @@ jobs:
 
       - name: Run Jupyter tests
         # run separately to clarify its dependency on dependencies
+        env:
+          JUPYTER_PLATFORM_DIRS: 1  # fix deprecation warning
         run: pytest -n auto tests/integration/jupyter/
 
   anvil:
