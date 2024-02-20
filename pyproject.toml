@@ -34,7 +34,6 @@ dependencies = [
 
 [project.optional-dependencies]
 forking-recommended = ["ujson"]
-jupyter-testing = ["jupyter_server", "ipython", "nest_asyncio"]
 
 [build-system]
 requires = ["setuptools", "wheel"]
