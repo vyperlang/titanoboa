@@ -20,5 +20,7 @@ def token():
 @pytest.fixture()
 def shared_memory(token, shared_memory_length):
     memory = SharedMemory(name=token, create=True, size=shared_memory_length)
-    yield memory
-    memory.unlink()
+    try:
+        yield memory
+    finally:
+        memory.unlink()
