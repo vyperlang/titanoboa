@@ -56,6 +56,7 @@ class BrowserSigner:
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
+        address = getattr(address, "address", address)
         address = _javascript_call(
             "loadSigner", address, timeout_message=ADDRESS_TIMEOUT_MESSAGE
         )
