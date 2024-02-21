@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from boa.integrations.jupyter.constants import SHARED_MEMORY_LENGTH
 from boa.integrations.jupyter.handlers import CallbackHandler, setup_handlers
 
 
@@ -53,8 +54,8 @@ def test_invalid_token(callback_handler, token):
     )
 
 
-def test_value_error(callback_handler, token, shared_memory, shared_memory_length):
-    callback_handler.request.body = b"0" * shared_memory_length  # no space for the \0
+def test_value_error(callback_handler, token, shared_memory):
+    callback_handler.request.body = b"0" * SHARED_MEMORY_LENGTH  # no space for the \0
     callback_handler.post(token)
     assert callback_handler.get_status() == 413
     callback_handler.finish.assert_called_once_with(

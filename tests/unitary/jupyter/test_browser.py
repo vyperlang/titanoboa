@@ -110,8 +110,6 @@ def mock_fork(mock_callback):
     mock_callback("evm_revert", "0x12345678")
     data = {"number": "0x123", "timestamp": "0x65bbb460"}
     mock_callback("eth_getBlockByNumber", data)
-    yield
-    boa.reset_env()
 
 
 @pytest.fixture()
