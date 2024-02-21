@@ -135,7 +135,7 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
     """Wraps arbitrary stmts with external fn and generates bytecode"""
 
     ast = parse_to_ast(source_code)
-    vy_ast.folding.fold(ast)
+
     ast = ast.body[0]
 
     return_sig = ""

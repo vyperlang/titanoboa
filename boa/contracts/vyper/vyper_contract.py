@@ -28,8 +28,7 @@ from vyper.compiler.settings import OptimizationLevel
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.analysis.base import VarInfo
-from vyper.semantics.types import AddressT, HashMapT, SelfT, TupleT
+from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
 from boa import BoaError
@@ -729,39 +728,19 @@ class VyperContract(_BaseVyperContract):
                 ret.merge(child_obj.line_profile(child))
         return ret
 
-    @cached_property
-    def _ast_module(self):
-        module = copy.deepcopy(self.compiler_data.annotated_vyper_module)
-        self._cache_namespace(module._metadata["namespace"])
-
-    # the global namespace is expensive to compute, so cache it
-    def _cache_namespace(self, namespace):
-        # copy.copy doesn't really work on Namespace objects, copy by hand
-        ret = vy_ns.Namespace()
-        ret._scopes = [set()]
-        for s in namespace._scopes:
-            ret.append(set())
-            for n in s:
-                ret[n] = namespace[n]
-
-        # recreate the "self" object because it gets removed from the global
-        # namespace at the end of validate_semantics. do not try this at home!
-        self_t = SelfT()
-        for s, t in self.module_t.members.items():
-            self_t.add_member(s, t)
-        ret["self"] = VarInfo(self_t)
-        ret._scopes[-1].remove("self")
-        ret._scopes[0].add("self")
-        self._vyper_namespace = ret
-
     def _get_function_id(self):
         self._function_id += 1
         return self._function_id
 
+    @cached_property
+    def _vyper_namespace(self):
+        module = self.compiler_data.annotated_vyper_module
+        # make a copy of the namespace, since we might modify it
+        return copy.copy(module._metadata["namespace"])
+
     @contextlib.contextmanager
     def override_vyper_namespace(self):
         # ensure self._vyper_namespace is computed
-        m = self._ast_module  # noqa: F841
         contract_members = self._vyper_namespace["self"].typ.members
         try:
             to_keep = set(contract_members.keys())
@@ -868,7 +847,6 @@ class VyperContract(_BaseVyperContract):
             raise ValueError(f"already injected: {fn_ast.name}")
 
         # ensure self._vyper_namespace is computed
-        m = self._ast_module  # noqa: F841
         self._vyper_namespace["self"].typ.members.pop(fn_ast.name, None)
         f = _InjectVyperFunction(self, fn_source_code)
         setattr(self.inject, fn_ast.name, f)
