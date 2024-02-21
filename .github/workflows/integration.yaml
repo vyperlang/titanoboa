@@ -35,7 +35,9 @@ jobs:
 
       # now merge the head branch into the base branch, so we can run the tests with the head branch's changes
       - name: Merge head branch
-        run: git pull origin ${{ github.head_ref }} --no-edit
+        run: |
+          git fetch origin ${{ github.head_ref }}
+          git merge origin/${{ github.head_ref }} --no-edit
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
