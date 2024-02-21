@@ -14,6 +14,7 @@ jobs:
   integration:
     name: "integration tests (Alchemy: fork mode and Sepolia)"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
 
       # given we use the pull_request_trigger, only allow contributors to run tests with secrets
@@ -27,18 +28,16 @@ jobs:
               core.setFailed(username + ' is not a contributor');
             }
 
-      # specifically check out the head ref, not the default base ref. Depth is needed for the merge step.
+      # this will check out the base branch, not the head branch
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 2
+          fetch-depth: 0 # we need the history to be able to merge
 
-      # we want to run the tests on a merge commit, so we need to merge the base branch into the head branch
-      - name: Merge base branch
-        if: github.event_name == 'pull_request_target'
+      # now merge the head branch into the base branch, so we can run the tests with the head branch's changes
+      - name: Merge head branch
         run: |
-          git fetch origin ${{ github.base_ref }}
-          git merge origin/${{ github.base_ref }} --no-edit
+          git fetch origin ${{ github.head_ref }}
+          git merge origin/${{ github.head_ref }} --no-edit
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v4

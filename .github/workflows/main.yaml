@@ -11,9 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.10", "3.11" ]
+        python-version: [ "3.10", "3.11", "3.12" ]
 
     name: "unit tests: python ${{ matrix.python-version }}"
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +49,7 @@ jobs:
   anvil:
     name: "integration tests (anvil)"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
