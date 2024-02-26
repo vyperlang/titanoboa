@@ -33,6 +33,7 @@ def test_crvusd_contract(crvusd_contract):
 
 
 def test_proxy_contract(proxy_contract):
+    assert proxy_contract._abi is not None
     assert proxy_contract.minTime() == 43200
     assert proxy_contract.voteTime() == 604800
     assert proxy_contract.minBalance() == 2500000000000000000000

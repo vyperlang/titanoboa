@@ -209,19 +209,23 @@ class ABIOverload:
 
 
 class ABIContract(_BaseEVMContract):
-    """A contract that has been deployed to the blockchain and created via an ABI."""
+    """A deployed contract loaded via an ABI."""
 
     def __init__(
         self,
         name: str,
-        functions: list[ABIFunction],
+        abi: dict,
         address: Address,
         filename: Optional[str] = None,
         env=None,
     ):
         super().__init__(env, filename=filename, address=address)
         self._name = name
-        self._functions = functions
+        self._abi = abi
+        self._functions = [
+            ABIFunction(item, name) for item in abi if item.get("type") == "function"
+        ]
+
         self._bytecode = self.env.vm.state.get_code(address.canonical_address)
         if not self._bytecode:
             warn(
@@ -230,7 +234,7 @@ class ABIContract(_BaseEVMContract):
             )
 
         overloads = defaultdict(list)
-        for f in functions:
+        for f in self._functions:
             overloads[f.name].append(f)
 
         for name, group in overloads.items():
@@ -282,7 +286,7 @@ class ABIContract(_BaseEVMContract):
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(self._name, self._functions)
+        return ABIContractFactory(self._name, self._abi)
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
@@ -297,26 +301,21 @@ class ABIContractFactory:
     do any contract deployment.
     """
 
-    def __init__(
-        self, name: str, functions: list["ABIFunction"], filename: Optional[str] = None
-    ):
+    def __init__(self, name: str, abi: dict, filename: Optional[str] = None):
         self._name = name
-        self._functions = functions
+        self._abi = abi
         self._filename = filename
 
     @classmethod
     def from_abi_dict(cls, abi, name="<anonymous contract>"):
-        functions = [
-            ABIFunction(item, name) for item in abi if item.get("type") == "function"
-        ]
-        return cls(basename(name), functions, filename=name)
+        return cls(basename(name), abi, filename=name)
 
     def at(self, address: Address | str) -> ABIContract:
         """
         Create an ABI contract object for a deployed contract at `address`.
         """
         address = Address(address)
-        contract = ABIContract(self._name, self._functions, address, self._filename)
+        contract = ABIContract(self._name, self._abi, address, self._filename)
         contract.env.register_contract(address, contract)
         return contract
 
