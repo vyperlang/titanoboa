@@ -723,7 +723,7 @@ class Env:
             if child.msg.code_address == b"":
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
-            self._hook_trace_computation(computation, child_contract)
+            self._hook_trace_computation(child, child_contract)
 
     # function to time travel
     def time_travel(
