@@ -12,7 +12,7 @@
     };
 
     // When opening in lab view, the base path contains extra folders
-    const base = location.pathname.includes("/lab/workspaces/auto-L") ? "../../../../.." : "..";
+    const base = location.pathname.includes("/lab/") ? "../.." : "..";
 
     /** Stringify data, converting big ints to strings */
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
