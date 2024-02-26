@@ -3,11 +3,14 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    const rpc = (method, params) => {
+    const rpc = async (method, params) => {
         const {ethereum} = window;
         console.assert(ethereum, 'No Ethereum plugin found. Please authorize the site on your browser wallet.');
         return ethereum.request({method, params});
     };
+
+    // When opening in lab view, the base path contains extra folders
+    const base = location.pathname.includes("/lab/") ? "../.." : "..";
 
     /** Stringify data, converting big ints to strings */
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
@@ -31,7 +34,7 @@
     async function callbackAPI(token, body) {
         const headers = {['X-XSRFToken']: getCookie('_xsrf')};
         const init = {method: 'POST', body, headers};
-        const url = `../titanoboa_jupyterlab/callback/${token}`;
+        const url = `${base}/titanoboa_jupyterlab/callback/${token}`;
         const response = await fetch(url, init);
         return response.text();
     }
@@ -67,7 +70,7 @@
     const handleCallback = func => async (token, ...args) => {
         if (!colab) {
             // Check if the cell was already executed. In Colab, eval_js() doesn't replay.
-            const response = await fetch(`../titanoboa_jupyterlab/callback/${token}`);
+            const response = await fetch(`${base}/titanoboa_jupyterlab/callback/${token}`);
             // !response.ok indicates the cell has already been executed
             if (!response.ok) return;
         }
