@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import deepcopy
 from functools import cached_property
 from os.path import basename
 from typing import Any, Optional, Union
@@ -243,6 +244,10 @@ class ABIContract(_BaseEVMContract):
         self._address = Address(address)
 
     @cached_property
+    def abi(self):
+        return deepcopy(self._abi)
+
+    @cached_property
     def method_id_map(self):
         """
         Returns a mapping from method id to function object.
@@ -305,6 +310,10 @@ class ABIContractFactory:
         self._name = name
         self._abi = abi
         self._filename = filename
+
+    @cached_property
+    def abi(self):
+        return deepcopy(self._abi)
 
     @classmethod
     def from_abi_dict(cls, abi, name="<anonymous contract>"):

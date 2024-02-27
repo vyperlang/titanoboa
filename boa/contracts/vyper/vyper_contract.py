@@ -24,6 +24,7 @@ from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
+from vyper.compiler.output import build_abi_output
 from vyper.compiler.settings import OptimizationLevel
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import VyperException
@@ -142,6 +143,10 @@ class _BaseVyperContract(_BaseEVMContract):
 
         with anchor_compiler_settings(self.compiler_data):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
+
+    @cached_property
+    def abi(self):
+        return build_abi_output(self.compiler_data)
 
 
 # create a blueprint for use with `create_from_blueprint`.
