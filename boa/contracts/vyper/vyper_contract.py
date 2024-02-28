@@ -750,7 +750,12 @@ class VyperContract(_BaseVyperContract):
     def _vyper_namespace(self):
         module = self.compiler_data.annotated_vyper_module
         # make a copy of the namespace, since we might modify it
-        return copy.copy(module._metadata["namespace"])
+        ret = copy.copy(module._metadata["namespace"])
+        ret._scopes = copy.deepcopy(ret._scopes)
+        if len(ret._scopes) == 0:
+            # funky behavior in Namespace.enter_scope()
+            ret._scopes.append(set())
+        return ret
 
     @contextlib.contextmanager
     def override_vyper_namespace(self):
