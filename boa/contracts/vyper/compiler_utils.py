@@ -10,7 +10,7 @@ from vyper.codegen.function_definitions import (
     generate_ir_for_internal_function,
 )
 from vyper.codegen.ir_node import IRnode
-from vyper.codegen.module import _globally_reachable_functions
+from vyper.codegen.module import _runtime_reachable_functions
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
@@ -50,8 +50,7 @@ def compile_vyper_function(vyper_function, contract):
         ast = ast.body[0]
         func_t = ast._metadata["func_type"]
 
-        if func_t._function_id is None:
-            func_t._function_id = contract._get_function_id()
+        contract.ensure_id(func_t)
         funcinfo = generate_ir_for_external_function(ast, module_t)
         ir = funcinfo.common_ir
 
@@ -68,13 +67,13 @@ def compile_vyper_function(vyper_function, contract):
         _, contract_runtime = contract.unoptimized_ir
         ir_list = ["seq", ir, contract_runtime]
         reachable = func_t.reachable_internal_functions
-        already_compiled = _globally_reachable_functions(module_t.function_defs)
+
+        already_compiled = _runtime_reachable_functions(module_t, contract)
         missing_functions = reachable.difference(already_compiled)
         # TODO: cache function compilations or something
         for f in missing_functions:
             assert f.ast_def is not None
-            if f._function_id is None:
-                f._function_id = contract._get_function_id()
+            contract.ensure_id(f)
             ir_list.append(
                 generate_ir_for_internal_function(f.ast_def, module_t, False).func_ir
             )

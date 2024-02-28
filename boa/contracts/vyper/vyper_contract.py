@@ -741,9 +741,10 @@ class VyperContract(_BaseVyperContract):
                 ret.merge(child_obj.line_profile(child))
         return ret
 
-    def _get_function_id(self):
-        self._function_id += 1
-        return self._function_id
+    def ensure_id(self, fn_t):  # mimic vyper.codegen.module.IDGenerator api
+        if fn_t._function_id is None:
+            fn_t._function_id = self._function_id
+            self._function_id += 1
 
     @cached_property
     def _vyper_namespace(self):
