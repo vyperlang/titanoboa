@@ -45,7 +45,7 @@ def compile_vyper_function(vyper_function, contract):
 
         # override namespace and add wrapper code at the top
         with contract.override_vyper_namespace():
-            analysis.validate_semantics(ast, compiler_data.input_bundle)
+            analysis.analyze_module(ast, compiler_data.input_bundle)
 
         ast = ast.body[0]
         func_t = ast._metadata["func_type"]
