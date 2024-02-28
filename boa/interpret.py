@@ -152,6 +152,7 @@ def loads_partial(
     compiler_args: dict = None,
 ) -> VyperDeployer:
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
+    filename = filename or "<unknown>"
     if dedent:
         source_code = textwrap.dedent(source_code)
 
