@@ -1,4 +1,6 @@
+import importlib
 import json
+import sys
 import textwrap
 from pathlib import Path
 from typing import Any, Union
@@ -24,6 +26,45 @@ _Contract = Union[VyperContract, VyperBlueprint]
 
 _disk_cache = None
 _search_path = None
+
+
+class BoaImporter(importlib.abc.MetaPathFinder):
+    def __init__(self):
+        self._path_lookup = {}
+
+    # TODO: replace this with more modern `find_spec()`
+    def find_module(self, fullname, package_path, target=None):
+        path = Path(fullname.replace(".", "/")).with_suffix(".vy")
+
+        for prefix in sys.path:
+            to_try = Path(prefix) / path
+
+            if to_try.exists():
+                self._path_lookup[fullname] = to_try
+                return self
+
+        return None
+
+    # TODO: replace with more modern `exec_module()` and `create_module()`
+    def load_module(self, fullname):
+        if fullname in sys.modules:
+            return sys.modules[fullname]
+
+        # import system should guarantee this, but be paranoid
+        if fullname not in self._path_lookup:
+            raise ImportError(f"invariant violated: no lookup for {fullname}")
+
+        path = self._path_lookup[fullname]
+        ret = load_partial(path)
+
+        # comply with PEP-302:
+        ret.__name__ = path.name
+        ret.__file__ = str(path)
+        sys.modules[fullname] = ret
+        return ret
+
+
+sys.meta_path.append(BoaImporter())
 
 
 def set_cache_dir(cache_dir="~/.cache/titanoboa"):

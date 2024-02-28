@@ -52,6 +52,6 @@ def test_state_machine_isolation(boa_contract):
     StateMachine.contract = boa_contract
     StateMachine.settings = {
         "stateful_step_count": NUM_STEPS,
-        "suppress_health_check": HealthCheck.all(),
+        "suppress_health_check": list(HealthCheck),
     }
     run_state_machine_as_test(StateMachine)

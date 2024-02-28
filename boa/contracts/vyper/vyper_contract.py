@@ -95,16 +95,29 @@ class VyperDeployer:
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
 
+    def stomp(self, address: Any, data_section=None) -> "VyperContract":
+        address = Address(address)
+
+        ret = self.deploy(override_address=address, skip_initcode=True)
+        vm = ret.env.vm
+        old_bytecode = vm.state.get_code(address.canonical_address)
+        new_bytecode = self.compiler_data.bytecode_runtime
+
+        immutables_size = self.compiler_data.global_ctx.immutable_section_bytes
+        if immutables_size > 0:
+            data_section = old_bytecode[-immutables_size:]
+            new_bytecode += data_section
+
+        vm.state.set_code(address.canonical_address, new_bytecode)
+        ret.env.register_contract(address, ret)
+        ret._set_bytecode(new_bytecode)
+        return ret
+
     # TODO: allow `env=` kwargs and so on
     def at(self, address: Any) -> "VyperContract":
         address = Address(address)
 
-        ret = VyperContract(
-            self.compiler_data,
-            override_address=address,
-            skip_initcode=True,
-            filename=self.filename,
-        )
+        ret = self.deploy(override_address=address, skip_initcode=True)
         vm = ret.env.vm
         bytecode = vm.state.get_code(address.canonical_address)
 
@@ -447,14 +460,14 @@ class ImmutablesModel:
 class VyperContract(_BaseVyperContract):
     def __init__(
         self,
-        compiler_data,
+        compiler_data: CompilerData,
         *args,
-        env=None,
-        override_address=None,
+        env: Env = None,
+        override_address: Address = None,
         # whether to skip constructor
         skip_initcode=False,
-        created_from=None,
-        filename=None,
+        created_from: Address = None,
+        filename: str = None,
     ):
         super().__init__(compiler_data, env, filename)
 
@@ -476,7 +489,7 @@ class VyperContract(_BaseVyperContract):
             addr = Address(override_address)
         else:
             addr = self._run_init(*args, override_address=override_address)
-        self._address: Address = addr
+        self._address = addr
 
         for fn_name, fn in exposed_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))

@@ -6,7 +6,7 @@ import logging
 import random
 import sys
 import warnings
-from typing import Any, Iterator, Optional, Tuple
+from typing import Any, Iterator, Optional, TypeAlias
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -17,13 +17,14 @@ from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
 from eth.vm.code_stream import CodeStream
+from eth.vm.gas_meter import allow_negative_refund_strategy
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from eth_utils import setup_DEBUG2_logging
 
-from boa.rpc import EthereumRPC
+from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
@@ -96,7 +97,7 @@ class VMPatcher:
 
 
 # make mypy happy
-_AddressType = Address | str | bytes | PYEVM_Address
+_AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
 
 
 _opcode_overrides = {}
@@ -271,12 +272,18 @@ class titanoboa_computation:
         self.opcodes = self.opcodes.copy()
         self.opcodes.update(_opcode_overrides)
 
-        self._gas_meter = self._gas_meter_class(self.msg.gas)
+        self._gas_meter = self._gas_meter_class(
+            self.msg.gas, refund_strategy=allow_negative_refund_strategy
+        )
         if hasattr(self._gas_meter, "_set_code"):
             self._gas_meter._set_code(self.code)
 
         self._child_pcs = []
         self._contract_repr_before_revert = None
+
+    @property
+    def net_gas_used(self):
+        return max(0, self.get_gas_used() - self.get_gas_refund())
 
     def add_child_computation(self, child_computation):
         super().add_child_computation(child_computation)
@@ -442,10 +449,10 @@ class Env:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork(self, url=None, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
         return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
 
-    def fork_rpc(self, rpc=None, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):
         """
         Fork the environment to a local chain.
         :param rpc: RPC to fork from
@@ -453,13 +460,8 @@ class Env:
         :param block_identifier: Block identifier to fork from
         :param kwargs: Additional arguments for the RPC
         """
-        AccountDBFork._rpc = rpc
-        AccountDBFork._rpc_init_kwargs = {
-            "block_identifier": block_identifier,
-            **kwargs,
-        }
-
-        self._init_vm(reset_traces=reset_traces, account_db_class=AccountDBFork)
+        account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
+        self._init_vm(reset_traces, account_db_class)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
@@ -593,7 +595,7 @@ class Env:
         start_pc: int = 0,
         # override the target address:
         override_address: Optional[_AddressType] = None,
-    ) -> Tuple[Address, bytes]:
+    ) -> tuple[Address, bytes]:
         if gas is None:
             gas = self.vm.state.gas_limit
 
@@ -721,7 +723,7 @@ class Env:
             if child.msg.code_address == b"":
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
-            self._hook_trace_computation(computation, child_contract)
+            self._hook_trace_computation(child, child_contract)
 
     # function to time travel
     def time_travel(

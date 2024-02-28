@@ -1,7 +1,7 @@
 import io
 import re
 import tokenize
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 import vyper.ast as vy_ast
 from vyper.codegen.core import getpos
@@ -36,7 +36,7 @@ def _extract_reason(comment: str) -> Any:
 # somewhat heuristic.
 def reason_at(
     source_code: str, lineno: int, end_lineno: int
-) -> Optional[Tuple[str, str]]:
+) -> Optional[tuple[str, str]]:
     block = get_block(source_code, lineno, end_lineno)
     c = _get_comment(block)
     if c is not None:

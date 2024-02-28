@@ -370,8 +370,8 @@ class OpcodeInfo:
 class OpcodeIRExecutor(IRExecutor):
     _type: type = StackItem  # type: ignore
 
-    def __init__(self, name, opcode_info, *args):
-        self.opcode_info: OpcodeInfo = opcode_info
+    def __init__(self, name: str, opcode_info: OpcodeInfo, *args):
+        self.opcode_info = opcode_info
 
         # to differentiate from implemented codes
         self._name = "__" + name + "__"
