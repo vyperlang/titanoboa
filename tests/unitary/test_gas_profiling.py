@@ -61,7 +61,7 @@ def foo(a: uint256, b: uint256, c: uint256) -> uint256:
 def _barfoo(a: uint256, b: uint256, c: uint256) -> uint256:
     d: uint256 = 0
     for j: uint256 in range(1000):
-        d = d * a / b
+        d = (d * a) // b
         if d > c:
             break
     return d

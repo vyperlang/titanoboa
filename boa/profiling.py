@@ -334,7 +334,7 @@ def get_call_profile_table(env: Env) -> Table:
             cname = ""
             caddr = ""
             if c == 0:
-                cname = profile.contract_path
+                cname = str(profile.contract_path)
                 caddr = address
             fn_name = profile.fn_name
             table.add_row(cname, caddr, fn_name, *stats.net_gas_stats.get_str_repr())

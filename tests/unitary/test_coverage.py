@@ -22,7 +22,7 @@ interface Foo:
 
 FOO: immutable(address)
 
-@external
+@deploy
 def __init__(_foo_address: address):
     FOO = _foo_address
 
