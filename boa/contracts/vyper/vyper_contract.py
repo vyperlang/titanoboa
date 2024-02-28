@@ -475,15 +475,16 @@ class VyperContract(_BaseVyperContract):
 
         # add all exposed functions from the interface to the contract
         exposed_fns = {
-            fn.name: fn
-            for fn in self.module_t.function_defs
-            if not fn._metadata["func_type"].is_internal
+            fn_t.name: fn_t.decl_node
+            for fn_t in compiler_data.global_ctx.exposed_functions
         }
 
         # set external methods as class attributes:
         self._ctor = None
-        if "__init__" in exposed_fns:
-            self._ctor = VyperFunction(exposed_fns.pop("__init__"), self)
+        if compiler_data.global_ctx.init_function is not None:
+            self._ctor = VyperFunction(
+                compiler_data.global_ctx.init_function.decl_node, self
+            )
 
         if skip_initcode:
             addr = Address(override_address)
