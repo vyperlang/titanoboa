@@ -93,8 +93,8 @@ class ABIFunction:
         """Merge positional and keyword arguments into a single list."""
         if len(kwargs) + len(args) != self.argument_count:
             raise TypeError(
-                f"Bad args to `{repr(self)}` "
-                f"(expected {self.argument_count} arguments, got {len(args)})"
+                f"Bad args to `{repr(self)}` (expected {self.argument_count} "
+                f"arguments, got {len(args)} args and {len(kwargs)} kwargs)"
             )
         try:
             kwarg_inputs = self._abi["inputs"][len(args) :]
@@ -216,6 +216,7 @@ class ABIContract(_BaseEVMContract):
         self,
         name: str,
         abi: dict,
+        functions: list[ABIFunction],
         address: Address,
         filename: Optional[str] = None,
         env=None,
@@ -223,9 +224,7 @@ class ABIContract(_BaseEVMContract):
         super().__init__(env, filename=filename, address=address)
         self._name = name
         self._abi = abi
-        self._functions = [
-            ABIFunction(item, name) for item in abi if item.get("type") == "function"
-        ]
+        self._functions = functions
 
         self._bytecode = self.env.vm.state.get_code(address.canonical_address)
         if not self._bytecode:
@@ -243,9 +242,9 @@ class ABIContract(_BaseEVMContract):
 
         self._address = Address(address)
 
-    @cached_property
+    @property
     def abi(self):
-        return deepcopy(self._abi)
+        return self._abi
 
     @cached_property
     def method_id_map(self):
@@ -291,7 +290,7 @@ class ABIContract(_BaseEVMContract):
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(self._name, self._abi)
+        return ABIContractFactory(self._name, self._abi, self._functions)
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
@@ -306,9 +305,16 @@ class ABIContractFactory:
     do any contract deployment.
     """
 
-    def __init__(self, name: str, abi: dict, filename: Optional[str] = None):
+    def __init__(
+        self,
+        name: str,
+        abi: dict,
+        functions: list[ABIFunction],
+        filename: Optional[str] = None,
+    ):
         self._name = name
         self._abi = abi
+        self._functions = functions
         self._filename = filename
 
     @cached_property
@@ -317,14 +323,19 @@ class ABIContractFactory:
 
     @classmethod
     def from_abi_dict(cls, abi, name="<anonymous contract>"):
-        return cls(basename(name), abi, filename=name)
+        functions = [
+            ABIFunction(item, name) for item in abi if item.get("type") == "function"
+        ]
+        return cls(basename(name), abi, functions, filename=name)
 
     def at(self, address: Address | str) -> ABIContract:
         """
         Create an ABI contract object for a deployed contract at `address`.
         """
         address = Address(address)
-        contract = ABIContract(self._name, self._abi, address, self._filename)
+        contract = ABIContract(
+            self._name, self._abi, self._functions, address, self._filename
+        )
         contract.env.register_contract(address, contract)
         return contract
 
