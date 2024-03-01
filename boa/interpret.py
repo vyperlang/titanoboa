@@ -1,7 +1,9 @@
-import importlib
 import json
 import sys
 import textwrap
+from importlib.abc import MetaPathFinder
+from importlib.machinery import SourceFileLoader
+from importlib.util import spec_from_loader
 from pathlib import Path
 from typing import Any, Union
 
@@ -26,39 +28,31 @@ _Contract = Union[VyperContract, VyperBlueprint]
 _disk_cache = None
 
 
-class BoaImporter(importlib.abc.MetaPathFinder):
-    def __init__(self):
-        self._path_lookup = {}
-
-    # TODO: replace this with more modern `find_spec()`
-    def find_module(self, fullname, package_path, target=None):
+class BoaImporter(MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
         path = Path(fullname.replace(".", "/")).with_suffix(".vy")
 
         for prefix in sys.path:
             to_try = Path(prefix) / path
 
             if to_try.exists():
-                self._path_lookup[fullname] = to_try
-                return self
+                loader = BoaLoader(fullname, str(to_try))
+                return spec_from_loader(fullname, loader)
 
-        return None
 
-    # TODO: replace with more modern `exec_module()` and `create_module()`
-    def load_module(self, fullname):
-        if fullname in sys.modules:
-            return sys.modules[fullname]
+class BoaLoader(SourceFileLoader):
+    def get_code(self, fullname):
+        # importlib docs say to return None, but that triggers an `ImportError`
+        return ""
 
-        # import system should guarantee this, but be paranoid
-        if fullname not in self._path_lookup:
-            raise ImportError(f"invariant violated: no lookup for {fullname}")
-
-        path = self._path_lookup[fullname]
-        ret = load_partial(path)
+    def create_module(self, spec):
+        ret = load_partial(self.path)
 
         # comply with PEP-302:
-        ret.__name__ = path.name
-        ret.__file__ = str(path)
-        sys.modules[fullname] = ret
+        ret.__name__ = spec.name
+        ret.__file__ = self.path
+        ret.__loader__ = self
+        ret.__package__ = spec.name.rpartition(".")[0]
         return ret
 
 
