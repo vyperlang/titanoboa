@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import deepcopy
 from functools import cached_property
 from os.path import basename
 from typing import Any, Optional, Union
@@ -92,8 +93,8 @@ class ABIFunction:
         """Merge positional and keyword arguments into a single list."""
         if len(kwargs) + len(args) != self.argument_count:
             raise TypeError(
-                f"Bad args to `{repr(self)}` "
-                f"(expected {self.argument_count} arguments, got {len(args)})"
+                f"Bad args to `{repr(self)}` (expected {self.argument_count} "
+                f"arguments, got {len(args)} args and {len(kwargs)} kwargs)"
             )
         try:
             kwarg_inputs = self._abi["inputs"][len(args) :]
@@ -209,11 +210,12 @@ class ABIOverload:
 
 
 class ABIContract(_BaseEVMContract):
-    """A contract that has been deployed to the blockchain and created via an ABI."""
+    """A deployed contract loaded via an ABI."""
 
     def __init__(
         self,
         name: str,
+        abi: dict,
         functions: list[ABIFunction],
         address: Address,
         filename: Optional[str] = None,
@@ -221,7 +223,9 @@ class ABIContract(_BaseEVMContract):
     ):
         super().__init__(env, filename=filename, address=address)
         self._name = name
+        self._abi = abi
         self._functions = functions
+
         self._bytecode = self.env.vm.state.get_code(address.canonical_address)
         if not self._bytecode:
             warn(
@@ -230,13 +234,17 @@ class ABIContract(_BaseEVMContract):
             )
 
         overloads = defaultdict(list)
-        for f in functions:
+        for f in self._functions:
             overloads[f.name].append(f)
 
         for name, group in overloads.items():
             setattr(self, name, ABIOverload.create(group, self))
 
         self._address = Address(address)
+
+    @property
+    def abi(self):
+        return self._abi
 
     @cached_property
     def method_id_map(self):
@@ -282,7 +290,7 @@ class ABIContract(_BaseEVMContract):
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(self._name, self._functions)
+        return ABIContractFactory(self._name, self._abi, self._functions)
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
@@ -298,25 +306,36 @@ class ABIContractFactory:
     """
 
     def __init__(
-        self, name: str, functions: list["ABIFunction"], filename: Optional[str] = None
+        self,
+        name: str,
+        abi: dict,
+        functions: list[ABIFunction],
+        filename: Optional[str] = None,
     ):
         self._name = name
+        self._abi = abi
         self._functions = functions
         self._filename = filename
+
+    @cached_property
+    def abi(self):
+        return deepcopy(self._abi)
 
     @classmethod
     def from_abi_dict(cls, abi, name="<anonymous contract>"):
         functions = [
             ABIFunction(item, name) for item in abi if item.get("type") == "function"
         ]
-        return cls(basename(name), functions, filename=name)
+        return cls(basename(name), abi, functions, filename=name)
 
     def at(self, address: Address | str) -> ABIContract:
         """
         Create an ABI contract object for a deployed contract at `address`.
         """
         address = Address(address)
-        contract = ABIContract(self._name, self._functions, address, self._filename)
+        contract = ABIContract(
+            self._name, self._abi, self._functions, address, self._filename
+        )
         contract.env.register_contract(address, contract)
         return contract
 

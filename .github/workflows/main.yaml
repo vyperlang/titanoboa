@@ -2,9 +2,7 @@ name: unitary
 
 on:
   pull_request:
-  push:
-    branches:
-      - master
+  push:  # all
 
 jobs:
   unitary:

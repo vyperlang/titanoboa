@@ -1,3 +1,4 @@
+import os
 from os.path import dirname, join, realpath
 
 from IPython.display import Javascript, display
@@ -8,7 +9,10 @@ def install_jupyter_javascript_triggers():
     cur_dir = dirname(realpath(__file__))
     with open(join(cur_dir, "jupyter.js")) as f:
         jupyter_js = f.read()
-    display(Javascript(jupyter_js))
+    js = jupyter_js.replace(
+        "$$JUPYTERHUB_SERVICE_PREFIX", os.environ["JUPYTERHUB_SERVICE_PREFIX"]
+    )
+    display(Javascript(js))
 
 
 def convert_frontend_dict(data):
