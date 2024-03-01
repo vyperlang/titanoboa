@@ -1,7 +1,7 @@
-import importlib
 import json
 import sys
 import textwrap
+from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
 from pathlib import Path
@@ -28,6 +28,18 @@ _Contract = Union[VyperContract, VyperBlueprint]
 _disk_cache = None
 
 
+class BoaImporter(MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        path = Path(fullname.replace(".", "/")).with_suffix(".vy")
+
+        for prefix in sys.path:
+            to_try = Path(prefix) / path
+
+            if to_try.exists():
+                loader = BoaLoader(fullname, str(to_try))
+                return spec_from_loader(fullname, loader)
+
+
 class BoaLoader(SourceFileLoader):
     def get_code(self, fullname):
         return ""
@@ -40,20 +52,7 @@ class BoaLoader(SourceFileLoader):
         ret.__file__ = self.path
         ret.__loader__ = self
         ret.__package__ = spec.name.rpartition(".")[0]
-
         return ret
-
-
-class BoaImporter(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path, target=None):
-        path = Path(fullname.replace(".", "/")).with_suffix(".vy")
-
-        for prefix in sys.path:
-            to_try = Path(prefix) / path
-
-            if to_try.exists():
-                loader = BoaLoader(fullname, str(to_try))
-                return spec_from_loader(fullname, loader)
 
 
 sys.meta_path.append(BoaImporter())
