@@ -42,6 +42,7 @@ class BoaImporter(MetaPathFinder):
 
 class BoaLoader(SourceFileLoader):
     def get_code(self, fullname):
+        # importlib docs say to return None, but that triggers an `ImportError`
         return ""
 
     def create_module(self, spec):
