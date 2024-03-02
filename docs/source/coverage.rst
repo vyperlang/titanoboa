@@ -1,6 +1,10 @@
 Using Coverage
 ==============
 
+Note
+
+If fast mode is enabled coverage will not work.
+
 Titanoboa offers coverage through the `coverage.py <https://coverage.readthedocs.io/>`_ package.
 
 To use, add the following to ``.coveragerc``:
