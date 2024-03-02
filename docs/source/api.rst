@@ -22,6 +22,27 @@ Titanoboa can be installed using pip:
 .. code-block:: bash
     pip install titanoboa
 
+If you want to install the latest development version:
+
+.. code-block:: bash
+    pip install git+https://github.com/vyperlang/titanoboa
+
+Alternatively if you are using poetry:
+
+.. code-block:: bash
+    poetry add titanoboa
+
+If you want to use a specific version you can customize the dependency in your `pyproject.toml` file like this:
+
+.. code-block:: toml
+    [tool.poetry.dependencies]
+    titanoboa = { git = "https://github.com/vyperlang/titanoboa.git", rev = <commit hash> }
+
+Titanoboa by Examples
+---------------------
+
+TODO
+
 API Reference
 =============
 
