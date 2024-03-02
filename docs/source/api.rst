@@ -1,9 +1,9 @@
-Getting started
-===============
+Overview
+--------
 
-A Vyper interpreter with pretty tracebacks, forking, debugging features and more! Titanoboa's goal is to provide a modern, advanced and integrated development experience for vyper users.
+Titanoboa (also called boa) is a Vyper interpreter with pretty tracebacks, forking, debugging features and more! Titanoboa's goal is to provide a modern, advanced and integrated development experience for vyper users.
 
-Unlike foundry, Titanoboa is not a framework, but a library that can be used in any python environment. It is designed to be used in Jupyter notebooks, python scripts, or tests (any python testing framework is compatible) to provide a seamless experience and give the illusion that python and vyper are the same language.
+Unlike foundry, Titanoboa is not just a framework, but a library that can be used in any python environment. It is designed to be used in jupyter notebooks, Python scripts, or tests (any Python testing framework is compatible) to provide a seamless experience and give the illusion that python and vyper are the same language.
 
 Architecture
 ------------
@@ -11,8 +11,11 @@ Titanoboa achieves feature parity with the vyper compiler while providing an int
 
 Internally, titanoboa uses vyper as a library to compile source code to bytecode, and then runs the bytecode using py-evm, adding instrumenting hooks to provide introspection. The use of py-evm means that the entire experience is highly configurable, down to the ability to patch opcodes and precompiles at the EVM level.
 
-Installation
-------------
+Getting started
+===============
+
+Installing Titanoboa
+--------------------
 
 Titanoboa can be installed using pip:
 
