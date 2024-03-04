@@ -1,9 +1,8 @@
 Using Coverage
 ==============
 
-Note
-
-If fast mode is enabled coverage will not work.
+.. warning::
+    Coverage is not yet supported when using :ref:
 
 Titanoboa offers coverage through the `coverage.py <https://coverage.readthedocs.io/>`_ package.
 
