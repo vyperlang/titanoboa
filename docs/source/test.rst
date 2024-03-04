@@ -3,6 +3,8 @@ Testing with Titanoboa
 
 Titanoboa integrates natively with `pytest <https://docs.pytest.org/>`_ and `hypothesis <https://hypothesis.readthedocs.io/en/latest/quickstart.html>`_. Nothing special is needed to enable these, as the plugins for these packages will be loaded automatically. By default, isolation is enabled for tests - that is, any changes to the EVM state inside the test case will automatically be rolled back after the test case completes.
 
+Since ``titanoboa`` is framework-agnostic any other testing framework should work as well.
+
 
 Gas Profiling
 -----------------------
