@@ -57,6 +57,20 @@ def set_network_env(url):
     set_env(NetworkEnv.from_url(url))
 
 
+def fork(*args, **kwargs):
+    """Fork the current environment to use a custom network URL"""
+    e = Env()
+    e.fork(*args, **kwargs)
+    set_env(e)
+
+
+def fork_rpc(*args, **kwargs):
+    """Fork the current environment to use a custom RPC"""
+    e = Env()
+    e.fork_rpc(*args, **kwargs)
+    set_env(e)
+
+
 def reset_env():
     set_env(Env())
 

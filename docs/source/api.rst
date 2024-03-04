@@ -162,7 +162,7 @@ High-Level Functionality
     .. code-block:: python
 
         >>> import boa, os
-        >>> boa.env.fork(os.environ["ALCHEMY_MAINNET_ENDPOINT"])
+        >>> boa.fork(os.environ["ALCHEMY_MAINNET_ENDPOINT"])
         >>> crvusd = boa.from_etherscan("0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E", name="crvUSD")
         >>> crvusd
         <crvUSD interface at 0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E>
@@ -461,7 +461,7 @@ Low-Level Functionality
             >>> import boa
             >>> boa.env.vm.state.block_number
             1
-            >>> boa.env.fork("https://rpc.ankr.com/eth")
+            >>> boa.fork("https://rpc.ankr.com/eth")
             >>> boa.env.vm.state.block_number
             16038471
 

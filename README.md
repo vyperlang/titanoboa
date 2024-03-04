@@ -166,7 +166,7 @@ Note that in `eval()` mode, titanoboa uses slightly different optimization setti
 ### Forking
 Create a fork of mainnet given rpc.
 ```python
-In [1]: import boa; boa.env.fork(url="<rpc server address>")
+In [1]: import boa; boa.fork(url="<rpc server address>")
 
 In [2]: %load_ext boa.ipython
 
@@ -187,7 +187,7 @@ Out[5]: 'Curve DAO Token'
 
 Cast current deployed addresses to vyper contract
 ```python
->>> import boa; boa.env.fork(url="<rpc server address>")
+>>> import boa; boa.fork(url="<rpc server address>")
 >>> c = boa.load_partial("examples/ERC20.vy").at("0xD533a949740bb3306d119CC777fa900bA034cd52")
 >>> c.name()
     'Curve DAO Token'
