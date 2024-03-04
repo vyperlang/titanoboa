@@ -301,7 +301,7 @@ class titanoboa_computation:
 
         if is_eip1167_contract(bytecode):
             contract_address = extract_eip1167_address(bytecode)
-            bytecode = cls.env.vm.state.get_code(contract_address)
+            bytecode = cls.env.get_code(contract_address)
 
         if bytecode in cls.env._code_registry:
             target = cls.env._code_registry[bytecode].deployer.at(contract_address)
@@ -406,6 +406,9 @@ class Env:
     def get_gas_price(self):
         return self._gas_price or 0
 
+    def get_code(self, address):
+        return self.vm.state.get_code(address)
+
     def _init_vm(self, reset_traces=True, account_db_class=AccountDB):
         self.vm = self.chain.get_vm()
         self.vm.__class__._state_class.account_db_class = account_db_class
@@ -508,7 +511,7 @@ class Env:
 
         # also register it in the registry for
         # create_minimal_proxy_to and create_copy_of
-        bytecode = self.vm.state.get_code(addr)
+        bytecode = self.get_code(addr)
         self._code_registry[bytecode] = obj
 
     def register_blueprint(self, bytecode, obj):
@@ -680,7 +683,7 @@ class Env:
 
         bytecode = override_bytecode
         if override_bytecode is None:
-            bytecode = self.vm.state.get_code(to)
+            bytecode = self.get_code(to)
 
         is_static = not is_modifying
 

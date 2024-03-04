@@ -1,5 +1,4 @@
 from collections import defaultdict
-from copy import deepcopy
 from functools import cached_property
 from os.path import basename
 from typing import Any, Optional, Union
@@ -319,7 +318,7 @@ class ABIContractFactory:
 
     @cached_property
     def abi(self):
-        return deepcopy(self._abi)
+        return self._abi
 
     @classmethod
     def from_abi_dict(cls, abi, name="<anonymous contract>"):

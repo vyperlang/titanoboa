@@ -1,9 +1,26 @@
+from multiprocessing.shared_memory import SharedMemory
 from unittest.mock import MagicMock
 
 import pytest
 
+from boa.integrations.jupyter import load_jupyter_server_extension
+from boa.integrations.jupyter.browser import _generate_token
 from boa.integrations.jupyter.constants import SHARED_MEMORY_LENGTH
-from boa.integrations.jupyter.handlers import CallbackHandler, setup_handlers
+from boa.integrations.jupyter.handlers import CallbackHandler
+
+
+@pytest.fixture()
+def token():
+    return _generate_token()
+
+
+@pytest.fixture()
+def shared_memory(token):
+    memory = SharedMemory(name=token, create=True, size=SHARED_MEMORY_LENGTH)
+    try:
+        yield memory
+    finally:
+        memory.unlink()
 
 
 @pytest.fixture()
@@ -23,7 +40,7 @@ def callback_handler(server_app_mock):
 
 
 def test_setup_handlers(server_app_mock):
-    setup_handlers(server_app_mock)
+    load_jupyter_server_extension(server_app_mock)
     server_app_mock.web_app.add_handlers.assert_called_once()
     _, kwargs = server_app_mock.web_app.add_handlers.call_args
     assert kwargs == {
@@ -66,5 +83,19 @@ def test_value_error(callback_handler, token, shared_memory):
 def test_success(callback_handler, token, shared_memory):
     callback_handler.request.body = b"body"
     callback_handler.post(token)
+    assert callback_handler.get_status() == 204
+    callback_handler.finish.assert_called_once_with()
+
+
+def test_get_invalid_token(callback_handler, token):
+    callback_handler.get(token)
+    assert callback_handler.get_status() == 404
+    callback_handler.finish.assert_called_once_with(
+        {"error": "Invalid token: " + token}
+    )
+
+
+def test_get_success(callback_handler, token, shared_memory):
+    callback_handler.get(token)
     assert callback_handler.get_status() == 204
     callback_handler.finish.assert_called_once_with()
