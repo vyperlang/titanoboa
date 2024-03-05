@@ -41,7 +41,7 @@ jobs:
           --cov=boa
           --cov-append
           --cov-report term-missing:skip-covered
-          --cov-fail-under=75
+          --cov-fail-under=78
           tests/unitary/
 
   anvil:

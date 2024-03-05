@@ -23,6 +23,7 @@ class TitanoboaMagic(ipython.Magics):
         if line:
             self.shell.user_ns[line] = c  # ret available in user ipython locals
             _contracts[line] = c  # ret available in boa.ipython._contracts
+        global _
         _ = c  # ret available at `boa.ipython._`
         return c
 
@@ -33,6 +34,7 @@ class TitanoboaMagic(ipython.Magics):
         if line:
             self.shell.user_ns[line] = c  # ret available in user ipython locals
             _contracts[line] = c  # ret available in boa.ipython._contracts
+        global _
         _ = c  # ret available at `boa.ipython._`
         return c
 

@@ -38,7 +38,7 @@ class ByteAddressableStorage:
             start -= start_ofst
             stop -= start_ofst
             return memoryview(ret[start:stop])
-        else:
+        else:  # pragma: no cover
             raise Exception("Must slice {self}")
 
 
@@ -64,7 +64,7 @@ def _get_length(mem, bound):
 def decode_vyper_object(mem, typ):
     if isinstance(typ, BytesM_T):
         # TODO tag return value like `vyper_object` does
-        return mem[: typ.m_bits].tobytes()
+        return mem[: typ.m].tobytes()
     if isinstance(typ, (AddressT, InterfaceT)):
         return to_checksum_address(mem[12:32].tobytes())
     if isinstance(typ, BoolT):
@@ -113,4 +113,4 @@ def decode_vyper_object(mem, typ):
             ofst += n
         return tuple(ret)
 
-    return f"unimplemented decoder for `{typ}`"
+    return f"unimplemented decoder for `{typ}`"  # pragma: no cover

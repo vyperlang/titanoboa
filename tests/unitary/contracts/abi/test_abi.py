@@ -25,7 +25,7 @@ def load_solidity_from_yaml(get_filepath):
     """
 
     def _load(yaml_filename):
-        with open(get_filepath(f"fixtures/solidity_{yaml_filename}.yaml")) as f:
+        with open(get_filepath(f"../../fixtures/solidity_{yaml_filename}.yaml")) as f:
             data = yaml.safe_load(f)
         bytecode = bytes.fromhex(data["bytecode"]["object"])
         address, _ = boa.env.deploy_code(bytecode=bytecode)

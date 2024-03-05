@@ -123,8 +123,8 @@ def _bytes_strategy(
 
 
 @_exclude_filter
-def _string_strategy(min_size: int = 0, max_size: int = 64) -> SearchStrategy:
-    return st.text(min_size=min_size, max_size=max_size)
+def _string_strategy(min_size: int = 0, max_size: int = 64, **kwargs) -> SearchStrategy:
+    return st.text(min_size=min_size, max_size=max_size, **kwargs)
 
 
 def _get_array_length(var_str: str, length: ArrayLengthType, dynamic_len: int) -> int:
