@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from boa import _jupyter_server_extension_points
 from boa.integrations.jupyter import load_jupyter_server_extension
 from boa.integrations.jupyter.browser import _generate_token
 from boa.integrations.jupyter.constants import SHARED_MEMORY_LENGTH
@@ -99,3 +100,9 @@ def test_get_success(callback_handler, token, shared_memory):
     callback_handler.get(token)
     assert callback_handler.get_status() == 204
     callback_handler.finish.assert_called_once_with()
+
+
+def test_jupyter_server_extension_points():
+    assert _jupyter_server_extension_points() == [
+        {"module": load_jupyter_server_extension.__module__}
+    ]

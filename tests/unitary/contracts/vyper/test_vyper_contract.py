@@ -50,3 +50,14 @@ def __init__():
     self.b = 0xd9b6
 """
     assert boa.loads(code)._storage.b.get() == bytes.fromhex("d9b6")
+
+
+def test_decode_dynarray():
+    code = """
+point: DynArray[int8, 10]
+
+@external
+def __init__():
+    self.point = [1, 2]
+"""
+    assert boa.loads(code)._storage.point.get() == [1, 2]

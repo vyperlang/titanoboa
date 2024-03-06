@@ -20,7 +20,7 @@ from boa.test.strategies import fuzz
 
 # turn off tracebacks if we are in repl
 # https://stackoverflow.com/a/64523765
-if hasattr(sys, "ps1"):
+if hasattr(sys, "ps1"):  # pragma: no cover
     pass
     # sys.tracebacklimit = 0
 
