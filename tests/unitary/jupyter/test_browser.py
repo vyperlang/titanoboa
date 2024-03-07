@@ -127,6 +127,7 @@ def display_mock():
 
 @pytest.fixture(scope="session")
 def account():
+    # this is just a random private key - we want deterministic tests
     return Account.from_key(
         "0xb25c7db31feed9122727bf0939dc769a96564b2de4c4726d035b36ecf1e5b364"
     )
