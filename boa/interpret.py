@@ -1,7 +1,9 @@
-import importlib
 import json
 import sys
 import textwrap
+from importlib.abc import MetaPathFinder
+from importlib.machinery import SourceFileLoader
+from importlib.util import spec_from_loader
 from pathlib import Path
 from typing import Any, Union
 
@@ -26,31 +28,31 @@ _Contract = Union[VyperContract, VyperBlueprint]
 _disk_cache = None
 
 
-class BoaImporter(importlib.abc.MetaPathFinder):
-    def find_module(self, fullname, package_path, target=None):
-        # Return a loader
-        return self
-
-    def load_module(self, fullname):
-        # Return a module
-        if fullname in sys.modules:
-            return sys.modules[fullname]
-
+class BoaImporter(MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
         path = Path(fullname.replace(".", "/")).with_suffix(".vy")
+
         for prefix in sys.path:
             to_try = Path(prefix) / path
-            try:
-                ret = load_partial(to_try)
-                break
-            except (FileNotFoundError, NotADirectoryError):
-                pass
-        else:
-            raise ImportError(fullname)
+
+            if to_try.exists():
+                loader = BoaLoader(fullname, str(to_try))
+                return spec_from_loader(fullname, loader)
+
+
+class BoaLoader(SourceFileLoader):
+    def get_code(self, fullname):
+        # importlib docs say to return None, but that triggers an `ImportError`
+        return ""
+
+    def create_module(self, spec):
+        ret = load_partial(self.path)
 
         # comply with PEP-302:
-        ret.__name__ = to_try.name
-        ret.__file__ = str(to_try)
-        sys.modules[fullname] = ret
+        ret.__name__ = spec.name
+        ret.__file__ = self.path
+        ret.__loader__ = self
+        ret.__package__ = spec.name.rpartition(".")[0]
         return ret
 
 

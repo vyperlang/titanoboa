@@ -2,7 +2,6 @@ import re
 
 import pytest
 import yaml
-from vyper.compiler.output import build_abi_output
 
 import boa
 from boa import BoaError
@@ -11,10 +10,9 @@ from boa.util.abi import Address
 
 
 def load_via_abi(code):
-    vyper_contract = boa.loads(code)
-    abi = build_abi_output(vyper_contract.compiler_data)
-    abi_contract = ABIContractFactory.from_abi_dict(abi).at(vyper_contract.address)
-    return abi_contract, vyper_contract
+    contract = boa.loads(code)
+    factory = ABIContractFactory.from_abi_dict(contract.abi)
+    return factory.at(contract.address), contract
 
 
 @pytest.fixture()
@@ -130,6 +128,7 @@ def test(a: uint128 = 0, b: uint128 = 0) -> uint128:
     assert c.test(a=1) == 1
     assert c.test(1, 2) == 3
     assert c.test(a=1, b=2) == 3
+    assert c.test(a=1, b=2, value=0, gas=None) == 3
 
     with pytest.raises(Exception) as exc_info:
         c.test(1, 2, 3)

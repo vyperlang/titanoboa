@@ -19,6 +19,7 @@ from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
 from eth.typing import JournalDBCheckpoint
 from eth.vm.code_stream import CodeStream
+from eth.vm.gas_meter import allow_negative_refund_strategy
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
@@ -268,12 +269,18 @@ class titanoboa_computation:
         self.opcodes = self.opcodes.copy()
         self.opcodes.update(_opcode_overrides)
 
-        self._gas_meter = self._gas_meter_class(self.msg.gas)
+        self._gas_meter = self._gas_meter_class(
+            self.msg.gas, refund_strategy=allow_negative_refund_strategy
+        )
         if hasattr(self._gas_meter, "_set_code"):
             self._gas_meter._set_code(self.code)
 
         self._child_pcs = []
         self._contract_repr_before_revert = None
+
+    @property
+    def net_gas_used(self):
+        return max(0, self.get_gas_used() - self.get_gas_refund())
 
     def add_child_computation(self, child_computation):
         super().add_child_computation(child_computation)

@@ -3,15 +3,16 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    let provider; // cache the provider to avoid re-creating it every time
-    const getEthersProvider = () => {
-        if (provider) return provider;
+    const rpc = async (method, params) => {
         const {ethereum} = window;
         if (!ethereum) {
             throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
         }
-        return provider = new ethers.BrowserProvider(ethereum);
+        return ethereum.request({method, params});
     };
+
+    // When opening in lab view, the base path contains extra folders
+    const base = `$$JUPYTERHUB_SERVICE_PREFIX`;  // gets replaced by the JupyterLab extension
 
     /** Stringify data, converting big ints to strings */
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
@@ -35,24 +36,26 @@
     async function callbackAPI(token, body) {
         const headers = {['X-XSRFToken']: getCookie('_xsrf')};
         const init = {method: 'POST', body, headers};
-        const url = `../titanoboa_jupyterlab/callback/${token}`;
+        const url = `${base}/titanoboa_jupyterlab/callback/${token}`;
         const response = await fetch(url, init);
         return response.text();
     }
 
-    const getSigner = () => getEthersProvider().getSigner();
-
-    /** Load the signer via ethers user */
-    const loadSigner = () => getSigner().then(s => s.getAddress());
+    let from;
+    const loadSigner = async (address) => {
+        const accounts = await rpc('eth_requestAccounts');
+        from = accounts.includes(address) ? address : accounts[0];
+        return from;
+    };
 
     /** Sign a transaction via ethers */
-    const sendTransaction = transaction => getSigner().then(s => s.sendTransaction(transaction));
+    const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
 
     /** Sign a typed data via ethers */
-    const signTypedData = (domain, types, value) => getSigner().then(s => s.signTypedData(domain, types, value));
-
-    /** Call an RPC method via ethers */
-    const rpc = (method, params) => getEthersProvider().send(method, params);
+    const signTypedData = (domain, types, value) => rpc(
+        'eth_signTypedData_v4',
+        [from, JSON.stringify({domain, types, value})]
+    );
 
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
@@ -85,7 +88,7 @@
     const handleCallback = func => async (token, ...args) => {
         if (!colab) {
             // Check if the cell was already executed. In Colab, eval_js() doesn't replay.
-            const response = await fetch(`../titanoboa_jupyterlab/callback/${token}`);
+            const response = await fetch(`${base}/titanoboa_jupyterlab/callback/${token}`);
             // !response.ok indicates the cell has already been executed
             if (!response.ok) return;
         }
@@ -107,4 +110,6 @@
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),
     };
+
+    if (element) element.style.display = "none";  // hide the output element in JupyterLab
 })();

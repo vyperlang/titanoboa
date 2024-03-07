@@ -24,6 +24,7 @@ from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
+from vyper.compiler.output import build_abi_output
 from vyper.compiler.settings import OptimizationLevel
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import VyperException
@@ -96,16 +97,29 @@ class VyperDeployer:
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
 
+    def stomp(self, address: Any, data_section=None) -> "VyperContract":
+        address = Address(address)
+
+        ret = self.deploy(override_address=address, skip_initcode=True)
+        vm = ret.env.vm
+        old_bytecode = vm.state.get_code(address.canonical_address)
+        new_bytecode = self.compiler_data.bytecode_runtime
+
+        immutables_size = self.compiler_data.global_ctx.immutable_section_bytes
+        if immutables_size > 0:
+            data_section = old_bytecode[-immutables_size:]
+            new_bytecode += data_section
+
+        vm.state.set_code(address.canonical_address, new_bytecode)
+        ret.env.register_contract(address, ret)
+        ret._set_bytecode(new_bytecode)
+        return ret
+
     # TODO: allow `env=` kwargs and so on
     def at(self, address: Any) -> "VyperContract":
         address = Address(address)
 
-        ret = VyperContract(
-            self.compiler_data,
-            override_address=address,
-            skip_initcode=True,
-            filename=self.filename,
-        )
+        ret = self.deploy(override_address=address, skip_initcode=True)
         bytecode = ret.env.evm.get_code(address)
 
         ret._set_bytecode(bytecode)
@@ -128,6 +142,10 @@ class _BaseVyperContract(_BaseEVMContract):
 
         with anchor_compiler_settings(self.compiler_data):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
+
+    @cached_property
+    def abi(self):
+        return build_abi_output(self.compiler_data)
 
 
 # create a blueprint for use with `create_from_blueprint`.
