@@ -4,6 +4,7 @@ in IPython/JupyterLab/Google Colab.
 """
 import json
 import logging
+import os
 from asyncio import get_event_loop, sleep
 from itertools import chain
 from multiprocessing.shared_memory import SharedMemory
@@ -40,8 +41,11 @@ nest_asyncio.apply()
 def _install_javascript_triggers():
     """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
     cur_dir = dirname(realpath(__file__))
-    with open(join(cur_dir, "jupyter.js")) as js_file:
-        display(Javascript(js_file.read()))
+    with open(join(cur_dir, "jupyter.js")) as f:
+        jupyter_js = f.read()
+    prefix = os.getenv("JUPYTERHUB_SERVICE_PREFIX", "..")
+    js = jupyter_js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix)
+    display(Javascript(js))
 
 
 class BrowserRPC(RPC):

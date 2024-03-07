@@ -1,4 +1,5 @@
 import pytest
+
 import boa
 
 
@@ -37,4 +38,3 @@ def bar(b: uint256) -> uint256:
 def test_sub_computations(source_contract):
     boa.env._coverage_enabled = True
     source_contract.bar(10)
-

@@ -247,7 +247,7 @@ class IRExecutor:
             self.builder.extend("\n\n")
             func.compile_func()
 
-        py_file = contract_path + str(self.compile_ctx.uuid) + ".py"
+        py_file = f"{contract_path}{self.compile_ctx.uuid}.py"
 
         # uncomment for debugging the python code:
         # with open(py_file, "w") as f:
