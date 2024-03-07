@@ -20,7 +20,6 @@ def test() -> bool:
     magic = TitanoboaMagic()
     magic.shell = MagicMock(user_ns={})
     deployer = magic.vyper("c", cell)
-    assert deployer is boa.ipython._
     assert deployer is boa.ipython._contracts["c"]
     assert deployer is magic.shell.user_ns["c"]
     assert deployer.deploy().test() == 1
@@ -36,7 +35,6 @@ def test() -> bool:
     magic = TitanoboaMagic()
     magic.shell = MagicMock(user_ns={})
     contract = magic.contract("c", cell)
-    assert contract is boa.ipython._
     assert contract is boa.ipython._contracts["c"]
     assert contract is magic.shell.user_ns["c"]
     assert contract.test() == 1
