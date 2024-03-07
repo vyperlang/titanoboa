@@ -425,7 +425,7 @@ class StorageModel:
         compiler_data = contract.compiler_data
         # TODO: recurse into imported modules
         for k, v in contract.module_t.variables.items():
-            is_storage = not v.is_immutable and not v.is_constant
+            is_storage = not (v.is_immutable or v.is_constant or v.is_transient)
             if is_storage:
                 slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
                 setattr(self, k, StorageVar(contract, slot, v.typ))
