@@ -63,7 +63,7 @@ Coverage
 --------------
 
 .. warning::
-    Coverage is not yet supported when using :ref:
+    Coverage is not yet supported when using fast mode.
 
 Titanoboa offers coverage through the `coverage.py <https://coverage.readthedocs.io/>`_ package.
 
@@ -95,3 +95,14 @@ or,
 Finally, ``coverage.py`` saves coverage data to a file named ``.coverage`` in the directory it is run in. To view the formatted coverage data, you typically want to use ``coverage report`` or ``coverage html``. See more options at https://coverage.readthedocs.io/en/latest/cmd.html.
 
 Coverage is experimental and there may be odd corner cases! If so, please report them on github or in the ``#titanoboa-interpreter`` channel of the `Vyper discord <https://discord.gg/6tw7PTM7C2>`_.
+
+Fast mode
+---------
+
+Titanoboa has a fast mode that can be enabled by calling the ``fast_mode`` method.
+
+This mode performs a number of optimizations by patching some py-evm objects to speed up the execution of unit tests.
+
+.. warning::
+    Fast mode is experimental and may break other features of boa (like coverage).
+
