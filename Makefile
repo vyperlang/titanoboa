@@ -12,7 +12,10 @@ build:
 test:
 	pytest tests/ --ignore=tests/integration/fork/ --ignore=tests/integration/network/
 
-# note: for pypi upload,
-# rm -r titanoboa.egg-info/ dist/
-# python -m build
-# twine upload dist/*
+clean:
+	@find . -name '*.pyc' -exec rm -f {} +
+	@find . -name '*.pyo' -exec rm -f {} +
+	@find . -name '*~' -exec rm -f {} +
+	@find . -name '__pycache__' -exec rmdir {} +
+
+# note: for pypi upload, see pypi-publish.sh
