@@ -96,7 +96,7 @@ Finally, ``coverage.py`` saves coverage data to a file named ``.coverage`` in th
 
 Coverage is experimental and there may be odd corner cases! If so, please report them on github or in the ``#titanoboa-interpreter`` channel of the `Vyper discord <https://discord.gg/6tw7PTM7C2>`_.
 
-Fuzzing strategies
+Fuzzing Strategies
 -----------------
 
 Titanoboa offers custom `hypothesis <https://hypothesis.readthedocs.io/en/latest/quickstart.html>`_ strategies for testing. These can be used to generate EVM-compliant random inputs for tests.
@@ -136,7 +136,7 @@ Internally this will use the ``importlib`` module to load the file and create a 
     Due to limitations in the Python import system, only imports of the form ``import Foo`` or ``from <folder> import Foo`` will work and it is not possible to use ``import <folder>``.
 
 
-Fast mode
+Fast Mode
 ---------
 
 Titanoboa has a fast mode that can be enabled by using ``boa.env.enable_fast_mode()``.
@@ -145,4 +145,31 @@ This mode performs a number of optimizations by patching some py-evm objects to 
 
 .. warning::
     Fast mode is experimental and may break other features of boa (like coverage).
+
+ipython Vyper Cells
+-------------------
+
+Titanoboa supports ipython Vyper cells. This means that you can write Vyper code in a ipython/Jupyter Notebook environment and execute it as if it was a Python cell (the contract will be compiled instead, and a ``ContractFactory`` will be returned). 
+
+To enable this feature, execute ``%load_ext boa.ipython`` in a cell.
+
+.. code-block:: python
+
+    In [1]: import boa; boa.env.fork(url="<rpc server address>")
+
+    In [2]: %load_ext boa.ipython
+
+    In [3]: %%vyper Test
+       ...: interface HasName:
+       ...:     def name() -> String[32]: view
+       ...:
+       ...: @external
+       ...: def get_name_of(addr: HasName) -> String[32]:
+       ...:     return addr.name()
+    Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
+
+    In [4]: c = Test.deploy()
+    
+    In [5]: c.get_name_of("0xD533a949740bb3306d119CC777fa900bA034cd52")
+    Out[5]: 'Curve DAO Token'
 
