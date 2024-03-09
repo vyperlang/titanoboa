@@ -38,4 +38,3 @@ If you want to use a specific version you can customize the dependency in your `
 
    [tool.poetry.dependencies]
    titanoboa = { git = "https://github.com/vyperlang/titanoboa.git", rev = <commit hash> }
-

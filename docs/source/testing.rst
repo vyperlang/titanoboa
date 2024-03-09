@@ -131,8 +131,8 @@ Internally this will use the ``importlib`` module to load the file and create a 
 
 .. note::
 
-    For this to work ``boa`` must be imported first. 
-    
+    For this to work ``boa`` must be imported first.
+
     Due to limitations in the Python import system, only imports of the form ``import Foo`` or ``from <folder> import Foo`` will work and it is not possible to use ``import <folder>``.
 
 
@@ -149,7 +149,7 @@ This mode performs a number of optimizations by patching some py-evm objects to 
 ipython Vyper Cells
 -------------------
 
-Titanoboa supports ipython Vyper cells. This means that you can write Vyper code in a ipython/Jupyter Notebook environment and execute it as if it was a Python cell (the contract will be compiled instead, and a ``ContractFactory`` will be returned). 
+Titanoboa supports ipython Vyper cells. This means that you can write Vyper code in a ipython/Jupyter Notebook environment and execute it as if it was a Python cell (the contract will be compiled instead, and a ``ContractFactory`` will be returned).
 
 To enable this feature, execute ``%load_ext boa.ipython`` in a cell.
 
@@ -169,7 +169,6 @@ To enable this feature, execute ``%load_ext boa.ipython`` in a cell.
     Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
 
     In [4]: c = Test.deploy()
-    
+
     In [5]: c.get_name_of("0xD533a949740bb3306d119CC777fa900bA034cd52")
     Out[5]: 'Curve DAO Token'
-
