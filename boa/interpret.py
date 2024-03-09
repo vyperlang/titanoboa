@@ -1,7 +1,9 @@
-import importlib
 import json
 import sys
 import textwrap
+from importlib.abc import MetaPathFinder
+from importlib.machinery import SourceFileLoader
+from importlib.util import spec_from_loader
 from pathlib import Path
 from typing import Any, Union
 
@@ -28,43 +30,9 @@ _disk_cache = None
 _search_path = None
 
 
-class BoaImporter(importlib.abc.MetaPathFinder):
-    def __init__(self):
-        self._path_lookup = {}
-
-    # TODO: replace this with more modern `find_spec()`
-    def find_module(self, fullname, package_path, target=None):
-        path = Path(fullname.replace(".", "/")).with_suffix(".vy")
-
-        for prefix in sys.path:
-            to_try = Path(prefix) / path
-
-            if to_try.exists():
-                self._path_lookup[fullname] = to_try
-                return self
-
-        return None
-
-    # TODO: replace with more modern `exec_module()` and `create_module()`
-    def load_module(self, fullname):
-        if fullname in sys.modules:
-            return sys.modules[fullname]
-
-        # import system should guarantee this, but be paranoid
-        if fullname not in self._path_lookup:
-            raise ImportError(f"invariant violated: no lookup for {fullname}")
-
-        path = self._path_lookup[fullname]
-        ret = load_partial(path)
-
-        # comply with PEP-302:
-        ret.__name__ = path.name
-        ret.__file__ = str(path)
-        sys.modules[fullname] = ret
-        return ret
-
-
-sys.meta_path.append(BoaImporter())
+def set_search_path(path: list[str]):
+    global _search_path
+    _search_path = path
 
 
 def set_cache_dir(cache_dir="~/.cache/titanoboa"):
@@ -76,9 +44,42 @@ def set_cache_dir(cache_dir="~/.cache/titanoboa"):
     _disk_cache = DiskCache(cache_dir, compiler_version)
 
 
-def set_search_path(path: list[str]):
-    global _search_path
-    _search_path = path
+def disable_cache():
+    set_cache_dir(None)
+
+
+set_cache_dir()  # enable caching, by default!
+
+
+class BoaImporter(MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        path = Path(fullname.replace(".", "/")).with_suffix(".vy")
+
+        for prefix in sys.path:
+            to_try = Path(prefix) / path
+
+            if to_try.exists():
+                loader = BoaLoader(fullname, str(to_try))
+                return spec_from_loader(fullname, loader)
+
+
+class BoaLoader(SourceFileLoader):
+    def get_code(self, fullname):
+        # importlib docs say to return None, but that triggers an `ImportError`
+        return ""
+
+    def create_module(self, spec):
+        ret = load_partial(self.path)
+
+        # comply with PEP-302:
+        ret.__name__ = spec.name
+        ret.__file__ = self.path
+        ret.__loader__ = self
+        ret.__package__ = spec.name.rpartition(".")[0]
+        return ret
+
+
+sys.meta_path.append(BoaImporter())
 
 
 def compiler_data(
