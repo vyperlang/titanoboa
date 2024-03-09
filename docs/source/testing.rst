@@ -139,7 +139,7 @@ Internally this will use the ``importlib`` module to load the file and create a 
 Fast mode
 ---------
 
-Titanoboa has a fast mode that can be enabled by calling the ``fast_mode`` method.
+Titanoboa has a fast mode that can be enabled by using ``boa.env.enable_fast_mode()``.
 
 This mode performs a number of optimizations by patching some py-evm objects to speed up the execution of unit tests.
 
