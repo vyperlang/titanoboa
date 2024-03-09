@@ -96,6 +96,41 @@ Finally, ``coverage.py`` saves coverage data to a file named ``.coverage`` in th
 
 Coverage is experimental and there may be odd corner cases! If so, please report them on github or in the ``#titanoboa-interpreter`` channel of the `Vyper discord <https://discord.gg/6tw7PTM7C2>`_.
 
+Native Import Syntax
+--------------------
+
+Titanoboa supports the native Python import syntax for Vyper contracts. This means that you can import Vyper contracts in any Python script as if you were importing a Python module.
+
+For example, if you have a contract ``contracts/Foo.vy``:
+
+.. code-block:: vyper
+
+    x: public(uint256)
+
+    def __init__(x_initial: uint256):
+        self.x = x_initial
+
+You can import it in a Python script ``tests/bar.py`` like this
+
+
+.. code-block:: python
+
+    from contracts import Foo
+
+    my_contract = Foo(42) # This will create a new instance of the contract
+
+    my_contract.x() # Do anything with the contract as you normally would
+
+Internally this will use the ``importlib`` module to load the file and create a ``ContractFactory``.
+
+
+.. note::
+
+    For this to work ``boa`` must be imported first. 
+    
+    Due to limitations in the Python import system, only imports of the form ``import Foo`` or ``from <folder> import Foo`` will work and it is not possible to use ``import <folder>``.
+
+
 Fast mode
 ---------
 
