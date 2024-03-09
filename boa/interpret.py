@@ -109,14 +109,14 @@ def get_module_fingerprint(
     seen = seen or {}
     fingerprints = []
     for stmt in module_t.import_stmts:
-        import_info = stmt._metdata["import_info"]
-        if import_info not in seen:
+        import_info = stmt._metadata["import_info"]
+        if id(import_info) not in seen:
             if isinstance(import_info.typ, ModuleT):
                 fingerprint = get_module_fingerprint(import_info.typ, seen)
             else:
                 fingerprint = hash_input(import_info.compiler_input)
-            seen[import_info] = fingerprint
-        fingerprint = seen[import_info]
+            seen[id(import_info)] = fingerprint
+        fingerprint = seen[id(import_info)]
         fingerprints.append(fingerprint)
     fingerprints.append(module_t._module.source_sha256sum)
 
