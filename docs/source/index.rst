@@ -13,4 +13,4 @@ Titanoboa
    overview
    examples
    api
-   test
+   testing
