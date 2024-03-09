@@ -1,7 +1,7 @@
 Overview
 ========
 
-``titanoboa`` (also called ``boa``) is a `Vyper <https://vyper.readthedocs.io/>`_ interpreter designed to provide a modern, advanced and integrated development experience with:
+Titanoboa (also called ``boa``) is a `Vyper <https://vyper.readthedocs.io/>`_ interpreter designed to provide a modern, advanced and integrated development experience with:
 
 * pretty tracebacks
 * forking
