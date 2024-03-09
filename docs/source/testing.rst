@@ -96,6 +96,11 @@ Finally, ``coverage.py`` saves coverage data to a file named ``.coverage`` in th
 
 Coverage is experimental and there may be odd corner cases! If so, please report them on github or in the ``#titanoboa-interpreter`` channel of the `Vyper discord <https://discord.gg/6tw7PTM7C2>`_.
 
+Fuzzing strategies
+-----------------
+
+Titanoboa offers custom `hypothesis <https://hypothesis.readthedocs.io/en/latest/quickstart.html>`_ strategies for testing. These can be used to generate EVM-compliant random inputs for tests.
+
 Native Import Syntax
 --------------------
 
