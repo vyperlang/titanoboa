@@ -142,6 +142,10 @@ def compiler_data(
         return ret
 
     with anchor_compiler_settings(ret):
+        # note that this actually parses and analyzes all dependencies,
+        # even if they haven't changed. an optimization would be to
+        # somehow convince vyper (in ModuleAnalyzer) to get the module_t
+        # from the cache.
         module_t = ret.annotated_vyper_module._metadata["type"]
     fingerprint = get_module_fingerprint(module_t)
 
