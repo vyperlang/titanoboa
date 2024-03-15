@@ -18,7 +18,7 @@ dependencies = [
     "vyper >= 0.3.10",
     "eth-stdlib>=0.2.7,<0.3.0",
     "eth-abi",
-    "py-evm>=0.10.0b1",
+    "py-evm>=0.10.0b2",
     "eth-typing",
     "hypothesis",
     "pytest",
