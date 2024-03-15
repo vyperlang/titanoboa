@@ -361,10 +361,13 @@ class NetworkEnv(Env):
     def _get_nonce(self, addr):
         return self._rpc.fetch("eth_getTransactionCount", [addr, "latest"])
 
+    def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):
+        raise TypeError("cannot fork a network env")
+
     def _reset_fork(self, block_identifier="latest"):
         # use "latest" to make sure we are forking with up-to-date state
         # but use reset_traces=False to help with storage dumps
-        self.fork_rpc(
+        super().fork_rpc(
             self._rpc,
             reset_traces=False,
             block_identifier=block_identifier,
