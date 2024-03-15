@@ -752,5 +752,5 @@ GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1
 def _make_chain():
     # TODO should we use MiningChain? is there a perf difference?
     # TODO debug why `fork_at()` cannot accept 0 as block num
-    _Chain = chain.build(MainnetChain, chain.latest_mainnet_at(1))
+    _Chain = chain.build(MainnetChain, chain.latest_mainnet_at(2))
     return _Chain.from_genesis(AtomicDB(), GENESIS_PARAMS)
