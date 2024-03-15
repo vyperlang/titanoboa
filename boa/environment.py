@@ -311,7 +311,7 @@ class titanoboa_computation:
         return computation
 
     @classmethod
-    def apply_computation(cls, state, msg, tx_ctx):
+    def apply_computation(cls, state, msg, tx_ctx, **kwargs):
         addr = msg.code_address
         contract = cls.env._lookup_contract_fast(addr) if addr else None
 
@@ -325,7 +325,7 @@ class titanoboa_computation:
 
         if contract is None or not cls.env._fast_mode_enabled:
             # print("SLOW MODE")
-            computation = super().apply_computation(state, msg, tx_ctx)
+            computation = super().apply_computation(state, msg, tx_ctx, **kwargs)
             return finalize(computation)
 
         with cls(state, msg, tx_ctx) as computation:
