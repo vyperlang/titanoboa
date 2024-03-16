@@ -50,6 +50,7 @@ class VMPatcher:
         "prev_hashes": "_prev_hashes",
         "chain_id": "_chain_id",
         "gas_limit": "_gas_limit",
+        "prevrandao": "_mix_hash",
     }
 
     _cmp_patchables = {"code_size_limit": "EIP170_CODE_SIZE_LIMIT"}
