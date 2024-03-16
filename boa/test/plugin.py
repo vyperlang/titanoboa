@@ -69,6 +69,10 @@ def pytest_fixture_post_finalizer(fixturedef, request):
         warnings.warn("possible bug in titanoboa! bad fixture tracking", stacklevel=1)
         return
 
+    # there are outstanding bugs in pytest where the finalizers get
+    # run out of order, so we need to maintain a task list and defer
+    # execution of out-of-order finalizers until all the finalizers
+    # that should have come before them get run.
     _task_list.add(fid)
 
     while (fid := next(reversed(_fixture_map.keys()), None)) in _task_list:
