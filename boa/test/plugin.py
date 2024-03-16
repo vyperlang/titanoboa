@@ -62,6 +62,7 @@ def pytest_fixture_setup(fixturedef, request):
     ctx.__enter__()
 
 
+# TODO: maybe use FixtureDef.addfinalizer()?
 def pytest_fixture_post_finalizer(fixturedef, request):
     fid = id(fixturedef)
 
@@ -75,6 +76,10 @@ def pytest_fixture_post_finalizer(fixturedef, request):
     # that should have come before them get run.
     _task_list.add(fid)
 
+    _work_task_list()
+
+
+def _work_task_list():
     while (fid := next(reversed(_fixture_map.keys()), None)) in _task_list:
         ctx = _fixture_map.pop(fid)
         _task_list.remove(fid)
