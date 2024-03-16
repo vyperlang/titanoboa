@@ -293,8 +293,8 @@ class titanoboa_computation:
 
     # hijack creations to automatically generate blueprints
     @classmethod
-    def apply_create_message(cls, state, msg, tx_ctx):
-        computation = super().apply_create_message(state, msg, tx_ctx)
+    def apply_create_message(cls, state, msg, tx_ctx, **kwargs):
+        computation = super().apply_create_message(state, msg, tx_ctx, **kwargs)
 
         bytecode = msg.code
         # cf. eth/vm/logic/system/Create* opcodes
