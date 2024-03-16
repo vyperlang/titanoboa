@@ -66,3 +66,16 @@ def setup_ignore_isolation(boa_contract):
 def test_check_ignore_isolation(boa_contract, setup_ignore_isolation):
     assert boa_contract.a() == 42069
     assert boa_contract.b() == addr_constn
+
+
+@pytest.fixture(scope="function")
+def modify_boa_contract(boa_contract):
+    # these values spill over from the previous test
+    assert boa_contract.a() == 42069
+    assert boa_contract.b() == addr_constn
+    boa_contract.set_vars(boa_contract.a() + 1, boa.env.generate_address())
+
+
+@pytest.mark.parametrize("a", range(10))
+def test_fixture_isolation(modify_boa_contract, a):
+    pass

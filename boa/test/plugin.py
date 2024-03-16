@@ -1,4 +1,5 @@
 import contextlib
+import warnings
 from typing import Generator
 
 import hypothesis
@@ -48,6 +49,32 @@ def pytest_collection_modifyitems(config, items):
             ignore_gas_profiling = item.get_closest_marker("ignore_gas_profiling")
             if not ignore_gas_profiling:
                 item.add_marker("gas_profile")
+
+
+_fixture_map = {}
+_task_list = set()
+
+
+def pytest_fixture_setup(fixturedef, request):
+    ctx = boa.env.anchor()
+    assert id(fixturedef) not in _fixture_map, "bad invariant"
+    _fixture_map[id(fixturedef)] = ctx
+    ctx.__enter__()
+
+
+def pytest_fixture_post_finalizer(fixturedef, request):
+    fid = id(fixturedef)
+
+    if fid not in _fixture_map:
+        warnings.warn("possible bug in titanoboa! bad fixture tracking", stacklevel=1)
+        return
+
+    _task_list.add(fid)
+
+    while (fid := next(reversed(_fixture_map.keys()), None)) in _task_list:
+        ctx = _fixture_map.pop(fid)
+        _task_list.remove(fid)
+        ctx.__exit__(None, None, None)
 
 
 @pytest.hookimpl(hookwrapper=True)
