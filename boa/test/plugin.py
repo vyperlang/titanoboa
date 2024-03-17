@@ -1,5 +1,4 @@
 import contextlib
-import warnings
 from typing import Generator
 
 import hypothesis
@@ -51,38 +50,30 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker("gas_profile")
 
 
-_fixture_map = {}
 _task_list = set()
+_stack = {}  # preserve the original order of tasks
+_id = 0
 
 
 def pytest_fixture_setup(fixturedef, request):
+    global _id
+    task_id = _id
+    _id += 1
+
     ctx = boa.env.anchor()
-    assert id(fixturedef) not in _fixture_map, "bad invariant"
-    _fixture_map[id(fixturedef)] = ctx
+    _stack[task_id] = ctx
+
     ctx.__enter__()
 
-
-# TODO: maybe use FixtureDef.addfinalizer()?
-def pytest_fixture_post_finalizer(fixturedef, request):
-    fid = id(fixturedef)
-
-    if fid not in _fixture_map:
-        warnings.warn("possible bug in titanoboa! bad fixture tracking", stacklevel=1)
-        return
-
-    # there are outstanding bugs in pytest where the finalizers get
-    # run out of order, so we need to maintain a task list and defer
-    # execution of out-of-order finalizers until all the finalizers
-    # that should have come before them get run.
-    _task_list.add(fid)
-
-    _work_task_list()
+    def finalize():
+        _task_list.add(task_id)
+        _work_task_list()
 
 
 def _work_task_list():
-    while (fid := next(reversed(_fixture_map.keys()), None)) in _task_list:
-        ctx = _fixture_map.pop(fid)
-        _task_list.remove(fid)
+    while (task_id := next(reversed(_stack.keys()), None)) in _task_list:
+        ctx = _stack.pop(task_id)
+        _task_list.remove(task_id)
         ctx.__exit__(None, None, None)
 
 
