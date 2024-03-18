@@ -68,7 +68,7 @@ def test_check_ignore_isolation(boa_contract, setup_ignore_isolation):
     assert boa_contract.b() == addr_constn
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def fixture_isolation_contract():
     code = """
 x: uint256
