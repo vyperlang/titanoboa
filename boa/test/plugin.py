@@ -50,17 +50,33 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker("gas_profile")
 
 
+_task_list = set()
+_stack = {}  # preserve the original order of tasks
+_id = 0
+
+
 def pytest_fixture_setup(fixturedef, request):
+    global _id
+    task_id = _id
+    _id += 1
+
     ctx = boa.env.anchor()
+    _stack[task_id] = ctx
+
     ctx.__enter__()
 
-    def _finalize():
-        ctx.__exit__(None, None, None)
+    def finalize():
+        _task_list.add(task_id)
+        _work_task_list()
 
-    # this depends on pytest 8.2.0 for some cases where fixtures
-    # used to be torn down out of order (fix introduced in
-    # https://github.com/pytest-dev/pytest/pull/11833/)
-    fixturedef.addfinalizer(_finalize)
+    fixturedef.addfinalizer(finalize)
+
+
+def _work_task_list():
+    while (task_id := next(reversed(_stack.keys()), None)) in _task_list:
+        ctx = _stack.pop(task_id)
+        _task_list.remove(task_id)
+        ctx.__exit__(None, None, None)
 
 
 @pytest.hookimpl(hookwrapper=True)
