@@ -69,13 +69,30 @@ def test_check_ignore_isolation(boa_contract, setup_ignore_isolation):
 
 
 @pytest.fixture(scope="function")
-def modify_boa_contract(boa_contract):
-    # these values spill over from the previous test
-    assert boa_contract.a() == 42069
-    assert boa_contract.b() == addr_constn
-    boa_contract.set_vars(boa_contract.a() + 1, boa.env.generate_address())
+def fixture_isolation_contract():
+    code = """
+x: uint256
+
+@external
+def set_x(val: uint256):
+    self.x = val
+
+@external
+def get_x() -> uint256:
+    return self.x
+    """
+    c = boa.loads(code)
+    c.set_x(1)
+    return c
+
+
+@pytest.fixture(scope="function")
+# test fixture isolation. this is a fixture which modifies its input fixture
+def modify_contract(fixture_isolation_contract):
+    assert fixture_isolation_contract.get_x() == 1
+    fixture_isolation_contract.set_x(2)
 
 
 @pytest.mark.parametrize("a", range(10))
-def test_fixture_isolation(modify_boa_contract, a):
-    pass
+def test_fixture_isolation(modify_contract, fixture_isolation_contract, a):
+    assert fixture_isolation_contract.get_x() == 2
