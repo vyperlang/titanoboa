@@ -80,6 +80,55 @@ class ExternalAccount:
         return {"hash": txhash}
 
 
+class Capabilities:
+    def __init__(self, rpc):
+        self._rpc = rpc
+
+    def _get_capability(self, hex_bytecode):
+        try:
+            self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}])
+            return True
+        except RPCError:
+            return False
+
+    @cached_property
+    def has_push0(self):
+        # PUSH0
+        return self._get_capability("0x5f")
+
+    @cached_property
+    def has_mcopy(self):
+        # PUSH1 0 DUP1 DUP1 MCOPY
+        return self._get_capability("0x600080805E")
+
+    @cached_property
+    def has_transient(self):
+        # PUSH1 0 DUP1 TLOAD
+        return self._get_capability("0x60005C")
+
+    @cached_property
+    def has_cancun(self):
+        return self.has_shanghai and self.has_mcopy and self.has_transient
+
+    @cached_property
+    def has_shanghai(self):
+        return self.has_push0
+
+    def describe_capabilities(self):
+        if not self.has_shanghai:
+            return "pre-shanghai"
+        if not self.has_cancun:
+            return "shanghai"
+        return "cancun"
+
+    def check_evm_version(self, evm_version):
+        if evm_version == "cancun":
+            return self.has_cancun
+        if evm_version == "shanghai":
+            return self.has_shanghai
+        return True
+
+
 class NetworkEnv(Env):
     """
     An Env object which can be swapped in via `boa.set_env()`.
@@ -111,6 +160,7 @@ class NetworkEnv(Env):
         self._gas_price = None
 
         self.tx_settings = TransactionSettings()
+        self.capabilities = Capabilities(rpc)
 
     @cached_property
     def _rpc_has_snapshot(self):
