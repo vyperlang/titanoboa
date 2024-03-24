@@ -97,8 +97,8 @@ struct Test:
 @view
 def test(_a: DynArray[uint256, 100]) -> ((DynArray[Test, 2], uint256), uint256):
     first: DynArray[Test, 2] = [
-        Test({address: msg.sender, number: _a[0]}),
-        Test({address: msg.sender, number: _a[1]}),
+        Test(address=msg.sender, number=_a[0]),
+        Test(address=msg.sender, number=_a[1]),
     ]
     return (first, _a[2]), _a[3]
     """
