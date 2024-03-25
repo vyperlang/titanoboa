@@ -36,5 +36,14 @@ def test_given(value):
 
 
 def test_kwargs_raises():
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError) as e:
         strategy("(uint,uint)", exclude=[(1, 2)])
+    assert "_tuple_strategy() got an unexpected keyword argument 'exclude'" == str(
+        e.value
+    )
+
+
+def test_bad_type_raises():
+    with pytest.raises(ValueError) as e:
+        strategy("tuple")
+    assert "No strategy available for type: tuple" == str(e.value)

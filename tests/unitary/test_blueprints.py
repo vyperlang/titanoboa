@@ -1,3 +1,4 @@
+import pytest
 from eth_utils import to_canonical_address
 
 import boa
@@ -24,10 +25,16 @@ def test_create2_address():
 
     child_contract_address = factory.create_child(blueprint.address, salt)
 
-    # TODO: make a util function on boa.env to get code
-    blueprint_bytecode = boa.env.vm.state.get_code(
-        to_canonical_address(blueprint.address)
-    )
+    blueprint_bytecode = boa.env.get_code(to_canonical_address(blueprint.address))
     assert child_contract_address == get_create2_address(
         blueprint_bytecode, factory.address, salt
     )
+
+
+def test_create2_address_bad_salt():
+    blueprint = boa.loads_partial(blueprint_code).deploy_as_blueprint()
+    blueprint_bytecode = boa.env.get_code(to_canonical_address(blueprint.address))
+    with pytest.raises(ValueError) as e:
+        get_create2_address(blueprint_bytecode, blueprint.address, salt=b"")
+
+    assert str(e.value) == "bad salt (must be bytes32): b''"

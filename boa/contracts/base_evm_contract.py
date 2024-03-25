@@ -24,7 +24,7 @@ class _BaseEVMContract:
         self._address = address  # this can be overridden by subclasses
         self.filename = filename
 
-    def stack_trace(self, computation: ComputationAPI):
+    def stack_trace(self, computation: ComputationAPI):  # pragma: no cover
         raise NotImplementedError
 
     def handle_error(self, computation):

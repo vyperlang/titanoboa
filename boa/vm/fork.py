@@ -2,13 +2,6 @@ import os
 import sys
 from typing import Any, Type
 
-from requests import HTTPError
-
-try:
-    import ujson as json
-except ImportError:
-    import json  # type: ignore
-
 import rlp
 from eth.db.account import AccountDB, keccak
 from eth.db.backends.memory import MemoryDB
@@ -18,8 +11,9 @@ from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth.vm.message import Message
 from eth_utils import int_to_big_endian, to_canonical_address, to_checksum_address
+from requests import HTTPError
 
-from boa.rpc import RPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
+from boa.rpc import RPC, RPCError, fixup_dict, json, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
 
 TIMEOUT = 60  # default timeout for http requests in seconds

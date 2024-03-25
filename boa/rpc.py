@@ -6,7 +6,7 @@ import requests
 
 try:
     import ujson as json
-except ImportError:
+except ImportError:  # pragma: no cover
     import json  # type: ignore
 
 TIMEOUT = 60  # default timeout for http requests in seconds
@@ -63,20 +63,22 @@ class RPC:
     """
 
     @property
-    def identifier(self) -> str:
+    def identifier(self) -> str:  # pragma: no cover
         raise NotImplementedError
 
     @property
-    def name(self) -> str:
+    def name(self) -> str:  # pragma: no cover
         raise NotImplementedError
 
     def fetch_uncached(self, method, params):
         return self.fetch(method, params)
 
-    def fetch(self, method: str, params: Any) -> Any:
+    def fetch(self, method: str, params: Any) -> Any:  # pragma: no cover
         raise NotImplementedError
 
-    def fetch_multi(self, payloads: list[tuple[str, Any]]) -> list[Any]:
+    def fetch_multi(
+        self, payloads: list[tuple[str, Any]]
+    ) -> list[Any]:  # pragma: no cover
         raise NotImplementedError
 
     def wait_for_tx_receipt(self, tx_hash, timeout: float, poll_latency=0.25):
