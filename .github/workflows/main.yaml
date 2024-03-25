@@ -42,6 +42,7 @@ jobs:
           --cov-append
           --cov-report term-missing:skip-covered
           --cov-fail-under=78
+          -nauto
           tests/unitary/
 
   anvil:
