@@ -7,7 +7,7 @@ import contextlib
 import logging
 import sys
 import warnings
-from typing import Any, Iterator, Optional, Type
+from typing import Any, Iterator, Optional, Tuple, Type
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -368,8 +368,8 @@ class FakeMessage(Message):
 class PyEVM:
     def __init__(self, env, fast_mode_enabled: bool):
         self.chain = _make_chain()
-        self.sha3_trace = {}
-        self.sstore_trace = {}
+        self.sha3_trace: dict = {}
+        self.sstore_trace: dict = {}
         self.env = env
         self._init_vm(
             env, AccountDB, reset_traces=True, fast_mode_enabled=fast_mode_enabled
@@ -387,7 +387,7 @@ class PyEVM:
 
         self.vm.patch = VMPatcher(self.vm)
 
-        c = type(
+        c: Type[titanoboa_computation] = type(
             "TitanoboaComputation",
             (titanoboa_computation, self.vm.state.computation_class),
             {"env": env},
@@ -471,13 +471,13 @@ class PyEVM:
     def reset_access_counters(self):
         self.vm.state._account_db._reset_access_counters()
 
-    def snapshot(self) -> (Hash32, JournalDBCheckpoint):
+    def snapshot(self) -> Tuple[Hash32, JournalDBCheckpoint]:
         return self.vm.state.snapshot()
 
     def anchor(self):
         return self.vm.patch.anchor()
 
-    def revert(self, snapshot_id: (Hash32, JournalDBCheckpoint)) -> None:
+    def revert(self, snapshot_id: Tuple[Hash32, JournalDBCheckpoint]) -> None:
         self.vm.state.revert(snapshot_id)
 
     def generate_contract_address(self, sender: Address):
