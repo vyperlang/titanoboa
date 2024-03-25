@@ -56,11 +56,4 @@ def test_raise_exception(simple_contract, t):
         simple_contract.raise_exception(t)
 
 
-def test_failed_transaction():
-    with pytest.raises(RuntimeError) as ctx:
-        boa.loads(code, STARTING_SUPPLY, gas=149377)
-    error = str(ctx.value)
-    assert error.startswith("txn failed:")
-
-
 # XXX: probably want to test deployment revert behavior

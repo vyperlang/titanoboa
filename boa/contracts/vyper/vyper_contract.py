@@ -160,7 +160,6 @@ class VyperBlueprint(_BaseVyperContract):
         override_address=None,
         blueprint_preamble=b"\xFE\x71\x00",
         filename=None,
-        gas=None,
     ):
         # note slight code duplication with VyperContract ctor,
         # maybe use common base class?
@@ -178,7 +177,7 @@ class VyperBlueprint(_BaseVyperContract):
         deploy_bytecode += blueprint_bytecode
 
         addr, self.bytecode = self.env.deploy_code(
-            bytecode=deploy_bytecode, override_address=override_address, gas=gas
+            bytecode=deploy_bytecode, override_address=override_address
         )
 
         self._address = Address(addr)
@@ -473,7 +472,6 @@ class VyperContract(_BaseVyperContract):
         skip_initcode=False,
         created_from: Address = None,
         filename: str = None,
-        gas=None,
     ):
         super().__init__(compiler_data, env, filename)
 
@@ -494,7 +492,7 @@ class VyperContract(_BaseVyperContract):
         if skip_initcode:
             addr = Address(override_address)
         else:
-            addr = self._run_init(*args, override_address=override_address, gas=gas)
+            addr = self._run_init(*args, override_address=override_address)
         self._address = addr
 
         for fn_name, fn in external_fns.items():
@@ -515,14 +513,14 @@ class VyperContract(_BaseVyperContract):
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, override_address=None, gas=None):
+    def _run_init(self, *args, override_address=None):
         encoded_args = b""
         if self._ctor:
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
         addr, self.bytecode = self.env.deploy_code(
-            bytecode=initcode, override_address=override_address, gas=gas
+            bytecode=initcode, override_address=override_address
         )
         return Address(addr)
 

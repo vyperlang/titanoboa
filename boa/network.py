@@ -419,8 +419,6 @@ class NetworkEnv(Env):
         print(f"tx broadcasted: {tx_hash}")
 
         receipt = self._rpc.wait_for_tx_receipt(tx_hash, self.tx_settings.poll_timeout)
-        if receipt["status"] != "0x1":
-            raise RuntimeError(f"txn failed: {receipt}")
 
         trace = None
         if self._tracer is not None:
