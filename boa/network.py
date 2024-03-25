@@ -127,7 +127,7 @@ class NetworkEnv(Env):
         if not self._rpc_has_snapshot:
             raise RuntimeError("RPC does not have `evm_snapshot` capability!")
         try:
-            blkid = self.vm.state._account_db._block_id
+            block_id = self.evm.block_id
             snapshot_id = self._rpc.fetch("evm_snapshot", [])
             yield
             # note we cannot call super.anchor() because vm/accountdb fork
@@ -135,7 +135,7 @@ class NetworkEnv(Env):
         finally:
             self._rpc.fetch("evm_revert", [snapshot_id])
             # wipe forked state
-            self._reset_fork(blkid)
+            self._reset_fork(block_id)
 
     # add account, or "Account-like" object. MUST expose
     # `sign_transaction` or `send_transaction` method!
@@ -192,10 +192,10 @@ class NetworkEnv(Env):
         # non eip-1559 transaction
         return tuple(self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])]))
 
-    def _check_sender(self, address):
+    def _check_sender(self, address: Address):
         if address is None:
             raise ValueError("No sender!")
-        return Address(address)
+        return address
 
     # OVERRIDES
     def execute_code(
@@ -370,7 +370,6 @@ class NetworkEnv(Env):
             block_identifier=block_identifier,
             cache_file=None,
         )
-        self.vm.state._account_db._rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = fixup_dict(
