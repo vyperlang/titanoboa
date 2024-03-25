@@ -28,6 +28,22 @@ _Contract = Union[VyperContract, VyperBlueprint]
 _disk_cache = None
 
 
+def set_cache_dir(cache_dir="~/.cache/titanoboa"):
+    global _disk_cache
+    if cache_dir is None:
+        _disk_cache = None
+        return
+    compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
+    _disk_cache = DiskCache(cache_dir, compiler_version)
+
+
+def disable_cache():
+    set_cache_dir(None)
+
+
+set_cache_dir()  # enable caching, by default!
+
+
 class BoaImporter(MetaPathFinder):
     def find_spec(self, fullname, path, target=None):
         path = Path(fullname.replace(".", "/")).with_suffix(".vy")
@@ -57,15 +73,6 @@ class BoaLoader(SourceFileLoader):
 
 
 sys.meta_path.append(BoaImporter())
-
-
-def set_cache_dir(cache_dir="~/.cache/titanoboa"):
-    global _disk_cache
-    if cache_dir is None:
-        _disk_cache = None
-        return
-    compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
-    _disk_cache = DiskCache(cache_dir, compiler_version)
 
 
 def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerData:
