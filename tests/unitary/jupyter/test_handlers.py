@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from boa.integrations.jupyter.constants import SHARED_MEMORY_LENGTH
+from boa.integrations.jupyter.constants import SHARED_MEMORY_LENGTH, TOKEN_REGEX
 from boa.integrations.jupyter.handlers import CallbackHandler, setup_handlers
 
 
@@ -30,7 +30,7 @@ def test_setup_handlers(server_app_mock):
         "host_pattern": ".*$",
         "host_handlers": [
             (
-                "/base_url/titanoboa_jupyterlab/callback/(titanoboa_jupyterlab_[0-9a-fA-F]{64})$",
+                f"/base_url/titanoboa_jupyterlab/callback/({TOKEN_REGEX})$",
                 CallbackHandler,
             )
         ],
