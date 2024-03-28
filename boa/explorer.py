@@ -1,9 +1,12 @@
 import json
 from typing import Optional
 
-import requests
-
-SESSION = requests.Session()
+try:
+    import requests_cache
+    SESSION = requests_cache.CachedSession(expire_after=24*60*7)
+except ImportError:
+    import requests
+    SESSION = requests.Session()
 
 
 def _fetch_etherscan(uri: str, api_key: Optional[str] = None, **params) -> dict:
