@@ -18,7 +18,7 @@ dependencies = [
     "vyper @ git+https://github.com/vyperlang/vyper.git@master",
     "eth-stdlib>=0.2.7,<0.3.0",
     "eth-abi",
-    "py-evm>=0.7.0a4",
+    "py-evm>=0.10.0b4",
     "eth-typing",
     "hypothesis",
     "pytest",

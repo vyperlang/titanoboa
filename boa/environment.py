@@ -50,6 +50,7 @@ class VMPatcher:
         "prev_hashes": "_prev_hashes",
         "chain_id": "_chain_id",
         "gas_limit": "_gas_limit",
+        "prevrandao": "_mix_hash",
     }
 
     _cmp_patchables = {"code_size_limit": "EIP170_CODE_SIZE_LIMIT"}
@@ -292,8 +293,8 @@ class titanoboa_computation:
 
     # hijack creations to automatically generate blueprints
     @classmethod
-    def apply_create_message(cls, state, msg, tx_ctx):
-        computation = super().apply_create_message(state, msg, tx_ctx)
+    def apply_create_message(cls, state, msg, tx_ctx, **kwargs):
+        computation = super().apply_create_message(state, msg, tx_ctx, **kwargs)
 
         bytecode = msg.code
         # cf. eth/vm/logic/system/Create* opcodes
@@ -311,7 +312,7 @@ class titanoboa_computation:
         return computation
 
     @classmethod
-    def apply_computation(cls, state, msg, tx_ctx):
+    def apply_computation(cls, state, msg, tx_ctx, **kwargs):
         addr = msg.code_address
         contract = cls.env._lookup_contract_fast(addr) if addr else None
 
@@ -325,7 +326,7 @@ class titanoboa_computation:
 
         if contract is None or not cls.env._fast_mode_enabled:
             # print("SLOW MODE")
-            computation = super().apply_computation(state, msg, tx_ctx)
+            computation = super().apply_computation(state, msg, tx_ctx, **kwargs)
             return finalize(computation)
 
         with cls(state, msg, tx_ctx) as computation:
