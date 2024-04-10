@@ -8,7 +8,10 @@ dist/
 .hypothesis/
 .idea/
 .pytest_cache
+
+# pythen virtual environments
 venv/
+.venv/
 *.env
 
 .coverage
