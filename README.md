@@ -10,7 +10,28 @@ Titanoboa achieves feature parity with the vyper compiler while providing an int
 
 Usage and quickstart are [below](#usage-quick-start). For more detailed documentation, please see the [documentation](https://titanoboa.readthedocs.io/en/latest/index.html).
 
-## Installation
+## Setup dev environment
+Clone titanoboa git repo and change into the newly created directory.
+
+Create python virtual environment inside titanoboa folder
+```
+python -m venv .venv
+```
+Switch to virtual envrionment
+```
+source .venv/bin/activate
+```
+Upgrade pip
+```
+pip install --upgrade pip
+```
+
+Install package dependencies
+```
+pip install -r dev-requirements.txt 
+```
+
+## Alternative Installation
 ```
 pip install titanoboa
 ```
