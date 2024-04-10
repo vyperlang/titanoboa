@@ -34,7 +34,8 @@ class ABIFunction:
 
     @property
     def name(self) -> str:
-        return self._abi["name"]
+        # note: the `constructor` definition does not have a name
+        return self._abi.get("name") or self._abi["type"]
 
     @cached_property
     def argument_types(self) -> list:
@@ -62,6 +63,8 @@ class ABIFunction:
 
     @cached_property
     def method_id(self) -> bytes:
+        if self._abi["type"] == "constructor":
+            return b""  # constructors don't have method IDs
         return method_id(self.name + self.signature)
 
     def __repr__(self) -> str:
