@@ -9,7 +9,7 @@ dist/
 .idea/
 .pytest_cache
 
-# pythen virtual environments
+# Python virtual environments
 venv/
 .venv/
 *.env
