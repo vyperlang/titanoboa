@@ -17,11 +17,4 @@ sphinx-rtd-theme
 jupyter_server
 nest_asyncio
 
-eth-stdlib>=0.2.7,<0.3.0
-eth-abi>=5.1.0
-eth-typing>=4.1.0
-eth-utils>=4.1.0
-eth-account>=0.12.1
-vyper==0.3.10
-py-evm>=0.10.0b4
-rich
+

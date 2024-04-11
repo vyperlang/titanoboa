@@ -6,31 +6,23 @@ A [Vyper](https://github.com/vyperlang/vyper) interpreter with pretty tracebacks
 
 Titanoboa achieves feature parity with the vyper compiler while providing an interpreted experience. How does it do this? Internally, titanoboa uses vyper as a library to compile source code to bytecode, and then runs the bytecode using [py-evm](https://github.com/ethereum/py-evm), adding instrumenting hooks to provide introspection. The use of `py-evm` means that the entire experience is highly configurable, down to the ability to patch opcodes and precompiles at the EVM level.
 
-## Documentation
+## Origin of name
 
-Usage and quickstart are [below](#usage-quick-start). For more detailed documentation, please see the [documentation](https://titanoboa.readthedocs.io/en/latest/index.html).
+Titanoboa (/ˌtaɪtənəˈboʊə/;[1] lit. 'titanic boa') is an extinct genus of very large snakes that lived in what is now La Guajira in northeastern Colombia. They could grow up to 12.8 m (42 ft), perhaps even 14.3 m (47 ft) long and reach a body mass of 730–1,135 kg (1,610–2,500 lb). This snake lived during the Middle to Late Paleocene epoch, around 60 to 58 million years ago, following the extinction of all non-avian dinosaurs. Although originally thought to be an apex predator, the discovery of skull bones revealed that it was more than likely specialized in preying on fish. The only known species is Titanoboa cerrejonensis, the largest snake ever discovered,[2] which supplanted the previous record holder, Gigantophis garstini.[3]
 
-## Setup dev environment
-Clone the titanoboa git repository and change into the newly created directory.
+# Documentation
 
-Create python virtual environment inside titanoboa folder
-```
-python -m venv .venv
-```
-Switch to virtual envrionment
-```
-source .venv/bin/activate
-```
-Upgrade pip
-```
-pip install --upgrade pip
-```
+Content
+- [Usage and quickstart guide](#usage-quick-start)
+- [Details on setup of development environment](#initial-preparation)
+- [Notes and performance hints](#notes-and-performance-hints)
 
-Install package dependencies
-```
-pip install .
-pip install -r dev-requirements.txt 
-```
+
+External links
+- [Detailed documentation on readthedoc.io](https://titanoboa.readthedocs.io/en/latest/index.html)
+- [Titanoboa on PyPi](https://pypi.org/project/titanoboa/)
+- [GitHub project](https://github.com/vyperlang/titanoboa)
+
 
 ## Install as dependency
 ```
@@ -42,23 +34,6 @@ For latest dev version:
 pip install git+https://github.com/vyperlang/titanoboa
 ```
 
-
-If you are installing titanoboa from git alongside brownie, you may have to manually install titanoboa *after* installing brownie
-
-```
-pip install brownie
-pip install git+https://github.com/vyperlang/titanoboa
-```
-
-Sometimes, using [pypy](https://www.pypy.org/download.html) can result in a substantial performance improvement for computation heavy contracts. `Pypy` can usually be used as a drop-in replacement for `CPython`.
-
-To get a performance boost for mainnet forking, install with the `forking-recommended` extra (`pip install "git+https://github.com/vyperlang/titanoboa#egg=titanoboa[forking-recommended]"`, or `pip install titanoboa[forking-recommended]`). This installs `plyvel` to cache RPC results between sessions, and `ujson` which improves json performance.
-
-If you are running titanoboa on a local [Vyper](https://github.com/vyperlang/vyper) project folder, you might need to run `python setup.py install` on your [Vyper](https://github.com/vyperlang/vyper) project if you encounter errors such as `ModuleNotFoundError: No module named 'vyper.version'`
-
-## Background
-
-Titanoboa (/ˌtaɪtənəˈboʊə/;[1] lit. 'titanic boa') is an extinct genus of very large snakes that lived in what is now La Guajira in northeastern Colombia. They could grow up to 12.8 m (42 ft), perhaps even 14.3 m (47 ft) long and reach a body mass of 730–1,135 kg (1,610–2,500 lb). This snake lived during the Middle to Late Paleocene epoch, around 60 to 58 million years ago, following the extinction of all non-avian dinosaurs. Although originally thought to be an apex predator, the discovery of skull bones revealed that it was more than likely specialized in preying on fish. The only known species is Titanoboa cerrejonensis, the largest snake ever discovered,[2] which supplanted the previous record holder, Gigantophis garstini.[3]
 
 ## Usage / Quick Start
 
@@ -237,3 +212,82 @@ You can use Jupyter to execute titanoboa code in network mode from your browser 
 ```bash
 $ python -m tests.integration.sim_veYFI
 ```
+
+
+# Appendix
+
+## Detailed setup of development environment
+
+### Requirements
+- Python 3.11
+- git
+
+### Initial preparation 
+Clone the titanoboa git repository and change into the newly created directory.
+```bash
+# clone
+git clone https://github.com/vyperlang/titanoboa.git
+cd titanoboa
+
+# Create python virtual environment inside titanoboa folder
+python -m venv .venv
+```
+Your environment is ready for coding or testing now. 
+
+### Preparation of each coding session
+```bash
+# Switch to virtual envrionment
+source .venv/bin/activate
+
+# Upgrade pip (every now an then)
+pip install --upgrade pip
+
+# Install or upgrade package dependencies (every now an then)
+pip install .
+pip install -r dev-requirements.txt
+
+# Leaving the virtual envrionment when you are done
+deactivate
+```
+
+## Notes and performance hints
+### Brownie and Titanoboa
+
+If you are installing titanoboa from git alongside brownie, you may have to manually install **brownie before titanoboa**:
+
+
+```
+pip install brownie
+pip install git+https://github.com/vyperlang/titanoboa
+```
+
+### Vyper version errors 
+If you are running titanoboa on a local **vyper project folder** and encounter errors in your vyper project such as `ModuleNotFoundError: No module named 'vyper.version'`, 
+you might need to run 
+```
+python setup.py install
+``` 
+See also [Vyper](https://github.com/vyperlang/vyper) on GitHub.
+
+
+### Contract computation performance
+Sometimes, using PyPy can result in a substantial performance improvement for computation heavy contracts. **PyPy** can usually be used as a drop-in replacement for **CPython**.
+
+See also [PyPy documentation](https://www.pypy.org/download.html). 
+
+
+### Mainnet forking performance
+To get a performance boost for mainnet forking, install with the `forking-recommended` extra:
+
+```
+ pip install titanoboa[forking-recommended]
+ ``` 
+
+ or for latest dev version:
+
+ ```
+ pip install git+https://github.com/vyperlang/titanoboa#egg=titanoboa[forking-recommended]
+ ```
+  
+ `forking-recommended` installs **plyvel** to cache RPC results between sessions, and **ujson** which improves json performance.
+

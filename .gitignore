@@ -14,5 +14,8 @@ venv/
 .venv/
 *.env
 
+# Visual Code
+.vscode/
+
 .coverage
 .coverage.*
