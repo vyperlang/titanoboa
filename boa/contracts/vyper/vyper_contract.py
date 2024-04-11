@@ -371,53 +371,47 @@ class StorageVar:
         self.slot = slot
         self.typ = typ
 
-    def _decode(self, slot, typ, truncate_limit=None):
+    def _decode_storage(self, slot, typ, truncate_limit=None):
         n = typ.memory_bytes_required
         if truncate_limit is not None and n > truncate_limit:
             return None  # indicate failure to caller
 
         fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
-        return decode_vyper_object(fakemem, typ)
-
-    def _dealias(self, maybe_address):
-        try:
-            return self.contract.env.lookup_alias(maybe_address)
-        except KeyError:  # not found, return the input
-            return maybe_address
+        return self.contract._decode(fakemem, typ)
 
     def get(self, truncate_limit=None):
-        if isinstance(self.typ, HashMapT):
-            ret = {}
-            for k in self.contract.env.sstore_trace.get(self.addr, {}):
-                path = unwrap_storage_key(self.contract.env.sha3_trace, k)
-                if to_int(path[0]) != self.slot:
-                    continue
+        if not isinstance(self.typ, HashMapT):
+            return self._decode_storage(self.slot, self.typ, truncate_limit)
 
-                path = path[1:]  # drop the slot
-                path_t = []
+        ret = {}
+        for k in self.contract.env.sstore_trace.get(self.addr, {}):
+            path = unwrap_storage_key(self.contract.env.sha3_trace, k)
+            if to_int(path[0]) != self.slot:
+                continue
 
-                ty = self.typ
-                for i, p in enumerate(path):
-                    path[i] = decode_vyper_object(memoryview(p), ty.key_type)
-                    path_t.append(ty.key_type)
-                    ty = ty.value_type
+            path = path[1:]  # drop the slot
+            path_t = []
 
-                val = self._decode(k, ty, truncate_limit)
+            ty = self.typ
+            for i, p in enumerate(path):
+                path[i] = self.contract._decode(memoryview(p), ty.key_type)
+                path_t.append(ty.key_type)
+                ty = ty.value_type
 
-                # set val only if value is nonzero
-                if val:
-                    # decode aliases as needed/possible
-                    dealiased_path = []
-                    for p, t in zip(path, path_t):
-                        if isinstance(t, AddressT):
-                            p = self._dealias(p)
-                        dealiased_path.append(p)
-                    setpath(ret, dealiased_path, val)
+            val = self._decode_storage(k, ty, truncate_limit)
 
-            return ret
+            # set val only if value is nonzero
+            if val:
+                # decode aliases as needed/possible
+                dealiased_path = []
+                for p, t in zip(path, path_t):
+                    if isinstance(t, AddressT):
+                        p = self.contract._dealias(p)
+                    dealiased_path.append(p)
+                setpath(ret, dealiased_path, val)
 
-        else:
-            return self._decode(self.slot, self.typ, truncate_limit)
+        return ret
+
 
 
 # data structure to represent the storage variables in a contract
@@ -451,7 +445,7 @@ class ImmutablesModel:
             if v.is_immutable:  # check that v
                 ofst = compiler_data.storage_layout["code_layout"][k]["offset"]
                 immutable_raw_bytes = data_section[ofst:]
-                value = decode_vyper_object(immutable_raw_bytes, v.typ)
+                value = contract._decode(immutable_raw_bytes, v.typ)
                 setattr(self, k, value)
 
     def dump(self):
@@ -555,6 +549,18 @@ class VyperContract(_BaseVyperContract):
 
         return ret
 
+    def _dealias(self, maybe_address):
+        try:
+            return self.env.lookup_alias(maybe_address)
+        except KeyError:  # not found, return the input
+            return maybe_address
+
+    def _decode(mem, typ):
+        ret = decode_vyper_object(mem, typ)
+        if isinstance(typ, AddressT):
+            return f"address \"{self._dealias(ret)}\""
+        return ret
+
     @cached_property
     def _immutables(self):
         return ImmutablesModel(self)
@@ -590,14 +596,14 @@ class VyperContract(_BaseVyperContract):
         mem = computation._memory
         frame_detail = FrameDetail(fn.name)
 
-        # ensure memory is initialized for `decode_vyper_object()`
+        # ensure memory is initialized for `self._decode()`
         mem.extend(frame_info.frame_start, frame_info.frame_size)
         for k, v in frame_info.frame_vars.items():
             if v.location.name != "memory":
                 continue
             ofst = v.pos
             size = v.typ.memory_bytes_required
-            frame_detail[k] = decode_vyper_object(mem.read(ofst, size), v.typ)
+            frame_detail[k] = self._decode(mem.read(ofst, size), v.typ)
 
         return frame_detail
 
