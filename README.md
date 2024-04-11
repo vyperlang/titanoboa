@@ -32,7 +32,7 @@ pip install .
 pip install -r dev-requirements.txt 
 ```
 
-## Alternative Installation
+## Install as dependency
 ```
 pip install titanoboa
 ```
