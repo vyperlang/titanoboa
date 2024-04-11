@@ -28,6 +28,7 @@ pip install --upgrade pip
 
 Install package dependencies
 ```
+pip install .
 pip install -r dev-requirements.txt 
 ```
 
