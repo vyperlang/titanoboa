@@ -11,7 +11,7 @@ Titanoboa achieves feature parity with the vyper compiler while providing an int
 Usage and quickstart are [below](#usage-quick-start). For more detailed documentation, please see the [documentation](https://titanoboa.readthedocs.io/en/latest/index.html).
 
 ## Setup dev environment
-Clone titanoboa git repo and change into the newly created directory.
+Clone the titanoboa git repository and change into the newly created directory.
 
 Create python virtual environment inside titanoboa folder
 ```
