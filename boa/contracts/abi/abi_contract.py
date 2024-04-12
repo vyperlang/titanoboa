@@ -218,7 +218,7 @@ class ABIContract(_BaseEVMContract):
     def __init__(
         self,
         name: str,
-        abi: dict,
+        abi: list[dict],
         functions: list[ABIFunction],
         address: Address,
         filename: Optional[str] = None,
@@ -311,7 +311,7 @@ class ABIContractFactory:
     def __init__(
         self,
         name: str,
-        abi: dict,
+        abi: list[dict],
         functions: list[ABIFunction],
         filename: Optional[str] = None,
     ):
