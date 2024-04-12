@@ -168,7 +168,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     :return: The result of the Javascript snippet sent to the API.
     """
     token = _generate_token()
-    args_str = ", ".join(json.dumps(p) for p in chain([token], args))
+    args_str = ", ".join(json.dumps(p, cls=_BytesEncoder) for p in chain([token], args))
     js_code = f"window._titanoboa.{js_func}({args_str});"
     # logging.warning(f"Calling {js_func} with {args_str}")
 
@@ -228,3 +228,10 @@ def _parse_js_result(result: dict) -> Any:
     raise RPCError(
         message=error.get("message", error), code=error.get("code", "CALLBACK_ERROR")
     )
+
+
+class _BytesEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, bytes):
+            return "0x" + o.hex()
+        return super().default(o)

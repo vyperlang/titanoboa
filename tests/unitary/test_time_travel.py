@@ -9,7 +9,7 @@ def test_no_inputs():
 
 
 def test_block_travel():
-    state = boa.env.vm.state
+    state = boa.env.evm.vm.state
     old_block = state.block_number
     old_timestamp = state.timestamp
     boa.env.time_travel(blocks=420)
@@ -18,7 +18,7 @@ def test_block_travel():
 
 
 def test_seconds_travel():
-    state = boa.env.vm.state
+    state = boa.env.evm.vm.state
     old_timestamp = state.timestamp
     old_block = state.block_number
     boa.env.time_travel(seconds=69)
