@@ -15,7 +15,7 @@ import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
 from vyper.ast.parse import parse_to_ast
-from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
+from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import (
     generate_ir_for_external_function,
     generate_ir_for_internal_function,
@@ -25,8 +25,7 @@ from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
 from vyper.compiler.output import build_abi_output
-from vyper.compiler.settings import OptimizationLevel
-from vyper.evm.opcodes import anchor_evm_version
+from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.types import AddressT, HashMapT, TupleT
@@ -45,7 +44,6 @@ from boa.contracts.vyper.ast_utils import (
 )
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
-    anchor_compiler_settings,
     compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
@@ -78,7 +76,7 @@ class VyperDeployer:
 
         # force compilation so that if there are any errors in the contract,
         # we fail at load rather than at deploy time.
-        with anchor_compiler_settings(self.compiler_data):
+        with anchor_settings(self.compiler_data.settings):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
         self.filename = filename
@@ -140,7 +138,7 @@ class _BaseVyperContract(_BaseEVMContract):
         super().__init__(env, filename)
         self.compiler_data = compiler_data
 
-        with anchor_compiler_settings(self.compiler_data):
+        with anchor_settings(self.compiler_data.settings):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
     @cached_property
@@ -615,7 +613,7 @@ class VyperContract(_BaseVyperContract):
     @property
     def source_map(self):
         if self._source_map is None:
-            with anchor_compiler_settings(self.compiler_data):
+            with anchor_settings(self.compiler_data.settings):
                 _, self._source_map = compile_ir.assembly_to_evm(
                     self.compiler_data.assembly_runtime
                 )
@@ -785,7 +783,7 @@ class VyperContract(_BaseVyperContract):
     # eliminator might prune a dead function (which we want to eval)
     @cached_property
     def unoptimized_assembly(self):
-        with anchor_evm_version(self.compiler_data.settings.evm_version):
+        with anchor_settings(self.compiler_data.settings):
             runtime = self.unoptimized_ir[1]
             return compile_ir.compile_to_assembly(
                 runtime, optimize=OptimizationLevel.NONE
@@ -805,7 +803,7 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def unoptimized_bytecode(self):
-        with anchor_evm_version(self.compiler_data.settings.evm_version):
+        with anchor_settings(self.compiler_data.settings):
             s, _ = compile_ir.assembly_to_evm(
                 self.unoptimized_assembly, insert_vyper_signature=True
             )
@@ -813,15 +811,15 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def unoptimized_ir(self):
-        with anchor_opt_level(OptimizationLevel.NONE), anchor_evm_version(
-            self.compiler_data.settings.evm_version
-        ):
+        settings = self.compiler_data.settings.copy()
+        settings.optimize = OptimizationLevel.NONE
+        with anchor_settings(settings):
             return generate_ir_for_module(self.module_t)
 
     @cached_property
     def ir_executor(self):
         _, ir_runtime = self.unoptimized_ir
-        with anchor_evm_version(self.compiler_data.settings.evm_version):
+        with anchor_settings(self.compiler_data.settings):
             return executor_from_ir(ir_runtime, self.compiler_data)
 
     @contextlib.contextmanager

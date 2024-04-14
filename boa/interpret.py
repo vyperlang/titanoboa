@@ -16,11 +16,11 @@ from vyper.compiler.input_bundle import (
     FilesystemInputBundle,
 )
 from vyper.compiler.phases import CompilerData
+from vyper.compiler.settings import anchor_settings
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
-from boa.contracts.vyper.compiler_utils import anchor_compiler_settings
 from boa.contracts.vyper.vyper_contract import (
     VyperBlueprint,
     VyperContract,
@@ -141,7 +141,7 @@ def compiler_data(
     if _disk_cache is None:
         return ret
 
-    with anchor_compiler_settings(ret):
+    with anchor_settings(ret.settings):
         # note that this actually parses and analyzes all dependencies,
         # even if they haven't changed. an optimization would be to
         # somehow convince vyper (in ModuleAnalyzer) to get the module_t
@@ -150,7 +150,7 @@ def compiler_data(
     fingerprint = get_module_fingerprint(module_t)
 
     def get_compiler_data():
-        with anchor_compiler_settings(ret):
+        with anchor_settings(ret.settings):
             # force compilation to happen so DiskCache will cache the compiled artifact:
             _ = ret.bytecode, ret.bytecode_runtime
         return ret

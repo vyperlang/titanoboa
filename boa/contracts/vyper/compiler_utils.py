@@ -1,17 +1,15 @@
-import contextlib
 import textwrap
 
 import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
 from vyper.ast.parse import parse_to_ast
-from vyper.codegen.core import anchor_opt_level
 from vyper.codegen.function_definitions import (
     generate_ir_for_external_function,
     generate_ir_for_internal_function,
 )
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import _runtime_reachable_functions
-from vyper.evm.opcodes import anchor_evm_version
+from vyper.compiler.settings import anchor_settings
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.utils import get_exact_type_from_node
@@ -20,13 +18,6 @@ from boa.contracts.vyper.ir_executor import executor_from_ir
 
 # id used internally for method id name
 _METHOD_ID_VAR = "_calldata_method_id"
-
-
-@contextlib.contextmanager
-def anchor_compiler_settings(compiler_data):
-    settings = compiler_data.settings
-    with anchor_opt_level(settings.optimize), anchor_evm_version(settings.evm_version):
-        yield
 
 
 def compile_vyper_function(vyper_function, contract):
@@ -39,7 +30,7 @@ def compile_vyper_function(vyper_function, contract):
 
     compiler_data = contract.compiler_data
 
-    with anchor_compiler_settings(compiler_data):
+    with anchor_settings(compiler_data.settings):
         module_t = contract.module_t
         ast = parse_to_ast(vyper_function)
 
