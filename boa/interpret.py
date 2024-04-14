@@ -16,7 +16,7 @@ from vyper.compiler.input_bundle import (
     FilesystemInputBundle,
 )
 from vyper.compiler.phases import CompilerData
-from vyper.compiler.settings import anchor_settings
+from vyper.compiler.settings import anchor_settings, Settings
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
@@ -137,7 +137,8 @@ def compiler_data(
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
-    ret = CompilerData(file_input, input_bundle, **kwargs)
+    settings = Settings(**kwargs)
+    ret = CompilerData(file_input, input_bundle, settings)
     if _disk_cache is None:
         return ret
 
