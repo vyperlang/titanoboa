@@ -7,7 +7,7 @@ import contextlib
 import logging
 import sys
 import warnings
-from typing import Any, Iterator, Optional, Tuple, Type
+from typing import Any, Iterator, Optional, Type
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
@@ -17,13 +17,11 @@ from eth.chains.mainnet import MainnetChain
 from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
-from eth.typing import JournalDBCheckpoint
 from eth.vm.code_stream import CodeStream
 from eth.vm.gas_meter import allow_negative_refund_strategy
 from eth.vm.message import Message
 from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
-from eth_typing import Hash32
 from eth_utils import setup_DEBUG2_logging
 
 from boa.rpc import RPC
@@ -32,7 +30,7 @@ from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter
-from boa.vm.utils import to_bytes, to_int
+from boa.vm.utils import ceil32, floor32, to_bytes, to_int
 
 
 def enable_pyevm_verbose_logging():
@@ -204,8 +202,8 @@ class Sha3PreimageTracer:
 
     # trace preimages of sha3
 
-    def __init__(self, sha3_op, evm):
-        self.evm = evm
+    def __init__(self, sha3_op, env):
+        self.env = env
         self.sha3 = sha3_op
 
     def __call__(self, computation):
@@ -221,21 +219,26 @@ class Sha3PreimageTracer:
 
         image = _stackitem_to_bytes(computation._stack.values[-1])
 
-        self.evm._trace_sha3_preimage(preimage, image)
+        self.env.sha3_trace[preimage] = image
 
 
 class SstoreTracer:
     mnemonic = "SSTORE"
 
-    def __init__(self, sstore_op, evm):
-        self.evm = evm
+    def __init__(self, sstore_op, env):
+        self.env = env
         self.sstore = sstore_op
 
     def __call__(self, computation):
         value, slot = [_stackitem_to_int(t) for t in computation._stack.values[-2:]]
         account = computation.msg.storage_address
 
-        self.evm._trace_sstore(account, slot)
+        # we don't want to deal with snapshots/commits/reverts, so just
+        # register that the slot was touched and downstream can filter
+        # zero entries.
+        self.env.sstore_trace[account] = self.env.sstore_trace.get(account, set()) & {
+            slot
+        }
 
         # dispatch into py-evm
         self.sstore(computation)
@@ -368,20 +371,10 @@ class FakeMessage(Message):
 class PyEVM:
     def __init__(self, env, fast_mode_enabled: bool):
         self.chain = _make_chain()
-        self.sha3_trace: dict = {}
-        self.sstore_trace: dict = {}
         self.env = env
-        self._init_vm(
-            env, AccountDB, reset_traces=True, fast_mode_enabled=fast_mode_enabled
-        )
+        self._init_vm(env, AccountDB, fast_mode_enabled=fast_mode_enabled)
 
-    def _init_vm(
-        self,
-        env,
-        account_db_class: Type[AccountDB],
-        reset_traces: bool,
-        fast_mode_enabled: bool,
-    ):
+    def _init_vm(self, env, account_db_class: Type[AccountDB], fast_mode_enabled: bool):
         self.vm = self.chain.get_vm()
         self.vm.__class__._state_class.account_db_class = account_db_class
 
@@ -398,18 +391,9 @@ class PyEVM:
 
         self.vm.state.computation_class = c
 
-        # we usually want to reset the trace data structures
-        # but sometimes don't, give caller the option.
-        if reset_traces:
-            self.sha3_trace = {}
-            self.sstore_trace = {}
-
         # patch in tracing opcodes
-        c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self)
-        c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self)
-
-    def _trace_sha3_preimage(self, preimage, image):
-        self.sha3_trace[image] = preimage
+        c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], env)
+        c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], env)
 
     def _trace_sstore(self, account, slot):
         self.sstore_trace.setdefault(account, set())
@@ -425,15 +409,10 @@ class PyEVM:
             unpatch_pyevm_state_object(self.vm.state)
 
     def fork_rpc(
-        self,
-        rpc: RPC,
-        reset_traces: bool,
-        fast_mode_enabled: bool,
-        block_identifier: str,
-        **kwargs,
+        self, rpc: RPC, fast_mode_enabled: bool, block_identifier: str, **kwargs
     ):
         account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
-        self._init_vm(self.env, account_db_class, reset_traces, fast_mode_enabled)
+        self._init_vm(self.env, account_db_class, fast_mode_enabled)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
@@ -471,16 +450,21 @@ class PyEVM:
     def reset_access_counters(self):
         self.vm.state._account_db._reset_access_counters()
 
-    def snapshot(self) -> Tuple[Hash32, JournalDBCheckpoint]:
+    def snapshot(self) -> Any:
         return self.vm.state.snapshot()
 
     def anchor(self):
-        return self.vm.patch.anchor()
+        snapshot_id = self.snapshot()
+        try:
+            with self.vm.patch.anchor():
+                yield
+        finally:
+            self.revert(snapshot_id)
 
-    def revert(self, snapshot_id: Tuple[Hash32, JournalDBCheckpoint]) -> None:
+    def revert(self, snapshot_id: Any) -> None:
         self.vm.state.revert(snapshot_id)
 
-    def generate_contract_address(self, sender: Address):
+    def generate_create_address(self, sender: Address):
         nonce = self.vm.state.get_nonce(sender.canonical_address)
         self.vm.state.increment_nonce(sender.canonical_address)
         return Address(generate_contract_address(sender.canonical_address, nonce))
@@ -559,12 +543,46 @@ class PyEVM:
     def block_id(self):
         return self.vm.state._account_db._block_id
 
+    @property
+    def block_number(self):
+        return self.vm.state.block_number
+
+    @property
+    def timestamp(self):
+        return self.vm.state.timestamp
+
+    def get_storage_slot(self, addr: Address, slot: int) -> "ByteAddressableStorage":
+        account_db = self.vm.state._account_db
+        return ByteAddressableStorage(account_db, addr, slot)
+
     def time_travel(self, add_seconds: int, add_blocks: int):
         self.vm.patch.timestamp += add_seconds
         self.vm.patch.block_number += add_blocks
 
-    def get_account_db(self):
-        return self.vm.state._account_db
+
+# wrap storage in something which looks like memory
+class ByteAddressableStorage:
+    def __init__(self, db: AccountDB, address: Address, key: int):
+        self.db = db
+        self.address = address.canonical_address
+        self.key = key
+
+    def __getitem__(self, subscript):
+        if isinstance(subscript, slice):
+            ret = b""
+            start = subscript.start or 0
+            stop = subscript.stop
+            i = self.key + start // 32
+            while i < self.key + ceil32(stop) // 32:
+                ret += self.db.get_storage(self.address, i).to_bytes(32, "big")
+                i += 1
+
+            start_ofst = floor32(start)
+            start -= start_ofst
+            stop -= start_ofst
+            return memoryview(ret[start:stop])
+        else:
+            raise Exception("Must slice {self}")
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}

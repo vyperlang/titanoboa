@@ -39,6 +39,9 @@ class Env:
         self._contracts = {}
         self._code_registry = {}
 
+        self.sha3_trace: dict = {}
+        self.sstore_trace: dict = {}
+
         self._profiled_contracts = {}
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
@@ -69,9 +72,14 @@ class Env:
         :param block_identifier: Block identifier to fork from
         :param kwargs: Additional arguments for the RPC
         """
+        # we usually want to reset the trace data structures
+        # but sometimes don't, give caller the option.
+        if reset_traces:
+            self.sha3_trace = {}
+            self.sstore_trace = {}
+
         self.evm.fork_rpc(
             rpc,
-            reset_traces,
             fast_mode_enabled=self._fast_mode_enabled,
             block_identifier=block_identifier,
             **kwargs,
@@ -155,12 +163,7 @@ class Env:
     # to the snapshot on exiting the with statement
     @contextlib.contextmanager
     def anchor(self):
-        snapshot_id = self.evm.snapshot()
-        try:
-            with self.evm.anchor():
-                yield
-        finally:
-            self.evm.revert(snapshot_id)
+        return self.evm.anchor()
 
     @contextlib.contextmanager
     def sender(self, address):
@@ -210,11 +213,10 @@ class Env:
     ) -> tuple[Address, bytes]:
         sender = self._get_sender(sender)
 
-        target_address = (
-            self.evm.generate_contract_address(sender)
-            if override_address is None
-            else Address(override_address)
-        )
+        if override_address is None:
+            target_address = self.evm.generate_create_address(sender)
+        else:
+            target_address = Address(override_address)
 
         prefetch_state = self._fork_mode and self._fork_try_prefetch_state
         origin = sender  # XXX: consider making this parameterizable
@@ -319,6 +321,20 @@ class Env:
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._hook_trace_computation(child, child_contract)
+
+    def get_code(self, address):
+        return self.evm.get_code(Address(address))
+
+    def get_storage_slot(self, address, slot):
+        return self.evm.get_storage_slot(address, slot)
+
+    @property
+    def block_number(self):
+        return self.evm.block_number
+
+    @property
+    def timestamp(self):
+        return self.evm.timestamp
 
     # function to time travel
     def time_travel(
