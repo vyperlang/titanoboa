@@ -25,10 +25,8 @@ class Env:
     _singleton = None
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
-    _fast_mode_enabled = False
-    _fork_try_prefetch_state = False
 
-    def __init__(self):
+    def __init__(self, fork_try_prefetch_state=False, fast_mode_enabled=False):
         self._gas_price = None
 
         self._aliases = {}
@@ -39,6 +37,9 @@ class Env:
         self._contracts = {}
         self._code_registry = {}
 
+        self.sha3_trace: dict = {}
+        self.sstore_trace: dict = {}
+
         self._profiled_contracts = {}
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
@@ -46,7 +47,7 @@ class Env:
 
         self._gas_tracker = 0
 
-        self.evm = PyEVM(self, self._fast_mode_enabled)
+        self.evm = PyEVM(self, fast_mode_enabled, fork_try_prefetch_state)
 
     def set_random_seed(self, seed=None):
         self._random = random.Random(seed)
@@ -55,7 +56,6 @@ class Env:
         return self._gas_price or 0
 
     def enable_fast_mode(self, flag: bool = True):
-        self._fast_mode_enabled = flag
         self.evm.enable_fast_mode(flag)
 
     def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
@@ -69,20 +69,16 @@ class Env:
         :param block_identifier: Block identifier to fork from
         :param kwargs: Additional arguments for the RPC
         """
-        self.evm.fork_rpc(
-            rpc,
-            reset_traces,
-            fast_mode_enabled=self._fast_mode_enabled,
-            block_identifier=block_identifier,
-            **kwargs,
-        )
+        # we usually want to reset the trace data structures
+        # but sometimes don't, give caller the option.
+        if reset_traces:
+            self.sha3_trace = {}
+            self.sstore_trace = {}
+
+        self.evm.fork_rpc(rpc, block_identifier, **kwargs)
 
     def get_gas_meter_class(self):
         return self.evm.get_gas_meter_class()
-
-    @property
-    def _fork_mode(self):
-        return self.evm.is_forked
 
     def set_gas_meter_class(self, cls: type) -> None:
         self.evm.set_gas_meter_class(cls)
@@ -155,12 +151,8 @@ class Env:
     # to the snapshot on exiting the with statement
     @contextlib.contextmanager
     def anchor(self):
-        snapshot_id = self.evm.snapshot()
-        try:
-            with self.evm.anchor():
-                yield
-        finally:
-            self.evm.revert(snapshot_id)
+        with self.evm.anchor():
+            yield
 
     @contextlib.contextmanager
     def sender(self, address):
@@ -210,19 +202,16 @@ class Env:
     ) -> tuple[Address, bytes]:
         sender = self._get_sender(sender)
 
-        target_address = (
-            self.evm.generate_contract_address(sender)
-            if override_address is None
-            else Address(override_address)
-        )
+        if override_address is None:
+            target_address = self.evm.generate_create_address(sender)
+        else:
+            target_address = Address(override_address)
 
-        prefetch_state = self._fork_mode and self._fork_try_prefetch_state
         origin = sender  # XXX: consider making this parameterizable
         c = self.evm.deploy_code(
             sender=sender,
             origin=origin,
             target_address=target_address,
-            prefetch_state=prefetch_state,
             gas=gas,
             gas_price=self.get_gas_price(),
             value=value,
@@ -284,11 +273,9 @@ class Env:
             bytecode = self.evm.get_code(to)
 
         is_static = not is_modifying
-        prefetch_state = self._fork_mode and self._fork_try_prefetch_state
         ret = self.evm.execute_code(
             sender=sender,
             to=to,
-            prefetch_state=prefetch_state,
             gas=gas,
             gas_price=self.get_gas_price(),
             value=value,
@@ -319,6 +306,20 @@ class Env:
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._hook_trace_computation(child, child_contract)
+
+    def get_code(self, address):
+        return self.evm.get_code(Address(address))
+
+    def get_storage_slot(self, address, slot):
+        return self.evm.get_storage_slot(address, slot)
+
+    @property
+    def block_number(self):
+        return self.evm.block_number
+
+    @property
+    def timestamp(self):
+        return self.evm.timestamp
 
     # function to time travel
     def time_travel(

@@ -15,10 +15,9 @@ from IPython.display import Javascript, display
 
 from boa.integrations.jupyter.constants import (
     ADDRESS_TIMEOUT_MESSAGE,
-    CALLBACK_TOKEN_BYTES,
+    CALLBACK_TOKEN_CHARS,
     CALLBACK_TOKEN_TIMEOUT,
     NUL,
-    PLUGIN_NAME,
     RPC_TIMEOUT_MESSAGE,
     SHARED_MEMORY_LENGTH,
     TRANSACTION_TIMEOUT_MESSAGE,
@@ -135,8 +134,8 @@ class BrowserEnv(NetworkEnv):
     A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
     """
 
-    def __init__(self, address=None):
-        super().__init__(rpc=BrowserRPC())
+    def __init__(self, address=None, **kwargs):
+        super().__init__(rpc=BrowserRPC(), **kwargs)
         self.signer = BrowserSigner(address)
         self.set_eoa(self.signer)
 
@@ -191,7 +190,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
 
 def _generate_token():
     """Generate a secure unique token to identify the SharedMemory object."""
-    return f"{PLUGIN_NAME}_{urandom(CALLBACK_TOKEN_BYTES).hex()}"
+    return urandom(CALLBACK_TOKEN_CHARS // 2).hex()
 
 
 def _wait_buffer_set(buffer: memoryview, timeout_message: str) -> bytes:

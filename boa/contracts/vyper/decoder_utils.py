@@ -14,33 +14,6 @@ from vyper.semantics.types import (
 )
 from vyper.utils import unsigned_to_signed
 
-from boa.vm.utils import ceil32, floor32
-
-
-# wrap storage in something which looks like memory
-class ByteAddressableStorage:
-    def __init__(self, db, address, key):
-        self.db = db
-        self.address = address
-        self.key = key
-
-    def __getitem__(self, subscript):
-        if isinstance(subscript, slice):
-            ret = b""
-            start = subscript.start or 0
-            stop = subscript.stop
-            i = self.key + start // 32
-            while i < self.key + ceil32(stop) // 32:
-                ret += self.db.get_storage(self.address, i).to_bytes(32, "big")
-                i += 1
-
-            start_ofst = floor32(start)
-            start -= start_ofst
-            stop -= start_ofst
-            return memoryview(ret[start:stop])
-        else:
-            raise Exception("Must slice {self}")
-
 
 class _Struct(dict):
     def __init__(self, name, *args, **kwargs):

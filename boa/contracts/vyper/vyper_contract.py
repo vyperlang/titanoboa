@@ -51,10 +51,7 @@ from boa.contracts.vyper.compiler_utils import (
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
-from boa.contracts.vyper.decoder_utils import (
-    ByteAddressableStorage,
-    decode_vyper_object,
-)
+from boa.contracts.vyper.decoder_utils import decode_vyper_object
 from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
@@ -120,7 +117,7 @@ class VyperDeployer:
         address = Address(address)
 
         ret = self.deploy(override_address=address, skip_initcode=True)
-        bytecode = ret.env.evm.get_code(address)
+        bytecode = ret.env.get_code(address)
 
         ret._set_bytecode(bytecode)
 
@@ -365,8 +362,7 @@ def setpath(lens, path, val):
 class StorageVar:
     def __init__(self, contract, slot, typ):
         self.contract = contract
-        self.addr = self.contract._address.canonical_address
-        self.accountdb = contract.env.evm.get_account_db()
+        self.addr = self.contract._address
         self.slot = slot
         self.typ = typ
 
@@ -375,7 +371,7 @@ class StorageVar:
         if truncate_limit is not None and n > truncate_limit:
             return None  # indicate failure to caller
 
-        fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
+        fakemem = self.contract.env.get_storage_slot(self.addr, slot)
         return decode_vyper_object(fakemem, typ)
 
     def _dealias(self, maybe_address):
@@ -387,8 +383,8 @@ class StorageVar:
     def get(self, truncate_limit=None):
         if isinstance(self.typ, HashMapT):
             ret = {}
-            for k in self.contract.env.evm.sstore_trace.get(self.addr, {}):
-                path = unwrap_storage_key(self.contract.env.evm.sha3_trace, k)
+            for k in self.contract.env.sstore_trace.get(self.addr, {}):
+                path = unwrap_storage_key(self.contract.env.sha3_trace, k)
                 if to_int(path[0]) != self.slot:
                     continue
 
