@@ -74,22 +74,24 @@ class BrowserSigner:
         )
         return convert_frontend_dict(sign_data)
 
-    def sign_typed_data(
-        self, domain: dict[str, Any], types: dict[str, list], value: dict[str, Any]
-    ) -> str:
+    def sign_typed_data(self, full_message: dict[str, Any], *args) -> str:
         """
         Sign typed data value with types data structure for domain using the EIP-712 specification.
-        :param domain: The domain data structure.
-        :param types: The types data structure.
-        :param value: The value to sign.
+        :param full_message: The full message to sign.
         :return: The signature.
         """
+        if len(args) == 2:
+            # for backwards compatibility, old signature was (domain, types, message)
+            full_message = {
+                "domain": full_message,
+                "types": args[0],
+                "message": args[1],
+            }
+        else:
+            assert not args, "sign_typed_data takes either 1 or 3 arguments"
+
         return _javascript_call(
-            "signTypedData",
-            domain,
-            types,
-            value,
-            timeout_message=TRANSACTION_TIMEOUT_MESSAGE,
+            "signTypedData", full_message, timeout_message=TRANSACTION_TIMEOUT_MESSAGE
         )
 
 
@@ -224,6 +226,7 @@ def _parse_js_result(result: dict) -> Any:
     # raise the error in the Jupyter cell so that the user can see it
     error = result["error"]
     error = error.get("info", error).get("error", error)
+    error = error.get("data", error)
     raise RPCError(
         message=error.get("message", error), code=error.get("code", "CALLBACK_ERROR")
     )

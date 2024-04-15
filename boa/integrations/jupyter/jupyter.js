@@ -52,10 +52,7 @@
     const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
 
     /** Sign a typed data via ethers */
-    const signTypedData = (domain, types, value) => rpc(
-        'eth_signTypedData_v4',
-        [from, JSON.stringify({domain, types, value})]
-    );
+    const signTypedData = typedData => rpc('eth_signTypedData_v4', [from, JSON.stringify(typedData)]);
 
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
@@ -93,8 +90,9 @@
             if (!response.ok) return;
         }
 
+        console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ...;`);
         const body = stringify(await parsePromise(func(...args)));
-        // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
+        console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {
             return body;
         }

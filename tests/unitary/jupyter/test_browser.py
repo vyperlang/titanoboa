@@ -205,6 +205,28 @@ def test_browser_rpc_server_error(
     assert str(exc_info.value) == "-32603: server error"
 
 
+def test_browser_rpc_internal_error(
+    token, display_mock, mock_callback, account, mock_fork, env
+):
+    error = {
+        "code": -32603,
+        "message": "Internal JSON-RPC error.",
+        "data": {
+            "code": 3,
+            "message": "insufficient funds for gas + value. balance: 0, fee: 116, value: 0",
+            "data": "0x",
+            "cause": None,
+        },
+    }
+    mock_callback("eth_gasPrice", error=error)
+    with pytest.raises(RPCError) as exc_info:
+        env.get_gas_price()
+    assert (
+        str(exc_info.value)
+        == "3: insufficient funds for gas + value. balance: 0, fee: 116, value: 0"
+    )
+
+
 def test_browser_js_error(token, display_mock, mock_callback, account, mock_fork):
     mock_callback("loadSigner", error={"message": "custom message", "stack": ""})
     with pytest.raises(RPCError) as exc_info:
