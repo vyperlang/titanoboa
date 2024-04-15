@@ -134,8 +134,8 @@ class BrowserEnv(NetworkEnv):
     A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
     """
 
-    def __init__(self, address=None):
-        super().__init__(rpc=BrowserRPC())
+    def __init__(self, address=None, **kwargs):
+        super().__init__(rpc=BrowserRPC(), **kwargs)
         self.signer = BrowserSigner(address)
         self.set_eoa(self.signer)
 

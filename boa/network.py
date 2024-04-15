@@ -90,8 +90,14 @@ class NetworkEnv(Env):
     # always prefetch state in network mode
     _fork_try_prefetch_state = True
 
-    def __init__(self, rpc: str | RPC, accounts: dict[str, Account] = None):
-        super().__init__()
+    def __init__(
+        self,
+        rpc: str | RPC,
+        accounts: dict[str, Account] = None,
+        fork_try_prefetch_state=True,
+        **kwargs,
+    ):
+        super().__init__(fork_try_prefetch_state, **kwargs)
 
         if isinstance(rpc, str):
             warnings.warn(

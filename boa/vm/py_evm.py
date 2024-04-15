@@ -302,7 +302,7 @@ class titanoboa_computation:
 
         if is_eip1167_contract(bytecode):
             contract_address = extract_eip1167_address(bytecode)
-            bytecode = cls.env.vm.state.get_code(contract_address)
+            bytecode = cls.env.evm.vm.state.get_code(contract_address)
 
         if bytecode in cls.env._code_registry:
             target = cls.env._code_registry[bytecode].deployer.at(contract_address)
@@ -324,7 +324,7 @@ class titanoboa_computation:
                 c._contract_repr_before_revert = repr(contract)
             return c
 
-        if contract is None or not cls.env._fast_mode_enabled:
+        if contract is None or not cls.env.evm._fast_mode_enabled:
             # print("SLOW MODE")
             computation = super().apply_computation(state, msg, tx_ctx, **kwargs)
             return finalize(computation)
@@ -369,12 +369,14 @@ class FakeMessage(Message):
 
 
 class PyEVM:
-    def __init__(self, env, fast_mode_enabled: bool):
+    def __init__(self, env, fast_mode_enabled=False, fork_try_prefetch_state=False):
         self.chain = _make_chain()
         self.env = env
-        self._init_vm(env, AccountDB, fast_mode_enabled=fast_mode_enabled)
+        self._fast_mode_enabled = fast_mode_enabled
+        self._fork_try_prefetch_state = fork_try_prefetch_state
+        self._init_vm(env, AccountDB)
 
-    def _init_vm(self, env, account_db_class: Type[AccountDB], fast_mode_enabled: bool):
+    def _init_vm(self, env, account_db_class: Type[AccountDB]):
         self.vm = self.chain.get_vm()
         self.vm.__class__._state_class.account_db_class = account_db_class
 
@@ -386,7 +388,7 @@ class PyEVM:
             {"env": env},
         )
 
-        if fast_mode_enabled:
+        if self._fast_mode_enabled:
             patch_pyevm_state_object(self.vm.state)
 
         self.vm.state.computation_class = c
@@ -408,11 +410,9 @@ class PyEVM:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork_rpc(
-        self, rpc: RPC, fast_mode_enabled: bool, block_identifier: str, **kwargs
-    ):
+    def fork_rpc(self, rpc: RPC, block_identifier: str, **kwargs):
         account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
-        self._init_vm(self.env, account_db_class, fast_mode_enabled)
+        self._init_vm(self.env, account_db_class)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
@@ -474,7 +474,6 @@ class PyEVM:
         sender: Address,
         origin: Address,
         target_address: Address,
-        prefetch_state: bool,
         gas: Optional[int],
         gas_price: int,
         value: int,
@@ -493,7 +492,7 @@ class PyEVM:
             data=b"",
         )
 
-        if prefetch_state:
+        if self.is_forked and self._fork_try_prefetch_state:
             self.vm.state._account_db.try_prefetch_state(msg)
 
         tx_ctx = BaseTransactionContext(
@@ -507,7 +506,6 @@ class PyEVM:
         self,
         sender: Address,
         to: Address,
-        prefetch_state: bool,
         gas: int,
         gas_price: int,
         value: int,
@@ -532,7 +530,8 @@ class PyEVM:
             ir_executor=ir_executor,
             contract=contract,
         )
-        if prefetch_state:
+
+        if self.is_forked and self._fork_try_prefetch_state:
             self.vm.state._account_db.try_prefetch_state(msg)
 
         origin = sender.canonical_address  # XXX: consider making this parameterizable

@@ -25,10 +25,8 @@ class Env:
     _singleton = None
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
-    _fast_mode_enabled = False
-    _fork_try_prefetch_state = False
 
-    def __init__(self):
+    def __init__(self, fork_try_prefetch_state=False, fast_mode_enabled=False):
         self._gas_price = None
 
         self._aliases = {}
@@ -49,7 +47,7 @@ class Env:
 
         self._gas_tracker = 0
 
-        self.evm = PyEVM(self, self._fast_mode_enabled)
+        self.evm = PyEVM(self, fast_mode_enabled, fork_try_prefetch_state)
 
     def set_random_seed(self, seed=None):
         self._random = random.Random(seed)
@@ -58,7 +56,6 @@ class Env:
         return self._gas_price or 0
 
     def enable_fast_mode(self, flag: bool = True):
-        self._fast_mode_enabled = flag
         self.evm.enable_fast_mode(flag)
 
     def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
@@ -78,19 +75,10 @@ class Env:
             self.sha3_trace = {}
             self.sstore_trace = {}
 
-        self.evm.fork_rpc(
-            rpc,
-            fast_mode_enabled=self._fast_mode_enabled,
-            block_identifier=block_identifier,
-            **kwargs,
-        )
+        self.evm.fork_rpc(rpc, block_identifier=block_identifier, **kwargs)
 
     def get_gas_meter_class(self):
         return self.evm.get_gas_meter_class()
-
-    @property
-    def _fork_mode(self):
-        return self.evm.is_forked
 
     def set_gas_meter_class(self, cls: type) -> None:
         self.evm.set_gas_meter_class(cls)
@@ -218,13 +206,11 @@ class Env:
         else:
             target_address = Address(override_address)
 
-        prefetch_state = self._fork_mode and self._fork_try_prefetch_state
         origin = sender  # XXX: consider making this parameterizable
         c = self.evm.deploy_code(
             sender=sender,
             origin=origin,
             target_address=target_address,
-            prefetch_state=prefetch_state,
             gas=gas,
             gas_price=self.get_gas_price(),
             value=value,
@@ -286,11 +272,9 @@ class Env:
             bytecode = self.evm.get_code(to)
 
         is_static = not is_modifying
-        prefetch_state = self._fork_mode and self._fork_try_prefetch_state
         ret = self.evm.execute_code(
             sender=sender,
             to=to,
-            prefetch_state=prefetch_state,
             gas=gas,
             gas_price=self.get_gas_price(),
             value=value,
