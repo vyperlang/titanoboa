@@ -22,7 +22,6 @@ def test_create2_address():
 
     child_contract_address = factory.create_child(blueprint.address, salt)
 
-    # TODO: make a util function on boa.env to get code
     blueprint_bytecode = boa.env.get_code(blueprint.address)
     assert child_contract_address == get_create2_address(
         blueprint_bytecode, factory.address, salt

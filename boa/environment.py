@@ -75,7 +75,7 @@ class Env:
             self.sha3_trace = {}
             self.sstore_trace = {}
 
-        self.evm.fork_rpc(rpc, block_identifier=block_identifier, **kwargs)
+        self.evm.fork_rpc(rpc, block_identifier, **kwargs)
 
     def get_gas_meter_class(self):
         return self.evm.get_gas_meter_class()
@@ -151,7 +151,8 @@ class Env:
     # to the snapshot on exiting the with statement
     @contextlib.contextmanager
     def anchor(self):
-        return self.evm.anchor()
+        with self.evm.anchor():
+            yield
 
     @contextlib.contextmanager
     def sender(self, address):

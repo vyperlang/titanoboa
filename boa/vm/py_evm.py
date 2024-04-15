@@ -374,9 +374,9 @@ class PyEVM:
         self.env = env
         self._fast_mode_enabled = fast_mode_enabled
         self._fork_try_prefetch_state = fork_try_prefetch_state
-        self._init_vm(env, AccountDB)
+        self._init_vm()
 
-    def _init_vm(self, env, account_db_class: Type[AccountDB]):
+    def _init_vm(self, account_db_class=AccountDB):
         self.vm = self.chain.get_vm()
         self.vm.__class__._state_class.account_db_class = account_db_class
 
@@ -385,7 +385,7 @@ class PyEVM:
         c: Type[titanoboa_computation] = type(
             "TitanoboaComputation",
             (titanoboa_computation, self.vm.state.computation_class),
-            {"env": env},
+            {"env": self.env},
         )
 
         if self._fast_mode_enabled:
@@ -394,8 +394,8 @@ class PyEVM:
         self.vm.state.computation_class = c
 
         # patch in tracing opcodes
-        c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], env)
-        c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], env)
+        c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.env)
+        c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.env)
 
     def _trace_sstore(self, account, slot):
         self.sstore_trace.setdefault(account, set())
@@ -412,7 +412,7 @@ class PyEVM:
 
     def fork_rpc(self, rpc: RPC, block_identifier: str, **kwargs):
         account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
-        self._init_vm(self.env, account_db_class)
+        self._init_vm(account_db_class)
         block_info = self.vm.state._account_db._block_info
 
         self.vm.patch.timestamp = int(block_info["timestamp"], 16)
@@ -453,6 +453,7 @@ class PyEVM:
     def snapshot(self) -> Any:
         return self.vm.state.snapshot()
 
+    @contextlib.contextmanager
     def anchor(self):
         snapshot_id = self.snapshot()
         try:
