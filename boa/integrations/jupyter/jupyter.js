@@ -8,6 +8,7 @@
         if (!ethereum) {
             throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
         }
+        console.log(`Boa: rpc(${method}, ${JSON.stringify(params)})`);
         return ethereum.request({method, params});
     };
 
@@ -90,7 +91,6 @@
             if (!response.ok) return;
         }
 
-        console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ...;`);
         const body = stringify(await parsePromise(func(...args)));
         console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {

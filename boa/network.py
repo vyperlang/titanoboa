@@ -438,3 +438,7 @@ class NetworkEnv(Env):
 
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
+
+    def get_chain_id(self) -> int:
+        chain_id = self._rpc.fetch("eth_chainId", [])
+        return int.from_bytes(bytes.fromhex(chain_id[2:]), "big")

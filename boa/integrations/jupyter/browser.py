@@ -141,18 +141,10 @@ class BrowserEnv(NetworkEnv):
         self.signer = BrowserSigner(address)
         self.set_eoa(self.signer)
 
-    def get_chain_id(self) -> int:
-        chain_id = _javascript_call(
-            "rpc", "eth_chainId", timeout_message=RPC_TIMEOUT_MESSAGE
-        )
-        return int.from_bytes(bytes.fromhex(chain_id[2:]), "big")
-
     def set_chain_id(self, chain_id: int | str):
-        _javascript_call(
-            "rpc",
+        self._rpc.fetch(
             "wallet_switchEthereumChain",
             [{"chainId": chain_id if isinstance(chain_id, str) else hex(chain_id)}],
-            timeout_message=RPC_TIMEOUT_MESSAGE,
         )
         self._reset_fork()
 
