@@ -161,16 +161,8 @@ class VyperBlueprint(_BaseVyperContract):
         # maybe use common base class?
         super().__init__(compiler_data, env, filename)
 
-        if blueprint_preamble is None:
-            blueprint_preamble = b""
-
-        blueprint_bytecode = blueprint_preamble + compiler_data.bytecode
-
-        # the length of the deployed code in bytes
-        len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
-        deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
-
-        deploy_bytecode += blueprint_bytecode
+        compiler_bytecode = compiler_data.bytecode
+        deploy_bytecode = self.generate_bytecode(compiler_bytecode, blueprint_preamble)
 
         addr, self.bytecode = self.env.deploy_code(
             bytecode=deploy_bytecode, override_address=override_address
@@ -178,7 +170,18 @@ class VyperBlueprint(_BaseVyperContract):
 
         self._address = Address(addr)
 
-        self.env.register_blueprint(compiler_data.bytecode, self)
+        self.env.register_blueprint(compiler_bytecode, self)
+
+    @staticmethod
+    def generate_bytecode(compiler_bytecode, blueprint_preamble=b"\xFE\x71\x00"):
+        if blueprint_preamble is None:
+            blueprint_preamble = b""
+
+        blueprint_bytecode = blueprint_preamble + compiler_bytecode
+        # the length of the deployed code in bytes
+        len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
+        deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
+        return deploy_bytecode + blueprint_bytecode
 
     @cached_property
     def deployer(self):
