@@ -91,7 +91,10 @@ class BrowserSigner:
             assert not args, "sign_typed_data takes either 1 or 3 arguments"
 
         return _javascript_call(
-            "signTypedData", full_message, timeout_message=TRANSACTION_TIMEOUT_MESSAGE
+            "rpc",
+            "eth_signTypedData_v4",
+            [self.address, full_message],
+            timeout_message=TRANSACTION_TIMEOUT_MESSAGE,
         )
 
 

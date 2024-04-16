@@ -42,11 +42,9 @@
         return response.text();
     }
 
-    let from;
     const loadSigner = async (address) => {
         const accounts = await rpc('eth_requestAccounts');
-        from = accounts.includes(address) ? address : accounts[0];
-        return from;
+        return accounts.includes(address) ? address : accounts[0];
     };
 
     /** Sign a transaction via ethers */
