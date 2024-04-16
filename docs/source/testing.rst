@@ -172,3 +172,54 @@ To enable this feature, execute ``%load_ext boa.ipython`` in a cell.
 
     In [5]: c.get_name_of("0xD533a949740bb3306d119CC777fa900bA034cd52")
     Out[5]: 'Curve DAO Token'
+
+Accessing non-public/external members
+-------------------------------------
+
+Titanoboa allows access to non-public/external members of a contract. This is useful for testing internal functions or variables without having to expose them to the outside world.
+
+Given a vyper module ``foo.vy`` in the same folder as your python code:
+
+.. code-block:: vyper
+
+    x: uint256
+    y: immutable(uint256)
+
+    def __init__(y_initial: uint256):
+        self.x = 42
+        self.y = y_initial
+
+    @internal
+    @pure
+    def _bar() -> uint256:
+        return 111
+
+``internal`` functions can be accessed by calling the function from the ``internal`` attribute of the contract.
+
+.. code-block:: python
+
+    import foo
+
+    my_contract = foo(1234)
+
+    my_contract.internal._bar() # Call the internal function _bar (returns 111)
+
+Private storage variables can be accessed by calling the variable from the ``_storage`` attribute of the contract:
+
+.. code-block:: python
+
+    import foo
+
+    my_contract = foo(1234)
+
+    my_contract._storage.x.get() # Access the private storage variable x (returns 42)
+
+Similarly private immutable variables can be accessed by calling the variable from the ``_immutable`` attribute of the contract:
+
+.. code-block:: python
+
+    import foo
+
+    my_contract = foo(1234)
+
+    my_contract._immutable.y # Access the private immutable variable y
