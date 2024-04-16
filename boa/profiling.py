@@ -135,13 +135,14 @@ class _SingleComputation:
     @cached_property
     def by_line(self):
         ret = {}
-        line_map = self.contract.source_map["pc_pos_map"]
+        source_map = self.contract.source_map["pc_raw_ast_map"]
         current_line = None
         seen = set()
         for pc in self.computation.code._trace:
-            if line_map.get(pc) is not None:
-                current_line, _, _, _ = line_map[pc]
+            if (node := source_map.get(pc)) is not None:
+                current_line = node.lineno
 
+            # NOTE: do we still need the `current_line is not None` guard?
             if current_line is not None and pc not in seen:
                 ret.setdefault(current_line, Datum())
                 ret[current_line].merge(self.by_pc[pc])

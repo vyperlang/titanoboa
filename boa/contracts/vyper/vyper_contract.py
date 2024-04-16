@@ -37,11 +37,7 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
-from boa.contracts.vyper.ast_utils import (
-    ast_map_of,
-    get_fn_ancestor_from_node,
-    reason_at,
-)
+from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
     compile_vyper_function,
@@ -573,10 +569,6 @@ class VyperContract(_BaseVyperContract):
     def at(self, address):
         return self.deployer.at(address)
 
-    @cached_property
-    def ast_map(self):
-        return ast_map_of(self.compiler_data.vyper_module)
-
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation)
         return get_fn_ancestor_from_node(node)
@@ -610,6 +602,7 @@ class VyperContract(_BaseVyperContract):
     def module_t(self):
         return self.compiler_data.global_ctx
 
+    # TODO: maybe rename to `ast_map`
     @property
     def source_map(self):
         if self._source_map is None:
@@ -637,10 +630,10 @@ class VyperContract(_BaseVyperContract):
             return self.ast_map.get(computation.vyper_source_pos)
 
         code_stream = computation.code
-        pc_map = self.source_map["pc_pos_map"]
+        ast_map = self.source_map["pc_raw_ast_map"]
         for pc in reversed(code_stream._trace):
-            if pc in pc_map and pc_map[pc] in self.ast_map:
-                return self.ast_map[pc_map[pc]]
+            if pc in ast_map:
+                return ast_map[pc]
         return None
 
     # ## handling events

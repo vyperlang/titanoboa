@@ -82,14 +82,15 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
         if (pc := frame.f_locals.get("_pc")) is None:
             return (-1, -1)
 
-        pc_map = contract.source_map["pc_pos_map"]
+        pc_map = contract.source_map["pc_raw_ast_map"]
 
-        info = pc_map.get(pc)
-        if info is None:
+        node = pc_map.get(pc)
+        if node is None:
             return (-1, -1)
-        (start_lineno, _, end_lineno, _) = info
 
-        # `return start_lineno, end_lineno` doesn't seem to work.
+        start_lineno = node.lineno
+        # end_lineno = node.end_lineno
+        # note: `return start_lineno, end_lineno` doesn't seem to work.
         return start_lineno, start_lineno
 
     # XXX: dynamic context. return function name or something
@@ -169,11 +170,8 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
         # source_map should really be in CompilerData
         _, source_map = compile_ir.assembly_to_evm(c.assembly_runtime)
 
-        for _, v in source_map["pc_pos_map"].items():
-            if v is None:
-                continue
-            (start_lineno, _, _, _) = v
-            ret.add(start_lineno)
+        for node in source_map["pc_raw_ast_map"].values():
+            ret.add(node.lineno)
 
         return ret
 

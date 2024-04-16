@@ -16,7 +16,7 @@ from vyper.compiler.input_bundle import (
     FilesystemInputBundle,
 )
 from vyper.compiler.phases import CompilerData
-from vyper.compiler.settings import anchor_settings, Settings
+from vyper.compiler.settings import Settings, anchor_settings
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 

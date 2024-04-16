@@ -4,7 +4,6 @@ import tokenize
 from typing import Any, Optional
 
 import vyper.ast as vy_ast
-from vyper.ir.compile_ir import getpos
 
 
 def get_block(source_code: str, lineno: int, end_lineno: int) -> str:
@@ -42,17 +41,6 @@ def reason_at(
     if c is not None:
         return _extract_reason(c)
     return None
-
-
-# build a reverse map from the format we have in pc_pos_map to AST nodes
-# (TODO: we might not need this anymore since vyper exports map from pc
-# to ast node directly as of 0.4.0)
-def ast_map_of(ast_node):
-    ast_map = {}
-    nodes = [ast_node] + ast_node.get_descendants(reverse=True)
-    for node in nodes:
-        ast_map[getpos(node)] = node
-    return ast_map
 
 
 def get_fn_name_from_lineno(ast_map: dict, lineno: int) -> str:
