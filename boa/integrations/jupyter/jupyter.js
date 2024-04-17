@@ -49,9 +49,6 @@
     /** Sign a transaction via ethers */
     const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
 
-    /** Sign a typed data via ethers */
-    const signTypedData = typedData => rpc('eth_signTypedData_v4', [from, JSON.stringify(typedData)]);
-
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
         while (true) {
