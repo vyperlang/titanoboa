@@ -74,22 +74,12 @@ class BrowserSigner:
         )
         return convert_frontend_dict(sign_data)
 
-    def sign_typed_data(self, full_message: dict[str, Any], *args) -> str:
+    def sign_typed_data(self, full_message: dict[str, Any]) -> str:
         """
         Sign typed data value with types data structure for domain using the EIP-712 specification.
         :param full_message: The full message to sign.
         :return: The signature.
         """
-        if len(args) == 2:
-            # for backwards compatibility, old signature was (domain, types, message)
-            full_message = {
-                "domain": full_message,
-                "types": args[0],
-                "message": args[1],
-            }
-        else:
-            assert not args, "sign_typed_data takes either 1 or 3 arguments"
-
         return _javascript_call(
             "rpc",
             "eth_signTypedData_v4",
@@ -228,6 +218,10 @@ def _parse_js_result(result: dict) -> Any:
 
 
 class _BytesEncoder(json.JSONEncoder):
+    """
+    A JSONEncoder that converts bytes to hex strings to be passed to JavaScript.
+    """
+
     def default(self, o):
         if isinstance(o, bytes):
             return "0x" + o.hex()

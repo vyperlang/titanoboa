@@ -440,5 +440,6 @@ class NetworkEnv(Env):
         return receipt, t_obj
 
     def get_chain_id(self) -> int:
+        """Get the current chain ID of the network as an integer."""
         chain_id = self._rpc.fetch("eth_chainId", [])
-        return int.from_bytes(bytes.fromhex(chain_id[2:]), "big")
+        return int(chain_id, 16)
