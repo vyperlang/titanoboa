@@ -133,7 +133,7 @@ class NetworkEnv(Env):
         if not self._rpc_has_snapshot:
             raise RuntimeError("RPC does not have `evm_snapshot` capability!")
         try:
-            block_id = self.evm.patch.block_id
+            block_number = self.evm.patch.block_number
             snapshot_id = self._rpc.fetch("evm_snapshot", [])
             yield
             # note we cannot call super.anchor() because vm/accountdb fork
@@ -141,7 +141,7 @@ class NetworkEnv(Env):
         finally:
             self._rpc.fetch("evm_revert", [snapshot_id])
             # wipe forked state
-            self._reset_fork(block_id)
+            self._reset_fork(block_number)
 
     # add account, or "Account-like" object. MUST expose
     # `sign_transaction` or `send_transaction` method!
