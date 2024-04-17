@@ -314,14 +314,6 @@ class Env:
     def get_code(self, address):
         return self.evm.get_code(Address(address))
 
-    @property
-    def block_number(self):
-        return self.evm.patch.block_number
-
-    @property
-    def timestamp(self):
-        return self.evm.patch.timestamp
-
     # function to time travel
     def time_travel(
         self,
