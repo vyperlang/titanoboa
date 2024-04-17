@@ -8,7 +8,6 @@
         if (!ethereum) {
             throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
         }
-        console.log(`Boa: rpc(${method}, ${JSON.stringify(params)})`);
         return ethereum.request({method, params});
     };
 
