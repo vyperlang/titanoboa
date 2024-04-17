@@ -51,7 +51,10 @@ from boa.contracts.vyper.compiler_utils import (
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
-from boa.contracts.vyper.decoder_utils import decode_vyper_object
+from boa.contracts.vyper.decoder_utils import (
+    ByteAddressableStorage,
+    decode_vyper_object,
+)
 from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
@@ -371,7 +374,7 @@ class StorageVar:
         if truncate_limit is not None and n > truncate_limit:
             return None  # indicate failure to caller
 
-        fakemem = self.contract.env.get_storage_slot(self.addr, slot)
+        fakemem = ByteAddressableStorage(self.contract.env.evm, self.addr, slot)
         return decode_vyper_object(fakemem, typ)
 
     def _dealias(self, maybe_address):
