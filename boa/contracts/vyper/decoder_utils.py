@@ -18,6 +18,7 @@ from boa.util.abi import Address
 from boa.vm.utils import ceil32, floor32
 
 
+# wrap storage in something which looks like memory
 class ByteAddressableStorage:
     def __init__(self, evm, address: Address, key: int):
         self.evm = evm

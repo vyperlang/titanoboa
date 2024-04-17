@@ -536,9 +536,6 @@ class PyEVM:
         self.vm.patch.block_number += add_blocks
 
 
-# wrap storage in something which looks like memory
-
-
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
 
 
