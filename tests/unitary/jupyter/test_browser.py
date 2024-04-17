@@ -135,9 +135,9 @@ def test_nest_applied():
 
 def test_browser_sign_typed_data(display_mock, mock_callback, env):
     signature = env.generate_address()
-    mock_callback("signTypedData", signature)
+    mock_callback("eth_signTypedData_v4", signature)
     data = env.signer.sign_typed_data(
-        {"name": "My App"}, {"types": []}, {"data": "0x1234"}
+        full_message={"domain": {"name": "My App"}, "types": [], "data": "0x1234"}
     )
     assert data == signature
 
