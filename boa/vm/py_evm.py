@@ -529,7 +529,8 @@ class PyEVM:
         return self.vm.state.timestamp
 
     def get_storage_slot(self, address: Address, slot: int) -> bytes:
-        return self.vm.state._account_db.get_storage(address, slot).to_bytes(32, "big")
+        data = self.vm.state._account_db.get_storage(address.canonical_address, slot)
+        return data.to_bytes(32, "big")
 
     def time_travel(self, add_seconds: int, add_blocks: int):
         self.vm.patch.timestamp += add_seconds
