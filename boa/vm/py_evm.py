@@ -30,7 +30,7 @@ from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
 from boa.vm.fast_accountdb import patch_pyevm_state_object, unpatch_pyevm_state_object
 from boa.vm.fork import AccountDBFork
 from boa.vm.gas_meters import GasMeter
-from boa.vm.utils import ceil32, floor32, to_bytes, to_int
+from boa.vm.utils import to_bytes, to_int
 
 
 def enable_pyevm_verbose_logging():
@@ -182,21 +182,6 @@ class TracingCodeStream(CodeStream):
         return self._length_cache
 
 
-# ### section: sha3 preimage tracing
-def _stackitem_to_int(value):
-    if isinstance(value, tuple):
-        return to_int(value[1])  # how py-evm<=0.8.0b1 stores stuff on stack
-    else:
-        return to_int(value)
-
-
-def _stackitem_to_bytes(value):
-    if isinstance(value, tuple):
-        return to_bytes(value[1])  # how py-evm<=0.8.0b1 stores stuff on stack
-    else:
-        return to_bytes(value)
-
-
 class Sha3PreimageTracer:
     mnemonic = "SHA3"
 
@@ -207,7 +192,7 @@ class Sha3PreimageTracer:
         self.sha3 = sha3_op
 
     def __call__(self, computation):
-        size, offset = [_stackitem_to_int(x) for x in computation._stack.values[-2:]]
+        size, offset = [to_int(x) for x in computation._stack.values[-2:]]
 
         # dispatch into py-evm
         self.sha3(computation)
@@ -217,7 +202,8 @@ class Sha3PreimageTracer:
 
         preimage = computation._memory.read_bytes(offset, size)
 
-        image = _stackitem_to_bytes(computation._stack.values[-1])
+        value = computation._stack.values[-1]
+        image = to_bytes(value)
 
         self.env.sha3_trace[preimage] = image
 
@@ -230,15 +216,13 @@ class SstoreTracer:
         self.sstore = sstore_op
 
     def __call__(self, computation):
-        value, slot = [_stackitem_to_int(t) for t in computation._stack.values[-2:]]
+        value, slot = [to_int(t) for t in computation._stack.values[-2:]]
         account = computation.msg.storage_address
 
         # we don't want to deal with snapshots/commits/reverts, so just
         # register that the slot was touched and downstream can filter
         # zero entries.
-        self.env.sstore_trace[account] = self.env.sstore_trace.get(account, set()) & {
-            slot
-        }
+        self.env.sstore_trace.setdefault(account, set()).add(slot)
 
         # dispatch into py-evm
         self.sstore(computation)
@@ -397,13 +381,6 @@ class PyEVM:
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.env)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.env)
 
-    def _trace_sstore(self, account, slot):
-        self.sstore_trace.setdefault(account, set())
-        # we don't want to deal with snapshots/commits/reverts, so just
-        # register that the slot was touched and downstream can filter
-        # zero entries.
-        self.sstore_trace[account].add(slot)
-
     def enable_fast_mode(self, flag: bool = True):
         if flag:
             patch_pyevm_state_object(self.vm.state)
@@ -551,9 +528,8 @@ class PyEVM:
     def timestamp(self):
         return self.vm.state.timestamp
 
-    def get_storage_slot(self, addr: Address, slot: int) -> "ByteAddressableStorage":
-        account_db = self.vm.state._account_db
-        return ByteAddressableStorage(account_db, addr, slot)
+    def get_storage_slot(self, address: Address, slot: int) -> bytes:
+        return self.vm.state._account_db.get_storage(address, slot).to_bytes(32, "big")
 
     def time_travel(self, add_seconds: int, add_blocks: int):
         self.vm.patch.timestamp += add_seconds
@@ -561,28 +537,6 @@ class PyEVM:
 
 
 # wrap storage in something which looks like memory
-class ByteAddressableStorage:
-    def __init__(self, db: AccountDB, address: Address, key: int):
-        self.db = db
-        self.address = address.canonical_address
-        self.key = key
-
-    def __getitem__(self, subscript):
-        if isinstance(subscript, slice):
-            ret = b""
-            start = subscript.start or 0
-            stop = subscript.stop
-            i = self.key + start // 32
-            while i < self.key + ceil32(stop) // 32:
-                ret += self.db.get_storage(self.address, i).to_bytes(32, "big")
-                i += 1
-
-            start_ofst = floor32(start)
-            start -= start_ofst
-            stop -= start_ofst
-            return memoryview(ret[start:stop])
-        else:
-            raise Exception("Must slice {self}")
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}

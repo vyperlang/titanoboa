@@ -11,6 +11,7 @@ from typing import Any, Optional, TypeAlias
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
+from boa.contracts.vyper.decoder_utils import ByteAddressableStorage
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -311,7 +312,7 @@ class Env:
         return self.evm.get_code(Address(address))
 
     def get_storage_slot(self, address, slot):
-        return self.evm.get_storage_slot(address, slot)
+        return ByteAddressableStorage(self.evm, address, slot)
 
     @property
     def block_number(self):
