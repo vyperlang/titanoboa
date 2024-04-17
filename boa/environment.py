@@ -6,7 +6,8 @@ The entry point for managing the execution environment.
 
 import contextlib
 import random
-from typing import Any, Optional, TypeAlias
+import textwrap
+from typing import TYPE_CHECKING, Any, Optional, TypeAlias
 
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
@@ -15,6 +16,10 @@ from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
+
+if TYPE_CHECKING:
+    from boa.contracts.vyper.vyper_contract import VyperDeployer
+
 
 # make mypy happy
 _AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
@@ -336,3 +341,23 @@ class Env:
             assert blocks is not None  # mypy hint
             seconds = blocks * block_delta
         self.evm.time_travel(seconds, blocks)
+
+    def create_deployer(
+        self,
+        source_code: str,
+        name: str = None,
+        filename: str = None,
+        dedent: bool = True,
+        compiler_args: dict = None,
+    ) -> "VyperDeployer":
+        from boa.contracts.vyper.vyper_contract import VyperDeployer
+        from boa.interpret import compiler_data
+
+        name = name or "VyperContract"  # TODO handle this upstream in CompilerData
+        if dedent:
+            source_code = textwrap.dedent(source_code)
+
+        compiler_args = compiler_args or {}
+
+        data = compiler_data(source_code, name, **compiler_args)
+        return VyperDeployer(data, filename=filename)

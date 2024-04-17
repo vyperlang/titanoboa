@@ -1,6 +1,5 @@
 import json
 import sys
-import textwrap
 from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
@@ -142,14 +141,15 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
-    name = name or "VyperContract"  # TODO handle this upstream in CompilerData
-    if dedent:
-        source_code = textwrap.dedent(source_code)
+    from boa import Env
 
-    compiler_args = compiler_args or {}
-
-    data = compiler_data(source_code, name, **compiler_args)
-    return VyperDeployer(data, filename=filename)
+    return Env.get_singleton().create_deployer(
+        source_code=source_code,
+        name=name,
+        filename=filename,
+        dedent=dedent,
+        compiler_args=compiler_args,
+    )
 
 
 def load_partial(filename: str, compiler_args=None) -> VyperDeployer:  # type: ignore
