@@ -364,7 +364,7 @@ class PyEVM:
         self.vm = self.chain.get_vm()
         self.vm.__class__._state_class.account_db_class = account_db_class
 
-        self.vm.patch = VMPatcher(self.vm)
+        self.patch = VMPatcher(self.vm)
 
         c: Type[titanoboa_computation] = type(
             "TitanoboaComputation",
@@ -392,8 +392,8 @@ class PyEVM:
         self._init_vm(account_db_class)
         block_info = self.vm.state._account_db._block_info
 
-        self.vm.patch.timestamp = int(block_info["timestamp"], 16)
-        self.vm.patch.block_number = int(block_info["number"], 16)
+        self.patch.timestamp = int(block_info["timestamp"], 16)
+        self.patch.block_number = int(block_info["number"], 16)
         # TODO patch the other stuff
 
         self.vm.state._account_db._rpc._init_mem_db()
@@ -429,15 +429,6 @@ class PyEVM:
 
     def snapshot(self) -> Any:
         return self.vm.state.snapshot()
-
-    @contextlib.contextmanager
-    def anchor(self):
-        snapshot_id = self.snapshot()
-        try:
-            with self.vm.patch.anchor():
-                yield
-        finally:
-            self.revert(snapshot_id)
 
     def revert(self, snapshot_id: Any) -> None:
         self.vm.state.revert(snapshot_id)
@@ -516,25 +507,9 @@ class PyEVM:
         tx_ctx = BaseTransactionContext(origin=origin, gas_price=gas_price)
         return self.vm.state.computation_class.apply_message(self.vm.state, msg, tx_ctx)
 
-    @property
-    def block_id(self):
-        return self.vm.state._account_db._block_id
-
-    @property
-    def block_number(self):
-        return self.vm.state.block_number
-
-    @property
-    def timestamp(self):
-        return self.vm.state.timestamp
-
     def get_storage_slot(self, address: Address, slot: int) -> bytes:
         data = self.vm.state._account_db.get_storage(address.canonical_address, slot)
         return data.to_bytes(32, "big")
-
-    def time_travel(self, add_seconds: int, add_blocks: int):
-        self.vm.patch.timestamp += add_seconds
-        self.vm.patch.block_number += add_blocks
 
 
 GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}

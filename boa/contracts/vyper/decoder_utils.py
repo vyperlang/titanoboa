@@ -22,7 +22,7 @@ from boa.vm.utils import ceil32, floor32
 class ByteAddressableStorage:
     def __init__(self, evm, address: Address, key: int):
         self.evm = evm
-        self.address = address.canonical_address
+        self.address = address
         self.key = key
 
     def __getitem__(self, subscript):

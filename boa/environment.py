@@ -151,8 +151,12 @@ class Env:
     # to the snapshot on exiting the with statement
     @contextlib.contextmanager
     def anchor(self):
-        with self.evm.anchor():
-            yield
+        snapshot_id = self.evm.snapshot()
+        try:
+            with self.evm.patch.anchor():
+                yield
+        finally:
+            self.evm.revert(snapshot_id)
 
     @contextlib.contextmanager
     def sender(self, address):
@@ -312,11 +316,11 @@ class Env:
 
     @property
     def block_number(self):
-        return self.evm.block_number
+        return self.evm.patch.block_number
 
     @property
     def timestamp(self):
-        return self.evm.timestamp
+        return self.evm.patch.timestamp
 
     # function to time travel
     def time_travel(
@@ -332,4 +336,6 @@ class Env:
         else:
             assert blocks is not None  # mypy hint
             seconds = blocks * block_delta
-        self.evm.time_travel(seconds, blocks)
+
+        self.evm.patch.timestamp += seconds
+        self.evm.patch.block_number += blocks
