@@ -10,6 +10,8 @@ _ONE_WEEK = 7 * 24 * 3600
 
 
 @contextlib.contextmanager
+# silence errors which can be thrown when handling a file that does
+# not exist
 def _silence_io_errors():
     try:
         yield
@@ -30,12 +32,16 @@ class DiskCache:
         for root, dirs, files in os.walk(self.cache_dir):
             # delete items older than ttl
             for f in files:
+                # squash errors, file might have been removed in race
+                # (both p.stat() and p.unlink() can throw)
                 with _silence_io_errors():
                     p = Path(root).joinpath(Path(f))
                     if time.time() - p.stat().st_atime > self.ttl or force:
                         p.unlink()
+
+            # prune empty directories
             for d in dirs:
-                # prune empty directories
+                # squash errors, directory might have been removed in race
                 with _silence_io_errors():
                     Path(root).joinpath(Path(d)).rmdir()
 
