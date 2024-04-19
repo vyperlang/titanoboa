@@ -1,3 +1,4 @@
+import contextlib
 import hashlib
 import os
 import pickle
@@ -6,6 +7,15 @@ import time
 from pathlib import Path
 
 _ONE_WEEK = 7 * 24 * 3600
+
+
+@contextlib.contextmanager
+def _silence_io_errors():
+    try:
+        yield
+    # pypy throws FileNotFoundError
+    except (OSError, FileNotFoundError):  # noqa: B014
+        pass
 
 
 class DiskCache:
@@ -20,16 +30,14 @@ class DiskCache:
         for root, dirs, files in os.walk(self.cache_dir):
             # delete items older than ttl
             for f in files:
-                p = Path(root).joinpath(Path(f))
-                if time.time() - p.stat().st_atime > self.ttl or force:
-                    p.unlink()
+                with _silence_io_errors():
+                    p = Path(root).joinpath(Path(f))
+                    if time.time() - p.stat().st_atime > self.ttl or force:
+                        p.unlink()
             for d in dirs:
                 # prune empty directories
-                try:
+                with _silence_io_errors():
                     Path(root).joinpath(Path(d)).rmdir()
-                # pypy throws FileNotFoundError
-                except (OSError, FileNotFoundError):  # noqa: B014
-                    pass
 
         self.last_gc = time.time()
 
