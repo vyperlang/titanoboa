@@ -530,6 +530,7 @@ class VyperContract(_BaseVyperContract):
         to_check = bytecode
         if self.data_section_size != 0:
             to_check = bytecode[: -self.data_section_size]
+        assert isinstance(self.compiler_data, CompilerData)
         if to_check != self.compiler_data.bytecode_runtime:
             warnings.warn(
                 f"casted bytecode does not match compiled bytecode at {self}",

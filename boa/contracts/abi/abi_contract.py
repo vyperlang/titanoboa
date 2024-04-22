@@ -1,7 +1,6 @@
 from collections import defaultdict
 from copy import deepcopy
 from functools import cached_property
-from os.path import basename
 from typing import Any, Optional, Union
 from warnings import warn
 
@@ -223,8 +222,11 @@ class ABIContract(_BaseEVMContract):
         address: Address,
         filename: Optional[str] = None,
         env=None,
+        compiler_data: Optional[Any] = None,
     ):
-        super().__init__(env, filename=filename, address=address)
+        super().__init__(
+            env, filename=filename, address=address, compiler_data=compiler_data
+        )
         self._name = name
         self._abi = abi
         self._functions = functions
@@ -293,7 +295,12 @@ class ABIContract(_BaseEVMContract):
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(self._name, self._abi, self._functions)
+        return ABIContractFactory(
+            self._name,
+            self._abi,
+            filename=self.filename,
+            compiler_data=self.compiler_data,
+        )
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
@@ -312,24 +319,26 @@ class ABIContractFactory:
         self,
         name: str,
         abi: list[dict],
-        functions: list[ABIFunction],
         filename: Optional[str] = None,
+        compiler_data: Optional[Any] = None,
     ):
         self._name = name
         self._abi = abi
-        self._functions = functions
+        self._functions = [
+            ABIFunction(item, name) for item in abi if item.get("type") == "function"
+        ]
         self._filename = filename
+        self.compiler_data = compiler_data
 
     @cached_property
     def abi(self):
         return deepcopy(self._abi)
 
     @classmethod
-    def from_abi_dict(cls, abi, name="<anonymous contract>"):
-        functions = [
-            ABIFunction(item, name) for item in abi if item.get("type") == "function"
-        ]
-        return cls(basename(name), abi, functions, filename=name)
+    def from_abi_dict(
+        cls, abi, name="<anonymous contract>", filename=None, compiler_data=None
+    ):
+        return cls(name, abi, filename, compiler_data)
 
     def at(self, address: Address | str) -> ABIContract:
         """
@@ -337,7 +346,12 @@ class ABIContractFactory:
         """
         address = Address(address)
         contract = ABIContract(
-            self._name, self._abi, self._functions, address, self._filename
+            self._name,
+            self._abi,
+            self._functions,
+            address,
+            self._filename,
+            compiler_data=self.compiler_data,
         )
         contract.env.register_contract(address, contract)
         return contract

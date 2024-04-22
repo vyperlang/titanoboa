@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 from eth.abc import ComputationAPI
 
@@ -19,10 +19,12 @@ class _BaseEVMContract:
         env: Optional[Env] = None,
         filename: Optional[str] = None,
         address: Optional[Address] = None,
+        compiler_data: Optional[Any] = None,
     ):
         self.env = env or Env.get_singleton()
         self._address = address  # this can be overridden by subclasses
         self.filename = filename
+        self.compiler_data = compiler_data
 
     def stack_trace(self, computation: ComputationAPI):
         raise NotImplementedError
@@ -51,10 +53,9 @@ class StackTrace(list):
 
 
 def _trace_for_unknown_contract(computation, env):
-    ret = StackTrace(
-        [f"<Unknown location in unknown contract {computation.msg.code_address.hex()}>"]
-    )
-    return _handle_child_trace(computation, env, ret)
+    err = f"   <Unknown contract 0x{computation.msg.code_address.hex()}>"
+    trace = StackTrace([err])
+    return _handle_child_trace(computation, env, trace)
 
 
 def _handle_child_trace(computation, env, return_trace):
