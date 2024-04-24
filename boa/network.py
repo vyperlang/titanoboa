@@ -105,7 +105,7 @@ class NetworkEnv(Env):
             )
             rpc = EthereumRPC(rpc)
 
-        self._rpc = rpc
+        self._rpc: RPC = rpc
 
         self._reset_fork()
 
@@ -412,7 +412,7 @@ class NetworkEnv(Env):
 
             # note: signed.rawTransaction has type HexBytes
             tx_hash = self._rpc.fetch(
-                "eth_sendRawTransaction", [to_hex(bytes(signed.rawTransaction))]
+                "eth_sendRawTransaction", [to_hex(bytes(signed.raw_transaction))]
             )
         else:
             # some providers (i.e. metamask) don't have sign_transaction
