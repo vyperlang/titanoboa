@@ -133,8 +133,8 @@ class NetworkEnv(Env):
         if not self._rpc_has_snapshot:
             raise RuntimeError("RPC does not have `evm_snapshot` capability!")
         block_number = self.evm.patch.block_number
+        snapshot_id = self._rpc.fetch("evm_snapshot", [])
         try:
-            snapshot_id = self._rpc.fetch("evm_snapshot", [])
             yield
             # note we cannot call super.anchor() because vm/accountdb fork
             # state is reset after every txn.
