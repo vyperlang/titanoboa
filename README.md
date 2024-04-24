@@ -36,7 +36,7 @@ If you are running titanoboa on a local [Vyper](https://github.com/vyperlang/vyp
 
 ## Background
 
-Titanoboa (/ˌtaɪtənəˈboʊə/;[1] lit. 'titanic boa') is an extinct genus of very large snakes that lived in what is now La Guajira in northeastern Colombia. They could grow up to 12.8 m (42 ft), perhaps even 14.3 m (47 ft) long and reach a body mass of 730–1,135 kg (1,610–2,500 lb). This snake lived during the Middle to Late Paleocene epoch, around 60 to 58 million years ago, following the extinction of all non-avian dinosaurs. Although originally thought to be an apex predator, the discovery of skull bones revealed that it was more than likely specialized in preying on fish. The only known species is Titanoboa cerrejonensis, the largest snake ever discovered,[2] which supplanted the previous record holder, Gigantophis garstini.[3]
+Titanoboa (/ˌtaɪtənəˈboʊə/; lit. 'titanic boa') is an extinct genus of very large snakes that lived in what is now La Guajira in northeastern Colombia. They could grow up to 12.8 m (42 ft), perhaps even 14.3 m (47 ft) long and reach a body mass of 730–1,135 kg (1,610–2,500 lb). This snake lived during the Middle to Late Paleocene epoch, around 60 to 58 million years ago, following the extinction of all non-avian dinosaurs. Although originally thought to be an apex predator, the discovery of skull bones revealed that it was more than likely specialized in preying on fish. The only known species is Titanoboa cerrejonensis, the largest snake ever discovered at that time, which supplanted the previous record holder, Gigantophis garstini.
 
 ## Usage / Quick Start
 
