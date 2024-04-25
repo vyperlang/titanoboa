@@ -19,8 +19,9 @@ def _fetch_etherscan(uri: str, api_key: Optional[str] = None, **params) -> dict:
     :param params: Query parameters
     :return: JSON response
     """
-    if uri in _cached_abi:
-        return _cached_abi[uri]
+    cache_key = uri + json.dumps(params, sort_keys=True)
+    if cache_key in _cached_abi:
+        return _cached_abi[cache_key]
 
     if api_key is not None:
         params["apikey"] = api_key
@@ -38,7 +39,7 @@ def _fetch_etherscan(uri: str, api_key: Optional[str] = None, **params) -> dict:
         raise ValueError(f"Failed to retrieve data from API: {data}")
 
     logging.warning(f"Queried Etherscan API with params: {params}")
-    _cached_abi[uri] = data
+    _cached_abi[cache_key] = data
     return data
 
 
@@ -49,8 +50,9 @@ def fetch_abi_from_etherscan(
     address = _resolve_implementation_address(address, uri, api_key)
 
     # fetch ABI of `address`
-    params = dict(module="contract", action="getabi", address=address)
-    data = _fetch_etherscan(uri, api_key, **params)
+    data = _fetch_etherscan(
+        uri, api_key, module="contract", action="getabi", address=address
+    )
 
     return json.loads(data["result"].strip())
 
@@ -58,8 +60,9 @@ def fetch_abi_from_etherscan(
 # fetch the address of a contract; resolves at most one layer of indirection
 # if the address is a proxy contract.
 def _resolve_implementation_address(address: str, uri: str, api_key: Optional[str]):
-    params = dict(module="contract", action="getsourcecode", address=address)
-    data = _fetch_etherscan(uri, api_key, **params)
+    data = _fetch_etherscan(
+        uri, api_key, module="contract", action="getsourcecode", address=address
+    )
     source_data = data["result"][0]
 
     # check if the contract is a proxy
