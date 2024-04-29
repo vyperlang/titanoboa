@@ -280,15 +280,16 @@ class ABIContract(_BaseEVMContract):
         Create a stack trace for a failed contract call.
         """
         calldata_method_id = bytes(computation.msg.data[:4])
+        reason = " ".join(computation.error.args or [])
+
         if calldata_method_id in self.method_id_map:
             function = self.method_id_map[calldata_method_id]
-            msg = f"  ({self}.{function.pretty_signature})"
+            msg = f"  {reason}({self}.{function.pretty_signature})"
         else:
             # Method might not be specified in the ABI
-            msg = f"  (unknown method id {self}.0x{calldata_method_id.hex()})"
+            msg = f"  {reason}(unknown method id {self}.0x{calldata_method_id.hex()})"
 
-        computation_stack = list(computation.error.args or [])
-        return_trace = StackTrace([msg] + computation_stack)
+        return_trace = StackTrace([msg])
         return _handle_child_trace(computation, self.env, return_trace)
 
     @property
