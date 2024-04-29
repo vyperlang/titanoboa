@@ -226,7 +226,7 @@ class ABIContract(_BaseEVMContract):
         self._abi = abi
         self._functions = functions
 
-        self._bytecode = self.env.vm.state.get_code(address.canonical_address)
+        self._bytecode = self.env.get_code(address)
         if not self._bytecode:
             warn(
                 f"Requested {self} but there is no bytecode at that address!",

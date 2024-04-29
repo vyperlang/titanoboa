@@ -13,8 +13,8 @@ from vyper.semantics.types import TupleT
 from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import keccak256
 
-from boa.environment import register_raw_precompile
 from boa.util.abi import abi_decode, abi_encode
+from boa.vm.py_evm import register_raw_precompile
 
 
 class PrecompileBuiltin(BuiltinFunctionT):

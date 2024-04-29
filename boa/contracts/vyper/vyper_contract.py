@@ -113,8 +113,7 @@ class VyperDeployer:
         address = Address(address)
 
         ret = self.deploy(override_address=address, skip_initcode=True)
-        vm = ret.env.vm
-        bytecode = vm.state.get_code(address.canonical_address)
+        bytecode = ret.env.get_code(address)
 
         ret._set_bytecode(bytecode)
 
@@ -359,8 +358,7 @@ def setpath(lens, path, val):
 class StorageVar:
     def __init__(self, contract, slot, typ):
         self.contract = contract
-        self.addr = self.contract._address.canonical_address
-        self.accountdb = contract.env.vm.state._account_db
+        self.addr = self.contract._address
         self.slot = slot
         self.typ = typ
 
@@ -369,7 +367,7 @@ class StorageVar:
         if truncate_limit is not None and n > truncate_limit:
             return None  # indicate failure to caller
 
-        fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
+        fakemem = ByteAddressableStorage(self.contract.env.evm, self.addr, slot)
         return decode_vyper_object(fakemem, typ)
 
     def _dealias(self, maybe_address):
@@ -707,7 +705,7 @@ class VyperContract(_BaseVyperContract):
             self.handle_error(computation)
 
         # cache gas used for call if profiling is enabled
-        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        gas_meter = self.env.get_gas_meter_class()
         if gas_meter == ProfilingGasMeter:
             cache_gas_used_for_computation(self, computation)
 
