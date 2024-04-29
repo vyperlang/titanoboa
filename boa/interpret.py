@@ -99,7 +99,7 @@ def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerDat
 
 
 def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
-    name = filename
+    name = Path(filename).stem
     # TODO: investigate if we can just put name in the signature
     if "name" in kwargs:
         name = kwargs.pop("name")

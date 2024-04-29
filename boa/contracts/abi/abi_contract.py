@@ -287,7 +287,8 @@ class ABIContract(_BaseEVMContract):
             # Method might not be specified in the ABI
             msg = f"  (unknown method id {self}.0x{calldata_method_id.hex()})"
 
-        return_trace = StackTrace([msg])
+        computation_stack = list(computation.error.args or [])
+        return_trace = StackTrace([msg] + computation_stack)
         return _handle_child_trace(computation, self.env, return_trace)
 
     @property

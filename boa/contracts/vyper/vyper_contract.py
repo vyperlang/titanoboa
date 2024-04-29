@@ -291,6 +291,9 @@ def check_boa_error_matches(error, *args, **kwargs):
         assert len(args) == 1, "multiple args!"
         assert len(kwargs) == 0, "can't mix args and kwargs!"
         err = args[0]
+        if isinstance(frame, str):
+            # frame for unknown contracts is a string
+            return _check(err in frame, f"{frame} does not match {args}")
         # try to match anything
         _check(
             err == frame.pretty_vm_reason

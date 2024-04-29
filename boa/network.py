@@ -400,7 +400,7 @@ class NetworkEnv(Env):
             except RPCError as e:
                 if e.code == 3:
                     # execution failed at estimateGas, probably the txn reverted
-                    raise _EstimateGasFailed()
+                    raise _EstimateGasFailed() from e
                 raise e from e
 
         if from_ not in self._accounts:
@@ -412,7 +412,7 @@ class NetworkEnv(Env):
 
             # note: signed.rawTransaction has type HexBytes
             tx_hash = self._rpc.fetch(
-                "eth_sendRawTransaction", [to_hex(bytes(signed.raw_transaction))]
+                "eth_sendRawTransaction", [to_hex(bytes(signed.rawTransaction))]
             )
         else:
             # some providers (i.e. metamask) don't have sign_transaction
