@@ -128,7 +128,7 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
 def generate_source_for_arbitrary_stmt(source_code, contract):
     """Wraps arbitrary stmts with external fn and generates source code"""
 
-    ast_typ = detect_statement_type(source_code, contract)
+    ast_typ = detect_expr_type(source_code, contract)
     if ast_typ:
         return_sig = f"-> {ast_typ}"
         debug_body = f"return {source_code}"
@@ -147,7 +147,7 @@ def generate_source_for_arbitrary_stmt(source_code, contract):
     )
 
 
-def detect_statement_type(source_code, contract):
+def detect_expr_type(source_code, contract):
     ast = parse_to_ast(source_code)
     vy_ast.folding.fold(ast)
     ast = ast.body[0]
