@@ -1,5 +1,6 @@
 import json
 import sys
+import textwrap
 from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
@@ -25,6 +26,7 @@ _Contract = Union[VyperContract, VyperBlueprint]
 
 
 _disk_cache = None
+_Deployer = VyperDeployer
 
 
 def set_cache_dir(cache_dir="~/.cache/titanoboa"):
@@ -34,6 +36,15 @@ def set_cache_dir(cache_dir="~/.cache/titanoboa"):
         return
     compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
     _disk_cache = DiskCache(cache_dir, compiler_version)
+
+
+def create_deployer(*args, **kwargs):
+    return _Deployer(*args, **kwargs)
+
+
+def set_deployer_class(deployer_class: type[_Deployer] = VyperDeployer):
+    global _Deployer
+    _Deployer = deployer_class
 
 
 def disable_cache():
@@ -74,8 +85,11 @@ class BoaLoader(SourceFileLoader):
 sys.meta_path.append(BoaImporter())
 
 
-def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerData:
+def compiler_data(
+    source_code: str, contract_name: str, deployer=None, **kwargs
+) -> CompilerData:
     global _disk_cache
+    deployer = deployer or _Deployer
 
     def _ifaces():
         # use get_interface_codes to get the interface source dict
@@ -85,17 +99,20 @@ def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerDat
 
     if _disk_cache is None:
         ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
-        return ret
+        return deployer.create_compiler_data(
+            source_code, contract_name, interface_codes=ifaces, **kwargs
+        )
 
     def func():
         ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
+        ret = deployer.create_compiler_data(
+            source_code, contract_name, interface_codes=ifaces, **kwargs
+        )
         with anchor_compiler_settings(ret):
             _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret
 
-    return _disk_cache.caching_lookup(str((kwargs, source_code)), func)
+    return _disk_cache.caching_lookup(str((kwargs, source_code, deployer)), func)
 
 
 def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
@@ -140,19 +157,18 @@ def loads_partial(
     filename: str = None,
     dedent: bool = True,
     compiler_args: dict = None,
-) -> VyperDeployer:
-    from boa import Env
+) -> _Deployer:
+    name = name or "VyperContract"  # TODO handle this upstream in CompilerData
+    if dedent:
+        source_code = textwrap.dedent(source_code)
 
-    return Env.get_singleton().create_deployer(
-        source_code=source_code,
-        name=name,
-        filename=filename,
-        dedent=dedent,
-        compiler_args=compiler_args,
-    )
+    compiler_args = compiler_args or {}
+
+    data = compiler_data(source_code, name, **compiler_args)
+    return _Deployer(data, filename=filename)
 
 
-def load_partial(filename: str, compiler_args=None) -> VyperDeployer:  # type: ignore
+def load_partial(filename: str, compiler_args=None) -> _Deployer:  # type: ignore
     with open(filename) as f:
         return loads_partial(
             f.read(), name=filename, filename=filename, compiler_args=compiler_args

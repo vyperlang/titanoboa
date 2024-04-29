@@ -6,6 +6,7 @@ from boa.contracts.vyper.vyper_contract import check_boa_error_matches
 from boa.debugger import BoaDebug
 from boa.environment import Env
 from boa.interpret import (
+    create_deployer,
     from_etherscan,
     load,
     load_abi,
@@ -13,6 +14,7 @@ from boa.interpret import (
     loads,
     loads_abi,
     loads_partial,
+    set_deployer_class,
 )
 from boa.network import NetworkEnv
 from boa.precompile import precompile
@@ -43,6 +45,7 @@ def set_env(new_env):
     env = new_env
 
     Env._singleton = new_env
+    set_deployer_class()  # make sure we are using the default compiler again
 
 
 def set_browser_env(address=None):
