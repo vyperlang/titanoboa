@@ -279,9 +279,11 @@ class ABIContract(_BaseEVMContract):
         """
         Create a stack trace for a failed contract call.
         """
-        calldata_method_id = bytes(computation.msg.data[:4])
-        reason = " ".join(computation.error.args or [])
+        reason = ""
+        if computation.is_error and any(computation.error.args):
+            reason = " ".join(str(arg) for arg in computation.error.args)
 
+        calldata_method_id = bytes(computation.msg.data[:4])
         if calldata_method_id in self.method_id_map:
             function = self.method_id_map[calldata_method_id]
             msg = f"  {reason}({self}.{function.pretty_signature})"

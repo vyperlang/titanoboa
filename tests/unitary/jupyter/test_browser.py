@@ -108,6 +108,7 @@ def mock_callback(mocked_token, display_mock):
 def mock_fork(mock_callback):
     mock_callback("evm_snapshot", "0x123456")
     mock_callback("evm_revert", "0x12345678")
+    mock_callback("eth_chainId", "0x1")
     data = {"number": "0x123", "timestamp": "0x65bbb460"}
     mock_callback("eth_getBlockByNumber", data)
 
@@ -165,8 +166,8 @@ def test_browser_chain_id(token, env, display_mock, mock_callback):
     assert env.get_chain_id() == 4660
     mock_callback("wallet_switchEthereumChain")
     env.set_chain_id(1)
-    assert display_mock.call_count == 3
-    (js,), _ = display_mock.call_args_list[-2]
+    assert display_mock.call_count == 4
+    (js,), _ = display_mock.call_args_list[1]
     assert (
         f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x1"}}])'
         in js.data
@@ -177,7 +178,7 @@ def test_browser_rpc(token, display_mock, mock_callback, account, mock_fork, env
     mock_callback("eth_gasPrice", "0x123")
     assert env.get_gas_price() == 291
 
-    assert display_mock.call_count == 6
+    assert display_mock.call_count == 7
     (js,), _ = display_mock.call_args
     assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
 
