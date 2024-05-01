@@ -97,7 +97,6 @@
     window._titanoboa = {
         loadSigner: handleCallback(loadSigner),
         sendTransaction: handleCallback(sendTransaction),
-        signTypedData: handleCallback(signTypedData),
         waitForTransactionReceipt: handleCallback(waitForTransactionReceipt),
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),
