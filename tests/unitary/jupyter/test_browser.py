@@ -206,9 +206,7 @@ def test_browser_rpc_server_error(
     assert str(exc_info.value) == "-32603: server error"
 
 
-def test_browser_rpc_internal_error(
-    token, display_mock, mock_callback, account, mock_fork, env
-):
+def test_browser_rpc_internal_error(mock_callback, env):
     error = {
         "code": -32603,
         "message": "Internal JSON-RPC error.",
@@ -226,6 +224,24 @@ def test_browser_rpc_internal_error(
         str(exc_info.value)
         == "3: insufficient funds for gas + value. balance: 0, fee: 116, value: 0"
     )
+
+
+def test_browser_rpc_debug_error(mock_callback, env):
+    message = 'The method "debug_traceCall" does not exist / is not available.'
+    error = {
+        "error": {
+            "code": -32601,
+            "message": message,
+            "data": {
+                "origin": "https://44wgpcbsrwx-496ff2e9c6d22116-0-colab.googleusercontent.com",
+                "cause": None,
+            },
+        }
+    }
+    mock_callback("eth_gasPrice", error=error)
+    with pytest.raises(RPCError) as exc_info:
+        env.get_gas_price()
+    assert str(exc_info.value) == f"-32601: {message}"
 
 
 def test_browser_js_error(token, display_mock, mock_callback, account, mock_fork):

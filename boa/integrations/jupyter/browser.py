@@ -208,12 +208,22 @@ def _parse_js_result(result: dict) -> Any:
     if "data" in result:
         return result["data"]
 
+    def _find_key(input_dict, target_key, typ) -> Any:
+        for key, value in input_dict.items():
+            if isinstance(value, dict):
+                found = _find_key(value, target_key, typ)
+                if found is not None:
+                    return found
+            if key == target_key and isinstance(value, typ) and value != "error":
+                return value
+        return None
+
     # raise the error in the Jupyter cell so that the user can see it
     error = result["error"]
-    error = error.get("info", error).get("error", error)
     error = error.get("data", error)
     raise RPCError(
-        message=error.get("message", error), code=error.get("code", "CALLBACK_ERROR")
+        message=_find_key(error, "message", str) or _find_key(error, "error", str),
+        code=_find_key(error, "code", int) or -1,
     )
 
 
