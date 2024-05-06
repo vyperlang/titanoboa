@@ -1,5 +1,4 @@
 import json
-import logging
 from time import sleep
 from typing import Optional
 
@@ -17,9 +16,9 @@ def _fetch_etherscan(
     Retries if rate limit is reached.
     :param uri: Etherscan API URI
     :param api_key: Etherscan API key
-    :params num_retries: Number of retries
-    :params backoff_ms: Backoff in milliseconds
-    :param params: Query parameters
+    :param num_retries: Number of retries
+    :param backoff_ms: Backoff in milliseconds
+    :param params: Additional query parameters
     :return: JSON response
     """
     if api_key is not None:
@@ -31,7 +30,6 @@ def _fetch_etherscan(
         data = res.json()
         if data.get("result") != "Max rate limit reached":
             break
-        logging.warning(f"Rate limit reached, retrying in {backoff_ms}ms...")
         sleep(backoff_ms / 1000)
 
     if int(data["status"]) != 1:
