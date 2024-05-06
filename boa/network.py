@@ -81,6 +81,10 @@ class ExternalAccount:
 
 
 class Capabilities:
+    """
+    Describes the capabilities of a chain (right now, EVM opcode support)
+    """
+
     def __init__(self, rpc):
         self._rpc = rpc
 
@@ -126,6 +130,9 @@ class Capabilities:
             return self.has_cancun
         if evm_version == "shanghai":
             return self.has_shanghai
+        # don't care about pre-shanghai since there aren't really new
+        # opcodes between constantinople and shanghai (and pre-constantinople
+        # is no longer even supported by vyper compiler).
         return True
 
 
