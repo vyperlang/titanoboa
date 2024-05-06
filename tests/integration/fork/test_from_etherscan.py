@@ -15,16 +15,12 @@ def api_key():
 
 @pytest.fixture(scope="module")
 def crvusd_contract(api_key):
-    contract = boa.from_etherscan(crvusd, name="crvUSD", api_key=api_key)
-
-    return contract
+    return boa.from_etherscan(crvusd, name="crvUSD", api_key=api_key)
 
 
 @pytest.fixture(scope="module")
 def proxy_contract(api_key):
-    contract = boa.from_etherscan(voting_agent, name="VotingAgent", api_key=api_key)
-
-    return contract
+    return boa.from_etherscan(voting_agent, name="VotingAgent", api_key=api_key)
 
 
 def test_crvusd_contract(crvusd_contract):
