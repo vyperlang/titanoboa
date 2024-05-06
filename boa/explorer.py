@@ -17,6 +17,8 @@ def _fetch_etherscan(
     Retries if rate limit is reached.
     :param uri: Etherscan API URI
     :param api_key: Etherscan API key
+    :params num_retries: Number of retries
+    :params backoff_ms: Backoff in milliseconds
     :param params: Query parameters
     :return: JSON response
     """
