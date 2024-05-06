@@ -248,4 +248,4 @@ def test_browser_js_error(token, display_mock, mock_callback, account, mock_fork
     mock_callback("loadSigner", error={"message": "custom message", "stack": ""})
     with pytest.raises(RPCError) as exc_info:
         BrowserSigner()
-    assert str(exc_info.value) == "CALLBACK_ERROR: custom message"
+    assert str(exc_info.value) == "-1: custom message"

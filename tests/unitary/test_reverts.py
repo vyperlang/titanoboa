@@ -163,3 +163,28 @@ def add():
 
     assert 0 == c._storage.counter.get()
     assert 0 == c.counter()
+
+
+def test_stack_trace(contract):
+    c = boa.loads(
+        """
+interface HasFoo:
+     def foo(x: uint256): nonpayable
+
+@external
+def revert(contract: HasFoo):
+    contract.foo(5)
+    """
+    )
+
+    with pytest.raises(BoaError) as context:
+        c.revert(contract.address)
+
+    trace = [
+        (line.contract_repr, line.error_detail, line.pretty_vm_reason)
+        for line in context.value.stack_trace
+    ]
+    assert trace == [
+        (repr(contract), "user revert with reason", "x is not 4"),
+        (repr(c), "external call failed", "x is not 4"),
+    ]
