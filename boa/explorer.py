@@ -6,10 +6,11 @@ from typing import Optional
 import requests
 
 SESSION = requests.Session()
-_cached_abi: dict[str, dict] = {}
 
 
-def _fetch_etherscan(uri: str, api_key: Optional[str] = None, **params) -> dict:
+def _fetch_etherscan(
+    uri: str, api_key: Optional[str] = None, num_retries=10, backoff_ms=400, **params
+) -> dict:
     """
     Fetch data from Etherscan API.
     Offers a simple caching mechanism to avoid redundant queries.
@@ -19,27 +20,21 @@ def _fetch_etherscan(uri: str, api_key: Optional[str] = None, **params) -> dict:
     :param params: Query parameters
     :return: JSON response
     """
-    cache_key = uri + json.dumps(params, sort_keys=True)
-    if cache_key in _cached_abi:
-        return _cached_abi[cache_key]
-
     if api_key is not None:
         params["apikey"] = api_key
 
-    for _ in range(10):
+    for _ in range(num_retries):
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
         if data.get("result") != "Max rate limit reached":
             break
-        logging.warning("Rate limit reached, retrying...")
-        sleep(0.3)
+        logging.warning(f"Rate limit reached, retrying in {backoff_ms}ms...")
+        sleep(backoff_ms / 1000)
 
     if int(data["status"]) != 1:
         raise ValueError(f"Failed to retrieve data from API: {data}")
 
-    logging.warning(f"Queried Etherscan API with params: {params}")
-    _cached_abi[cache_key] = data
     return data
 
 
@@ -68,5 +63,4 @@ def _resolve_implementation_address(address: str, uri: str, api_key: Optional[st
     # check if the contract is a proxy
     if int(source_data["Proxy"]) == 1:
         return source_data["Implementation"]
-    else:
-        return address
+    return address
