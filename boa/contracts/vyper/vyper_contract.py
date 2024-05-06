@@ -120,8 +120,7 @@ class VyperDeployer:
         address = Address(address)
 
         ret = self.deploy(override_address=address, skip_initcode=True)
-        vm = ret.env.vm
-        bytecode = vm.state.get_code(address.canonical_address)
+        bytecode = ret.env.get_code(address)
 
         ret._set_bytecode(bytecode)
 
@@ -366,8 +365,7 @@ def setpath(lens, path, val):
 class StorageVar:
     def __init__(self, contract, slot, typ):
         self.contract = contract
-        self.addr = self.contract._address.canonical_address
-        self.accountdb = contract.env.vm.state._account_db
+        self.addr = self.contract._address
         self.slot = slot
         self.typ = typ
 
@@ -376,7 +374,7 @@ class StorageVar:
         if truncate_limit is not None and n > truncate_limit:
             return None  # indicate failure to caller
 
-        fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
+        fakemem = ByteAddressableStorage(self.contract.env.evm, self.addr, slot)
         return decode_vyper_object(fakemem, typ)
 
     def _dealias(self, maybe_address):
@@ -466,6 +464,7 @@ class VyperContract(_BaseVyperContract):
         self,
         compiler_data: CompilerData,
         *args,
+        value=0,
         env: Env = None,
         override_address: Address = None,
         # whether to skip constructor
@@ -490,9 +489,11 @@ class VyperContract(_BaseVyperContract):
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
         if skip_initcode:
+            if value:
+                raise Exception("nonzero value but initcode is being skipped")
             addr = Address(override_address)
         else:
-            addr = self._run_init(*args, override_address=override_address)
+            addr = self._run_init(*args, value=value, override_address=override_address)
         self._address = addr
 
         for fn_name, fn in external_fns.items():
@@ -513,14 +514,14 @@ class VyperContract(_BaseVyperContract):
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, override_address=None):
+    def _run_init(self, *args, value=0, override_address=None):
         encoded_args = b""
         if self._ctor:
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
         addr, self.bytecode = self.env.deploy_code(
-            bytecode=initcode, override_address=override_address
+            bytecode=initcode, value=value, override_address=override_address
         )
         return Address(addr)
 
@@ -706,7 +707,7 @@ class VyperContract(_BaseVyperContract):
             self.handle_error(computation)
 
         # cache gas used for call if profiling is enabled
-        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        gas_meter = self.env.get_gas_meter_class()
         if gas_meter == ProfilingGasMeter:
             cache_gas_used_for_computation(self, computation)
 

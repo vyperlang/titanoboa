@@ -3,6 +3,8 @@ Testing with Titanoboa
 
 Titanoboa integrates natively with `pytest <https://docs.pytest.org/>`_ and `hypothesis <https://hypothesis.readthedocs.io/en/latest/quickstart.html>`_. Nothing special is needed to enable these, as the plugins for these packages will be loaded automatically. By default, isolation is enabled for tests - that is, any changes to the EVM state inside the test case will automatically be rolled back after the test case completes.
 
+Since ``titanoboa`` is framework-agnostic any other testing framework should work as well.
+
 
 Gas Profiling
 -----------------------
@@ -56,3 +58,117 @@ If ``--gas-profile`` is selected, to ignore gas profiling for specific tests, de
 
 .. warning::
     Profiling does not work with pytest-xdist plugin at the moment.
+
+Coverage
+--------------
+
+.. warning::
+    Coverage is not yet supported when using fast mode.
+
+Titanoboa offers coverage through the `coverage.py <https://coverage.readthedocs.io/>`_ package.
+
+To use, add the following to ``.coveragerc``:
+
+.. code-block::
+
+    [run]
+    plugins = boa.coverage
+
+(for more information see https://coverage.readthedocs.io/en/latest/config.html)
+
+Then, run with ``coverage run ...``
+
+To run with pytest, it can be invoked in either of two ways,
+
+.. code-block::
+
+    coverage run -m pytest ...
+
+or,
+
+.. code-block::
+
+    pytest --cov= ...
+
+`pytest-cov <https://pytest-cov.readthedocs.io/en/latest/readme.html#usage>`_ is a wrapper around ``coverage.py`` for using with pytest; using it is recommended because it smooths out some quirks of using ``coverage.py`` with pytest.
+
+Finally, ``coverage.py`` saves coverage data to a file named ``.coverage`` in the directory it is run in. To view the formatted coverage data, you typically want to use ``coverage report`` or ``coverage html``. See more options at https://coverage.readthedocs.io/en/latest/cmd.html.
+
+Coverage is experimental and there may be odd corner cases! If so, please report them on github or in the ``#titanoboa-interpreter`` channel of the `Vyper discord <https://discord.gg/6tw7PTM7C2>`_.
+
+Fuzzing Strategies
+-----------------
+
+Titanoboa offers custom `hypothesis <https://hypothesis.readthedocs.io/en/latest/quickstart.html>`_ strategies for testing. These can be used to generate EVM-compliant random inputs for tests.
+
+Native Import Syntax
+--------------------
+
+Titanoboa supports the native Python import syntax for Vyper contracts. This means that you can import Vyper contracts in any Python script as if you were importing a Python module.
+
+For example, if you have a contract ``contracts/Foo.vy``:
+
+.. code-block:: vyper
+
+    x: public(uint256)
+
+    def __init__(x_initial: uint256):
+        self.x = x_initial
+
+You can import it in a Python script ``tests/bar.py`` like this
+
+
+.. code-block:: python
+
+    from contracts import Foo
+
+    my_contract = Foo(42) # This will create a new instance of the contract
+
+    my_contract.x() # Do anything with the contract as you normally would
+
+Internally this will use the ``importlib`` module to load the file and create a ``ContractFactory``.
+
+
+.. note::
+
+    For this to work ``boa`` must be imported first.
+
+    Due to limitations in the Python import system, only imports of the form ``import Foo`` or ``from <folder> import Foo`` will work and it is not possible to use ``import <folder>``.
+
+
+Fast Mode
+---------
+
+Titanoboa has a fast mode that can be enabled by using ``boa.env.enable_fast_mode()``.
+
+This mode performs a number of optimizations by patching some py-evm objects to speed up the execution of unit tests.
+
+.. warning::
+    Fast mode is experimental and may break other features of boa (like coverage).
+
+ipython Vyper Cells
+-------------------
+
+Titanoboa supports ipython Vyper cells. This means that you can write Vyper code in a ipython/Jupyter Notebook environment and execute it as if it was a Python cell (the contract will be compiled instead, and a ``ContractFactory`` will be returned).
+
+To enable this feature, execute ``%load_ext boa.ipython`` in a cell.
+
+.. code-block:: python
+
+    In [1]: import boa; boa.env.fork(url="<rpc server address>")
+
+    In [2]: %load_ext boa.ipython
+
+    In [3]: %%vyper Test
+       ...: interface HasName:
+       ...:     def name() -> String[32]: view
+       ...:
+       ...: @external
+       ...: def get_name_of(addr: HasName) -> String[32]:
+       ...:     return addr.name()
+    Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
+
+    In [4]: c = Test.deploy()
+
+    In [5]: c.get_name_of("0xD533a949740bb3306d119CC777fa900bA034cd52")
+    Out[5]: 'Curve DAO Token'

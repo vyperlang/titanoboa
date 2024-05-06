@@ -6,7 +6,7 @@ import pytest
 from boa import _jupyter_server_extension_points
 from boa.integrations.jupyter import load_jupyter_server_extension
 from boa.integrations.jupyter.browser import _generate_token
-from boa.integrations.jupyter.constants import SHARED_MEMORY_LENGTH
+from boa.integrations.jupyter.constants import SHARED_MEMORY_LENGTH, TOKEN_REGEX
 from boa.integrations.jupyter.handlers import CallbackHandler
 
 
@@ -48,7 +48,7 @@ def test_setup_handlers(server_app_mock):
         "host_pattern": ".*$",
         "host_handlers": [
             (
-                "/base_url/titanoboa_jupyterlab/callback/(titanoboa_jupyterlab_[0-9a-fA-F]{64})$",
+                f"/base_url/titanoboa_jupyterlab/callback/({TOKEN_REGEX})$",
                 CallbackHandler,
             )
         ],
