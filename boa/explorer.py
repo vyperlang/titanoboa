@@ -45,9 +45,8 @@ def fetch_abi_from_etherscan(
     address = _resolve_implementation_address(address, uri, api_key)
 
     # fetch ABI of `address`
-    data = _fetch_etherscan(
-        uri, api_key, module="contract", action="getabi", address=address
-    )
+    params = dict(module="contract", action="getabi", address=address)
+    data = _fetch_etherscan(uri, api_key, **params)
 
     return json.loads(data["result"].strip())
 
@@ -55,12 +54,12 @@ def fetch_abi_from_etherscan(
 # fetch the address of a contract; resolves at most one layer of indirection
 # if the address is a proxy contract.
 def _resolve_implementation_address(address: str, uri: str, api_key: Optional[str]):
-    data = _fetch_etherscan(
-        uri, api_key, module="contract", action="getsourcecode", address=address
-    )
+    params = dict(module="contract", action="getsourcecode", address=address)
+    data = _fetch_etherscan(uri, api_key, **params)
     source_data = data["result"][0]
 
     # check if the contract is a proxy
     if int(source_data["Proxy"]) == 1:
         return source_data["Implementation"]
-    return address
+    else:
+        return address
