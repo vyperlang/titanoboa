@@ -3,6 +3,7 @@
 import plyvel
 from eth.db.backends.base import BaseDB
 
+
 class LevelDB(BaseDB):
     _GLOBAL = None
 

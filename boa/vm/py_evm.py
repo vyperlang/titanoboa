@@ -396,7 +396,7 @@ class PyEVM:
         self.patch.block_number = int(block_info["number"], 16)
         # TODO patch the other stuff
 
-        self.vm.state._account_db._rpc._init_mem_db()
+        self.vm.state._account_db._rpc._init_db()
 
     @property
     def is_forked(self):
