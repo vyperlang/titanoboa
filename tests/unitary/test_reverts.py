@@ -185,8 +185,14 @@ def __init__(math: address):
 @external
 def ext_call():
     Math(self.math).some_math(11)
+
+@external
+def ext_call2():
+    Math(self.math).some_math(11)  # dev: call math
 """
     m = boa.loads(pool_code)
     p = boa.loads(math_code, m.address)
     with boa.reverts(dev="math not ok"):
         p.ext_call()
+    with boa.reverts(dev="call math"):
+        p.ext_call2()
