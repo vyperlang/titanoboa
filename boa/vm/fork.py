@@ -52,7 +52,7 @@ class CachingRPC(RPC):
                     # use CacheDB as an additional layer over disk
                     # (ideally would use leveldb lru cache but it's not configurable
                     # via LevelDB API).
-                    self._db = CacheDB(LevelDB(cache_file), cache_size=1024 * 1024)  # type: ignore
+                    self._db = CacheDB(LevelDB(cache_file), cache_size=50 * 1024 * 1024)  # type: ignore
                 except ImportError:
                     # plyvel not found
                     pass
