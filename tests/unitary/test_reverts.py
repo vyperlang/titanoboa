@@ -163,3 +163,30 @@ def add():
 
     assert 0 == c._storage.counter.get()
     assert 0 == c.counter()
+
+
+def test_reverts_dev_reason():
+    pool_code = """
+@external
+@pure
+def some_math(x: uint256):
+    assert x < 10 # dev: math not ok
+"""
+    math_code = """
+math: address
+
+interface Math:
+    def some_math(x: uint256): pure
+
+@external
+def __init__(math: address):
+    self.math = math
+
+@external
+def ext_call():
+    Math(self.math).some_math(11)
+"""
+    m = boa.loads(pool_code)
+    p = boa.loads(math_code, m.address)
+    with boa.reverts(dev="math not ok"):
+        p.ext_call()

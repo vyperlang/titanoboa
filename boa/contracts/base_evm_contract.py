@@ -75,6 +75,11 @@ def _handle_child_trace(computation, env, return_trace):
         child_trace = _trace_for_unknown_contract(child, env)
     else:
         child_trace = child_obj.stack_trace(child)
+
+    if child_trace.last_frame.dev_reason and not return_trace.last_frame.dev_reason:
+        # Propagate the dev reason from the child frame to the parent
+        return_trace.last_frame.dev_reason = child_trace.last_frame.dev_reason
+
     return StackTrace(child_trace + return_trace)
 
 
