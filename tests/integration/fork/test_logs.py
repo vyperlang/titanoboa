@@ -33,7 +33,7 @@ def test_logs(simple_contract):
     simple_contract.deposit(value=amount, sender=eoa)
 
     topic0 = keccak256("Deposit(address,uint256)".encode())
-    expect_raw_log = (
+    expected_log = (
         0,
         int(WETH_ADDRESS, 16).to_bytes(20),
         (int.from_bytes(topic0), int(simple_contract.address, 16)),
@@ -41,4 +41,4 @@ def test_logs(simple_contract):
     )
 
     logs = simple_contract.get_logs()
-    assert logs == [RawEvent(expect_raw_log)]
+    assert logs == [RawEvent(expected_log)]
