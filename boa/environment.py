@@ -315,14 +315,12 @@ class Env:
         return self.evm.get_code(Address(address))
 
     def set_code(self, address: _AddressType, code: bytes) -> None:
-        assert self.evm.is_forked, "The EVM is not forked, cannot set code"
         self.evm.set_code(Address(address), code)
 
     def get_storage(self, address: _AddressType, slot: int) -> int:
         return self.evm.get_storage(Address(address), slot)
 
     def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
-        assert self.evm.is_forked, "The EVM is not forked, cannot set storage"
         self.evm.set_storage(Address(address), slot, value)
 
     # function to time travel
