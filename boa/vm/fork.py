@@ -120,10 +120,7 @@ class CachingRPC(RPC):
             # fetch_multi is called only with the missing payloads
             # map the results back to the original indices
             for result_ix, rpc_result in enumerate(self._rpc.fetch_multi(batch)):
-                try:
-                    key, item_ix = keys[result_ix]
-                except IndexError:
-                    continue
+                key, item_ix = keys[result_ix]
                 ret[item_ix] = rpc_result
                 self._db[key] = json.dumps(rpc_result).encode("utf-8")
 
