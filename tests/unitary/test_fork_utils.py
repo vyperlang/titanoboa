@@ -6,17 +6,17 @@ from boa import NetworkEnv
 address = "0x0000000000000000000000000000000000000065"
 
 
-def test_balance_non_fork():
+def test_set_balance_network():
     with pytest.raises(NotImplementedError):
         NetworkEnv.set_balance(boa.env, address, 0)
 
 
-def test_code_non_fork():
+def test_set_code_network():
     with pytest.raises(NotImplementedError):
         NetworkEnv.set_code(boa.env, address, b"")
 
 
-def test_storage_non_fork():
+def test_set_storage_network():
     with pytest.raises(NotImplementedError):
         NetworkEnv.set_storage(boa.env, address, 0, 0)
 
