@@ -496,10 +496,11 @@ class NetworkEnv(Env):
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
 
+    def set_balance(self, address, value):
+        raise NotImplementedError("Cannot use set_balance in network mode")
+
     def set_code(self, address: _AddressType, code: bytes) -> None:
-        assert self.evm.is_forked, "The EVM is not forked, cannot set code"
-        return super().set_code(address, code)
+        raise NotImplementedError("Cannot use set_code in network mode")
 
     def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
-        assert self.evm.is_forked, "The EVM is not forked, cannot set storage"
-        super().set_storage(address, slot, value)
+        raise NotImplementedError("Cannot use set_storage in network mode")
