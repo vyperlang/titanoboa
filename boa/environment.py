@@ -318,10 +318,8 @@ class Env:
         assert self.evm.is_forked, "The EVM is not forked, cannot set code"
         self.evm.set_code(Address(address), code)
 
-    def get_storage(
-        self, address: _AddressType, slot: int, from_journal: bool = True
-    ) -> int:
-        return self.evm.get_storage(Address(address), slot, from_journal)
+    def get_storage(self, address: _AddressType, slot: int) -> int:
+        return self.evm.get_storage(Address(address), slot)
 
     def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
         assert self.evm.is_forked, "The EVM is not forked, cannot set storage"
