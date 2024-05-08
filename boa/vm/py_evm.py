@@ -420,6 +420,17 @@ class PyEVM:
     def get_code(self, address: Address) -> bytes:
         return self.vm.state.get_code(address.canonical_address)
 
+    def set_code(self, address: Address, code: bytes) -> None:
+        self.vm.state.set_code(address.canonical_address, code)
+
+    def get_storage(
+        self, address: Address, slot: int, from_journal: bool = True
+    ) -> int:
+        return self.vm.state.get_storage(address.canonical_address, slot, from_journal)
+
+    def set_storage(self, address: Address, slot: int, value: int) -> None:
+        self.vm.state.set_storage(address.canonical_address, slot, value)
+
     def get_gas_limit(self):
         return self.vm.state.gas_limit
 
