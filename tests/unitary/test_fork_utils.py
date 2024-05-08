@@ -23,7 +23,7 @@ def test_code():
     assert boa.env.get_code(address) == code
 
 
-def test_storage(monkeypatch):
+def test_storage():
     storage = 12381920371289
     assert boa.env.get_storage(address, 0) == 0
     boa.env.set_storage(address, 0, storage)
