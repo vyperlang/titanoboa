@@ -92,7 +92,7 @@ class Capabilities:
         try:
             self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}])
             return True
-        except (RPCError, HTTPError):
+        except RPCError:
             return False
 
     @cached_property
