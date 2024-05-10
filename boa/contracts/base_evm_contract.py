@@ -49,7 +49,7 @@ class StackTrace(list):
 
     @property
     def dev_reason(self) -> str | None:
-        if not self.last_frame or isinstance(self.last_frame, str):
+        if self.last_frame is None or isinstance(self.last_frame, str):
             return None
         return self.last_frame.dev_reason
 
