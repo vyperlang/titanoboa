@@ -14,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (push)
+        uses: actions/checkout@v4
         if: github.event_name != 'pull_request_target'
 
       # given we use the pull_request_trigger, only allow contributors to run tests with secrets
@@ -29,12 +30,13 @@ jobs:
               core.setFailed(username + ' is not a contributor');
             }
 
-      - uses: actions/checkout@v4
+      - name: Checkout ${{ github.event.pull_request.head.repo.full_name }}@${{ github.event.pull_request.head.sha }}
+        uses: actions/checkout@v4
         if: github.event_name == 'pull_request_target'
         with:
           fetch-depth: 0 # we need the history to be able to merge
-          repository: ${{ github.pull_request.base_repo }}
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v4

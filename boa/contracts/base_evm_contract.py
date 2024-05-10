@@ -46,6 +46,12 @@ class StackTrace(list):
         return "\n\n".join(str(x) for x in self)
 
     @property
+    def dev_reason(self) -> str | None:
+        if isinstance(self.last_frame, str):
+            return None
+        return self.last_frame.dev_reason
+
+    @property
     def last_frame(self):
         return self[-1]
 
@@ -76,9 +82,9 @@ def _handle_child_trace(computation, env, return_trace):
     else:
         child_trace = child_obj.stack_trace(child)
 
-    if child_trace.last_frame.dev_reason and not return_trace.last_frame.dev_reason:
+    if child_trace.dev_reason and not return_trace.dev_reason:
         # Propagate the dev reason from the child frame to the parent
-        return_trace.last_frame.dev_reason = child_trace.last_frame.dev_reason
+        return_trace.last_frame.dev_reason = child_trace.dev_reason
 
     return StackTrace(child_trace + return_trace)
 

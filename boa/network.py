@@ -92,7 +92,7 @@ class Capabilities:
         try:
             self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}])
             return True
-        except RPCError:
+        except (RPCError, HTTPError):
             return False
 
     @cached_property
@@ -181,7 +181,7 @@ class NetworkEnv(Env):
             snapshot_id = self._rpc.fetch("evm_snapshot", [])
             self._rpc.fetch("evm_revert", [snapshot_id])
             return True
-        except RPCError:
+        except (RPCError, HTTPError):
             return False
 
     # OVERRIDES
