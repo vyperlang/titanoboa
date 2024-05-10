@@ -70,15 +70,12 @@ def pytest_fixture_setup(fixturedef, request):
 
 
 def pytest_fixture_post_finalizer(fixturedef, request):
-    if fixturedef not in _fixture_map:
-        warnings.warn("possible bug in titanoboa! bad fixture tracking", stacklevel=1)
-        return
-
     # there are outstanding bugs in pytest where the finalizers get
     # run out of order, so we need to maintain a task list and defer
     # execution of out-of-order finalizers until all the finalizers
     # that should have come before them get run.
-    _task_list.update(_fixture_map[fixturedef])
+    todo = _fixture_map.get(fixturedef, [])
+    _task_list.update(todo)
 
     _work_task_list()
 
