@@ -136,6 +136,14 @@ class _BaseVyperContract(_BaseEVMContract):
         with anchor_settings(self.compiler_data.settings):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
+        if (capabilities := getattr(env, "capabilities", None)) is not None:
+            compiler_evm_version = self.compiler_data.settings.evm_version
+            if not capabilities.check_evm_version(compiler_evm_version):
+                msg = "EVM version mismatch! tried to deploy "
+                msg += f"{compiler_evm_version} but network only has "
+                msg += f"{capabilities.describe_capabilities()}"
+                raise Exception(msg)
+
     @cached_property
     def abi(self):
         return build_abi_output(self.compiler_data)
