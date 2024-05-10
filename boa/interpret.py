@@ -129,7 +129,7 @@ def compiler_data(
     global _disk_cache, _search_path
 
     file_input = FileInput(
-        source_code=source_code,
+        contents=source_code,
         source_id=-1,
         path=Path(contract_name),
         resolved_path=Path(filename),

@@ -28,6 +28,7 @@ from vyper.compiler.output import build_abi_output
 from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
+from vyper.semantics.analysis.base import VarInfo
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
@@ -121,6 +122,10 @@ class VyperDeployer:
 
         return ret
 
+    @cached_property
+    def _constants(self):
+        return ConstantsModel(self.compiler_data)
+
 
 # a few lines of shared code between VyperBlueprint and VyperContract
 class _BaseVyperContract(_BaseEVMContract):
@@ -139,6 +144,10 @@ class _BaseVyperContract(_BaseEVMContract):
     @cached_property
     def abi(self):
         return build_abi_output(self.compiler_data)
+
+    @cached_property
+    def _constants(self):
+        return ConstantsModel(self.compiler_data)
 
 
 # create a blueprint for use with `create_from_blueprint`.
@@ -449,6 +458,20 @@ class ImmutablesModel:
 
     def dump(self):
         return FrameDetail("immutables", vars(self))
+
+    def __repr__(self):
+        return repr(self.dump())
+
+
+# data structure to represent the constants in a contract
+class ConstantsModel:
+    def __init__(self, compiler_data: CompilerData):
+        for k, v in compiler_data.annotated_vyper_module._metadata["namespace"].items():
+            if isinstance(v, VarInfo) and v.decl_node and v.is_constant:
+                setattr(self, k, v.decl_node.value.value)
+
+    def dump(self):
+        return FrameDetail("constants", vars(self))
 
     def __repr__(self):
         return repr(self.dump())
