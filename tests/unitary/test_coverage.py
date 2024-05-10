@@ -29,7 +29,7 @@ def __init__(_foo_address: address):
 @external
 @view
 def bar(b: uint256) -> uint256:
-    c: uint256 = Foo(FOO).foo(b)
+    c: uint256 = staticcall Foo(FOO).foo(b)
     return c
 """
     return boa.loads(source_code, external_contract.address, name="TestContract")

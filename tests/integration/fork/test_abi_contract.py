@@ -133,16 +133,17 @@ def test_fork_write(crvusd, n):
 def test_fork_write_flip(crvusd):
     e = boa.loads(
         f"""
-from vyper.interfaces import ERC20
+from ethereum.ercs import ERC20
 crvUSD: ERC20
-@external
+
+@deploy
 def __init__():
     self.crvUSD = ERC20({crvusd.address})
 @external
 def flip_from(_input: uint256) -> uint256:
-    self.crvUSD.transferFrom(msg.sender, self, _input)
-    self.crvUSD.transfer(msg.sender, _input / 2)
-    return _input / 2
+    extcall self.crvUSD.transferFrom(msg.sender, self, _input)
+    extcall self.crvUSD.transfer(msg.sender, _input // 2)
+    return _input // 2
     """
     )
     pool = "0x4dece678ceceb27446b35c672dc7d61f30bad69e"
@@ -160,7 +161,7 @@ def test_abi_stack_trace(crvusd):
 from ethereum.ercs import ERC20
 @external
 def foo(x: ERC20, from_: address):
-    x.transferFrom(from_, self, 100)
+    extcall x.transferFrom(from_, self, 100)
     """
     )
 
