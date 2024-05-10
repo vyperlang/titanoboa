@@ -45,6 +45,9 @@ class Env:
         self._cached_line_profiles = {}
         self._coverage_data = {}
 
+        # New contracts since last snapshot
+        self._new_contracts = []
+
         self._gas_tracker = 0
 
         self.evm = PyEVM(self, fast_mode_enabled, fork_try_prefetch_state)
@@ -117,7 +120,22 @@ class Env:
         # also register it in the registry for
         # create_minimal_proxy_to and create_copy_of
         bytecode = self.evm.get_code(addr)
-        self._code_registry[bytecode] = obj
+        novel_bytecode = bytecode not in self._code_registry
+        if novel_bytecode:
+            self._code_registry[bytecode] = obj
+        # Remember this address as a new contract
+        self._new_contracts.append((addr, novel_bytecode))
+
+    # Unregister a contract, e.g., while reverting to a snapshot
+    # addr should be an Address
+    def unregister_contract(self, addr, unregister_bytecode=True):
+        if addr.canonical_address in self._contracts:
+            del self._contracts[addr.canonical_address]
+
+        if unregister_bytecode:
+            bytecode = self.evm.get_code(addr)
+            if bytecode in self._code_registry:
+                del self._code_registry[bytecode]
 
     def register_blueprint(self, bytecode, obj):
         self._code_registry[bytecode] = obj
@@ -152,10 +170,15 @@ class Env:
     @contextlib.contextmanager
     def anchor(self):
         snapshot_id = self.evm.snapshot()
+        # Remember new contracts from this snapshot
+        self._new_contracts = []
         try:
             with self.evm.patch.anchor():
                 yield
         finally:
+            # Unregister new contracts since snapshot
+            for addr, novel_bytecode in self._new_contracts:
+                self.unregister_contract(addr, novel_bytecode)
             self.evm.revert(snapshot_id)
 
     @contextlib.contextmanager
