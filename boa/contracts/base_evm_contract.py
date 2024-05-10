@@ -84,7 +84,7 @@ def _handle_child_trace(computation, env, return_trace):
     else:
         child_trace = child_obj.stack_trace(child)
 
-    if child_trace.dev_reason and not return_trace.dev_reason:
+    if child_trace.dev_reason is not None and return_trace.dev_reason is None:
         # Propagate the dev reason from the child frame to the parent
         return_trace.last_frame.dev_reason = child_trace.dev_reason
 
