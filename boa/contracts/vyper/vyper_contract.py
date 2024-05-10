@@ -467,8 +467,12 @@ class ImmutablesModel:
 class ConstantsModel:
     def __init__(self, compiler_data: CompilerData):
         for k, v in compiler_data.annotated_vyper_module._metadata["namespace"].items():
-            if isinstance(v, VarInfo) and v.decl_node and v.is_constant:
-                setattr(self, k, v.decl_node.value.value)
+            if (
+                isinstance(v, VarInfo)
+                and v.decl_node is not None
+                and v.decl_node.is_constant
+            ):
+                setattr(self, k, v.decl_node.value.reduced().value)
 
     def dump(self):
         return FrameDetail("constants", vars(self))
