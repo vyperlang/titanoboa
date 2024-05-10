@@ -181,7 +181,7 @@ class NetworkEnv(Env):
             snapshot_id = self._rpc.fetch("evm_snapshot", [])
             self._rpc.fetch("evm_revert", [snapshot_id])
             return True
-        except RPCError:
+        except (RPCError, HTTPError):
             return False
 
     # OVERRIDES
