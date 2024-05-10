@@ -41,13 +41,15 @@ class _BaseEVMContract:
         return self._address
 
 
+# TODO: allow only ErrorDetail in here.
+# Currently this is list[str|ErrorDetail] (see _trace_for_unknown_contract below)
 class StackTrace(list):
     def __str__(self):
         return "\n\n".join(str(x) for x in self)
 
     @property
     def dev_reason(self) -> str | None:
-        if isinstance(self.last_frame, str):
+        if not self.last_frame or isinstance(self.last_frame, str):
             return None
         return self.last_frame.dev_reason
 
