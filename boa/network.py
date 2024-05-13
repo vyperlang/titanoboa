@@ -8,7 +8,7 @@ from math import ceil
 from eth_account import Account
 from requests.exceptions import HTTPError
 
-from boa.environment import Env
+from boa.environment import Env, _AddressType
 from boa.rpc import (
     RPC,
     EthereumRPC,
@@ -181,7 +181,7 @@ class NetworkEnv(Env):
             snapshot_id = self._rpc.fetch("evm_snapshot", [])
             self._rpc.fetch("evm_revert", [snapshot_id])
             return True
-        except RPCError:
+        except (RPCError, HTTPError):
             return False
 
     # OVERRIDES
@@ -495,3 +495,12 @@ class NetworkEnv(Env):
 
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
+
+    def set_balance(self, address, value):
+        raise NotImplementedError("Cannot use set_balance in network mode")
+
+    def set_code(self, address: _AddressType, code: bytes) -> None:
+        raise NotImplementedError("Cannot use set_code in network mode")
+
+    def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
+        raise NotImplementedError("Cannot use set_storage in network mode")

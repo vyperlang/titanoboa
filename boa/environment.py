@@ -311,8 +311,17 @@ class Env:
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._hook_trace_computation(child, child_contract)
 
-    def get_code(self, address):
+    def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))
+
+    def set_code(self, address: _AddressType, code: bytes) -> None:
+        self.evm.set_code(Address(address), code)
+
+    def get_storage(self, address: _AddressType, slot: int) -> int:
+        return self.evm.get_storage(Address(address), slot)
+
+    def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
+        self.evm.set_storage(Address(address), slot, value)
 
     # function to time travel
     def time_travel(

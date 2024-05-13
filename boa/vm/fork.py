@@ -31,28 +31,33 @@ class CachingRPC(RPC):
     def __init__(self, rpc: RPC, cache_file: str = DEFAULT_CACHE_DIR):
         # (default to memory db plyvel not found or cache_file is None)
         self._rpc = rpc
-        self._init_mem_db()
-        if cache_file is not None:
-            try:
-                from boa.util.leveldb import LevelDB
 
-                print("(using leveldb)", file=sys.stderr)
-
-                cache_file = os.path.expanduser(cache_file)
-                # use CacheDB as an additional layer over disk
-                # (ideally would use leveldb lru cache but it's not configurable
-                # via LevelDB API).
-                self._db = CacheDB(LevelDB(cache_file), cache_size=1024 * 1024)  # type: ignore
-            except ImportError:
-                # plyvel not found
-                pass
+        self._cache_file = cache_file
+        self._init_db()
 
     # _loaded is a cache for the constructor.
     # reduces fork time after the first fork.
     _loaded: dict[tuple[str, str], "CachingRPC"] = {}
     _pid: int = os.getpid()  # so we can detect if our fds are bad
 
-    def _init_mem_db(self):
+    def _init_db(self):
+        if self._cache_file is not None:
+            try:
+                from boa.util.leveldb import LevelDB
+
+                print("(using leveldb)", file=sys.stderr)
+
+                cache_file = os.path.expanduser(self._cache_file)
+                # use CacheDB as an additional layer over disk
+                # (ideally would use leveldb lru cache but it's not configurable
+                # via LevelDB API).
+                leveldb = LevelDB.create(cache_file)
+                self._db = CacheDB(leveldb, cache_size=1024 * 1024)  # type: ignore
+                return
+            except ImportError:
+                # plyvel not found
+                pass
+
         self._db = MemoryDB(lrudict(1024 * 1024))
 
     @property
