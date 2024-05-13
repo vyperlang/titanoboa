@@ -15,6 +15,7 @@ from vyper.ast.nodes import VyperNode
 from vyper.codegen.ir_node import IRnode
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
+from vyper.ir.compile_ir import getpos
 from vyper.utils import unsigned_to_signed
 
 from boa.util.lrudict import lrudict
@@ -845,7 +846,7 @@ class Assert(IRExecutor):
         self.builder.extend(
             f"""
         if not bool({test}):
-            VM.vyper_source_pos = {repr(source and source.src)}
+            VM.vyper_source_pos = {repr(source and getpos(source))}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert("")  # venom assert
         """
@@ -862,7 +863,7 @@ class _IRRevert(IRExecutor):
         self.builder.extend(
             f"""
             VM.output = VM.memory_read_bytes({ptr}, {size})
-            VM.vyper_source_pos = {repr(source and source.src)}
+            VM.vyper_source_pos = {repr(source and getpos(source))}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert(VM.output)  # venom revert
         """
