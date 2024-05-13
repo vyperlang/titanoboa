@@ -106,8 +106,8 @@ def _address_strategy(length: Optional[int] = 100) -> SearchStrategy:
             {obj.address for obj in boa.env._code_registry.values()}
     )
 
-    # generate max(length - len(env_accounts), 0) random addresses
-    random_strings = generate_random_string(max(length - len(env_accounts), 0))
+    # generate `length` random addresses
+    random_strings = generate_random_string(length)
     random_accounts = {format_addr(i) for i in random_strings}
 
     return _DeferredStrategyRepr(
