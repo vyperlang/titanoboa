@@ -65,7 +65,7 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
 
     def dynamic_source_filename(self, filename, frame):
         contract = self._contract_for_frame(frame)
-        if contract is None:
+        if contract is None or contract.filename is None:
             return None
 
         return str(contract.filename)

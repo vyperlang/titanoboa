@@ -1,4 +1,3 @@
-import eth.exceptions
 import pytest
 
 import boa
@@ -20,6 +19,7 @@ def test_deploy_with_endowment():
 
     assert boa.env.get_balance(boa.env.eoa) == 0
     assert boa.env.get_balance(c.address) == 1000
+
 
 # try to call ctor with skip_init=True - must raise
 def test_deploy_with_endowment_must_init():
