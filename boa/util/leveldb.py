@@ -5,7 +5,8 @@ from eth.db.backends.base import BaseDB
 
 
 class LevelDB(BaseDB):
-    # Creates db as a class variable to avoid level db lock error
+    _GLOBAL = None
+
     def __init__(self, db_path, max_open_files: int = None) -> None:
         self.db = plyvel.DB(
             db_path,
@@ -13,6 +14,14 @@ class LevelDB(BaseDB):
             error_if_exists=False,
             max_open_files=max_open_files,
         )
+
+    @classmethod
+    # Creates db as a class variable to avoid level db lock error
+    # create the singleton db object
+    def create(cls, *args, **kwargs):
+        if cls._GLOBAL is None:
+            cls._GLOBAL = cls(*args, **kwargs)
+        return cls._GLOBAL
 
     def __getitem__(self, key: bytes) -> bytes:
         v = self.db.get(key)

@@ -25,7 +25,7 @@ from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
 from vyper.compiler.output import build_abi_output
-from vyper.compiler.settings import OptimizationLevel, anchor_settings
+from vyper.compiler.settings import OptimizationLevel, Settings, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.analysis.base import VarInfo
@@ -140,6 +140,14 @@ class _BaseVyperContract(_BaseEVMContract):
 
         with anchor_settings(self.compiler_data.settings):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
+
+        if (capabilities := getattr(env, "capabilities", None)) is not None:
+            compiler_evm_version = self.compiler_data.settings.evm_version
+            if not capabilities.check_evm_version(compiler_evm_version):
+                msg = "EVM version mismatch! tried to deploy "
+                msg += f"{compiler_evm_version} but network only has "
+                msg += f"{capabilities.describe_capabilities()}"
+                raise Exception(msg)
 
     @cached_property
     def abi(self):
@@ -652,7 +660,7 @@ class VyperContract(_BaseVyperContract):
     def find_source_of(self, computation, is_initcode=False):
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
-            return self.ast_map.get(computation.vyper_source_pos)
+            return self.source_map.get(computation.vyper_source_pos)
 
         code_stream = computation.code
         ast_map = self.source_map["pc_raw_ast_map"]
@@ -829,7 +837,7 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def unoptimized_ir(self):
-        settings = self.compiler_data.settings.copy()
+        settings = Settings.from_dict(self.compiler_data.settings.as_dict())
         settings.optimize = OptimizationLevel.NONE
         with anchor_settings(settings):
             return generate_ir_for_module(self.module_t)

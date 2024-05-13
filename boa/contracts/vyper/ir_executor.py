@@ -11,6 +11,8 @@ from eth.exceptions import Halt
 from eth.exceptions import Revert as VMRevert
 from eth.exceptions import WriteProtection
 from eth_hash.auto import keccak
+from vyper.ast.nodes import VyperNode
+from vyper.codegen.ir_node import IRnode
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
 from vyper.utils import unsigned_to_signed
@@ -839,10 +841,11 @@ class Assert(IRExecutor):
 
     def _compile(self, test):
         _ = VMRevert  # make flake8 happy
+        source = self.ir_node.ast_source
         self.builder.extend(
             f"""
         if not bool({test}):
-            VM.vyper_source_pos = {repr(self.ir_node.source_pos)}
+            VM.vyper_source_pos = {repr(source and source.src)}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert("")  # venom assert
         """
@@ -855,10 +858,11 @@ class _IRRevert(IRExecutor):
     _sig = (int, int)
 
     def _compile(self, ptr, size):
+        source = self.ir_node.ast_source
         self.builder.extend(
             f"""
             VM.output = VM.memory_read_bytes({ptr}, {size})
-            VM.vyper_source_pos = {repr(self.ir_node.source_pos)}
+            VM.vyper_source_pos = {repr(source and source.src)}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert(VM.output)  # venom revert
         """
@@ -1118,17 +1122,19 @@ class Set(IRExecutor):
         val.compile(out=variable.out_name, out_typ=int)
 
 
-def _ensure_source_pos(ir_node, source_pos=None, error_msg=None):
-    if ir_node.source_pos is None:
-        ir_node.source_pos = source_pos
+def _ensure_ast_source(
+    ir_node: IRnode, ast_source: VyperNode = None, error_msg: str = None
+):
+    if ir_node.ast_source is None:
+        ir_node.ast_source = ast_source
     if ir_node.error_msg is None:
         ir_node.error_msg = error_msg
     for arg in ir_node.args:
-        _ensure_source_pos(arg, ir_node.source_pos, ir_node.error_msg)
+        _ensure_ast_source(arg, ir_node.ast_source, ir_node.error_msg)
 
 
 def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
-    _ensure_source_pos(ir_node)
+    _ensure_ast_source(ir_node)
     ctx = CompileContext(vyper_compiler_data)
     ret = _executor_from_ir(ir_node, ctx)
 
