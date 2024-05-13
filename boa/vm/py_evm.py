@@ -396,7 +396,7 @@ class PyEVM:
         self.patch.block_number = int(block_info["number"], 16)
         self.patch.chain_id = int(rpc.fetch("eth_chainId", []), 16)
 
-        self.vm.state._account_db._rpc._init_mem_db()
+        self.vm.state._account_db._rpc._init_db()
 
     @property
     def is_forked(self):
@@ -419,6 +419,15 @@ class PyEVM:
 
     def get_code(self, address: Address) -> bytes:
         return self.vm.state.get_code(address.canonical_address)
+
+    def set_code(self, address: Address, code: bytes) -> None:
+        self.vm.state.set_code(address.canonical_address, code)
+
+    def get_storage(self, address: Address, slot: int) -> int:
+        return self.vm.state.get_storage(address.canonical_address, slot)
+
+    def set_storage(self, address: Address, slot: int, value: int) -> None:
+        self.vm.state.set_storage(address.canonical_address, slot, value)
 
     def get_gas_limit(self):
         return self.vm.state.gas_limit
