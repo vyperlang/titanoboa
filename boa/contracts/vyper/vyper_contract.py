@@ -633,7 +633,7 @@ class VyperContract(_BaseVyperContract):
     def find_source_of(self, computation, is_initcode=False):
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
-            return self.ast_map.get(computation.vyper_source_pos)
+            return self.source_map.get(computation.vyper_source_pos)
 
         code_stream = computation.code
         ast_map = self.source_map["pc_raw_ast_map"]
