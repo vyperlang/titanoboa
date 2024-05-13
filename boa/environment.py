@@ -13,11 +13,14 @@ from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
+from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
 
 # make mypy happy
 _AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
+
+CACHE_LENGTH = 1024
 
 
 # wrapper class around py-evm which provides a "contract-centric" API
@@ -30,6 +33,7 @@ class Env:
         self._gas_price = None
 
         self._aliases = {}
+        self._address_cache: lrudict = lrudict(CACHE_LENGTH)
 
         # TODO differentiate between origin and sender
         self.eoa = self.generate_address("eoa")
@@ -178,6 +182,8 @@ class Env:
 
     def generate_address(self, alias: Optional[str] = None) -> _AddressType:
         t = Address(self._random.randbytes(20))
+        # in newest python versions, dict keeps insertion order
+        self._address_cache[t] = ""
         if alias is not None:
             self.alias(t, alias)
 
