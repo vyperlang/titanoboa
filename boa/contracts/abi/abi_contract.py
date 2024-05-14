@@ -246,6 +246,7 @@ class ABIContract(_BaseEVMContract):
             setattr(self, name, ABIOverload.create(group, self))
 
         self._address = Address(address)
+        self._computation: Optional[ComputationAPI] = None
 
     @property
     def abi(self):
@@ -265,6 +266,7 @@ class ABIContract(_BaseEVMContract):
         :param computation: the computation object returned by `execute_code`
         :param abi_type: the ABI type of the return value.
         """
+        self._computation = computation
         # when there's no contract in the address, the computation output is empty
         if computation.is_error:
             return self.handle_error(computation)
