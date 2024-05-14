@@ -151,7 +151,8 @@ ipython Vyper Cells
 
 Titanoboa supports ipython Vyper cells. This means that you can write Vyper code in a ipython/Jupyter Notebook environment and execute it as if it was a Python cell (the contract will be compiled instead, and a ``ContractFactory`` will be returned).
 
-To enable this feature, execute ``%load_ext boa.ipython`` in a cell.
+You can use Jupyter to execute titanoboa code in network mode from your browser using any wallet, using your wallet to sign transactions and call the RPC.
+For a full example, please see `this example Jupyter notebook <../../examples/jupyter_browser_signer.ipynb>`_.
 
 .. code-block:: python
 
