@@ -316,6 +316,10 @@ def check_boa_error_matches(error, *args, **kwargs):
     # try to match a specific kwarg
     assert len(kwargs) == 1 and len(args) == 0
 
+    if isinstance(frame, str):
+        # frame for unknown contracts is a string
+        raise ValueError(f"expected {kwargs} but got {frame}")
+
     # don't accept magic
     if frame.dev_reason:
         assert frame.dev_reason.reason_type not in ("vm_error", "compiler")
