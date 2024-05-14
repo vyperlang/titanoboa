@@ -8,7 +8,7 @@ from math import ceil
 from eth_account import Account
 from requests.exceptions import HTTPError
 
-from boa.environment import Env
+from boa.environment import Env, _AddressType
 from boa.rpc import (
     RPC,
     EthereumRPC,
@@ -80,6 +80,62 @@ class ExternalAccount:
         return {"hash": txhash}
 
 
+class Capabilities:
+    """
+    Describes the capabilities of a chain (right now, EVM opcode support)
+    """
+
+    def __init__(self, rpc):
+        self._rpc = rpc
+
+    def _get_capability(self, hex_bytecode):
+        try:
+            self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}])
+            return True
+        except RPCError:
+            return False
+
+    @cached_property
+    def has_push0(self):
+        # PUSH0
+        return self._get_capability("0x5f")
+
+    @cached_property
+    def has_mcopy(self):
+        # PUSH1 0 DUP1 DUP1 MCOPY
+        return self._get_capability("0x600080805E")
+
+    @cached_property
+    def has_transient(self):
+        # PUSH1 0 DUP1 TLOAD
+        return self._get_capability("0x60005C")
+
+    @cached_property
+    def has_cancun(self):
+        return self.has_shanghai and self.has_mcopy and self.has_transient
+
+    @cached_property
+    def has_shanghai(self):
+        return self.has_push0
+
+    def describe_capabilities(self):
+        if not self.has_shanghai:
+            return "pre-shanghai"
+        if not self.has_cancun:
+            return "shanghai"
+        return "cancun"
+
+    def check_evm_version(self, evm_version):
+        if evm_version == "cancun":
+            return self.has_cancun
+        if evm_version == "shanghai":
+            return self.has_shanghai
+        # don't care about pre-shanghai since there aren't really new
+        # opcodes between constantinople and shanghai (and pre-constantinople
+        # is no longer even supported by vyper compiler).
+        return True
+
+
 class NetworkEnv(Env):
     """
     An Env object which can be swapped in via `boa.set_env()`.
@@ -117,6 +173,7 @@ class NetworkEnv(Env):
         self._gas_price = None
 
         self.tx_settings = TransactionSettings()
+        self.capabilities = Capabilities(rpc)
 
     @cached_property
     def _rpc_has_snapshot(self):
@@ -124,7 +181,7 @@ class NetworkEnv(Env):
             snapshot_id = self._rpc.fetch("evm_snapshot", [])
             self._rpc.fetch("evm_revert", [snapshot_id])
             return True
-        except RPCError:
+        except (RPCError, HTTPError):
             return False
 
     # OVERRIDES
@@ -132,16 +189,16 @@ class NetworkEnv(Env):
     def anchor(self):
         if not self._rpc_has_snapshot:
             raise RuntimeError("RPC does not have `evm_snapshot` capability!")
+        block_number = self.evm.patch.block_number
+        snapshot_id = self._rpc.fetch("evm_snapshot", [])
         try:
-            block_id = self.evm.patch.block_id
-            snapshot_id = self._rpc.fetch("evm_snapshot", [])
             yield
             # note we cannot call super.anchor() because vm/accountdb fork
             # state is reset after every txn.
         finally:
             self._rpc.fetch("evm_revert", [snapshot_id])
             # wipe forked state
-            self._reset_fork(block_id)
+            self._reset_fork(block_number)
 
     # add account, or "Account-like" object. MUST expose
     # `sign_transaction` or `send_transaction` method!
@@ -438,3 +495,12 @@ class NetworkEnv(Env):
 
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
+
+    def set_balance(self, address, value):
+        raise NotImplementedError("Cannot use set_balance in network mode")
+
+    def set_code(self, address: _AddressType, code: bytes) -> None:
+        raise NotImplementedError("Cannot use set_code in network mode")
+
+    def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
+        raise NotImplementedError("Cannot use set_storage in network mode")
