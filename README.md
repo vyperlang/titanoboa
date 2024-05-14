@@ -209,7 +209,8 @@ Cast current deployed addresses to vyper contract
 
 ### Jupyter Integration
 
-You can use Jupyter to execute titanoboa code in network mode from your browser using any wallet, using `boa.integrations.jupyter.BrowserSigner` as a drop-in replacement for `eth_account.Account`. For a full example, please see [this example Jupyter notebook](examples/jupyter_browser_signer.ipynb)
+You can use Jupyter to execute titanoboa code in network mode from your browser using any wallet, using `BrowserSigner` as a drop-in replacement for `eth_account.Account`.
+For a full example, please see [this example Jupyter notebook](examples/jupyter_browser_signer.ipynb)
 
 
 ### Basic tests
