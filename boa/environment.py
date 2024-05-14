@@ -338,5 +338,21 @@ class Env:
             assert blocks is not None  # mypy hint
             seconds = blocks * block_delta
 
-        self.evm.patch.timestamp += seconds
-        self.evm.patch.block_number += blocks
+        self.timestamp += seconds
+        self.block_number += blocks
+
+    @property
+    def block_number(self) -> int:
+        return self.evm.patch.block_number
+
+    @block_number.setter
+    def block_number(self, value: int):
+        self.evm.patch.block_number = value
+
+    @property
+    def timestamp(self) -> int:
+        return self.evm.patch.timestamp
+
+    @timestamp.setter
+    def timestamp(self, value: int):
+        self.evm.patch.timestamp = value
