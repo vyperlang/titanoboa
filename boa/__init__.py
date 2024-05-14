@@ -58,6 +58,16 @@ def set_network_env(url):
     set_env(NetworkEnv.from_url(url))
 
 
+def fork(*args, **kwargs):
+    """Fork the current environment to use a custom network URL"""
+    e = Env()
+    if env.__name__ == "BrowserEnv":
+        e.fork_rpc(*args, **kwargs)
+    else:
+        e.fork(*args, **kwargs)
+    set_env(e)
+
+
 def reset_env():
     set_env(Env())
 
