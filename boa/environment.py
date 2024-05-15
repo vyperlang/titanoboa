@@ -6,7 +6,8 @@ The entry point for managing the execution environment.
 
 import contextlib
 import random
-from typing import Any, Optional, TypeAlias
+from functools import cached_property
+from typing import Any, Optional, Type, TypeAlias
 
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
@@ -14,7 +15,7 @@ from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
-from boa.vm.py_evm import PyEVM
+from boa.vm.py_evm import PyEVM, VMPatcher
 
 # make mypy happy
 _AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
@@ -338,21 +339,45 @@ class Env:
             assert blocks is not None  # mypy hint
             seconds = blocks * block_delta
 
-        self.timestamp += seconds
-        self.block_number += blocks
+        self.evm.patch.timestamp += seconds
+        self.evm.patch.block_number += blocks
 
-    @property
-    def block_number(self) -> int:
-        return self.evm.patch.block_number
+    @cached_property
+    def block(self) -> "BlockEnv":
+        return BlockEnv(self.evm.patch)
 
-    @block_number.setter
-    def block_number(self, value: int):
-        self.evm.patch.block_number = value
 
-    @property
-    def timestamp(self) -> int:
-        return self.evm.patch.timestamp
+class MagicAttribute:
+    def __init__(self, patch_attr: str):
+        self.patch_attr = patch_attr
 
-    @timestamp.setter
-    def timestamp(self, value: int):
-        self.evm.patch.timestamp = value
+    def __set_name__(self, owner: Type["BlockEnv"], name: str) -> None:
+        ...  # python descriptor protocol
+
+    def __get__(self, block: "BlockEnv", owner):
+        if block is None:
+            return self  # static call
+        attr = self.patch_attr
+        patch = block.patch
+        value = getattr(patch, attr)
+        base: Type = type(value)
+
+        class MakeCallable(base):
+            @contextlib.contextmanager
+            def __call__(self, new_value):
+                setattr(patch, attr, new_value)
+                yield
+                setattr(patch, attr, self)
+
+        return MakeCallable(value)
+
+    def __set__(self, instance: "BlockEnv", value):
+        setattr(instance.patch, self.patch_attr, value)
+
+
+class BlockEnv:
+    number = MagicAttribute("block_number")
+    timestamp = MagicAttribute("timestamp")
+
+    def __init__(self, patch: VMPatcher):
+        self.patch = patch
