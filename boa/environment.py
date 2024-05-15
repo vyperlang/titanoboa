@@ -367,7 +367,7 @@ class MagicAttribute:
             def __call__(self, new_value):
                 setattr(patch, attr, new_value)
                 yield
-                setattr(patch, attr, self)
+                setattr(patch, attr, value)
 
         return MakeCallable(value)
 
