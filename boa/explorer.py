@@ -1,4 +1,5 @@
 import json
+from time import sleep
 from typing import Optional
 
 import requests
@@ -6,13 +7,30 @@ import requests
 SESSION = requests.Session()
 
 
-def _fetch_etherscan(uri: str, api_key: Optional[str] = None, **params) -> dict:
+def _fetch_etherscan(
+    uri: str, api_key: Optional[str] = None, num_retries=10, backoff_ms=400, **params
+) -> dict:
+    """
+    Fetch data from Etherscan API.
+    Offers a simple caching mechanism to avoid redundant queries.
+    Retries if rate limit is reached.
+    :param uri: Etherscan API URI
+    :param api_key: Etherscan API key
+    :param num_retries: Number of retries
+    :param backoff_ms: Backoff in milliseconds
+    :param params: Additional query parameters
+    :return: JSON response
+    """
     if api_key is not None:
         params["apikey"] = api_key
 
-    res = SESSION.get(uri, params=params)
-    res.raise_for_status()
-    data = res.json()
+    for _ in range(num_retries):
+        res = SESSION.get(uri, params=params)
+        res.raise_for_status()
+        data = res.json()
+        if data.get("result") != "Max rate limit reached":
+            break
+        sleep(backoff_ms / 1000)
 
     if int(data["status"]) != 1:
         raise ValueError(f"Failed to retrieve data from API: {data}")
