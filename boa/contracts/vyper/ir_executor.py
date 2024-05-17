@@ -842,11 +842,10 @@ class Assert(IRExecutor):
 
     def _compile(self, test):
         _ = VMRevert  # make flake8 happy
-        source = self.ir_node.ast_source
         self.builder.extend(
             f"""
         if not bool({test}):
-            VM.vyper_source_pos = {repr(source and getpos(source))}
+            VM.vyper_source_pos = {repr(_get_ir_pos(self.ir_node))}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert("")  # venom assert
         """
@@ -859,11 +858,10 @@ class _IRRevert(IRExecutor):
     _sig = (int, int)
 
     def _compile(self, ptr, size):
-        source = self.ir_node.ast_source
         self.builder.extend(
             f"""
             VM.output = VM.memory_read_bytes({ptr}, {size})
-            VM.vyper_source_pos = {repr(source and getpos(source))}
+            VM.vyper_source_pos = {repr(_get_ir_pos(self.ir_node))}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert(VM.output)  # venom revert
         """
@@ -1164,3 +1162,9 @@ def _executor_from_ir(ir_node, compile_ctx) -> Any:
     assert len(ir_node.args) == 0, ir_node
     assert isinstance(ir_node.value, str)
     return StringExecutor(compile_ctx, ir_node.value)
+
+
+def _get_ir_pos(ir_node):
+    if ir_node.ast_source is None:
+        return None
+    return getpos(ir_node.ast_source)
