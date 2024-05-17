@@ -14,6 +14,7 @@ import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
+from vyper.ast.nodes import VariableDecl
 from vyper.ast.parse import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import (
@@ -28,7 +29,6 @@ from vyper.compiler.output import build_abi_output
 from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.analysis.base import VarInfo
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
@@ -474,13 +474,9 @@ class ImmutablesModel:
 # data structure to represent the constants in a contract
 class ConstantsModel:
     def __init__(self, compiler_data: CompilerData):
-        for k, v in compiler_data.annotated_vyper_module._metadata["namespace"].items():
-            if (
-                isinstance(v, VarInfo)
-                and v.decl_node is not None
-                and v.decl_node.is_constant
-            ):
-                setattr(self, k, v.decl_node.value.reduced().value)
+        for v in compiler_data.annotated_vyper_module.get_children(VariableDecl):
+            if v.is_constant:
+                setattr(self, v.target.id, v.value.reduced().value)
 
     def dump(self):
         return FrameDetail("constants", vars(self))
