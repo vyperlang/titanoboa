@@ -434,9 +434,15 @@ class NetworkEnv(Env):
             )
         except RPCError as e:
             if self._suppress_debug_tt:
-                warnings.warn(f"Couldn't get a trace for {tx_hash}")
-                return None
-            raise e
+                warnings.warn(f"Couldn't get a trace for {tx_hash}!", stacklevel=3)
+            else:
+                warnings.warn(
+                    f"Couldn't get a trace for {tx_hash}! If you want to"
+                    " suppress this error, call `boa.env.suppress_debug_tt()`"
+                    " first.",
+                    stacklevel=3,
+                )
+                raise e
 
         return None
 
