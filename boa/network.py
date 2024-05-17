@@ -425,7 +425,7 @@ class NetworkEnv(Env):
     def suppress_debug_tt(self, new_value=True):
         self._suppress_debug_tt = new_value
 
-    def debug_tt(self, tx_hash):
+    def _debug_tt(self, tx_hash):
         if self._tracer is None:
             return None
         try:
