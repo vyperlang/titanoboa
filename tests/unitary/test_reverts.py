@@ -196,3 +196,15 @@ def ext_call2():
         p.ext_call()
     with boa.reverts(dev="call math"):
         p.ext_call2()
+
+
+def test_trace_constructor_revert():
+    code = """
+@external
+def __init__():
+    assert False, "revert reason"
+"""
+    with pytest.raises(BoaError) as error_context:
+        boa.loads(code)
+
+    assert "revert reason" in str(error_context.value)

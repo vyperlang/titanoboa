@@ -14,7 +14,7 @@ import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
-from eth.exceptions import VMError
+from eth.exceptions import Revert, VMError
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
@@ -484,6 +484,7 @@ class VyperContract(_BaseVyperContract):
 
         self.created_from = created_from
         self._computation = None
+        self._source_map = None
 
         # add all exposed functions from the interface to the contract
         external_fns = {
@@ -518,7 +519,6 @@ class VyperContract(_BaseVyperContract):
         self._storage = StorageModel(self)
 
         self._eval_cache = lrudict(0x1000)
-        self._source_map = None
 
         self.env.register_contract(self._address, self)
 
@@ -528,9 +528,13 @@ class VyperContract(_BaseVyperContract):
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
-        addr, self.bytecode = self.env.deploy_code(
-            bytecode=initcode, value=value, override_address=override_address
-        )
+        try:
+            addr, self.bytecode = self.env.deploy_code(
+                bytecode=initcode, value=value, override_address=override_address
+            )
+        except Revert:
+            raise BoaError(self.stack_trace(self.env._last_computation))
+
         if addr.canonical_address not in self.env._last_computation.contracts_created:
             raise ValueError("contract creation failed")
 
