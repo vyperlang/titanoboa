@@ -133,12 +133,12 @@ def test_fork_write(crvusd, n):
 def test_fork_write_flip(crvusd):
     e = boa.loads(
         f"""
-from ethereum.ercs import ERC20
-crvUSD: ERC20
+from ethereum.ercs import IERC20
+crvUSD: IERC20
 
 @deploy
 def __init__():
-    self.crvUSD = ERC20({crvusd.address})
+    self.crvUSD = IERC20({crvusd.address})
 @external
 def flip_from(_input: uint256) -> uint256:
     extcall self.crvUSD.transferFrom(msg.sender, self, _input)
@@ -158,9 +158,9 @@ def flip_from(_input: uint256) -> uint256:
 def test_abi_stack_trace(crvusd):
     c = boa.loads(
         """
-from ethereum.ercs import ERC20
+from ethereum.ercs import IERC20
 @external
-def foo(x: ERC20, from_: address):
+def foo(x: IERC20, from_: address):
     extcall x.transferFrom(from_, self, 100)
     """
     )
