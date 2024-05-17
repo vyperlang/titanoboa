@@ -3,7 +3,7 @@
 @author Curve Finance, Yearn Finance
 @license MIT
 """
-from ethereum.ercs import ERC20
+from ethereum.ercs import IERC20
 
 interface VotingYFI:
     def user_point_epoch(addr: address) -> uint256: view
@@ -11,7 +11,7 @@ interface VotingYFI:
     def user_point_history(addr: address, loc: uint256) -> Point: view
     def point_history(loc: uint256) -> Point: view
     def checkpoint(): nonpayable
-    def token() -> ERC20: view
+    def token() -> IERC20: view
     def modify_lock(amount: uint256, unlock_time: uint256, user: address) -> LockedBalance: nonpayable
 
 event Initialized:
@@ -47,7 +47,7 @@ struct LockedBalance:
 WEEK: constant(uint256) = 7 * 86400
 TOKEN_CHECKPOINT_DEADLINE: constant(uint256) = 86400
 
-YFI: immutable(ERC20)
+YFI: immutable(IERC20)
 VEYFI: immutable(VotingYFI)
 
 start_time: public(uint256)
@@ -350,7 +350,7 @@ def toggle_allowed_to_relock(user: address) -> bool:
 
 @view
 @external
-def token() -> ERC20:
+def token() -> IERC20:
     return YFI
 
 

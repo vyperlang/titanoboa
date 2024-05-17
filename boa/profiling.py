@@ -200,7 +200,7 @@ class LineProfile:
 
         line_gas_data = {}
         for (contract, line), datum in raw_summary:
-            fn_name = get_fn_name_from_lineno(contract.ast_map, line)
+            fn_name = get_fn_name_from_lineno(contract.source_map, line)
 
             # here we use net_gas to include child computation costs:
             line_info = LineInfo(

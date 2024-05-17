@@ -10,7 +10,7 @@
     Vote weight decays linearly over time.
     A user can unlock funds early incurring a penalty.
 """
-from ethereum.ercs import ERC20
+from ethereum.ercs import IERC20
 
 interface RewardPool:
     def burn(amount: uint256) -> bool: nonpayable
@@ -56,10 +56,10 @@ event Supply:
     ts: uint256
 
 event Initialized:
-    token: ERC20
+    token: IERC20
     reward_pool: RewardPool
 
-YFI: immutable(ERC20)
+YFI: immutable(IERC20)
 REWARD_POOL: immutable(RewardPool)
 
 DAY: constant(uint256) = 86400
@@ -77,7 +77,7 @@ slope_changes: public(HashMap[address, HashMap[uint256, int128]])  # time -> sig
 
 
 @deploy
-def __init__(token: ERC20, reward_pool: RewardPool):
+def __init__(token: IERC20, reward_pool: RewardPool):
     """
     @notice Contract constructor
     @param token YFI token address
@@ -468,7 +468,7 @@ def getPriorVotes(user: address, height: uint256) -> uint256:
 def totalSupply(ts: uint256 = block.timestamp) -> uint256:
     """
     @notice Calculate total voting power
-    @dev Adheres to the ERC20 `totalSupply` interface for Aragon compatibility
+    @dev Adheres to the IERC20 `totalSupply` interface for Aragon compatibility
     @return Total voting power
     """
     epoch: uint256 = self.epoch[self]
@@ -506,7 +506,7 @@ def totalSupplyAt(height: uint256) -> uint256:
 
 @view
 @external
-def token() -> ERC20:
+def token() -> IERC20:
     return YFI
 
 
