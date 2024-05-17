@@ -25,7 +25,7 @@ from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
 from vyper.compiler.output import build_abi_output
-from vyper.compiler.settings import OptimizationLevel, Settings, anchor_settings
+from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.types import AddressT, HashMapT, TupleT
@@ -810,7 +810,7 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def unoptimized_ir(self):
-        settings = Settings.from_dict(self.compiler_data.settings.as_dict())
+        settings = copy.copy(self.compiler_data.settings)
         settings.optimize = OptimizationLevel.NONE
         with anchor_settings(settings):
             return generate_ir_for_module(self.module_t)
