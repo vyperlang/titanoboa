@@ -17,4 +17,6 @@ def __init__(supply: uint256):
     )
     logs = contract.get_logs()
     log_strs = [str(log) for log in logs]
-    assert log_strs == ["Transfer(sender=0x"]
+    sender = "0x0000000000000000000000000000000000000000"
+    receiver = str(boa.env.eoa)
+    assert log_strs == [f"Transfer(sender={sender}, receiver={receiver}, value=100)"]

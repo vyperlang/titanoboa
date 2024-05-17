@@ -37,7 +37,8 @@ class _BaseEVMContract:
 
     @property
     def address(self) -> Address:
-        assert self._address is not None
+        if self._address is None:
+            raise ValueError("Contract address is not set")
         return self._address
 
 

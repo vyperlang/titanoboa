@@ -531,8 +531,10 @@ class VyperContract(_BaseVyperContract):
         addr, self.bytecode = self.env.deploy_code(
             bytecode=initcode, value=value, override_address=override_address
         )
+        if addr.canonical_address not in self.env._last_computation.contracts_created:
+            raise ValueError("contract creation failed")
+
         self._computation = self.env._last_computation
-        assert addr in self._computation.contracts_created
         return Address(addr)
 
     # manually set the runtime bytecode, instead of using deploy
