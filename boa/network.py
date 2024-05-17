@@ -174,6 +174,7 @@ class NetworkEnv(Env):
 
         self.tx_settings = TransactionSettings()
         self.capabilities = Capabilities(rpc)
+        self._suppress_debug_tt = False
 
     @cached_property
     def _rpc_has_snapshot(self):
@@ -421,6 +422,24 @@ class NetworkEnv(Env):
 
         return call_tracer
 
+    def suppress_debug_tt(self, new_value=True):
+        self._suppress_debug_tt = new_value
+
+    def debug_tt(self, tx_hash):
+        if self._tracer is None:
+            return None
+        try:
+            return self._rpc.fetch_uncached(
+                "debug_traceTransaction", [tx_hash, self._tracer]
+            )
+        except RPCError as e:
+            if self._suppress_debug_tt:
+                warnings.warn(f"Couldn't get a trace for {tx_hash}")
+                return None
+            raise e
+
+        return None
+
     def _get_nonce(self, addr):
         return self._rpc.fetch("eth_getTransactionCount", [addr, "latest"])
 
@@ -482,11 +501,7 @@ class NetworkEnv(Env):
 
         receipt = self._rpc.wait_for_tx_receipt(tx_hash, self.tx_settings.poll_timeout)
 
-        trace = None
-        if self._tracer is not None:
-            trace = self._rpc.fetch_uncached(
-                "debug_traceTransaction", [tx_hash, self._tracer]
-            )
+        trace = self._debug_tt(tx_hash)
 
         print(f"{tx_hash} mined in block {receipt['blockHash']}!")
 
