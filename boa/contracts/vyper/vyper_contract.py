@@ -483,6 +483,7 @@ class VyperContract(_BaseVyperContract):
         super().__init__(compiler_data, env, filename)
 
         self.created_from = created_from
+        self._computation = None
 
         # add all exposed functions from the interface to the contract
         external_fns = {
@@ -518,7 +519,6 @@ class VyperContract(_BaseVyperContract):
 
         self._eval_cache = lrudict(0x1000)
         self._source_map = None
-        self._computation = None
 
         self.env.register_contract(self._address, self)
 
@@ -531,6 +531,8 @@ class VyperContract(_BaseVyperContract):
         addr, self.bytecode = self.env.deploy_code(
             bytecode=initcode, value=value, override_address=override_address
         )
+        self._computation = self.env._last_computation
+        assert addr in self._computation.contracts_created
         return Address(addr)
 
     # manually set the runtime bytecode, instead of using deploy
@@ -647,7 +649,7 @@ class VyperContract(_BaseVyperContract):
     # ## handling events
     def _get_logs(self, computation, include_child_logs):
         if computation is None:
-            return []
+            raise ValueError("There was no computation to retrieve logs from")
 
         if include_child_logs:
             return list(computation.get_raw_log_entries())

@@ -36,6 +36,7 @@ class Env:
 
         self._contracts = {}
         self._code_registry = {}
+        self._last_computation = None
 
         self.sha3_trace: dict = {}
         self.sstore_trace: dict = {}
@@ -221,6 +222,7 @@ class Env:
             value=value,
             bytecode=bytecode,
         )
+        self._last_computation = c
         if c._gas_meter_class != NoGasMeter:
             self._update_gas_used(c.get_gas_used())
 
@@ -297,6 +299,7 @@ class Env:
         if ret._gas_meter_class != NoGasMeter:
             self._update_gas_used(ret.get_gas_used())
 
+        self._last_computation = ret
         return ret
 
     def _hook_trace_computation(self, computation, contract=None):
