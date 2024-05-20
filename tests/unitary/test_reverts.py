@@ -219,7 +219,10 @@ def test_repro():
     with pytest.raises(BoaError) as exc_info:
         nft.mint(hacker, sender=hacker)
 
-    assert str(exc_info.value).startswith("Revert(b'')")
+    s = str(exc_info.value)
+    assert s.startswith("Revert(b'')")
+    x = str(exc_info.value)
+    assert x.startswith("Revert(b'')")
 
     with boa.reverts():
         nft.mint(hacker, sender=hacker)
