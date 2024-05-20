@@ -156,10 +156,11 @@ def add():
     assert self.counter == 0
     """
     )
-    try:
-        assert c.add()
-    except BoaError as e:
-        assert "<storage: counter=1>" in str(e)
+    with pytest.raises(BoaError) as context:
+        c.add()
+
+    assert "<storage: counter=1>" in str(context.value)
+    assert str(context.value).startswith("Revert(b'')")
 
     assert 0 == c._storage.counter.get()
     assert 0 == c.counter()
