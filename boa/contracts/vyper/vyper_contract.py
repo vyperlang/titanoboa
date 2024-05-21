@@ -12,24 +12,22 @@ from typing import Any, Optional
 import vyper
 import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
-import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
-from vyper.ast.utils import parse_to_ast
-from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
-from vyper.codegen.function_definitions import generate_ir_for_function
-from vyper.codegen.function_definitions.common import ExternalFuncIR, InternalFuncIR
-from vyper.codegen.global_context import GlobalContext
+from vyper.ast.parse import parse_to_ast
+from vyper.codegen.core import calculate_type_for_external_return
+from vyper.codegen.function_definitions import (
+    generate_ir_for_external_function,
+    generate_ir_for_internal_function,
+)
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
 from vyper.compiler.output import build_abi_output
-from vyper.compiler.settings import OptimizationLevel
-from vyper.evm.opcodes import anchor_evm_version
+from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.analysis.data_positions import set_data_positions
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
@@ -39,14 +37,9 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
-from boa.contracts.vyper.ast_utils import (
-    ast_map_of,
-    get_fn_ancestor_from_node,
-    reason_at,
-)
+from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
-    anchor_compiler_settings,
     compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
@@ -79,7 +72,7 @@ class VyperDeployer:
 
         # force compilation so that if there are any errors in the contract,
         # we fail at load rather than at deploy time.
-        with anchor_compiler_settings(self.compiler_data):
+        with anchor_settings(self.compiler_data.settings):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
         self.filename = filename
@@ -140,7 +133,7 @@ class _BaseVyperContract(_BaseEVMContract):
         super().__init__(env, filename)
         self.compiler_data = compiler_data
 
-        with anchor_compiler_settings(self.compiler_data):
+        with anchor_settings(self.compiler_data.settings):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
 
         if (capabilities := getattr(env, "capabilities", None)) is not None:
@@ -430,8 +423,9 @@ class StorageVar:
 class StorageModel:
     def __init__(self, contract):
         compiler_data = contract.compiler_data
-        for k, v in compiler_data.global_ctx.variables.items():
-            is_storage = not v.is_immutable and not v.is_constant
+        # TODO: recurse into imported modules
+        for k, v in contract.module_t.variables.items():
+            is_storage = not (v.is_immutable or v.is_constant or v.is_transient)
             if is_storage:
                 slot = compiler_data.storage_layout["storage_layout"][k]["slot"]
                 setattr(self, k, StorageVar(contract, slot, v.typ))
@@ -453,7 +447,8 @@ class ImmutablesModel:
     def __init__(self, contract):
         compiler_data = contract.compiler_data
         data_section = memoryview(contract.data_section)
-        for k, v in compiler_data.global_ctx.variables.items():
+        # TODO: recurse into imported modules
+        for k, v in contract.module_t.variables.items():
             if v.is_immutable:  # check that v
                 ofst = compiler_data.storage_layout["code_layout"][k]["offset"]
                 immutable_raw_bytes = data_section[ofst:]
@@ -487,16 +482,17 @@ class VyperContract(_BaseVyperContract):
         self._source_map = None
 
         # add all exposed functions from the interface to the contract
-        external_fns = {
-            fn.name: fn
-            for fn in self.global_ctx.functions
-            if fn._metadata["type"].is_external
+        exposed_fns = {
+            fn_t.name: fn_t.decl_node
+            for fn_t in compiler_data.global_ctx.exposed_functions
         }
 
         # set external methods as class attributes:
         self._ctor = None
-        if "__init__" in external_fns:
-            self._ctor = VyperFunction(external_fns.pop("__init__"), self)
+        if compiler_data.global_ctx.init_function is not None:
+            self._ctor = VyperFunction(
+                compiler_data.global_ctx.init_function.decl_node, self
+            )
 
         if skip_initcode:
             if value:
@@ -506,15 +502,20 @@ class VyperContract(_BaseVyperContract):
             addr = self._run_init(*args, value=value, override_address=override_address)
         self._address = addr
 
-        for fn_name, fn in external_fns.items():
+        for fn_name, fn in exposed_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))
 
         # set internal methods as class.internal attributes:
         self.internal = lambda: None
-        for fn in self.global_ctx.functions:
-            if not fn._metadata["type"].is_internal:
+        for fn in self.module_t.function_defs:
+            if not fn._metadata["func_type"].is_internal:
                 continue
             setattr(self.internal, fn.name, VyperInternalFunction(fn, self))
+
+        # TODO: set library methods as class.internal attributes?
+
+        # not sure if this is accurate in the presence of modules
+        self._function_id = len(self.module_t.function_defs)
 
         self._storage = StorageModel(self)
 
@@ -553,7 +554,7 @@ class VyperContract(_BaseVyperContract):
 
     def __repr__(self):
         ret = (
-            f"<{self.compiler_data.contract_name} at {self.address}, "
+            f"<{self.compiler_data.contract_path} at {self.address}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
         )
 
@@ -579,10 +580,6 @@ class VyperContract(_BaseVyperContract):
     # is this actually useful?
     def at(self, address):
         return self.deployer.at(address)
-
-    @cached_property
-    def ast_map(self):
-        return ast_map_of(self.compiler_data.vyper_module)
 
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation)
@@ -614,13 +611,14 @@ class VyperContract(_BaseVyperContract):
         return frame_detail
 
     @property
-    def global_ctx(self):
+    def module_t(self):
         return self.compiler_data.global_ctx
 
+    # TODO: maybe rename to `ast_map`
     @property
     def source_map(self):
         if self._source_map is None:
-            with anchor_compiler_settings(self.compiler_data):
+            with anchor_settings(self.compiler_data.settings):
                 _, self._source_map = compile_ir.assembly_to_evm(
                     self.compiler_data.assembly_runtime
                 )
@@ -641,13 +639,13 @@ class VyperContract(_BaseVyperContract):
     def find_source_of(self, computation, is_initcode=False):
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
-            return self.ast_map.get(computation.vyper_source_pos)
+            return self.source_map.get(computation.vyper_source_pos)
 
         code_stream = computation.code
-        pc_map = self.source_map["pc_pos_map"]
+        ast_map = self.source_map["pc_raw_ast_map"]
         for pc in reversed(code_stream._trace):
-            if pc in pc_map and pc_map[pc] in self.ast_map:
-                return self.ast_map[pc_map[pc]]
+            if pc in ast_map:
+                return ast_map[pc]
         return None
 
     # ## handling events
@@ -755,47 +753,25 @@ class VyperContract(_BaseVyperContract):
                 ret.merge(child_obj.line_profile(child))
         return ret
 
+    def ensure_id(self, fn_t):  # mimic vyper.codegen.module.IDGenerator api
+        if fn_t._function_id is None:
+            fn_t._function_id = self._function_id
+            self._function_id += 1
+
     @cached_property
-    def _ast_module(self):
-        module = copy.deepcopy(self.compiler_data.vyper_module)
-
-        # do the same thing as vyper_module_folded but skip getter expansion
-        with anchor_compiler_settings(self.compiler_data):
-            vy_ast.folding.fold(module)
-            with vy_ns.get_namespace().enter_scope():
-                analysis.add_module_namespace(
-                    module, self.compiler_data.interface_codes
-                )
-                analysis.validate_functions(module)
-                # we need to cache the namespace right here(!).
-                # set_data_positions will modify the type definitions in place.
-                self._cache_namespace(vy_ns.get_namespace())
-
-            vy_ast.expansion.remove_unused_statements(module)
-            # calculate slots for all storage variables, tagging
-            # the types in the namespace.
-            set_data_positions(module, storage_layout_overrides=None)
-
-            # ensure _ir_info is generated for all functions in this copied/shadow
-            # namespace
-            _ = generate_ir_for_module(GlobalContext(module))
-
-            return module
-
-    # the global namespace is expensive to compute, so cache it
-    def _cache_namespace(self, namespace):
-        # copy.copy doesn't really work on Namespace objects, copy by hand
-        ret = vy_ns.Namespace()
-        ret._scopes = copy.deepcopy(namespace._scopes)
-        for s in namespace._scopes:
-            for n in s:
-                ret[n] = namespace[n]
-        self._vyper_namespace = ret
+    def _vyper_namespace(self):
+        module = self.compiler_data.annotated_vyper_module
+        # make a copy of the namespace, since we might modify it
+        ret = copy.copy(module._metadata["namespace"])
+        ret._scopes = copy.deepcopy(ret._scopes)
+        if len(ret._scopes) == 0:
+            # funky behavior in Namespace.enter_scope()
+            ret._scopes.append(set())
+        return ret
 
     @contextlib.contextmanager
     def override_vyper_namespace(self):
         # ensure self._vyper_namespace is computed
-        m = self._ast_module  # noqa: F841
         contract_members = self._vyper_namespace["self"].typ.members
         try:
             to_keep = set(contract_members.keys())
@@ -812,7 +788,7 @@ class VyperContract(_BaseVyperContract):
     # eliminator might prune a dead function (which we want to eval)
     @cached_property
     def unoptimized_assembly(self):
-        with anchor_evm_version(self.compiler_data.settings.evm_version):
+        with anchor_settings(self.compiler_data.settings):
             runtime = self.unoptimized_ir[1]
             return compile_ir.compile_to_assembly(
                 runtime, optimize=OptimizationLevel.NONE
@@ -820,7 +796,7 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def data_section_size(self):
-        return self.global_ctx.immutable_section_bytes
+        return self.module_t.immutable_section_bytes
 
     @cached_property
     def data_section(self):
@@ -832,7 +808,7 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def unoptimized_bytecode(self):
-        with anchor_evm_version(self.compiler_data.settings.evm_version):
+        with anchor_settings(self.compiler_data.settings):
             s, _ = compile_ir.assembly_to_evm(
                 self.unoptimized_assembly, insert_vyper_signature=True
             )
@@ -840,15 +816,15 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def unoptimized_ir(self):
-        with anchor_opt_level(OptimizationLevel.NONE), anchor_evm_version(
-            self.compiler_data.settings.evm_version
-        ):
-            return generate_ir_for_module(self.compiler_data.global_ctx)
+        settings = copy.copy(self.compiler_data.settings)
+        settings.optimize = OptimizationLevel.NONE
+        with anchor_settings(settings):
+            return generate_ir_for_module(self.module_t)
 
     @cached_property
     def ir_executor(self):
         _, ir_runtime = self.unoptimized_ir
-        with anchor_evm_version(self.compiler_data.settings.evm_version):
+        with anchor_settings(self.compiler_data.settings):
             return executor_from_ir(ir_runtime, self.compiler_data)
 
     @contextlib.contextmanager
@@ -897,12 +873,11 @@ class VyperContract(_BaseVyperContract):
 
         # get an AST so we know the fn name; work is doubled in
         # _compile_vyper_function but no way around it.
-        fn_ast = parse_to_ast(fn_source_code, {}).body[0]
+        fn_ast = parse_to_ast(fn_source_code).body[0]
         if hasattr(self.inject, fn_ast.name) and not force:
             raise ValueError(f"already injected: {fn_ast.name}")
 
         # ensure self._vyper_namespace is computed
-        m = self._ast_module  # noqa: F841
         self._vyper_namespace["self"].typ.members.pop(fn_ast.name, None)
         f = _InjectVyperFunction(self, fn_source_code)
         setattr(self.inject, fn_ast.name, f)
@@ -918,10 +893,10 @@ class VyperFunction:
         self.__doc__ = (
             fn_ast.doc_string.value if hasattr(fn_ast, "doc_string") else None
         )
-        self.__module__ = self.contract.compiler_data.contract_name
+        self.__module__ = self.contract.compiler_data.contract_path
 
     def __repr__(self):
-        return f"{self.contract.compiler_data.contract_name}.{self.fn_ast.name}"
+        return f"{self.contract.compiler_data.contract_path}.{self.fn_ast.name}"
 
     def __str__(self):
         return repr(self.func_t)
@@ -932,16 +907,17 @@ class VyperFunction:
 
     @property
     def func_t(self):
-        return self.fn_ast._metadata["type"]
+        return self.fn_ast._metadata["func_type"]
 
     @cached_property
     def ir(self):
-        global_ctx = self.contract.global_ctx
+        module_t = self.contract.module_t
 
-        res = generate_ir_for_function(self.fn_ast, global_ctx, False)
-        if isinstance(res, InternalFuncIR):
+        if self.func_t.is_internal:
+            res = generate_ir_for_internal_function(self.fn_ast, module_t, False)
             ir = res.func_ir
-        elif isinstance(res, ExternalFuncIR):
+        else:
+            res = generate_ir_for_external_function(self.fn_ast, module_t)
             ir = res.common_ir
 
         return optimize(ir)

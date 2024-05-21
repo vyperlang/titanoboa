@@ -10,7 +10,7 @@ code = """
 totalSupply: public(uint256)
 balances: HashMap[address, uint256]
 
-@external
+@deploy
 def __init__(t: uint256):
     self.totalSupply = t
     self.balances[self] = t

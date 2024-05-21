@@ -170,33 +170,34 @@ def test_reverts_dev_reason():
     pool_code = """
 @external
 @pure
-def some_math(x: uint256):
+def some_math(x: uint256) -> uint256:
     assert x < 10 # dev: math not ok
+    return x
 """
     math_code = """
 math: address
 
 interface Math:
-    def some_math(x: uint256): pure
+    def some_math(x: uint256) -> uint256: pure
 
-@external
+@deploy
 def __init__(math: address):
     self.math = math
 
 @external
-def ext_call():
-    Math(self.math).some_math(11)
+def math_call():
+    _: uint256 = staticcall Math(self.math).some_math(11)
 
 @external
-def ext_call2():
-    Math(self.math).some_math(11)  # dev: call math
+def math_call_with_reason():
+    _: uint256 = staticcall Math(self.math).some_math(11)  # dev: call math
 """
     m = boa.loads(pool_code)
     p = boa.loads(math_code, m.address)
     with boa.reverts(dev="math not ok"):
-        p.ext_call()
+        p.math_call()
     with boa.reverts(dev="call math"):
-        p.ext_call2()
+        p.math_call_with_reason()
 
 
 def test_trace_constructor_revert():

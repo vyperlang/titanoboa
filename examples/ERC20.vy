@@ -2,11 +2,11 @@
 # @author Takayuki Jimba (@yudetamago)
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
 
-from vyper.interfaces import ERC20
-from vyper.interfaces import ERC20Detailed
+from ethereum.ercs import IERC20
+from ethereum.ercs import IERC20Detailed
 
-implements: ERC20
-implements: ERC20Detailed
+implements: IERC20
+implements: IERC20Detailed
 
 event Transfer:
     sender: indexed(address)
@@ -34,7 +34,7 @@ totalSupply: public(uint256)
 minter: address
 
 
-@external
+@deploy
 def __init__(_name: String[32], _symbol: String[32], _decimals: uint8, supply: uint256):
     init_supply: uint256 = supply * 10 ** convert(decimals, uint256)
     name = _name
