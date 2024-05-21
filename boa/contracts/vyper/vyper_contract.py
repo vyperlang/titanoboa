@@ -494,6 +494,7 @@ class VyperContract(_BaseVyperContract):
                 compiler_data.global_ctx.init_function.decl_node, self
             )
 
+        self._address = None
         if skip_initcode:
             if value:
                 raise Exception("nonzero value but initcode is being skipped")
@@ -619,9 +620,11 @@ class VyperContract(_BaseVyperContract):
     def source_map(self):
         if self._source_map is None:
             with anchor_settings(self.compiler_data.settings):
-                _, self._source_map = compile_ir.assembly_to_evm(
-                    self.compiler_data.assembly_runtime
-                )
+                if self._address is None:
+                    assembly = self.compiler_data.assembly
+                else:
+                    assembly = self.compiler_data.assembly_runtime
+                _, self._source_map = compile_ir.assembly_to_evm(assembly)
         return self._source_map
 
     def find_error_meta(self, computation):
