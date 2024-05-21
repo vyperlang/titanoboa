@@ -14,7 +14,7 @@ import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.analysis as analysis
 import vyper.semantics.namespace as vy_ns
-from eth.exceptions import Revert, VMError
+from eth.exceptions import VMError
 from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import anchor_opt_level, calculate_type_for_external_return
 from vyper.codegen.function_definitions import generate_ir_for_function
@@ -528,18 +528,16 @@ class VyperContract(_BaseVyperContract):
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
-        try:
-            addr, self.bytecode = self.env.deploy_code(
-                bytecode=initcode, value=value, override_address=override_address
-            )
-        except Revert:
-            raise BoaError(self.stack_trace(self.env._last_computation))
+        computation = self.env.deploy(
+            bytecode=initcode, value=value, override_address=override_address
+        )
+        self._computation = computation
 
-        if addr.canonical_address not in self.env._last_computation.contracts_created:
-            raise ValueError("contract creation failed")
+        if computation.is_error:
+            raise BoaError(self.stack_trace(computation))
 
-        self._computation = self.env._last_computation
-        return Address(addr)
+        (address,) = computation.contracts_created
+        return Address(address)
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
