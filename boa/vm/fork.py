@@ -256,7 +256,7 @@ class AccountDBFork(AccountDB):
                 key = int_to_big_endian(slot)
                 if not self._helper_have_storage(address, slot):
                     account_store._journal_storage[key] = rlp.encode(value)  # type: ignore
-        self.lock_changes()
+        self.commit(snapshot)
 
     def get_code(self, address):
         try:

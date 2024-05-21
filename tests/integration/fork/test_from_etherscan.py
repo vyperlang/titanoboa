@@ -1,6 +1,9 @@
 import os
+from unittest.mock import patch
 
 import pytest
+from eth.vm.message import Message
+from vyper.utils import method_id
 
 import boa
 
@@ -33,3 +36,36 @@ def test_proxy_contract(proxy_contract):
     assert proxy_contract.minTime() == 43200
     assert proxy_contract.voteTime() == 604800
     assert proxy_contract.minBalance() == 2500000000000000000000
+
+
+def test_prefetch_state(proxy_contract):
+    msg = Message(
+        to=proxy_contract.address.canonical_address,
+        sender=boa.env.eoa.canonical_address,
+        gas=0,
+        value=0,
+        code=proxy_contract._bytecode,
+        data=method_id("minTime()"),
+    )
+    db = boa.env.evm.vm.state._account_db
+    db.try_prefetch_state(msg)
+    assert (
+        db.get_code(proxy_contract.address.canonical_address)
+        == proxy_contract._bytecode
+    )
+
+
+@pytest.mark.parametrize("prefetch", [True, False])
+def test_prefetch_state_called_on_message(proxy_contract, prefetch):
+    boa.env.evm._fork_try_prefetch_state = prefetch
+    with patch("boa.vm.fork.AccountDBFork.try_prefetch_state") as mock:
+        proxy_contract.minTime()
+        assert mock.called == prefetch
+
+
+@pytest.mark.parametrize("prefetch", [True, False])
+def test_prefetch_state_called_on_deploy(proxy_contract, prefetch):
+    boa.env.evm._fork_try_prefetch_state = prefetch
+    with patch("boa.vm.fork.AccountDBFork.try_prefetch_state") as mock:
+        boa.loads("")
+        assert mock.called == prefetch
