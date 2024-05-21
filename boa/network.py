@@ -432,7 +432,7 @@ class NetworkEnv(Env):
             return self._rpc.fetch_uncached(
                 "debug_traceTransaction", [tx_hash, self._tracer]
             )
-        except RPCError as e:
+        except (HTTPError, RPCError) as e:
             if self._suppress_debug_tt:
                 warnings.warn(f"Couldn't get a trace for {tx_hash}!", stacklevel=3)
             else:
