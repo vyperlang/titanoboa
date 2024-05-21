@@ -183,9 +183,13 @@ class VyperBlueprint(_BaseVyperContract):
 
         deploy_bytecode += blueprint_bytecode
 
-        addr, self.bytecode = self.env.deploy_code(
+        addr, computation = self.env.deploy(
             bytecode=deploy_bytecode, override_address=override_address
         )
+        if computation.is_error:
+            raise computation.error
+
+        self.bytecode = computation.output
 
         self._address = Address(addr)
 
@@ -528,16 +532,14 @@ class VyperContract(_BaseVyperContract):
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
-        computation = self.env.deploy(
+        address, computation = self.env.deploy(
             bytecode=initcode, value=value, override_address=override_address
         )
         self._computation = computation
 
         if computation.is_error:
             raise BoaError(self.stack_trace(computation))
-
-        (address,) = computation.contracts_created
-        return Address(address)
+        return address
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
@@ -653,7 +655,7 @@ class VyperContract(_BaseVyperContract):
     # ## handling events
     def _get_logs(self, computation, include_child_logs):
         if computation is None:
-            raise ValueError("There was no computation to retrieve logs from")
+            return []
 
         if include_child_logs:
             return list(computation.get_raw_log_entries())
