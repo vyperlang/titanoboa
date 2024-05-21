@@ -302,7 +302,6 @@ class Env:
         if ret._gas_meter_class != NoGasMeter:
             self._update_gas_used(ret.get_gas_used())
 
-        self._last_computation = ret
         return ret
 
     def _hook_trace_computation(self, computation, contract=None):
