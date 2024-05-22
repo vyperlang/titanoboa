@@ -6,6 +6,7 @@ from eth.vm.message import Message
 from vyper.utils import method_id
 
 import boa
+from boa import Env
 
 crvusd = "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E"
 voting_agent = "0xE478de485ad2fe566d49342Cbd03E49ed7DB3356"
@@ -38,21 +39,25 @@ def test_proxy_contract(proxy_contract):
     assert proxy_contract.minBalance() == 2500000000000000000000
 
 
-def test_prefetch_state(proxy_contract):
+@pytest.mark.parametrize("fresh_env", [True, False])
+def test_prefetch_state(proxy_contract, rpc_url, fresh_env):
+    env = boa.env
+    if fresh_env:
+        env = Env()
+        env.fork(rpc_url)
+
     msg = Message(
         to=proxy_contract.address.canonical_address,
-        sender=boa.env.eoa.canonical_address,
+        sender=env.eoa.canonical_address,
         gas=0,
         value=0,
         code=proxy_contract._bytecode,
         data=method_id("minTime()"),
     )
-    db = boa.env.evm.vm.state._account_db
+    db = env.evm.vm.state._account_db
     db.try_prefetch_state(msg)
-    assert (
-        db.get_code(proxy_contract.address.canonical_address)
-        == proxy_contract._bytecode
-    )
+    account = db._account_cache[proxy_contract.address.canonical_address]
+    assert db._journaldb[account.code_hash] == proxy_contract._bytecode
 
 
 @pytest.mark.parametrize("prefetch", [True, False])

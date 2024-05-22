@@ -96,9 +96,14 @@ class CachingRPC(RPC):
         return json.dumps({"method": method, "params": params}).encode("utf-8")
 
     def fetch(self, method, params):
-        # dispatch into fetch_multi for caching behavior.
-        (res,) = self.fetch_multi([(method, params)])
-        return res
+        # cannot dispatch into fetch_multi, doesn't work for debug_traceCall.
+        key = self._mk_key(method, params)
+        if key in self._db:
+            return json.loads(self._db[key])
+
+        result = self._rpc.fetch(method, params)
+        self._db[key] = json.dumps(result).encode("utf-8")
+        return result
 
     def fetch_uncached(self, method, params):
         return self._rpc.fetch_uncached(method, params)
@@ -214,20 +219,15 @@ class AccountDBFork(AccountDB):
                 "data": msg.data,
             }
         )
-        # TODO: skip debug_traceCall if we have seen these specific
-        # arguments with this specific block before
         try:
-            tracer = {"tracer": "prestateTracer"}
-            res = self._rpc.fetch_uncached(
-                "debug_traceCall", [args, self._block_id, tracer]
-            )
+            trace_args = [args, self._block_id, {"tracer": "prestateTracer"}]
+            trace = self._rpc.fetch("debug_traceCall", trace_args)
         except (RPCError, HTTPError):
             return
 
         snapshot = self.record()
 
-        # everything is returned in hex
-        for address, v in res.items():
+        for address, account_trace in trace.items():
             try:
                 address = to_canonical_address(address)
             except ValueError:
@@ -236,14 +236,18 @@ class AccountDBFork(AccountDB):
                 return
 
             # set account if we don't already have it
-            if self._get_account_helper(address) is None:
-                balance = to_int(v.get("balance", "0x"))
-                code = to_bytes(v.get("code", "0x"))
-                nonce = v.get("nonce", 0)  # already an int
+            account_helper = self._get_account_helper(address)
+            if account_helper is None:
+                balance = to_int(account_trace.get("balance", "0x"))
+                code = to_bytes(account_trace.get("code", "0x"))
+                nonce = account_trace.get("nonce", 0)  # already an int
                 self._set_account(address, Account(nonce=nonce, balance=balance))
                 self.set_code(address, code)
+                self._dirty_accounts.add(address)
+            else:
+                self._account_cache[address] = account_helper
 
-            storage = v.get("storage", dict())
+            storage = account_trace.get("storage", dict())
 
             account_store = super()._get_address_store(address)
             for hexslot, hexvalue in storage.items():
@@ -256,16 +260,20 @@ class AccountDBFork(AccountDB):
                 key = int_to_big_endian(slot)
                 if not self._helper_have_storage(address, slot):
                     account_store._journal_storage[key] = rlp.encode(value)  # type: ignore
+
         self.commit(snapshot)
 
     def get_code(self, address):
         try:
             return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
-            ret = self._rpc.fetch(
-                "eth_getCode", [to_checksum_address(address), self._block_id]
+            code = to_bytes(
+                self._rpc.fetch(
+                    "eth_getCode", [to_checksum_address(address), self._block_id]
+                )
             )
-            return to_bytes(ret)
+            self.set_code(address, code)
+            return code
 
     def discard(self, checkpoint):
         super().discard(checkpoint)
@@ -276,9 +284,7 @@ class AccountDBFork(AccountDB):
         self._dontfetch.commit(checkpoint)
 
     def record(self):
-        checkpoint = super().record()
-        self._dontfetch.record(checkpoint)
-        return checkpoint
+        return self._dontfetch.record(super().record())
 
     # helper to determine if something is in the storage db
     # or we need to get from RPC
