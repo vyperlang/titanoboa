@@ -102,7 +102,10 @@ class BoaError(Exception):
         frame = self.stack_trace.last_frame
         if hasattr(frame, "vm_error"):
             err = frame.vm_error
-            err.args = (frame.pretty_vm_reason, *err.args[1:])
+            if not getattr(err, "_already_pretty", False):
+                # avoid double patching when str() is called more than once
+                setattr(err, "_already_pretty", True)
+                err.args = (frame.pretty_vm_reason, *err.args[1:])
         else:
             err = frame
         return f"{err}\n\n{self.stack_trace}"
