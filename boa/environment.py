@@ -224,15 +224,13 @@ class Env:
 
         if computation._gas_meter_class != NoGasMeter:
             self._update_gas_used(computation.get_gas_used())
-        return computation
+        return target_address, computation
 
     def deploy_code(self, *args, **kwargs) -> tuple[Address, bytes]:
-        computation = self.deploy(*args, **kwargs)
+        address, computation = self.deploy(*args, **kwargs)
         if computation.is_error:
             raise computation.error
-
-        (address,) = computation.contracts_created
-        return Address(address), computation.output
+        return address, computation.output
 
     def raw_call(
         self,
@@ -302,7 +300,6 @@ class Env:
         if ret._gas_meter_class != NoGasMeter:
             self._update_gas_used(ret.get_gas_used())
 
-        self._last_computation = ret
         return ret
 
     def _hook_trace_computation(self, computation, contract=None):
