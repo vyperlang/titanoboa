@@ -183,9 +183,13 @@ class VyperBlueprint(_BaseVyperContract):
 
         deploy_bytecode += blueprint_bytecode
 
-        addr, self.bytecode = self.env.deploy_code(
+        addr, computation = self.env.deploy(
             bytecode=deploy_bytecode, override_address=override_address
         )
+        if computation.is_error:
+            raise computation.error
+
+        self.bytecode = computation.output
 
         self._address = Address(addr)
 
@@ -483,6 +487,8 @@ class VyperContract(_BaseVyperContract):
         super().__init__(compiler_data, env, filename)
 
         self.created_from = created_from
+        self._computation = None
+        self._source_map = None
 
         # add all exposed functions from the interface to the contract
         external_fns = {
@@ -517,8 +523,6 @@ class VyperContract(_BaseVyperContract):
         self._storage = StorageModel(self)
 
         self._eval_cache = lrudict(0x1000)
-        self._source_map = None
-        self._computation = None
 
         self.env.register_contract(self._address, self)
 
@@ -528,10 +532,14 @@ class VyperContract(_BaseVyperContract):
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
-        addr, self.bytecode = self.env.deploy_code(
+        address, computation = self.env.deploy(
             bytecode=initcode, value=value, override_address=override_address
         )
-        return Address(addr)
+        self._computation = computation
+
+        if computation.is_error:
+            raise BoaError(self.stack_trace(computation))
+        return address
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
