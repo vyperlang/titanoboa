@@ -34,7 +34,7 @@ dependencies = [
     "requests",
 
     # required for networked accounts
-    "eth-account",
+    "eth-account>=0.13.0",
 ]
 
 [project.optional-dependencies]
