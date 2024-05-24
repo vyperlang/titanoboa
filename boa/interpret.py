@@ -124,7 +124,7 @@ def get_module_fingerprint(
 
 
 def compiler_data(
-    source_code: str, contract_name: str, filename: str, **kwargs
+    source_code: str, contract_name: str, filename: str | Path, **kwargs
 ) -> CompilerData:
     global _disk_cache, _search_path
 
