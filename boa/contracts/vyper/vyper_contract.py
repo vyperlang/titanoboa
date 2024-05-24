@@ -536,6 +536,7 @@ class VyperContract(_BaseVyperContract):
             bytecode=initcode, value=value, override_address=override_address
         )
         self._computation = computation
+        self.bytecode = computation.output
 
         if computation.is_error:
             raise BoaError(self.stack_trace(computation))
