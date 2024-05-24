@@ -17,7 +17,7 @@ from eth.db.journal import JournalDB
 from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth.vm.message import Message
-from eth_utils import int_to_big_endian, to_canonical_address, to_checksum_address
+from eth_utils import to_canonical_address, to_checksum_address
 
 from boa.rpc import RPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
@@ -30,7 +30,6 @@ _PREDEFINED_BLOCKS = {"safe", "latest", "finalized", "pending", "earliest"}
 
 
 _EMPTY = b""  # empty rlp stuff
-_HAS_KEY = b"\x01"  # could be anything
 
 
 class CachingRPC(RPC):
@@ -149,7 +148,8 @@ class AccountDBFork(AccountDB):
     def __init__(self, rpc: CachingRPC, block_identifier: str, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self._dontfetch = JournalDB(MemoryDB())
+        self._prefetched = JournalDB(MemoryDB())
+        print("created prefetch DB", file=sys.stderr)
 
         self._rpc = rpc
 
@@ -186,7 +186,14 @@ class AccountDBFork(AccountDB):
         account = self._get_account_helper(address, from_journal)
 
         if account is None:
-            account = self._get_account_rpc(address)
+            if address in self._prefetched:
+                account = rlp.decode(self._prefetched[address], sedes=Account)
+                print(f"account 0x{address.hex()} is prefetched", file=sys.stderr)
+            else:
+                account = self._get_account_rpc(address)
+                print(f"account 0x{address.hex()} is not prefetched", file=sys.stderr)
+        else:
+            print(f"account 0x{address.hex()} is cached", file=sys.stderr)
 
         if from_journal:
             self._account_cache[address] = account
@@ -235,31 +242,26 @@ class AccountDBFork(AccountDB):
                 self.discard(snapshot)
                 return
 
-            # set account if we don't already have it
-            account_helper = self._get_account_helper(address)
-            if account_helper is None:
-                balance = to_int(account_trace.get("balance", "0x"))
-                code = to_bytes(account_trace.get("code", "0x"))
-                nonce = account_trace.get("nonce", 0)  # already an int
-                self._set_account(address, Account(nonce=nonce, balance=balance))
-                self.set_code(address, code)
-                self._dirty_accounts.add(address)
-            else:
-                self._account_cache[address] = account_helper
+            # set account in the cache
+            balance = to_int(account_trace.get("balance", "0x"))
+            code = to_bytes(account_trace.get("code", "0x"))
+            nonce = account_trace.get("nonce", 0)  # already an int
+
+            code_hash = keccak(code)
+            account = Account(nonce=nonce, balance=balance, code_hash=code_hash)
+            self._prefetched[code_hash] = code
+            self._prefetched[address] = rlp.encode(account, sedes=Account)
+            print(f"prefetched 0x{address.hex()} {account}", file=sys.stderr)
 
             storage = account_trace.get("storage", dict())
-
-            account_store = super()._get_address_store(address)
-            for hexslot, hexvalue in storage.items():
-                slot = to_int(hexslot)
-                value = to_int(hexvalue)
-                # set storage if we don't already have it.
-                # see AccountStorageDB.get()
-                # note we explicitly write 0s, so that they appear
-                # in the journal later when called by get_storage
-                key = int_to_big_endian(slot)
-                if not self._helper_have_storage(address, slot):
-                    account_store._journal_storage[key] = rlp.encode(value)  # type: ignore
+            for slot, value in storage.items():
+                slot = to_int(slot)
+                key = self._get_storage_tracker_key(address, slot)
+                self._prefetched[key] = to_bytes(value)
+                print(
+                    f"prefetched storage 0x{address.hex()} {slot}={value} with key 0x{key.hex()}",
+                    file=sys.stderr,
+                )
 
         self.commit(snapshot)
 
@@ -267,53 +269,60 @@ class AccountDBFork(AccountDB):
         try:
             return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
-            code = to_bytes(
-                self._rpc.fetch(
-                    "eth_getCode", [to_checksum_address(address), self._block_id]
-                )
+            pass
+
+        code_hash = self.get_code_hash(address)
+        if code_hash in self._prefetched:
+            print(f"code 0x{code_hash.hex()} is prefetched", file=sys.stderr)
+            return self._prefetched[code_hash]
+        print(f"code 0x{code_hash.hex()} is not prefetched", file=sys.stderr)
+
+        code = to_bytes(
+            self._rpc.fetch(
+                "eth_getCode", [to_checksum_address(address), self._block_id]
             )
-            self.set_code(address, code)
-            return code
+        )
+        self.set_code(address, code)
+        return code
 
     def discard(self, checkpoint):
         super().discard(checkpoint)
-        self._dontfetch.discard(checkpoint)
+        self._prefetched.discard(checkpoint)
+        print(f"discard {checkpoint}", file=sys.stderr)
 
     def commit(self, checkpoint):
         super().commit(checkpoint)
-        self._dontfetch.commit(checkpoint)
+        self._prefetched.commit(checkpoint)
+        print(f"commit {checkpoint}", file=sys.stderr)
 
     def record(self):
-        return self._dontfetch.record(super().record())
+        checkpoint = self._prefetched.record(super().record())
+        print(f"record {checkpoint}", file=sys.stderr)
+        return checkpoint
 
-    # helper to determine if something is in the storage db
-    # or we need to get from RPC
-    def _helper_have_storage(self, address, slot, from_journal=True):
-        if not from_journal:
-            db = super()._get_address_store(address)._locked_changes
-            key = int_to_big_endian(slot)
-            return db.get(key, _EMPTY) != _EMPTY
+    def get_storage(self, address, slot, from_journal=True) -> int:
+        # call super for address warming semantics
+        if address in self._account_stores:
+            return super().get_storage(address, slot, from_journal)
 
         key = self._get_storage_tracker_key(address, slot)
-        return self._dontfetch.get(key) == _HAS_KEY
+        if key in self._prefetched:
+            print(
+                f"storage 0x{address.hex()} {slot} is prefetched with key 0x{key.hex()}",
+                file=sys.stderr,
+            )
+            return int.from_bytes(self._prefetched[key], "big")
 
-    def get_storage(self, address, slot, from_journal=True):
-        # call super for address warming semantics
-        val = super().get_storage(address, slot, from_journal)
-        if self._helper_have_storage(address, slot, from_journal=from_journal):
-            return val
+        print(
+            f"storage 0x{address.hex()} {slot} is not prefetched with key 0x{key.hex()}",
+            file=sys.stderr,
+        )
 
         addr = to_checksum_address(address)
         raw_val = self._rpc.fetch(
             "eth_getStorageAt", [addr, to_hex(slot), self._block_id]
         )
         return to_int(raw_val)
-
-    def set_storage(self, address, slot, value):
-        super().set_storage(address, slot, value)
-        # mark don't fetch
-        key = self._get_storage_tracker_key(address, slot)
-        self._dontfetch[key] = _HAS_KEY
 
     def account_exists(self, address):
         if super().account_exists(address):

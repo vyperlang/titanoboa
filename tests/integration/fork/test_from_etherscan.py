@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 from eth.vm.message import Message
+from eth.vm.transaction_context import BaseTransactionContext
 from vyper.utils import method_id
 
 import boa
@@ -40,24 +41,36 @@ def test_proxy_contract(proxy_contract):
 
 
 @pytest.mark.parametrize("fresh_env", [True, False])
-def test_prefetch_state(proxy_contract, rpc_url, fresh_env):
+def test_prefetch_state(rpc_url, fresh_env, crvusd_contract):
     env = boa.env
     if fresh_env:
         env = Env()
         env.fork(rpc_url)
 
     msg = Message(
-        to=proxy_contract.address.canonical_address,
+        to=crvusd_contract.address.canonical_address,
         sender=env.eoa.canonical_address,
-        gas=0,
+        gas=30000,
         value=0,
-        code=proxy_contract._bytecode,
-        data=method_id("minTime()"),
+        code=crvusd_contract._bytecode,
+        data=method_id("burn(uint256)") + (0).to_bytes(32, "big"),
     )
-    db = env.evm.vm.state._account_db
+    state = env.evm.vm.state
+    db = state._account_db
     db.try_prefetch_state(msg)
-    account = db._account_cache[proxy_contract.address.canonical_address]
-    assert db._journaldb[account.code_hash] == proxy_contract._bytecode
+
+    # patch the RPC, so we make sure to use the cache
+    with patch("boa.vm.fork.CachingRPC.fetch", side_effect=AssertionError):
+        code = db.get_code(crvusd_contract.address.canonical_address)
+        storage = db.get_storage(crvusd_contract.address.canonical_address, slot=2)
+
+        assert code == crvusd_contract._bytecode
+        assert storage == crvusd_contract.totalSupply()
+
+        tx_ctx = BaseTransactionContext(origin=env.eoa.canonical_address, gas_price=0)
+        computation = state.computation_class.apply_message(state, msg, tx_ctx)
+        with pytest.raises(AttributeError):
+            assert not computation.error
 
 
 @pytest.mark.parametrize("prefetch", [True, False])
