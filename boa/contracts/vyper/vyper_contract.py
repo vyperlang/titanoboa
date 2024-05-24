@@ -124,6 +124,7 @@ class VyperDeployer:
 
     @cached_property
     def _constants(self):
+        # Make constants available at compile time. Useful for testing. See #196
         return ConstantsModel(self.compiler_data)
 
 
@@ -476,7 +477,7 @@ class ConstantsModel:
     def __init__(self, compiler_data: CompilerData):
         for v in compiler_data.annotated_vyper_module.get_children(VariableDecl):
             if v.is_constant:
-                setattr(self, v.target.id, v.value.reduced().value)
+                setattr(self, v.target.id, v.value.get_folded_value().value)
 
     def dump(self):
         return FrameDetail("constants", vars(self))
