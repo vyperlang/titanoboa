@@ -50,7 +50,7 @@ class CachingRPC(RPC):
             try:
                 from boa.util.leveldb import LevelDB
 
-                print("(using leveldb)", file=sys.stderr)
+                print(f"{id(self)}: (using leveldb)", file=sys.stderr)
 
                 cache_file = os.path.expanduser(self._cache_file)
                 # use CacheDB as an additional layer over disk
@@ -149,7 +149,7 @@ class AccountDBFork(AccountDB):
         super().__init__(*args, **kwargs)
 
         self._prefetched = JournalDB(MemoryDB())
-        print("created prefetch DB", file=sys.stderr)
+        print(f"{id(self)}: created prefetch DB", file=sys.stderr)
 
         self._rpc = rpc
 
@@ -188,12 +188,18 @@ class AccountDBFork(AccountDB):
         if account is None:
             if address in self._prefetched:
                 account = rlp.decode(self._prefetched[address], sedes=Account)
-                print(f"account 0x{address.hex()} is prefetched", file=sys.stderr)
+                print(
+                    f"{id(self)}: account 0x{address.hex()} is prefetched",
+                    file=sys.stderr,
+                )
             else:
                 account = self._get_account_rpc(address)
-                print(f"account 0x{address.hex()} is not prefetched", file=sys.stderr)
+                print(
+                    f"{id(self)}: account 0x{address.hex()} is not prefetched",
+                    file=sys.stderr,
+                )
         else:
-            print(f"account 0x{address.hex()} is cached", file=sys.stderr)
+            print(f"{id(self)}: account 0x{address.hex()} is cached", file=sys.stderr)
 
         if from_journal:
             self._account_cache[address] = account
@@ -251,7 +257,9 @@ class AccountDBFork(AccountDB):
             account = Account(nonce=nonce, balance=balance, code_hash=code_hash)
             self._prefetched[code_hash] = code
             self._prefetched[address] = rlp.encode(account, sedes=Account)
-            print(f"prefetched 0x{address.hex()} {account}", file=sys.stderr)
+            print(
+                f"{id(self)}: prefetched 0x{address.hex()} {account}", file=sys.stderr
+            )
 
             storage = account_trace.get("storage", dict())
             for slot, value in storage.items():
@@ -273,9 +281,13 @@ class AccountDBFork(AccountDB):
 
         code_hash = self.get_code_hash(address)
         if code_hash in self._prefetched:
-            print(f"code 0x{code_hash.hex()} is prefetched", file=sys.stderr)
+            print(
+                f"{id(self)}: code 0x{code_hash.hex()} is prefetched", file=sys.stderr
+            )
             return self._prefetched[code_hash]
-        print(f"code 0x{code_hash.hex()} is not prefetched", file=sys.stderr)
+        print(
+            f"{id(self)}: code 0x{code_hash.hex()} is not prefetched", file=sys.stderr
+        )
 
         code = to_bytes(
             self._rpc.fetch(
@@ -288,16 +300,16 @@ class AccountDBFork(AccountDB):
     def discard(self, checkpoint):
         super().discard(checkpoint)
         self._prefetched.discard(checkpoint)
-        print(f"discard {checkpoint}", file=sys.stderr)
+        print(f"{id(self)}: discard {checkpoint}", file=sys.stderr)
 
     def commit(self, checkpoint):
         super().commit(checkpoint)
         self._prefetched.commit(checkpoint)
-        print(f"commit {checkpoint}", file=sys.stderr)
+        print(f"{id(self)}: commit {checkpoint}", file=sys.stderr)
 
     def record(self):
         checkpoint = self._prefetched.record(super().record())
-        print(f"record {checkpoint}", file=sys.stderr)
+        print(f"{id(self)}: record {checkpoint}", file=sys.stderr)
         return checkpoint
 
     def get_storage(self, address, slot, from_journal=True) -> int:
@@ -314,7 +326,8 @@ class AccountDBFork(AccountDB):
             return int.from_bytes(self._prefetched[key], "big")
 
         print(
-            f"storage 0x{address.hex()} {slot} is not prefetched with key 0x{key.hex()}",
+            f"{id(self)}: storage 0x{address.hex()} {slot} is not prefetched "
+            f"with key 0x{key.hex()}",
             file=sys.stderr,
         )
 
