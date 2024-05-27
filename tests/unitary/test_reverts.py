@@ -222,3 +222,15 @@ def revert(contract: HasFoo):
         (repr(contract), "user revert with reason", "x is not 4"),
         (repr(c), "external call failed", "x is not 4"),
     ]
+
+
+def test_trace_constructor_revert():
+    code = """
+@external
+def __init__():
+    assert False, "revert reason"
+"""
+    with pytest.raises(BoaError) as error_context:
+        boa.loads(code)
+
+    assert "revert reason" in str(error_context.value)

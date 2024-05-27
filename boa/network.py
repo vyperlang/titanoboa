@@ -349,10 +349,13 @@ class NetworkEnv(Env):
         return computation
 
     # OVERRIDES
-    def deploy_code(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
-        local_address, local_bytecode = super().deploy_code(
+    def deploy(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
+        local_address, computation = super().deploy(
             sender=sender, gas=gas, value=value, bytecode=bytecode
         )
+        if computation.is_error:
+            return local_address, computation
+
         if trim_dict(kwargs):
             raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
         bytecode = to_hex(bytecode)
@@ -364,9 +367,7 @@ class NetworkEnv(Env):
 
         create_address = Address(receipt["contractAddress"])
 
-        deployed_bytecode = local_bytecode
-
-        if trace is not None and local_bytecode != trace.returndata_bytes:
+        if trace is not None and computation.output != trace.returndata_bytes:
             # not sure what to do about this, for now just complain
             warnings.warn(
                 "local fork did not match node! this indicates state got out "
@@ -374,7 +375,7 @@ class NetworkEnv(Env):
                 stacklevel=2,
             )
             # return what the node returned anyway
-            deployed_bytecode = trace.returndata_bytes
+            computation.output = trace.returndata_bytes
 
         if local_address != create_address:
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
@@ -382,7 +383,7 @@ class NetworkEnv(Env):
         # TODO get contract info in here
         print(f"contract deployed at {create_address}")
 
-        return create_address, deployed_bytecode
+        return create_address, computation
 
     @cached_property
     def _tracer(self):
@@ -431,7 +432,7 @@ class NetworkEnv(Env):
             return self._rpc.fetch_uncached(
                 "debug_traceTransaction", [tx_hash, self._tracer]
             )
-        except RPCError as e:
+        except (HTTPError, RPCError) as e:
             if self._suppress_debug_tt:
                 warnings.warn(f"Couldn't get a trace for {tx_hash}!", stacklevel=3)
             else:
