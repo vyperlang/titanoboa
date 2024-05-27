@@ -37,7 +37,9 @@ class _BaseEVMContract:
 
     @property
     def address(self) -> Address:
-        assert self._address is not None
+        if self._address is None:
+            # avoid assert, in pytest it would call repr(self) which segfaults
+            raise RuntimeError("Contract address is not set")
         return self._address
 
 

@@ -194,7 +194,7 @@ class Env:
     def _update_gas_used(self, gas_used: int):
         self._gas_tracker += gas_used
 
-    def deploy_code(
+    def deploy(
         self,
         sender: Optional[_AddressType] = None,
         gas: Optional[int] = None,
@@ -203,7 +203,7 @@ class Env:
         start_pc: int = 0,  # TODO: This isn't used
         # override the target address:
         override_address: Optional[_AddressType] = None,
-    ) -> tuple[Address, bytes]:
+    ):
         sender = self._get_sender(sender)
 
         if override_address is None:
@@ -212,7 +212,7 @@ class Env:
             target_address = Address(override_address)
 
         origin = sender  # XXX: consider making this parameterizable
-        c = self.evm.deploy_code(
+        computation = self.evm.deploy_code(
             sender=sender,
             origin=origin,
             target_address=target_address,
@@ -221,13 +221,16 @@ class Env:
             value=value,
             bytecode=bytecode,
         )
-        if c._gas_meter_class != NoGasMeter:
-            self._update_gas_used(c.get_gas_used())
 
-        if c.is_error:
-            raise c.error
+        if computation._gas_meter_class != NoGasMeter:
+            self._update_gas_used(computation.get_gas_used())
+        return target_address, computation
 
-        return target_address, c.output
+    def deploy_code(self, *args, **kwargs) -> tuple[Address, bytes]:
+        address, computation = self.deploy(*args, **kwargs)
+        if computation.is_error:
+            raise computation.error
+        return address, computation.output
 
     def raw_call(
         self,
