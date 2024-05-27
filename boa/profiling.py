@@ -275,14 +275,16 @@ def cache_gas_used_for_computation(contract, computation):
 def _create_table(for_line_profile: bool = False) -> Table:
     table = Table(title="\n")
 
-    table.add_column(
-        "Contract", justify="left", style="cyan", no_wrap=True, width=52
-    )
+    table.add_column("Contract", justify="left", style="cyan", no_wrap=True, width=52)
     computation_column_width = 30
     if for_line_profile:
         computation_column_width = 79
     table.add_column(
-        "Computation", justify="left", style="cyan", no_wrap=True, width=computation_column_width
+        "Computation",
+        justify="left",
+        style="cyan",
+        no_wrap=True,
+        width=computation_column_width,
     )
 
     table.add_column("Count", style="magenta")
@@ -319,7 +321,7 @@ def get_call_profile_table(env: Env) -> Table:
             fn_vs_median_gas.append((cache[profile].net_gas_stats.median_gas, profile))
 
         # arrange from most to least expensive contracts:
-        fn_vs_mfn_vs_median_gasean_gas = sorted(fn_vs_median_gas, key=lambda x: x[0], reverse=True)
+        fn_vs_median_gas = sorted(fn_vs_median_gas, key=lambda x: x[0], reverse=True)
 
         for c, (_, profile) in enumerate(fn_vs_median_gas):
             stats = cache[profile]
