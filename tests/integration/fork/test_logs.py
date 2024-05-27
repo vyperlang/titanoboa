@@ -35,9 +35,9 @@ def test_logs(simple_contract):
     topic0 = keccak256("Deposit(address,uint256)".encode())
     expected_log = (
         0,
-        int(WETH_ADDRESS, 16).to_bytes(20),
-        (int.from_bytes(topic0), int(simple_contract.address, 16)),
-        amount.to_bytes(32),
+        int(WETH_ADDRESS, 16).to_bytes(20, "big"),
+        (int.from_bytes(topic0, "big"), int(simple_contract.address, 16)),
+        amount.to_bytes(32, "big"),
     )
 
     logs = simple_contract.get_logs()

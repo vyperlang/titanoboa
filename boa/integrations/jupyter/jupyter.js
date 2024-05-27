@@ -69,10 +69,22 @@
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         if (!colab) {
-            // Check if the cell was already executed. In Colab, eval_js() doesn't replay.
+            // Check backend and whether cell was executed. In Colab, eval_js() doesn't replay.
             const response = await fetch(`${base}/titanoboa_jupyterlab/callback/${token}`);
-            // !response.ok indicates the cell has already been executed
-            if (!response.ok) return;
+            if (response.status === 404 && response.headers.get('Content-Type') === 'application/json') {
+                return; // the cell has already been executed
+            }
+            if (!response.ok) {
+                const error = 'Could not connect to the titanoboa backend. Please make sure the Jupyter extension is installed by running the following command:';
+                const command = 'jupyter lab extension enable boa';
+                if (element) {
+                    element.style.display = "block";  // show the output element in JupyterLab
+                    element.innerHTML = `<h3 style="color: red">${error}</h3><pre>${command}</pre>`;
+                } else {
+                    prompt(error, command);
+                }
+                return;
+            }
         }
 
         const body = stringify(await parsePromise(func(...args)));
