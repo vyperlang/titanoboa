@@ -275,21 +275,15 @@ def cache_gas_used_for_computation(contract, computation):
 def _create_table(for_line_profile: bool = False) -> Table:
     table = Table(title="\n")
 
-    if not for_line_profile:
-        table.add_column(
-            "Contract", justify="left", style="cyan", no_wrap=True, width=30
-        )
-        table.add_column("Address", justify="left", style="cyan", no_wrap=True)
-        table.add_column(
-            "Computation", justify="left", style="cyan", no_wrap=True, width=30
-        )
-    else:
-        table.add_column(
-            "Contract", justify="left", style="cyan", no_wrap=True, width=52
-        )
-        table.add_column(
-            "Computation", justify="left", style="cyan", no_wrap=True, width=79
-        )
+    table.add_column(
+        "Contract", justify="left", style="cyan", no_wrap=True, width=52
+    )
+    computation_column_width = 30
+    if for_line_profile:
+        computation_column_width = 79
+    table.add_column(
+        "Computation", justify="left", style="cyan", no_wrap=True, width=computation_column_width
+    )
 
     table.add_column("Count", style="magenta")
     table.add_column("Mean", style="magenta")
@@ -306,38 +300,45 @@ def get_call_profile_table(env: Env) -> Table:
 
     cache = env._cached_call_profiles
     cached_contracts = env._profiled_contracts
-    contract_vs_mean_gas = []
+    contract_vs_median_gas = []
     for profile in cache:
         cache[profile].compute_stats()
-        contract_vs_mean_gas.append(
-            (cache[profile].net_gas_stats.avg_gas, profile.address)
+        contract_vs_median_gas.append(
+            (cache[profile].net_gas_stats.median_gas, profile.address)
         )
 
     # arrange from most to least expensive contracts:
-    sort_gas = sorted(contract_vs_mean_gas, key=lambda x: x[0], reverse=True)
+    sort_gas = sorted(contract_vs_median_gas, key=lambda x: x[0], reverse=True)
     sorted_addresses = list(set([x[1] for x in sort_gas]))
 
     # --------------- POPULATE TABLE -----------------
 
     for address in sorted_addresses:
-        fn_vs_mean_gas = []
+        fn_vs_median_gas = []
         for profile in cached_contracts[address]:
-            fn_vs_mean_gas.append((cache[profile].net_gas_stats.avg_gas, profile))
+            fn_vs_median_gas.append((cache[profile].net_gas_stats.median_gas, profile))
 
         # arrange from most to least expensive contracts:
-        fn_vs_mean_gas = sorted(fn_vs_mean_gas, key=lambda x: x[0], reverse=True)
+        fn_vs_mfn_vs_median_gasean_gas = sorted(fn_vs_median_gas, key=lambda x: x[0], reverse=True)
 
-        for c, (_, profile) in enumerate(fn_vs_mean_gas):
+        for c, (_, profile) in enumerate(fn_vs_median_gas):
             stats = cache[profile]
 
             # only first line should be populated for name and address
             cname = ""
-            caddr = ""
-            if c == 0:
-                cname = profile.contract_name
-                caddr = address
             fn_name = profile.fn_name
-            table.add_row(cname, caddr, fn_name, *stats.net_gas_stats.get_str_repr())
+            stats = list(stats.net_gas_stats.get_str_repr())
+            if c == 0:
+                relpath = os.path.relpath(profile.contract_name)
+                contract_data_str = (
+                    f"Path: {os.path.dirname(relpath)}\n"
+                    f"Name: {os.path.basename(relpath)}\n"
+                    f"Address: {address}\n"
+                )
+                cname = contract_data_str
+                fn_name = "\n\n\n" + profile.fn_name
+                stats = [f"\n\n\n{value}" for value in stats]
+            table.add_row(cname, fn_name, *stats)
 
         table.add_section()
 
@@ -359,10 +360,10 @@ def get_line_profile_table(env: Env) -> Table:
 
     table = _create_table(for_line_profile=True)
     for (contract_name, contract_address), fn_data in contracts.items():
-        contract_file_path = os.path.split(contract_name)
+        relpath = os.path.relpath(contract_name)
         contract_data_str = (
-            f"Path: {contract_file_path[0]}\n"
-            f"Name: {contract_file_path[1]}\n"
+            f"Path: {os.path.dirname(relpath)}\n"
+            f"Name: {os.path.basename(relpath)}\n"
             f"Address: {contract_address}\n"
             f"{'-'*52}"
         )
@@ -388,8 +389,8 @@ def get_line_profile_table(env: Env) -> Table:
                 data = (contract_name, fn_name, code, *stats.get_str_repr())
                 l_profile.append(data)
 
-            # sorted by mean (x[4]):
-            l_profile = sorted(l_profile, key=lambda x: int(x[4]), reverse=True)
+            # sorted by median (x[5]):
+            l_profile = sorted(l_profile, key=lambda x: int(x[5]), reverse=True)
 
             for c, profile in enumerate(l_profile):
                 cname = ""
