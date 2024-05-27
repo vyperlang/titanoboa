@@ -14,6 +14,7 @@ import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
 from eth.exceptions import VMError
+from vyper.ast.nodes import VariableDecl
 from vyper.ast.parse import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
 from vyper.codegen.function_definitions import (
@@ -121,6 +122,11 @@ class VyperDeployer:
 
         return ret
 
+    @cached_property
+    def _constants(self):
+        # Make constants available at compile time. Useful for testing. See #196
+        return ConstantsModel(self.compiler_data)
+
 
 # a few lines of shared code between VyperBlueprint and VyperContract
 class _BaseVyperContract(_BaseEVMContract):
@@ -147,6 +153,10 @@ class _BaseVyperContract(_BaseEVMContract):
     @cached_property
     def abi(self):
         return build_abi_output(self.compiler_data)
+
+    @cached_property
+    def _constants(self):
+        return ConstantsModel(self.compiler_data)
 
 
 # create a blueprint for use with `create_from_blueprint`.
@@ -466,6 +476,20 @@ class ImmutablesModel:
         return repr(self.dump())
 
 
+# data structure to represent the constants in a contract
+class ConstantsModel:
+    def __init__(self, compiler_data: CompilerData):
+        for v in compiler_data.annotated_vyper_module.get_children(VariableDecl):
+            if v.is_constant:
+                setattr(self, v.target.id, v.value.get_folded_value().value)
+
+    def dump(self):
+        return FrameDetail("constants", vars(self))
+
+    def __repr__(self):
+        return repr(self.dump())
+
+
 class VyperContract(_BaseVyperContract):
     def __init__(
         self,
@@ -538,6 +562,7 @@ class VyperContract(_BaseVyperContract):
             bytecode=initcode, value=value, override_address=override_address
         )
         self._computation = computation
+        self.bytecode = computation.output
 
         if computation.is_error:
             raise BoaError(self.stack_trace(computation))
