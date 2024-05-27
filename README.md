@@ -196,10 +196,11 @@ Cast current deployed addresses to vyper contract
 ```
 
 ### Network Mode
+
 ```python
->>> import boa; from boa.network import NetworkEnv
->>> from eth_account import Account
+>>> import boa
 >>> boa.env.set_network_env("<rpc server address>")
+>>> from eth_account import Account
 >>> # in a real codebase, always load private keys safely from an encrypted store!
 >>> boa.env.add_account(Account(<a private key>))
 >>> c = boa.load("examples/ERC20.vy", "My Token", "TKN", 10**18, 10)

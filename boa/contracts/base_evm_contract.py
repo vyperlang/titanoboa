@@ -37,7 +37,9 @@ class _BaseEVMContract:
 
     @property
     def address(self) -> Address:
-        assert self._address is not None
+        if self._address is None:
+            # avoid assert, in pytest it would call repr(self) which segfaults
+            raise RuntimeError("Contract address is not set")
         return self._address
 
 
@@ -102,7 +104,10 @@ class BoaError(Exception):
         frame = self.stack_trace.last_frame
         if hasattr(frame, "vm_error"):
             err = frame.vm_error
-            err.args = (frame.pretty_vm_reason, *err.args[1:])
+            if not getattr(err, "_already_pretty", False):
+                # avoid double patching when str() is called more than once
+                setattr(err, "_already_pretty", True)
+                err.args = (frame.pretty_vm_reason, *err.args[1:])
         else:
             err = frame
         return f"{err}\n\n{self.stack_trace}"

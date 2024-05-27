@@ -174,6 +174,7 @@ class NetworkEnv(Env):
 
         self.tx_settings = TransactionSettings()
         self.capabilities = Capabilities(rpc)
+        self._suppress_debug_tt = False
 
     @cached_property
     def _rpc_has_snapshot(self):
@@ -349,10 +350,13 @@ class NetworkEnv(Env):
         return computation
 
     # OVERRIDES
-    def deploy_code(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
-        local_address, local_bytecode = super().deploy_code(
+    def deploy(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
+        local_address, computation = super().deploy(
             sender=sender, gas=gas, value=value, bytecode=bytecode
         )
+        if computation.is_error:
+            return local_address, computation
+
         if trim_dict(kwargs):
             raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
         bytecode = to_hex(bytecode)
@@ -364,9 +368,7 @@ class NetworkEnv(Env):
 
         create_address = Address(receipt["contractAddress"])
 
-        deployed_bytecode = local_bytecode
-
-        if trace is not None and local_bytecode != trace.returndata_bytes:
+        if trace is not None and computation.output != trace.returndata_bytes:
             # not sure what to do about this, for now just complain
             warnings.warn(
                 "local fork did not match node! this indicates state got out "
@@ -374,7 +376,7 @@ class NetworkEnv(Env):
                 stacklevel=2,
             )
             # return what the node returned anyway
-            deployed_bytecode = trace.returndata_bytes
+            computation.output = trace.returndata_bytes
 
         if local_address != create_address:
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
@@ -382,7 +384,7 @@ class NetworkEnv(Env):
         # TODO get contract info in here
         print(f"contract deployed at {create_address}")
 
-        return create_address, deployed_bytecode
+        return create_address, computation
 
     @cached_property
     def _tracer(self):
@@ -420,6 +422,30 @@ class NetworkEnv(Env):
             return None
 
         return call_tracer
+
+    def suppress_debug_tt(self, new_value=True):
+        self._suppress_debug_tt = new_value
+
+    def _debug_tt(self, tx_hash):
+        if self._tracer is None:
+            return None
+        try:
+            return self._rpc.fetch_uncached(
+                "debug_traceTransaction", [tx_hash, self._tracer]
+            )
+        except (HTTPError, RPCError) as e:
+            if self._suppress_debug_tt:
+                warnings.warn(f"Couldn't get a trace for {tx_hash}!", stacklevel=3)
+            else:
+                warnings.warn(
+                    f"Couldn't get a trace for {tx_hash}! If you want to"
+                    " suppress this error, call `boa.env.suppress_debug_tt()`"
+                    " first.",
+                    stacklevel=3,
+                )
+                raise e
+
+        return None
 
     def _get_nonce(self, addr):
         return self._rpc.fetch("eth_getTransactionCount", [addr, "latest"])
@@ -470,7 +496,7 @@ class NetworkEnv(Env):
 
             # note: signed.rawTransaction has type HexBytes
             tx_hash = self._rpc.fetch(
-                "eth_sendRawTransaction", [to_hex(bytes(signed.rawTransaction))]
+                "eth_sendRawTransaction", [to_hex(bytes(signed.raw_transaction))]
             )
         else:
             # some providers (i.e. metamask) don't have sign_transaction
@@ -482,11 +508,7 @@ class NetworkEnv(Env):
 
         receipt = self._rpc.wait_for_tx_receipt(tx_hash, self.tx_settings.poll_timeout)
 
-        trace = None
-        if self._tracer is not None:
-            trace = self._rpc.fetch_uncached(
-                "debug_traceTransaction", [tx_hash, self._tracer]
-            )
+        trace = self._debug_tt(tx_hash)
 
         print(f"{tx_hash} mined in block {receipt['blockHash']}!")
 
