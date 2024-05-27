@@ -711,8 +711,10 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def event_for(self):
-        m = self.compiler_data.vyper_module_folded._metadata["type"]
-        return {e.event_id: e for e in m.events.values()}
+        event_types = [
+            d._metadata["event_type"] for d in self.compiler_data.global_ctx.event_defs
+        ]
+        return {e.event_id: e for e in event_types}
 
     def decode_log(self, e):
         log_id, address, topics, data = e
