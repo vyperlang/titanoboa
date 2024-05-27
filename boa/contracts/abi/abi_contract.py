@@ -1,13 +1,16 @@
 from collections import defaultdict
 from copy import deepcopy
+from dataclasses import dataclass, make_dataclass
 from functools import cached_property
 from os.path import basename
 from typing import Any, Optional, Union
 from warnings import warn
 
 from eth.abc import ComputationAPI
+from eth_typing import ChecksumAddress
+from eth_utils import to_checksum_address
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
-from vyper.utils import method_id
+from vyper.utils import keccak256, method_id
 
 from boa.contracts.base_evm_contract import (
     BoaError,
@@ -16,6 +19,104 @@ from boa.contracts.base_evm_contract import (
     _handle_child_trace,
 )
 from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
+
+
+# a very simple log representation for the raw log entries
+@dataclass
+class LogEntry:
+    address: str
+    topics: list[bytes]
+    data: bytes
+
+
+@dataclass
+class ABILog:
+    """Represents a parsed log entry from a contract."""
+
+    address: ChecksumAddress
+    args: tuple
+    event: str
+    topics: list[bytes]
+    raw_data: bytes
+
+
+class ABILogTopic:
+    """Represents a log event topic in an ABI."""
+
+    def __init__(self, event_abi: dict, contract_name: str):
+        self._abi = event_abi
+        self._contract_name = contract_name
+
+    @cached_property
+    def topic_id(self) -> bytes:
+        """The keccak256 hash of the event signature."""
+        if self._abi.get("anonymous") is True:
+            return b""
+        return keccak256((self.name + self.signature).encode())
+
+    @property
+    def name(self) -> str:
+        return self._abi.get("name") or self._abi["type"]
+
+    @property
+    def indexed_inputs(self) -> list[dict]:
+        return [item for item in self._abi["inputs"] if item["indexed"]]
+
+    @property
+    def unindexed_inputs(self) -> list[dict]:
+        return [item for item in self._abi["inputs"] if not item["indexed"]]
+
+    @cached_property
+    def indexed_types(self) -> list[str]:
+        return [_abi_from_json(i) for i in self.indexed_inputs]
+
+    @cached_property
+    def unindexed_types(self) -> list[str]:
+        return [_abi_from_json(i) for i in self.unindexed_inputs]
+
+    @property
+    def signature(self) -> str:
+        return f"({_format_abi_type(self.indexed_types + self.unindexed_types)})"
+
+    def __repr__(self) -> str:
+        return (
+            f"ABITopic {self._contract_name}.{self.signature} (0x{self.topic_id.hex()})"
+        )
+
+    def parse(self, log: "LogEntry") -> ABILog:
+        return ABILog(
+            address=to_checksum_address(log.address),
+            args=self._parse_args(log),
+            event=self.name,
+            topics=log.topics,
+            raw_data=log.data,
+        )
+
+    @cached_property
+    def data_type(self) -> type:
+        """
+        Create a dataclass for the log event data.
+        """
+        inputs = self.indexed_inputs + self.unindexed_inputs
+        fields = [(item["name"], item["type"]) for item in inputs]
+        return make_dataclass(self.name, fields)
+
+    def _parse_args(self, log: "LogEntry") -> Any:
+        """Convert the log data into a dataclass instance."""
+        assert len(log.topics) == 1 + len(
+            self.indexed_inputs
+        ), "Invalid log topic count"
+        indexed = [
+            t if self._is_hashed(typ) else abi_decode(f"{_format_abi_type([typ])}", t)
+            for typ, t in zip(self.indexed_types, log.topics[1:])
+        ]
+        decoded = abi_decode(f"({_format_abi_type(self.unindexed_types)})", log.data)
+        return self.data_type(*indexed, *decoded)
+
+    @staticmethod
+    def _is_hashed(typ):
+        """Check if a type is hashed when included in a log topic."""
+        return typ in ("bytes", "string", "tuple") or typ.endswith("[]")
 
 
 class ABIFunction:
@@ -217,6 +318,7 @@ class ABIContract(_BaseEVMContract):
         name: str,
         abi: dict,
         functions: list[ABIFunction],
+        log_topics: list[ABILogTopic],
         address: Address,
         filename: Optional[str] = None,
         env=None,
@@ -225,6 +327,7 @@ class ABIContract(_BaseEVMContract):
         self._name = name
         self._abi = abi
         self._functions = functions
+        self.log_topics = log_topics
 
         self._bytecode = self.env.get_code(address)
         if not self._bytecode:
@@ -290,12 +393,27 @@ class ABIContract(_BaseEVMContract):
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(self._name, self._abi, self._functions)
+        return ABIContractFactory(
+            self._name, self._abi, self._functions, self.log_topics
+        )
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
         warn_str = "" if self._bytecode else " (WARNING: no bytecode at this address!)"
         return f"<{self._name} interface at {self.address}{warn_str}>{file_str}"
+
+    def parse_log(self, log: "LogEntry") -> ABILog:
+        """
+        Parse a log entry into an ABILog object.
+        :param log: the log entry to parse
+        """
+        topic_id = log.topics[0]
+        for topic in self.log_topics:
+            if topic.topic_id == topic_id:
+                return topic.parse(log)
+        raise KeyError(
+            f"Could not find event for log 0x{topic_id.hex()}. Found {self.log_topics}"
+        )
 
 
 class ABIContractFactory:
@@ -310,11 +428,13 @@ class ABIContractFactory:
         name: str,
         abi: dict,
         functions: list[ABIFunction],
+        log_topics: list[ABILogTopic],
         filename: Optional[str] = None,
     ):
         self._name = name
         self._abi = abi
         self._functions = functions
+        self._log_topics = log_topics
         self._filename = filename
 
     @cached_property
@@ -326,7 +446,10 @@ class ABIContractFactory:
         functions = [
             ABIFunction(item, name) for item in abi if item.get("type") == "function"
         ]
-        return cls(basename(name), abi, functions, filename=name)
+        log_topics = [
+            ABILogTopic(item, name) for item in abi if item.get("type") == "event"
+        ]
+        return cls(basename(name), abi, functions, log_topics, filename=name)
 
     def at(self, address: Address | str) -> ABIContract:
         """
@@ -334,7 +457,12 @@ class ABIContractFactory:
         """
         address = Address(address)
         contract = ABIContract(
-            self._name, self._abi, self._functions, address, self._filename
+            self._name,
+            self._abi,
+            self._functions,
+            self._log_topics,
+            address,
+            self._filename,
         )
         contract.env.register_contract(address, contract)
         return contract
