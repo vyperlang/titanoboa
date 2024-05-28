@@ -23,14 +23,14 @@ from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encod
 
 # a very simple log representation for the raw log entries
 @dataclass
-class LogEntry:
+class RawLogEntry:
     address: str
     topics: list[bytes]
     data: bytes
 
 
 @dataclass
-class ABILog:
+class ParsedLogEntry:
     """Represents a parsed log entry from a contract."""
 
     address: ChecksumAddress
@@ -83,8 +83,8 @@ class ABILogTopic:
             f"ABITopic {self._contract_name}.{self.signature} (0x{self.topic_id.hex()})"
         )
 
-    def parse(self, log: "LogEntry") -> ABILog:
-        return ABILog(
+    def parse(self, log: "RawLogEntry") -> ParsedLogEntry:
+        return ParsedLogEntry(
             address=to_checksum_address(log.address),
             args=self._parse_args(log),
             event=self.name,
@@ -101,7 +101,7 @@ class ABILogTopic:
         fields = [(item["name"], item["type"]) for item in inputs]
         return make_dataclass(self.name, fields)
 
-    def _parse_args(self, log: "LogEntry") -> Any:
+    def _parse_args(self, log: "RawLogEntry") -> Any:
         """Convert the log data into a dataclass instance."""
         assert len(log.topics) == 1 + len(
             self.indexed_inputs
@@ -135,7 +135,8 @@ class ABIFunction:
 
     @property
     def name(self) -> str:
-        return self._abi["name"]
+        # note: the `constructor` definition does not have a name
+        return self._abi.get("name") or self._abi["type"]
 
     @cached_property
     def argument_types(self) -> list:
@@ -163,6 +164,8 @@ class ABIFunction:
 
     @cached_property
     def method_id(self) -> bytes:
+        if self._abi["type"] == "constructor":
+            return b""  # constructors don't have method IDs
         return method_id(self.name + self.signature)
 
     def __repr__(self) -> str:
@@ -194,7 +197,8 @@ class ABIFunction:
         """Merge positional and keyword arguments into a single list."""
         if len(kwargs) + len(args) != self.argument_count:
             raise TypeError(
-                f"Bad args to `{repr(self)}` (expected {self.argument_count} "
+                "invocation failed due to improper number of arguments to"
+                f" `{repr(self)}` (expected {self.argument_count} "
                 f"arguments, got {len(args)} args and {len(kwargs)} kwargs)"
             )
         try:
@@ -225,7 +229,7 @@ class ABIFunction:
             case (single,):
                 return single
             case multiple:
-                return tuple(multiple)
+                return multiple
 
 
 class ABIOverload:
@@ -402,7 +406,7 @@ class ABIContract(_BaseEVMContract):
         warn_str = "" if self._bytecode else " (WARNING: no bytecode at this address!)"
         return f"<{self._name} interface at {self.address}{warn_str}>{file_str}"
 
-    def parse_log(self, log: "LogEntry") -> ABILog:
+    def parse_log(self, log: "RawLogEntry") -> ParsedLogEntry:
         """
         Parse a log entry into an ABILog object.
         :param log: the log entry to parse
@@ -476,10 +480,8 @@ def _abi_from_json(abi: dict) -> str:
     """
     if "components" in abi:
         components = ",".join([_abi_from_json(item) for item in abi["components"]])
-        if abi["type"] == "tuple":
-            return f"({components})"
-        if abi["type"] == "tuple[]":
-            return f"({components})[]"
+        if abi["type"].startswith("tuple"):
+            return f"({components}){abi['type'][5:]}"
         raise ValueError("Components found in non-tuple type " + abi["type"])
 
     return abi["type"]
