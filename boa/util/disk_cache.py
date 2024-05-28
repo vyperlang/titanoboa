@@ -66,8 +66,9 @@ class DiskCache:
                 return pickle.loads(f.read())
         except OSError:
             res = func()
-            tid = threading.get_ident()
-            tmp_p = p.with_suffix(f".{tid}.unfinished")
+            # use process ID and thread ID to avoid race conditions
+            job_id = f"{os.getpid()}.{threading.get_ident()}"
+            tmp_p = p.with_suffix(f".{job_id}.unfinished")
             with tmp_p.open("wb") as f:
                 f.write(pickle.dumps(res))
             # rename is atomic, don't really need to care about fsync
