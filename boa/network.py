@@ -20,7 +20,21 @@ from boa.rpc import (
     trim_dict,
 )
 from boa.util.abi import Address
-from boa.util.disk_cache import DiskCache
+from boa.util.disk_cache import DeployCache
+
+
+def set_cache_dir(cache_dir: str | None = "~/.cache/titanoboa"):
+    if cache_dir is None:
+        DeployCache._instance = None
+        return
+    DeployCache._instance = DeployCache(cache_dir, "deploy_cache")
+
+
+def disable_cache():
+    set_cache_dir(cache_dir=None)
+
+
+set_cache_dir()  # enable caching, by default!
 
 
 class TraceObject:
@@ -366,10 +380,9 @@ class NetworkEnv(Env):
         def send_tx():
             return self._send_txn(from_=sender, value=value, gas=gas, data=bytecode)
 
-        override_address, receipt, trace = None, None, None
-        if DiskCache.has(cache_key):  # get address before deploying to evm
-            (receipt, trace), _ = DiskCache.lookup(cache_key, send_tx)
-            override_address = Address(receipt["contractAddress"])
+        override_address, receipt, trace = self._get_deploy_cache(
+            cache_key, send_tx, bytecode
+        )
 
         # deploy to evm
         local_address, computation = super().deploy(
@@ -383,7 +396,7 @@ class NetworkEnv(Env):
             return local_address, computation
 
         if receipt is None:  # not in cache, send tx to network now
-            receipt, trace = DiskCache.lookup(cache_key, send_tx)
+            receipt, trace = DeployCache.lookup(cache_key, send_tx)
 
         create_address = Address(receipt["contractAddress"])
 
@@ -404,6 +417,14 @@ class NetworkEnv(Env):
         print(f"contract deployed at {create_address}")
 
         return create_address, computation
+
+    def _get_deploy_cache(self, cache_key, send_tx, bytecode):
+        if DeployCache.has(cache_key):  # get address before deploying to evm
+            receipt, trace = DeployCache.lookup(cache_key, send_tx)
+            address = Address(receipt["contractAddress"])
+            if self.get_code(address) in bytecode:
+                return address, receipt, trace
+        return None, None, None
 
     @cached_property
     def _tracer(self):

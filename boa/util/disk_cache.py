@@ -5,7 +5,13 @@ import pickle
 import threading
 import time
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, Optional, TypeVar
+
+from vyper.compiler import CompilerData
+
+if TYPE_CHECKING:
+    from boa.network import TraceObject
+
 
 _ONE_WEEK = 7 * 24 * 3600
 
@@ -24,8 +30,8 @@ def _silence_io_errors():
 T = TypeVar("T")
 
 
-class DiskCache:
-    _instance: "DiskCache" | None = None
+class _DiskCache(Generic[T]):
+    _instance: Optional["_DiskCache"] = None
 
     def __init__(self, cache_dir: str | Path, version_salt: str, ttl=_ONE_WEEK):
         self.cache_dir = Path(cache_dir).expanduser()
@@ -59,7 +65,7 @@ class DiskCache:
         return self.cache_dir.joinpath(f"{self.version_salt}/{digest}.pickle")
 
     # look up x in the cal; on a miss, write back to the cache
-    def _lookup(self, key: str, func: Callable[[], T]) -> tuple[T, bool]:
+    def _lookup(self, key: str, func: Callable[[], T]) -> T:
         gc_interval = self.ttl // 10
         if time.time() - self.last_gc >= gc_interval:
             self._collect_garbage()
@@ -68,7 +74,7 @@ class DiskCache:
         p.parent.mkdir(parents=True, exist_ok=True)
         try:
             with p.open("rb") as f:
-                return pickle.loads(f.read()), True
+                return pickle.loads(f.read())
         except OSError:
             res = func()
             tid = threading.get_ident()
@@ -78,16 +84,21 @@ class DiskCache:
             # rename is atomic, don't really need to care about fsync
             # because worst case we will just rebuild the item
             tmp_p.rename(p)
-            return res, False
+            return res
 
     @classmethod
     def has(cls, key: str) -> bool | None:
+        """
+        Check if the cache contains the given key.
+        :param key: The key to check
+        :return: None if cache is disabled, True if key is in cache, False otherwise
+        """
         if cls._instance is None:
             return None
         return cls._instance._get_location(key).exists()
 
     @classmethod
-    def lookup(cls, key: str, func: Callable[[], T]) -> tuple[T, bool | None]:
+    def lookup(cls, key: str, func: Callable[[], T]) -> T:
         """
         Lookup the string in the cache, if it is not found, call the function to get the value.
         :param key: The string to look up
@@ -98,5 +109,13 @@ class DiskCache:
             - None if the cache is disabled
         """
         if cls._instance is None:
-            return func(), None
+            return func()
         return cls._instance._lookup(key, func)
+
+
+class CompileCache(_DiskCache[CompilerData]):
+    _instance: Optional["CompileCache"] = None
+
+
+class DeployCache(_DiskCache[tuple[dict, Optional["TraceObject"]]]):
+    _instance: Optional["DeployCache"] = None

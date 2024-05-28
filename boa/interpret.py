@@ -20,17 +20,17 @@ from boa.contracts.vyper.vyper_contract import (
 )
 from boa.explorer import fetch_abi_from_etherscan
 from boa.util.abi import Address
-from boa.util.disk_cache import DiskCache
+from boa.util.disk_cache import CompileCache
 
 _Contract = Union[VyperContract, VyperBlueprint]
 
 
 def set_cache_dir(cache_dir: str | None = "~/.cache/titanoboa"):
     if cache_dir is None:
-        DiskCache._instance = None
+        CompileCache._instance = None
         return
     compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
-    DiskCache._instance = DiskCache(cache_dir, compiler_version)
+    CompileCache._instance = CompileCache(cache_dir, compiler_version)
 
 
 def disable_cache():
@@ -84,11 +84,12 @@ def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerDat
         return result
 
     cache_key = str((kwargs, source_code))
-    result, is_cached = DiskCache.lookup(cache_key, cache_miss)
+    is_cached = CompileCache.has(cache_key)
+    ret = CompileCache.lookup(cache_key, cache_miss)
     if is_cached is True:
-        with anchor_compiler_settings(result):
-            _ = result.bytecode, result.bytecode_runtime  # force compilation to happen
-    return result
+        with anchor_compiler_settings(ret):
+            _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
+    return ret
 
 
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
