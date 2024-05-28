@@ -31,11 +31,6 @@ def simple_contract():
     return boa.loads(code, STARTING_SUPPLY)
 
 
-def test_env_type():
-    # sanity check
-    assert isinstance(boa.env, NetworkEnv)
-
-
 def test_total_supply(simple_contract):
     assert simple_contract.totalSupply() == STARTING_SUPPLY
 
@@ -54,6 +49,11 @@ def test_update_total_supply(simple_contract, t):
 def test_raise_exception(simple_contract, t):
     with boa.reverts("oh no!"):
         simple_contract.raise_exception(t)
+
+
+def test_env_type():
+    # sanity check
+    assert isinstance(boa.env, NetworkEnv)
 
 
 # XXX: probably want to test deployment revert behavior

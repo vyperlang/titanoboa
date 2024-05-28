@@ -25,20 +25,16 @@ from boa.util.disk_cache import DiskCache
 _Contract = Union[VyperContract, VyperBlueprint]
 
 
-_disk_cache = None
-
-
-def set_cache_dir(cache_dir="~/.cache/titanoboa"):
-    global _disk_cache
+def set_cache_dir(cache_dir: str | None = "~/.cache/titanoboa"):
     if cache_dir is None:
-        _disk_cache = None
+        DiskCache._instance = None
         return
     compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
-    _disk_cache = DiskCache(cache_dir, compiler_version)
+    DiskCache._instance = DiskCache(cache_dir, compiler_version)
 
 
 def disable_cache():
-    set_cache_dir(None)
+    set_cache_dir(cache_dir=None)
 
 
 set_cache_dir()  # enable caching, by default!
@@ -76,27 +72,23 @@ sys.meta_path.append(BoaImporter())
 
 
 def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerData:
-    global _disk_cache
-
-    def _ifaces():
+    def cache_miss():
         # use get_interface_codes to get the interface source dict
         # TODO revisit this once imports are cleaned up vyper-side
-        ret = get_interface_codes(Path("."), {contract_name: source_code})
-        return ret[contract_name]
+        ifaces = get_interface_codes(Path("."), {contract_name: source_code})[
+            contract_name
+        ]
+        result = CompilerData(
+            source_code, contract_name, interface_codes=ifaces, **kwargs
+        )
+        return result
 
-    if _disk_cache is None:
-        ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
-        return ret
-
-    def func():
-        ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
-        with anchor_compiler_settings(ret):
-            _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
-        return ret
-
-    return _disk_cache.caching_lookup(str((kwargs, source_code)), func)
+    cache_key = str((kwargs, source_code))
+    result, is_cached = DiskCache.lookup(cache_key, cache_miss)
+    if is_cached is True:
+        with anchor_compiler_settings(result):
+            _ = result.bytecode, result.bytecode_runtime  # force compilation to happen
+    return result
 
 
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore

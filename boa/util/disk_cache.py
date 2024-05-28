@@ -5,6 +5,7 @@ import pickle
 import threading
 import time
 from pathlib import Path
+from typing import Callable, TypeVar
 
 _ONE_WEEK = 7 * 24 * 3600
 
@@ -20,15 +21,19 @@ def _silence_io_errors():
         pass
 
 
+T = TypeVar("T")
+
+
 class DiskCache:
-    def __init__(self, cache_dir, version_salt, ttl=_ONE_WEEK):
+    _instance: "DiskCache" | None = None
+
+    def __init__(self, cache_dir: str | Path, version_salt: str, ttl=_ONE_WEEK):
         self.cache_dir = Path(cache_dir).expanduser()
         self.version_salt = version_salt
-        self.ttl = ttl
+        self.ttl = ttl  # time to live
+        self.last_gc = 0.0  # last garbage collection
 
-        self.last_gc = 0
-
-    def gc(self, force=False):
+    def _collect_garbage(self, force=False) -> None:
         for root, dirs, files in os.walk(self.cache_dir):
             # delete items older than ttl
             for f in files:
@@ -48,22 +53,22 @@ class DiskCache:
         self.last_gc = time.time()
 
     # content-addressable location
-    def cal(self, string):
-        preimage = (self.version_salt + string).encode("utf-8")
+    def _get_location(self, key: str) -> Path:
+        preimage = (self.version_salt + key).encode("utf-8")
         digest = hashlib.sha256(preimage).digest().hex()
         return self.cache_dir.joinpath(f"{self.version_salt}/{digest}.pickle")
 
     # look up x in the cal; on a miss, write back to the cache
-    def caching_lookup(self, string, func):
+    def _lookup(self, key: str, func: Callable[[], T]) -> tuple[T, bool]:
         gc_interval = self.ttl // 10
         if time.time() - self.last_gc >= gc_interval:
-            self.gc()
+            self._collect_garbage()
 
-        p = self.cal(string)
+        p = self._get_location(key)
         p.parent.mkdir(parents=True, exist_ok=True)
         try:
             with p.open("rb") as f:
-                return pickle.loads(f.read())
+                return pickle.loads(f.read()), True
         except OSError:
             res = func()
             tid = threading.get_ident()
@@ -73,4 +78,25 @@ class DiskCache:
             # rename is atomic, don't really need to care about fsync
             # because worst case we will just rebuild the item
             tmp_p.rename(p)
-            return res
+            return res, False
+
+    @classmethod
+    def has(cls, key: str) -> bool | None:
+        if cls._instance is None:
+            return None
+        return cls._instance._get_location(key).exists()
+
+    @classmethod
+    def lookup(cls, key: str, func: Callable[[], T]) -> tuple[T, bool | None]:
+        """
+        Lookup the string in the cache, if it is not found, call the function to get the value.
+        :param key: The string to look up
+        :param func: The function to call if the string is not found
+        :return: The value and whether it was found in the cache:
+            - True if the value was found in the cache
+            - False if the value was added to the cache
+            - None if the cache is disabled
+        """
+        if cls._instance is None:
+            return func(), None
+        return cls._instance._lookup(key, func)

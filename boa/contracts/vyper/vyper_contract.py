@@ -533,7 +533,10 @@ class VyperContract(_BaseVyperContract):
 
         initcode = self.compiler_data.bytecode + encoded_args
         address, computation = self.env.deploy(
-            bytecode=initcode, value=value, override_address=override_address
+            bytecode=initcode,
+            value=value,
+            override_address=override_address,
+            source_code=self.compiler_data.source_code,
         )
         self._computation = computation
         self.bytecode = computation.output

@@ -200,6 +200,7 @@ class Env:
         gas: Optional[int] = None,
         value: int = 0,
         bytecode: bytes = b"",
+        source_code: Optional[str] = None,
         start_pc: int = 0,  # TODO: This isn't used
         # override the target address:
         override_address: Optional[_AddressType] = None,
@@ -313,6 +314,9 @@ class Env:
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._hook_trace_computation(child, child_contract)
+
+    def get_chain_id(self) -> int:
+        return self.evm.chain.chain_id
 
     def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))

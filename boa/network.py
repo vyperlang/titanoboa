@@ -20,6 +20,7 @@ from boa.rpc import (
     trim_dict,
 )
 from boa.util.abi import Address
+from boa.util.disk_cache import DiskCache
 
 
 class TraceObject:
@@ -350,21 +351,39 @@ class NetworkEnv(Env):
         return computation
 
     # OVERRIDES
-    def deploy(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
+    def deploy(
+        self, sender=None, gas=None, value=0, bytecode=b"", source_code=None, **kwargs
+    ):
+        if trim_dict(kwargs):
+            raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
+
+        # todo: use integrity hash instead of source code after vyper>=0.4
+        # note: bytecode already includes the constructor args
+        cache_key = str((source_code, bytecode, self.get_chain_id()))
+
+        sender = self._check_sender(self._get_sender(sender))
+
+        def send_tx():
+            return self._send_txn(from_=sender, value=value, gas=gas, data=bytecode)
+
+        override_address, receipt, trace = None, None, None
+        if DiskCache.has(cache_key):  # get address before deploying to evm
+            (receipt, trace), _ = DiskCache.lookup(cache_key, send_tx)
+            override_address = Address(receipt["contractAddress"])
+
+        # deploy to evm
         local_address, computation = super().deploy(
-            sender=sender, gas=gas, value=value, bytecode=bytecode
+            sender=sender,
+            gas=gas,
+            value=value,
+            bytecode=bytecode,
+            override_address=override_address,
         )
         if computation.is_error:
             return local_address, computation
 
-        if trim_dict(kwargs):
-            raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
-        bytecode = to_hex(bytecode)
-        sender = self._check_sender(self._get_sender(sender))
-
-        receipt, trace = self._send_txn(
-            from_=sender, value=value, gas=gas, data=bytecode
-        )
+        if receipt is None:  # not in cache, send tx to network now
+            receipt, trace = DiskCache.lookup(cache_key, send_tx)
 
         create_address = Address(receipt["contractAddress"])
 
@@ -517,6 +536,10 @@ class NetworkEnv(Env):
 
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
+
+    def get_chain_id(self) -> int:
+        chain_id = self._rpc.fetch("eth_chainId", [])
+        return int.from_bytes(bytes.fromhex(chain_id[2:]), "big")
 
     def set_balance(self, address, value):
         raise NotImplementedError("Cannot use set_balance in network mode")
