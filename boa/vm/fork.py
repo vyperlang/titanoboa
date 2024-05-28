@@ -150,7 +150,6 @@ class AccountDBFork(AccountDB):
         super().__init__(*args, **kwargs)
 
         self._dontfetch = JournalDB(MemoryDB())
-        print(f"{id(self)}: created prefetch DB", file=sys.stderr)
 
         self._rpc = rpc
 
@@ -236,28 +235,15 @@ class AccountDBFork(AccountDB):
                 self.discard(snapshot)
                 return
 
-            storage = account_trace.get("storage", {})
             # set account if we don't already have it
-            account_helper = self._get_account_helper(address)
-            if account_helper is None:
+            if self._get_account_helper(address) is None:
                 balance = to_int(account_trace.get("balance", "0x"))
                 code = to_bytes(account_trace.get("code", "0x"))
                 nonce = account_trace.get("nonce", 0)  # already an int
                 self._set_account(address, Account(nonce=nonce, balance=balance))
                 self.set_code(address, code)
-                print(
-                    f"{id(self)}: prefetched 0x{address.hex()} with storage "
-                    f"{storage.keys()}",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    f"{id(self)}: ignore prefetched 0x{address.hex()} with storage "
-                    f"{storage.keys()}",
-                    file=sys.stderr,
-                )
 
-            for hexslot, hexvalue in storage.items():
+            for hexslot, hexvalue in account_trace.get("storage", {}).items():
                 slot = to_int(hexslot)
                 value = to_int(hexvalue)
                 # set storage if we don't already have it.
@@ -266,26 +252,14 @@ class AccountDBFork(AccountDB):
                 # in the journal later when called by get_storage
                 if not self._helper_have_storage(address, slot):
                     self.set_storage(address, slot, value)
-                    print(
-                        f"{id(self)}: prefetched storage 0x{address.hex()}: {slot}={value}",
-                        file=sys.stderr,
-                    )
-                else:
-                    print(
-                        f"{id(self)}: ignore prefetched storage 0x{address.hex()}: {slot}={value}",
-                        file=sys.stderr,
-                    )
 
+        # the prefetch is lost on later reverts, however the RPC calls are cached
         self.commit(snapshot)
 
     def get_code(self, address):
         try:
             return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
-            print(
-                f"{id(self)}: code {to_checksum_address(address)} is missing",
-                file=sys.stderr,
-            )
             code = to_bytes(
                 self._rpc.fetch(
                     "eth_getCode", [to_checksum_address(address), self._block_id]
@@ -296,53 +270,37 @@ class AccountDBFork(AccountDB):
 
     def discard(self, checkpoint):
         super().discard(checkpoint)
-        print(f"{id(self)}: discarded {checkpoint}", file=sys.stderr)
         self._dontfetch.discard(checkpoint)
 
     def commit(self, checkpoint):
         super().commit(checkpoint)
-        print(f"{id(self)}: committed {checkpoint}", file=sys.stderr)
         self._dontfetch.commit(checkpoint)
 
     def record(self):
         checkpoint = super().record()
-        print(f"{id(self)}: recorded {checkpoint}", file=sys.stderr)
         return self._dontfetch.record(checkpoint)
 
     # helper to determine if something is in the storage db
     # or we need to get from RPC
     def _helper_have_storage(self, address, slot, from_journal=True):
-        if not from_journal:
-            db = super()._get_address_store(address)._locked_changes
-            key = int_to_big_endian(slot)
-            return db.get(key, _EMPTY) != _EMPTY
+        if from_journal:
+            key = self._get_storage_tracker_key(address, slot)
+            return self._dontfetch.get(key) == _HAS_KEY
 
-        key = self._get_storage_tracker_key(address, slot)
-        return self._dontfetch.get(key) == _HAS_KEY
+        db = super()._get_address_store(address)._locked_changes
+        key = int_to_big_endian(slot)
+        return db.get(key, _EMPTY) != _EMPTY
 
     def get_storage(self, address, slot, from_journal=True):
         # call super for address warming semantics
         value = super().get_storage(address, slot, from_journal)
         if self._helper_have_storage(address, slot, from_journal=from_journal):
-            print(
-                f"{id(self)}: found evm storage 0x{address.hex()} {slot}={value}",
-                file=sys.stderr,
-            )
             return value
 
-        key = self._get_storage_tracker_key(address, slot)
-        dontfetch = self._dontfetch.get(key) == _HAS_KEY
-        addr = to_checksum_address(address)
-        raw_val = self._rpc.fetch(
-            "eth_getStorageAt", [addr, to_hex(slot), self._block_id]
-        )
-        value = to_int(raw_val)
-        print(
-            f"{id(self)}: eth_getStorageAt 0x{address.hex()} {slot}={value} from rpc. "
-            f"dontfetch={dontfetch}, from_journal={from_journal}",
-            file=sys.stderr,
-        )
+        fetch_args = [to_checksum_address(address), to_hex(slot), self._block_id]
+        value = to_int(self._rpc.fetch("eth_getStorageAt", fetch_args))
         if from_journal:
+            # when not from journal, don't override changes
             self.set_storage(address, slot, value)
         return value
 
@@ -353,7 +311,8 @@ class AccountDBFork(AccountDB):
         self._dontfetch[key] = _HAS_KEY
 
     def account_exists(self, address):
-        if super().account_exists(address):
-            return True
-
-        return self.get_balance(address) > 0 or self.get_nonce(address) > 0
+        return (
+            super().account_exists(address)
+            or self.get_balance(address) > 0
+            or self.get_nonce(address) > 0
+        )
