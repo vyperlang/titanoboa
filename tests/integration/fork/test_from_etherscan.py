@@ -41,7 +41,7 @@ def test_proxy_contract(proxy_contract):
 @pytest.mark.parametrize("fresh_env", [True, False])
 def test_prefetch_state(rpc_url, fresh_env, crvusd_contract):
     if fresh_env:
-        # the contract was loaded from abi, want to test it against a fresh env
+        # the contract was loaded from abi, test it against a fresh env too
         env = Env()
         env.fork(rpc_url)
     else:
@@ -60,10 +60,11 @@ def test_prefetch_state(rpc_url, fresh_env, crvusd_contract):
     db.try_prefetch_state(msg)
 
     # patch the RPC, so we make sure to use the cache
-    with patch("boa.vm.fork.CachingRPC.fetch", side_effect=AssertionError):
+    with patch("boa.rpc.EthereumRPC.fetch", side_effect=AssertionError):
         code = db.get_code(crvusd_contract.address.canonical_address)
         storage = db.get_storage(crvusd_contract.address.canonical_address, slot=2)
 
+        crvusd_contract.env = env
         assert code == crvusd_contract._bytecode
         assert storage == crvusd_contract.totalSupply()
 
