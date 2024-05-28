@@ -235,7 +235,6 @@ class ABIContract(_BaseEVMContract):
             setattr(self, name, ABIOverload.create(group, self))
 
         self._address = Address(address)
-        self.env.register_contract(address, self)
 
     @property
     def abi(self):
@@ -323,6 +322,7 @@ class ABIContractFactory:
         contract = ABIContract(
             self._name, self._abi, self._functions, address, self._filename
         )
+        contract.env.register_contract(contract.address, contract)
         return contract
 
 

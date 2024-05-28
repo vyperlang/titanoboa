@@ -125,11 +125,14 @@ class _BaseEVMContract:
 
     def _create_error(self, computation):
         try:
-            return BoaError.from_computation(computation, self.env, self)
-        except BoaError as b:
-            # modify the error so the traceback starts in userland.
-            # inspired by answers in https://stackoverflow.com/q/1603940/
-            return strip_internal_frames(b)
+            raise BoaError.from_computation(computation, self.env, self)
+        except BoaError as error:
+            try:
+                # modify the error so the traceback starts in userland.
+                # inspired by answers in https://stackoverflow.com/q/1603940/
+                raise strip_internal_frames(error) from None
+            except BoaError as error:
+                return error
 
     @property
     def address(self) -> Address:
