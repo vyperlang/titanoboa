@@ -23,8 +23,6 @@ from boa.rpc import (
 from boa.util.abi import Address
 from boa.util.deploy_cache import DeployCache
 
-_deploy_cache_path = Path("~/.local/share/titanoboa/deploy_cache.sqlite").expanduser()
-
 
 class TraceObject:
     def __init__(self, raw_trace):
@@ -149,6 +147,9 @@ class NetworkEnv(Env):
 
     # always prefetch state in network mode
     _fork_try_prefetch_state = True
+    _deploy_cache_path = Path(
+        "~/.local/share/titanoboa/deploy_cache.sqlite"
+    ).expanduser()
 
     def __init__(
         self,
@@ -365,7 +366,7 @@ class NetworkEnv(Env):
         **kwargs,
     ):
         if trim_dict(kwargs):
-            raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
+            raise TypeError(f"invalid kwargs to `deploy`: {kwargs}")
 
         # todo: use integrity hash instead of source code after vyper>=0.4
         # note: bytecode already includes the constructor args
@@ -416,7 +417,7 @@ class NetworkEnv(Env):
 
     @cached_property
     def _deploys(self):
-        return DeployCache(_deploy_cache_path)
+        return DeployCache(self._deploy_cache_path)
 
     @cached_property
     def _tracer(self):
