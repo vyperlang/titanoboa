@@ -169,7 +169,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     token = _generate_token()
     args_str = ", ".join(json.dumps(p) for p in chain([token], args))
     js_code = f"window._titanoboa.{js_func}({args_str});"
-    # logging.warning(f"Calling {js_func} with {args_str}")
+    logging.warning(f"Calling {js_func} with {args_str}")
 
     if colab_eval_js:
         install_jupyter_javascript_triggers()
