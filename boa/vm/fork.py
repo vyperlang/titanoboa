@@ -227,7 +227,7 @@ class AccountDBFork(AccountDB):
 
         snapshot = self.record()
 
-        for address, account_trace in trace.items():
+        for address, account_dict in trace.items():
             try:
                 address = to_canonical_address(address)
             except ValueError:
@@ -237,13 +237,14 @@ class AccountDBFork(AccountDB):
 
             # set account if we don't already have it
             if self._get_account_helper(address) is None:
-                balance = to_int(account_trace.get("balance", "0x"))
-                code = to_bytes(account_trace.get("code", "0x"))
-                nonce = account_trace.get("nonce", 0)  # already an int
+                balance = to_int(account_dict.get("balance", "0x"))
+                code = to_bytes(account_dict.get("code", "0x"))
+                nonce = account_dict.get("nonce", 0)  # already an int
                 self._set_account(address, Account(nonce=nonce, balance=balance))
                 self.set_code(address, code)
 
-            for hexslot, hexvalue in account_trace.get("storage", {}).items():
+            storage = account_dict.get("storage", {})
+            for hexslot, hexvalue in storage.items():
                 slot = to_int(hexslot)
                 value = to_int(hexvalue)
                 # set storage if we don't already have it.
@@ -260,13 +261,12 @@ class AccountDBFork(AccountDB):
         try:
             return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
-            code = to_bytes(
-                self._rpc.fetch(
-                    "eth_getCode", [to_checksum_address(address), self._block_id]
-                )
-            )
-            self.set_code(address, code)
-            return code
+            pass
+
+        code_args = [to_checksum_address(address), self._block_id]
+        code = to_bytes(self._rpc.fetch("eth_getCode", code_args))
+        self.set_code(address, code)
+        return code
 
     def discard(self, checkpoint):
         super().discard(checkpoint)
@@ -293,16 +293,16 @@ class AccountDBFork(AccountDB):
 
     def get_storage(self, address, slot, from_journal=True):
         # call super for address warming semantics
-        value = super().get_storage(address, slot, from_journal)
+        val = super().get_storage(address, slot, from_journal)
         if self._helper_have_storage(address, slot, from_journal=from_journal):
-            return value
+            return val
 
         fetch_args = [to_checksum_address(address), to_hex(slot), self._block_id]
-        value = to_int(self._rpc.fetch("eth_getStorageAt", fetch_args))
+        val = to_int(self._rpc.fetch("eth_getStorageAt", fetch_args))
         if from_journal:
             # when not from journal, don't override changes
-            self.set_storage(address, slot, value)
-        return value
+            self.set_storage(address, slot, val)
+        return val
 
     def set_storage(self, address, slot, value):
         super().set_storage(address, slot, value)
@@ -311,8 +311,6 @@ class AccountDBFork(AccountDB):
         self._dontfetch[key] = _HAS_KEY
 
     def account_exists(self, address):
-        return (
-            super().account_exists(address)
-            or self.get_balance(address) > 0
-            or self.get_nonce(address) > 0
-        )
+        if super().account_exists(address):
+            return True
+        return self.get_balance(address) > 0 or self.get_nonce(address) > 0
