@@ -278,7 +278,8 @@ class AccountDBFork(AccountDB):
 
     def record(self):
         checkpoint = super().record()
-        return self._dontfetch.record(checkpoint)
+        self._dontfetch.record(checkpoint)
+        return checkpoint
 
     # helper to determine if something is in the storage db
     # or we need to get from RPC
