@@ -4,13 +4,15 @@ from os.path import dirname, join, realpath
 from IPython.display import Javascript, display
 
 
-def install_jupyter_javascript_triggers():
+def install_jupyter_javascript_triggers(debug_mode=False):
     """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
     cur_dir = dirname(realpath(__file__))
     with open(join(cur_dir, "jupyter.js")) as f:
         jupyter_js = f.read()
     prefix = os.getenv("JUPYTERHUB_SERVICE_PREFIX", "..")
     js = jupyter_js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix)
+    if debug_mode:
+        js = js.replace("// console", "console")
     display(Javascript(js))
 
 
