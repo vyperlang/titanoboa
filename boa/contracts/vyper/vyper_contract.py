@@ -522,7 +522,6 @@ class VyperContract(_BaseVyperContract):
                 compiler_data.global_ctx.init_function.decl_node, self
             )
 
-        self._address = None
         if skip_initcode:
             if value:
                 raise Exception("nonzero value but initcode is being skipped")
