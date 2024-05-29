@@ -9,14 +9,13 @@ def install_jupyter_javascript_triggers(debug_mode=False):
     """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
     cur_dir = dirname(realpath(__file__))
     with open(join(cur_dir, "jupyter.js")) as f:
-        jupyter_js = f.read()
+        js = f.read()
+
     prefix = os.getenv("JUPYTERHUB_SERVICE_PREFIX", "..")
-    js = Javascript(
-        jupyter_js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix).replace(
-            "$$BOA_DEBUG_MODE", json.dumps(debug_mode)
-        )
-    )
-    display(js)
+    js = js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix)
+    js = js.replace("$$BOA_DEBUG_MODE", json.dumps(debug_mode))
+
+    display(Javascript(js))
 
 
 def convert_frontend_dict(data):
