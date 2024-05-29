@@ -1,3 +1,4 @@
+import json
 import os
 from os.path import dirname, join, realpath
 
@@ -10,10 +11,12 @@ def install_jupyter_javascript_triggers(debug_mode=False):
     with open(join(cur_dir, "jupyter.js")) as f:
         jupyter_js = f.read()
     prefix = os.getenv("JUPYTERHUB_SERVICE_PREFIX", "..")
-    js = jupyter_js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix)
-    if debug_mode:
-        js = js.replace("// console", "console")
-    display(Javascript(js))
+    js = Javascript(
+        jupyter_js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix).replace(
+            "$$BOA_DEBUG_MODE", json.dumps(debug_mode)
+        )
+    )
+    display(js)
 
 
 def convert_frontend_dict(data):

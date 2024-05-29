@@ -11,8 +11,11 @@
         return ethereum.request({method, params});
     };
 
-    // When opening in lab view, the base path contains extra folders
-    const base = `$$JUPYTERHUB_SERVICE_PREFIX`;  // gets replaced by the JupyterLab extension
+    // the following vars get replaced by the backend
+    const config = {
+        base: `$$JUPYTERHUB_SERVICE_PREFIX`,  // in lab view, base path is deeper
+        debug: $$BOA_DEBUG_MODE,
+    };
 
     /** Stringify data, converting big ints to strings */
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
@@ -36,7 +39,7 @@
     async function callbackAPI(token, body) {
         const headers = {['X-XSRFToken']: getCookie('_xsrf')};
         const init = {method: 'POST', body, headers};
-        const url = `${base}/titanoboa_jupyterlab/callback/${token}`;
+        const url = `${config.base}/titanoboa_jupyterlab/callback/${token}`;
         const response = await fetch(url, init);
         return response.text();
     }
@@ -106,7 +109,7 @@
         }
 
         const body = stringify(await parsePromise(func(...args)));
-        // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
+        config.debug && console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {
             return body;
         }
