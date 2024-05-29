@@ -4,6 +4,7 @@ import warnings
 from dataclasses import dataclass
 from functools import cached_property
 from math import ceil
+from pathlib import Path
 
 from eth_account import Account
 from requests.exceptions import HTTPError
@@ -20,21 +21,9 @@ from boa.rpc import (
     trim_dict,
 )
 from boa.util.abi import Address
-from boa.util.disk_cache import DeployCache
+from boa.util.deploy_cache import DeployCache
 
-
-def set_cache_dir(cache_dir: str | None = "~/.cache/titanoboa"):
-    if cache_dir is None:
-        DeployCache._instance = None
-        return
-    DeployCache._instance = DeployCache(cache_dir, "deploy_cache")
-
-
-def disable_cache():
-    set_cache_dir(cache_dir=None)
-
-
-set_cache_dir()  # enable caching, by default!
+_deploy_cache_path = Path("~/.local/share/titanoboa/deploy_cache.sqlite").expanduser()
 
 
 class TraceObject:
@@ -366,23 +355,25 @@ class NetworkEnv(Env):
 
     # OVERRIDES
     def deploy(
-        self, sender=None, gas=None, value=0, bytecode=b"", source_code=None, **kwargs
+        self,
+        sender=None,
+        gas=None,
+        value=0,
+        bytecode=b"",
+        source_code=None,
+        deploy_id=None,
+        **kwargs,
     ):
         if trim_dict(kwargs):
             raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
 
         # todo: use integrity hash instead of source code after vyper>=0.4
         # note: bytecode already includes the constructor args
-        cache_key = str((source_code, bytecode, self.get_chain_id()))
 
         sender = self._check_sender(self._get_sender(sender))
 
-        def send_tx():
-            return self._send_txn(from_=sender, value=value, gas=gas, data=bytecode)
-
-        override_address, receipt, trace = self._get_deploy_cache(
-            cache_key, send_tx, bytecode
-        )
+        chain_id = self.get_chain_id()
+        receipt, trace = self._deploys.get(source_code, bytecode, deploy_id, chain_id)
 
         # deploy to evm
         local_address, computation = super().deploy(
@@ -390,13 +381,18 @@ class NetworkEnv(Env):
             gas=gas,
             value=value,
             bytecode=bytecode,
-            override_address=override_address,
+            override_address=receipt["contractAddress"] if receipt else None,
         )
         if computation.is_error:
             return local_address, computation
 
         if receipt is None:  # not in cache, send tx to network now
-            receipt, trace = DeployCache.lookup(cache_key, send_tx)
+            receipt, trace = self._send_txn(
+                from_=sender, value=value, gas=gas, data=bytecode
+            )
+            self._deploys.set(
+                source_code, bytecode, deploy_id, chain_id, receipt, trace
+            )
 
         create_address = Address(receipt["contractAddress"])
 
@@ -418,18 +414,9 @@ class NetworkEnv(Env):
 
         return create_address, computation
 
-    def _get_deploy_cache(self, cache_key, send_tx, bytecode):
-        if DeployCache.has(cache_key):  # get address before deploying to evm
-            receipt, trace = DeployCache.lookup(cache_key, send_tx)
-            address = Address(receipt["contractAddress"])
-            code = self.get_code(address)
-            if code and code in bytecode:
-                return address, receipt, trace
-            else:
-                # in test chains (e.g. anvil) the bytecode is lost on restart
-                assert code == b"", f"code mismatch: {code} != {bytecode}"
-
-        return None, None, None
+    @cached_property
+    def _deploys(self):
+        return DeployCache(_deploy_cache_path)
 
     @cached_property
     def _tracer(self):
