@@ -422,8 +422,13 @@ class NetworkEnv(Env):
         if DeployCache.has(cache_key):  # get address before deploying to evm
             receipt, trace = DeployCache.lookup(cache_key, send_tx)
             address = Address(receipt["contractAddress"])
-            if self.get_code(address) in bytecode:
+            code = self.get_code(address)
+            if code and code in bytecode:
                 return address, receipt, trace
+            else:
+                # in test chains (e.g. anvil) the bytecode is lost on restart
+                assert code == b"", f"code mismatch: {code} != {bytecode}"
+
         return None, None, None
 
     @cached_property
