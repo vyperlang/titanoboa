@@ -44,7 +44,6 @@ class DeployCache:
 
         hash_str = self._hash_str(bytecode, source_code, chain_id)
         if (row := self._get(deploy_id, hash_str)) is None:
-            print(bytecode.hex())
             return None, None
 
         from boa.network import TraceObject
@@ -54,7 +53,6 @@ class DeployCache:
     def set(self, source_code, bytecode, deploy_id, chain_id, receipt, trace):
         if deploy_id and source_code:
             hash_str = self._hash_str(bytecode, source_code, chain_id)
-            print(bytecode.hex())
             self._insert(deploy_id, hash_str, receipt, trace)
 
     def _get(self, deploy_id, hashed):

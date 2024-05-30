@@ -200,7 +200,7 @@ class Env:
         gas: Optional[int] = None,
         value: int = 0,
         bytecode: bytes = b"",
-        source_code: Optional[str] = None,
+        source_code: Optional[str] = None,  # only used in network env
         start_pc: int = 0,  # TODO: This isn't used
         # override the target address:
         override_address: Optional[_AddressType] = None,
