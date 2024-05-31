@@ -98,7 +98,7 @@ class BrowserRPC(RPC):
     An RPC object that sends requests to the browser via Javascript.
     """
 
-    debug_mode = False
+    _debug_mode = False
 
     @property
     def identifier(self) -> str:
@@ -171,11 +171,11 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     token = _generate_token()
     args_str = ", ".join(json.dumps(p) for p in chain([token], args))
     js_code = f"window._titanoboa.{js_func}({args_str});"
-    if BrowserRPC.debug_mode:
+    if BrowserRPC._debug_mode:
         logging.warning(f"Calling {js_func} with {args_str}")
 
     if colab_eval_js:
-        install_jupyter_javascript_triggers(BrowserRPC.debug_mode)
+        install_jupyter_javascript_triggers(BrowserRPC._debug_mode)
         result = colab_eval_js(js_code)
         return _parse_js_result(json.loads(result))
 
