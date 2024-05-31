@@ -26,7 +26,6 @@ _Contract = Union[VyperContract, VyperBlueprint]
 
 
 _disk_cache = None
-_Deployer = VyperDeployer
 
 
 def set_cache_dir(cache_dir="~/.cache/titanoboa"):
@@ -38,20 +37,26 @@ def set_cache_dir(cache_dir="~/.cache/titanoboa"):
     _disk_cache = DiskCache(cache_dir, compiler_version)
 
 
-def create_deployer(*args, **kwargs):
-    return _Deployer(*args, **kwargs)
-
-
-def set_deployer_class(deployer_class: type[_Deployer] = VyperDeployer):
-    global _Deployer
-    _Deployer = deployer_class
-
-
 def disable_cache():
     set_cache_dir(None)
 
 
 set_cache_dir()  # enable caching, by default!
+
+
+_Deployer = VyperDeployer
+
+
+def set_deployer_class(deployer_class: type[_Deployer] = VyperDeployer):
+    """
+    Set the class used for deploying contracts.
+    This may be used e.g. in plugins for customizing the deployment process.
+    The given class is used for the `loads` and `load_partial` functions, but
+    note that the user may still call any number of different deployers directly.
+    :param deployer_class: The class to use for deploying contracts.
+    """
+    global _Deployer
+    _Deployer = deployer_class
 
 
 class BoaImporter(MetaPathFinder):

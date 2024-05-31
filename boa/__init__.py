@@ -6,7 +6,6 @@ from boa.contracts.vyper.vyper_contract import check_boa_error_matches
 from boa.debugger import BoaDebug
 from boa.environment import Env
 from boa.interpret import (
-    create_deployer,
     from_etherscan,
     load,
     load_abi,
