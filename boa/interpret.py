@@ -94,7 +94,8 @@ def compiler_data(
     source_code: str, contract_name: str, deployer=None, **kwargs
 ) -> CompilerData:
     global _disk_cache
-    deployer = deployer or _Deployer
+    if deployer is None:
+        deployer = _Deployer
 
     def _ifaces():
         # use get_interface_codes to get the interface source dict
