@@ -284,13 +284,13 @@ class AccountDBFork(AccountDB):
     # helper to determine if something is in the storage db
     # or we need to get from RPC
     def _helper_have_storage(self, address, slot, from_journal=True):
-        if from_journal:
-            key = self._get_storage_tracker_key(address, slot)
-            return self._dontfetch.get(key) == _HAS_KEY
+        if not from_journal:
+            db = super()._get_address_store(address)._locked_changes
+            key = int_to_big_endian(slot)
+            return db.get(key, _EMPTY) != _EMPTY
 
-        db = super()._get_address_store(address)._locked_changes
-        key = int_to_big_endian(slot)
-        return db.get(key, _EMPTY) != _EMPTY
+        key = self._get_storage_tracker_key(address, slot)
+        return self._dontfetch.get(key) == _HAS_KEY
 
     def get_storage(self, address, slot, from_journal=True):
         # call super for address warming semantics
