@@ -94,18 +94,21 @@ class BrowserSigner:
     A BrowserSigner is a class that can be used to sign transactions in IPython/JupyterLab.
     """
 
-    def __init__(self, address=None, rpc=BrowserRPC()):
+    def __init__(self, address=None, rpc=None):
         """
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
+        if rpc is None:
+            rpc = BrowserRPC()  # note: the browser window is global anyway
         self._rpc = rpc
         address = getattr(address, "address", address)
         accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
 
-        if address is None and accounts:
+        if address is None and len(accounts) > 0:
             address = accounts[0]
-        elif address not in accounts:
+
+        if address not in accounts:
             raise ValueError(f"Address {address} is not available in the browser")
 
         self.address = Address(address)
@@ -144,7 +147,9 @@ class BrowserEnv(NetworkEnv):
     A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
     """
 
-    def __init__(self, address=None, rpc=BrowserRPC(), **kwargs):
+    def __init__(self, address=None, rpc=None, **kwargs):
+        if rpc is None:
+            rpc = BrowserRPC()
         super().__init__(rpc=rpc, **kwargs)
         self.signer = BrowserSigner(address, rpc)
         self.set_eoa(self.signer)
