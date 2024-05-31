@@ -141,7 +141,7 @@ def test_browser_sign_typed_data(display_mock, mock_callback, env):
 
 
 def test_browser_rpc_inject_js(mocked_token, display_mock, mock_callback):
-    BrowserRPC()
+    _ = BrowserRPC()  # test the constructor
     (((js1,), _),) = display_mock.call_args_list
     assert "window._titanoboa = " in js1.data
 
