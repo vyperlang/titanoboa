@@ -112,7 +112,8 @@ def compiler_data(
             _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret
 
-    return _disk_cache.caching_lookup(str((kwargs, source_code, deployer)), func)
+    cache_key = str((contract_name, source_code, kwargs, deployer))
+    return _disk_cache.caching_lookup(cache_key, func)
 
 
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
