@@ -1035,7 +1035,7 @@ class VyperFunction:
             override_bytecode = self._override_bytecode
 
         # note: this anchor doesn't do anything on the default implementation.
-        # it's override the source map in subclasses
+        # the source map is overridden in subclasses
         with self.contract._anchor_source_map(self._source_map):
             computation = self.env.execute_code(
                 to_address=self.contract._address,
