@@ -9,7 +9,7 @@ event Transfer:
     receiver: indexed(address)
     value: uint256
 
-@external
+@deploy
 def __init__(supply: uint256):
     log Transfer(empty(address), msg.sender, supply)
 """,

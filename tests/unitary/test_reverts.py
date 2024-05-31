@@ -202,7 +202,7 @@ def math_call_with_reason():
 
 def test_trace_constructor_revert():
     code = """
-@external
+@deploy
 def __init__():
     assert False, "revert reason"
 """
@@ -210,3 +210,29 @@ def __init__():
         boa.loads(code)
 
     assert "revert reason" in str(error_context.value)
+
+
+def test_trace_constructor_stack_trace():
+    called_code = """
+@external
+@pure
+def check(x: uint256) -> uint256:
+    assert x < 10 # dev: less than 10
+    return x
+"""
+    caller_code = """
+interface Called:
+    def check(x: uint256) -> uint256: pure
+
+@deploy
+def __init__(math: address, x: uint256):
+    _: uint256 = staticcall Called(math).check(x)
+"""
+    called = boa.loads(called_code)
+    boa.loads(caller_code, called.address, 0)
+    with pytest.raises(BoaError) as error_context:
+        boa.loads(caller_code, called.address, 10)
+
+    trace = error_context.value.stack_trace
+    assert [repr(frame.vm_error) for frame in trace] == ["Revert(b'')"] * 2
+    assert [frame.dev_reason.reason_str for frame in trace] == ["less than 10"] * 2

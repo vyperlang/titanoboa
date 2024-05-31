@@ -557,15 +557,24 @@ class VyperContract(_BaseVyperContract):
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
-        address, computation = self.env.deploy(
-            bytecode=initcode, value=value, override_address=override_address
-        )
-        self._computation = computation
-        self.bytecode = computation.output
+        with self._anchor_source_map(self._deployment_source_map):
+            address, computation = self.env.deploy(
+                bytecode=initcode, value=value, override_address=override_address
+            )
 
-        if computation.is_error:
-            raise BoaError(self.stack_trace(computation))
-        return address
+            self._computation = computation
+            self.bytecode = computation.output
+
+            if computation.is_error:
+                raise BoaError(self.stack_trace(computation))
+
+            return address
+
+    @cached_property
+    def _deployment_source_map(self):
+        with anchor_settings(self.compiler_data.settings):
+            _, source_map = compile_ir.assembly_to_evm(self.compiler_data.assembly)
+            return source_map
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
@@ -646,9 +655,8 @@ class VyperContract(_BaseVyperContract):
     def source_map(self):
         if self._source_map is None:
             with anchor_settings(self.compiler_data.settings):
-                _, self._source_map = compile_ir.assembly_to_evm(
-                    self.compiler_data.assembly_runtime
-                )
+                assembly = self.compiler_data.assembly_runtime
+                _, self._source_map = compile_ir.assembly_to_evm(assembly)
         return self._source_map
 
     def find_error_meta(self, computation):
@@ -708,8 +716,8 @@ class VyperContract(_BaseVyperContract):
 
     @cached_property
     def event_for(self):
-        m = self.compiler_data.vyper_module_folded._metadata["type"]
-        return {e.event_id: e for e in m.events.values()}
+        module_t = self.compiler_data.global_ctx
+        return {e.event_id: e for e in module_t.used_events}
 
     def decode_log(self, e):
         log_id, address, topics, data = e
@@ -1026,6 +1034,8 @@ class VyperFunction:
         if hasattr(self, "_override_bytecode"):
             override_bytecode = self._override_bytecode
 
+        # note: this anchor doesn't do anything on the default implementation.
+        # the source map is overridden in subclasses
         with self.contract._anchor_source_map(self._source_map):
             computation = self.env.execute_code(
                 to_address=self.contract._address,
