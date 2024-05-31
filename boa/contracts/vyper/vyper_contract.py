@@ -397,18 +397,16 @@ class VyperContract(_BaseVyperContract):
 
         # set external methods as class attributes:
         self._ctor = None
-        self._address = None
         if "__init__" in external_fns:
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
         if skip_initcode:
             if value:
                 raise Exception("nonzero value but initcode is being skipped")
-            self._address = Address(override_address)
+            addr = Address(override_address)
         else:
-            self._address = self._run_init(
-                *args, value=value, override_address=override_address
-            )
+            addr = self._run_init(*args, value=value, override_address=override_address)
+        self._address = addr
 
         for fn_name, fn in external_fns.items():
             setattr(self, fn_name, VyperFunction(fn, self))

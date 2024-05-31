@@ -266,10 +266,11 @@ class ABIContract(_BaseEVMContract):
 
     def find_error_meta(self, computation):
         calldata_method_id = bytes(computation.msg.data[:4])
-        if calldata_method_id in self.method_id_map:
-            return self.method_id_map[calldata_method_id].pretty_signature
-        # (private) function might not be specified in the ABI
-        return f"unknown method 0x{calldata_method_id.hex()}"
+        if calldata_method_id not in self.method_id_map:
+            # (private) function might not be specified in the ABI
+            return f"unknown method 0x{calldata_method_id.hex()}"
+
+        return self.method_id_map[calldata_method_id].pretty_signature
 
     @property
     def deployer(self) -> "ABIContractFactory":
