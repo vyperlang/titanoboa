@@ -15,6 +15,7 @@ from boa.interpret import (
     loads_partial,
 )
 from boa.network import NetworkEnv
+from boa.plugins import LOAD_PLUGINS
 from boa.precompile import precompile
 from boa.test.strategies import fuzz
 from boa.vm.py_evm import enable_pyevm_verbose_logging, patch_opcode
@@ -89,3 +90,6 @@ def _jupyter_server_extension_points() -> list[dict]:
     where to find the `_load_jupyter_server_extension` function.
     """
     return [{"module": "boa.integrations.jupyter"}]
+
+
+LOAD_PLUGINS()
