@@ -400,10 +400,9 @@ class PyEVM:
 
     @property
     def is_forked(self):
-        return self.vm.__class__._state_class.account_db_class == AccountDBFork
-
-    def _set_account_db_class(self, account_db_class: type):
-        self.vm.__class__._state_class.account_db_class = account_db_class
+        return issubclass(
+            self.vm.__class__._state_class.account_db_class, AccountDBFork
+        )
 
     def get_gas_meter_class(self):
         return self.vm.state.computation_class._gas_meter_class
