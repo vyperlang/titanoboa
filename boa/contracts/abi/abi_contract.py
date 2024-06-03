@@ -333,7 +333,7 @@ class ABIContractFactory:
         self._functions = [
             ABIFunction(item, name) for item in abi if item.get("type") == "function"
         ]
-        self._filename = filename
+        self.filename = filename
         self.compiler_data = compiler_data
 
     @cached_property
@@ -356,7 +356,7 @@ class ABIContractFactory:
             self._abi,
             self._functions,
             address,
-            self._filename,
+            self.filename,
             compiler_data=self.compiler_data,
         )
         contract.env.register_contract(address, contract)
