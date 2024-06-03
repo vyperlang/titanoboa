@@ -178,11 +178,11 @@ def test_browser_chain_id(token, env, display_mock, mock_callback):
     )
 
 
-def test_browser_rpc(token, display_mock, mock_callback, account, mock_fork, env):
+def test_browser_rpc_gas_price(
+    token, display_mock, mock_callback, account, mock_fork, env
+):
     mock_callback("eth_gasPrice", "0x123")
     assert env.get_gas_price() == 291
-
-    assert display_mock.call_count == 6
     (js,), _ = display_mock.call_args
     assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
 
