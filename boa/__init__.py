@@ -13,7 +13,6 @@ from boa.interpret import (
     loads,
     loads_abi,
     loads_partial,
-    set_deployer_class,
 )
 from boa.network import NetworkEnv
 from boa.precompile import precompile
@@ -44,7 +43,6 @@ def set_env(new_env):
     env = new_env
 
     Env._singleton = new_env
-    set_deployer_class()  # make sure we are using the default compiler again
 
 
 def set_browser_env(address=None):

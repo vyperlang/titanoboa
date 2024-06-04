@@ -18,6 +18,7 @@ from boa.contracts.vyper.vyper_contract import (
     VyperContract,
     VyperDeployer,
 )
+from boa.environment import Env
 from boa.explorer import fetch_abi_from_etherscan
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
@@ -42,21 +43,6 @@ def disable_cache():
 
 
 set_cache_dir()  # enable caching, by default!
-
-
-_Deployer = VyperDeployer
-
-
-def set_deployer_class(deployer_class: type[_Deployer] = VyperDeployer):
-    """
-    Set the class used for deploying contracts.
-    This may be used e.g. in plugins for customizing the deployment process.
-    The given class is used for the `loads` and `load_partial` functions, but
-    note that the user may still call any number of different deployers directly.
-    :param deployer_class: The class to use for deploying contracts.
-    """
-    global _Deployer
-    _Deployer = deployer_class
 
 
 class BoaImporter(MetaPathFinder):
@@ -95,7 +81,7 @@ def compiler_data(
 ) -> CompilerData:
     global _disk_cache
     if deployer is None:
-        deployer = _Deployer
+        deployer = _get_default_deployer_class()
 
     def _ifaces():
         # use get_interface_codes to get the interface source dict
@@ -164,18 +150,19 @@ def loads_partial(
     filename: str | Path | None = None,
     dedent: bool = True,
     compiler_args: dict = None,
-) -> _Deployer:
+) -> VyperDeployer:
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
     if dedent:
         source_code = textwrap.dedent(source_code)
 
     compiler_args = compiler_args or {}
 
-    data = compiler_data(source_code, name, **compiler_args)
-    return _Deployer(data, filename=filename)
+    deployer_class = _get_default_deployer_class()
+    data = compiler_data(source_code, name, deployer_class, **compiler_args)
+    return deployer_class(data, filename=filename)
 
 
-def load_partial(filename: str, compiler_args=None) -> _Deployer:  # type: ignore
+def load_partial(filename: str, compiler_args=None):
     with open(filename) as f:
         return loads_partial(
             f.read(), name=filename, filename=filename, compiler_args=compiler_args
@@ -188,6 +175,10 @@ def from_etherscan(
     addr = Address(address)
     abi = fetch_abi_from_etherscan(addr, uri, api_key)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
+
+
+def _get_default_deployer_class():
+    return getattr(Env.get_singleton(), "deployer_class", VyperDeployer)
 
 
 __all__ = []  # type: ignore
