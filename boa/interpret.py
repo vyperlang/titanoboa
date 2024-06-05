@@ -178,7 +178,10 @@ def from_etherscan(
 
 
 def _get_default_deployer_class():
-    return getattr(Env.get_singleton(), "deployer_class", VyperDeployer)
+    env = Env.get_singleton()
+    if hasattr(env, "deployer_class"):
+        return env.deployer_class
+    return VyperDeployer
 
 
 __all__ = []  # type: ignore
