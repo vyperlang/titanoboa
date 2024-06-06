@@ -55,12 +55,12 @@ class _EstimateGasFailed(Exception):
 class TransactionSettings:
     # when calculating the base fee, the number of blocks N ahead
     # to compute a cap for the Nth block.
-    # defaults to 4 (4 blocks ahead, pending block's baseFee * ~1.6)
+    # defaults to 5 (5 blocks ahead, pending block's baseFee * ~1.6)
     # but can be tweaked. if you get errors like
     # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
     # try increasing the constant.
     # do not recommend setting below 0.
-    base_fee_estimator_constant: int = 4
+    base_fee_estimator_constant: int = 5
 
     # amount of time to wait, in seconds before giving up on a transaction
     poll_timeout: float = 240.0
@@ -236,7 +236,7 @@ class NetworkEnv(Env):
     def get_eip1559_fee(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
         reqs = [
-            ("eth_getBlockByNumber", ["pending", False]),
+            ("eth_getBlockByNumber", ["latest", False]),
             ("eth_maxPriorityFeePerGas", []),
             ("eth_chainId", []),
         ]
