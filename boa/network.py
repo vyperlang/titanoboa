@@ -472,7 +472,10 @@ class NetworkEnv(Env):
             tx_data["maxFeePerGas"] = max_fee
             tx_data["chainId"] = chain_id
         except (RPCError, KeyError) as e:
-            warnings.warn(f"No EIP-1559 transaction available, falling back to legacy", stacklevel=3)
+            warnings.warn(
+                "No EIP-1559 transaction available, falling back to legacy",
+                stacklevel=3,
+            )
             warnings.warn(str(e), stacklevel=3)
             gas_price, chain_id = self.get_static_fee()
             tx_data["gasPrice"] = gas_price

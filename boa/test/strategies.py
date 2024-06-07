@@ -1,5 +1,3 @@
-import random
-import string
 from typing import Any, Callable, Iterable, Optional, Union
 
 from eth_abi.grammar import BasicType, TupleType, parse
