@@ -55,7 +55,7 @@ class _EstimateGasFailed(Exception):
 class TransactionSettings:
     # when calculating the base fee, the number of blocks N ahead
     # to compute a cap for the Nth block.
-    # defaults to 5 (5 blocks ahead, pending block's baseFee * ~1.6)
+    # defaults to 5 (5 blocks ahead, pending block's baseFee * ~1.8)
     # but can be tweaked. if you get errors like
     # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
     # try increasing the constant.
