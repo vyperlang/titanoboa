@@ -96,10 +96,11 @@ def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerDat
             _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret
 
-    return _disk_cache.caching_lookup(str((kwargs, source_code)), func)
+    cache_key = str((contract_name, source_code, kwargs))
+    return _disk_cache.caching_lookup(cache_key, func)
 
 
-def load(filename: str, *args, **kwargs) -> _Contract:  # type: ignore
+def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
     name = filename
     # TODO: investigate if we can just put name in the signature
     if "name" in kwargs:
@@ -138,7 +139,7 @@ def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFa
 def loads_partial(
     source_code: str,
     name: str = None,
-    filename: str = None,
+    filename: str | Path | None = None,
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
