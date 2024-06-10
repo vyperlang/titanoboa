@@ -117,6 +117,14 @@ def test_compiler_reason_does_not_stop_dev_reason(contract):
             contract.bar(3)
 
 
+def test_strip_internal_frames(contract):
+    # but only in assert statements. in other cases, stomp!
+    with pytest.raises(BoaError) as context:
+        contract.baz(2**256 - 1)
+
+    assert str(context.traceback[-1].path) == __file__
+
+
 @pytest.mark.parametrize(
     "type_,empty", [("DynArray[uint8, 8]", []), ("String[8]", ""), ("Bytes[8]", b"")]
 )
