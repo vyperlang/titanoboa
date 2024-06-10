@@ -307,7 +307,9 @@ def check_boa_error_matches(error, *args, **kwargs):
         err = args[0]
         if isinstance(frame, str):
             # frame for unknown contracts is a string
-            return _check(err in frame, f"{frame} does not match {args}")
+            _check(err in frame, f"{frame} does not match {args}")
+            return
+
         # try to match anything
         _check(
             err == frame.pretty_vm_reason

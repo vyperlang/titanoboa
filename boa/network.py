@@ -43,6 +43,7 @@ class TraceObject:
     def is_error(self):
         if "structLogs" in self.raw_trace:
             return self.raw_trace["failed"]
+        # we can have `"error": null` in the payload
         return self.raw_trace.get("error") is not None
 
 

@@ -207,6 +207,8 @@ def test_browser_rpc_server_error(
 
 
 def test_browser_rpc_internal_error(mock_callback, env):
+    # this error was found while testing zksync in Google Colab with the browser RPC
+    # we are agnostic to the exact data, just testing that we find the key properly
     error = {
         "code": -32603,
         "message": "Internal JSON-RPC error.",
@@ -227,6 +229,8 @@ def test_browser_rpc_internal_error(mock_callback, env):
 
 
 def test_browser_rpc_debug_error(mock_callback, env):
+    # this error was found while testing zksync in Google Colab with the browser RPC
+    # we are agnostic to the exact data, just testing that we find the key properly
     message = 'The method "debug_traceCall" does not exist / is not available.'
     error = {
         "error": {

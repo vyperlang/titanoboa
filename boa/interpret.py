@@ -104,7 +104,9 @@ def compiler_data(
             _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret
 
-    cache_key = str((contract_name, source_code, kwargs, deployer))
+    assert isinstance(deployer, type)
+    deployer_id = repr(deployer)  # a unique str identifying the deployer class
+    cache_key = str((contract_name, source_code, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, func)
 
 

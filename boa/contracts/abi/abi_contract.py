@@ -34,7 +34,7 @@ class ABIFunction:
     @property
     def name(self) -> str:
         # note: the `constructor` definition does not have a name
-        return self._abi.get("name") or self._abi["type"]
+        return self._abi.get("name", "")
 
     @cached_property
     def argument_types(self) -> list:
@@ -282,6 +282,7 @@ class ABIContract(_BaseEVMContract):
         Create a stack trace for a failed contract call.
         """
         reason = ""
+        # revert without reason has args=[None], so we don't want to include that
         if computation.is_error and any(computation.error.args):
             reason = " ".join(str(arg) for arg in computation.error.args)
 
