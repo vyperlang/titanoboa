@@ -2,6 +2,7 @@ import asyncio
 import json
 import re
 from asyncio import get_event_loop
+from datetime import datetime
 from multiprocessing.shared_memory import SharedMemory
 from unittest import mock
 from unittest.mock import MagicMock, patch
@@ -11,7 +12,13 @@ from eth_account import Account
 
 import boa
 from boa.integrations.jupyter import BrowserSigner
+from boa.integrations.jupyter.browser import _generate_token
 from boa.rpc import RPCError
+
+
+@pytest.fixture()
+def token():
+    return _generate_token()
 
 
 @pytest.fixture()
@@ -119,9 +126,12 @@ def display_mock():
         yield display_mock
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def account():
-    return Account.create()
+    # this is just a random private key - we want deterministic tests
+    return Account.from_key(
+        "0xb25c7db31feed9122727bf0939dc769a96564b2de4c4726d035b36ecf1e5b364"
+    )
 
 
 @pytest.fixture()
@@ -153,11 +163,56 @@ def test_browser_signer_colab(colab_eval_mock, mocked_token, display_mock):
     assert f'loadSigner("{mocked_token}", null)' in js
 
 
-def test_browser_loads_signer(token, display_mock, mock_callback, account, mock_fork):
+def test_browser_load_signer(token, display_mock, mock_callback, account, mock_fork):
     mock_callback("loadSigner", account.address)
     boa.set_browser_env()
     assert boa.env.eoa == account.address
     assert type(boa.env._accounts[boa.env.eoa]).__name__ == BrowserSigner.__name__
+
+
+def test_browser_timeout():
+    with mock.patch(
+        "boa.integrations.jupyter.browser.get_running_loop"
+    ) as mock_get_loop:
+        io_loop = mock_get_loop.return_value
+        now = datetime.now().timestamp()
+        io_loop.time.side_effect = [now, now, now + 1000]
+
+        def run(future):
+            """Set the memory buffer and run the async task that checks it"""
+            task = MagicMock()
+            task.result.return_value = get_event_loop().run_until_complete(future)
+            return task
+
+        io_loop.create_task = run
+
+        with pytest.raises(TimeoutError):
+            boa.set_browser_env()
+
+
+def test_browser_sign_transaction(env, mock_callback):
+    code = """
+@external
+def dummy() -> bool:
+    return True
+"""
+    mock_callback("eth_getBalance", "0x0")
+    mock_callback("eth_getTransactionCount", "0x0")
+    mock_callback("eth_getCode", "0x00")
+    mock_callback("eth_gasPrice", "0x0")
+    mock_callback("eth_chainId", "0x1")
+    mock_callback("eth_estimateGas", "0x0")
+    mock_callback("sendTransaction", {"hash": "0x123"})
+    mock_callback(
+        "waitForTransactionReceipt",
+        {
+            "blockHash": "0x123",
+            "blockNumber": "0x123",
+            "contractAddress": "0x520c4BbBb1153fBB42742fEf935283e19Bb2a2e0",
+        },
+    )
+    mock_callback("debug_traceTransaction", error={"message": "error"})
+    assert boa.loads(code)
 
 
 def test_browser_chain_id(token, env, display_mock, mock_callback):
@@ -181,6 +236,7 @@ def test_browser_rpc(token, display_mock, mock_callback, account, mock_fork, env
     assert display_mock.call_count == 7
     (js,), _ = display_mock.call_args
     assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
+    assert env._rpc.name == "BrowserRPC"
 
 
 def test_browser_rpc_error(token, display_mock, mock_callback, account, mock_fork, env):

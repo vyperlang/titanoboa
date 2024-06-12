@@ -120,7 +120,7 @@ class _BaseEVMContract:
         self.filename = filename
         self._computation = None
 
-    def find_error_meta(self, computation: ComputationAPI) -> str:
+    def find_error_meta(self, computation: ComputationAPI) -> str:  # pragma: no cover
         raise NotImplementedError
 
     def _create_error(self, computation):

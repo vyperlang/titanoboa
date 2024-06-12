@@ -41,3 +41,10 @@ def test_min_max(value):
 )
 def test_exclude(value):
     assert value not in [1.337, 1.2345]
+
+
+@given(
+    value=strategy("decimal", min_value=1, max_value=2, exclude=lambda val: val > 1.5)
+)
+def test_exclude_callable(value):
+    assert value > 1.5
