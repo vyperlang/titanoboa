@@ -32,9 +32,9 @@ class ABIFunction:
         self.contract: Optional["ABIContract"] = None
 
     @property
-    def name(self) -> str:
+    def name(self) -> str | None:
         # note: the `constructor` definition does not have a name
-        return self._abi.get("name", "")
+        return self._abi.get("name")
 
     @cached_property
     def argument_types(self) -> list:
@@ -62,7 +62,7 @@ class ABIFunction:
 
     @cached_property
     def method_id(self) -> bytes:
-        if self._abi["type"] == "constructor":
+        if self.name is None:
             return b""  # constructors don't have method IDs
         return method_id(self.name + self.signature)
 
@@ -155,7 +155,7 @@ class ABIOverload:
         self.functions = functions
 
     @cached_property
-    def name(self) -> str:
+    def name(self) -> str | None:
         return self.functions[0].name
 
     def prepare_calldata(self, *args, disambiguate_signature=None, **kwargs) -> bytes:
@@ -195,18 +195,19 @@ class ABIOverload:
             ]
             assert len(matches) <= 1, "ABI signature must be unique"
 
+        name = self.name if self.name is not None else "__init__"
         match matches:
             case [function]:
                 return function
             case []:
                 raise Exception(
-                    f"Could not find matching {self.name} function for given arguments."
+                    f"Could not find matching {name} function for given arguments."
                 )
             case multiple:
                 raise Exception(
-                    f"Ambiguous call to {self.name}. "
+                    f"Ambiguous call to {name}. "
                     f"Arguments can be encoded to multiple overloads: "
-                    f"{', '.join(self.name + f.signature for f in multiple)}. "
+                    f"{', '.join(name + f.signature for f in multiple)}. "
                     f"(Hint: try using `disambiguate_signature=` to disambiguate)."
                 )
 
@@ -242,8 +243,9 @@ class ABIContract(_BaseEVMContract):
         for f in self._functions:
             overloads[f.name].append(f)
 
-        for name, group in overloads.items():
-            setattr(self, name, ABIOverload.create(group, self))
+        for fn_name, group in overloads.items():
+            if fn_name is not None:  # constructors have no name
+                setattr(self, fn_name, ABIOverload.create(group, self))
 
         self._address = Address(address)
         self._computation: Optional[ComputationAPI] = None
