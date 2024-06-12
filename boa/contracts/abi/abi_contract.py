@@ -209,19 +209,19 @@ class ABIOverload:
             ]
             assert len(matches) <= 1, "ABI signature must be unique"
 
-        name = self.name if self.name is not None else "__init__"
+        assert self.name, "Constructor does not have a name."
         match matches:
             case [function]:
                 return function
             case []:
                 raise Exception(
-                    f"Could not find matching {name} function for given arguments."
+                    f"Could not find matching {self.name} function for given arguments."
                 )
             case multiple:
                 raise Exception(
-                    f"Ambiguous call to {name}. "
+                    f"Ambiguous call to {self.name}. "
                     f"Arguments can be encoded to multiple overloads: "
-                    f"{', '.join(name + f.signature for f in multiple)}. "
+                    f"{', '.join(self.name + f.signature for f in multiple)}. "
                     f"(Hint: try using `disambiguate_signature=` to disambiguate)."
                 )
 
