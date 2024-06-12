@@ -223,11 +223,8 @@ class ABIContract(_BaseEVMContract):
         address: Address,
         filename: Optional[str] = None,
         env=None,
-        compiler_data: Optional[Any] = None,
     ):
-        super().__init__(
-            env, filename=filename, address=address, compiler_data=compiler_data
-        )
+        super().__init__(env, filename=filename, address=address)
         self._name = name
         self._abi = abi
         self._functions = functions
@@ -305,11 +302,7 @@ class ABIContract(_BaseEVMContract):
         Returns a factory that can be used to retrieve another deployed contract.
         """
         return ABIContractFactory(
-            self._name,
-            self._abi,
-            self._functions,
-            filename=self.filename,
-            compiler_data=self.compiler_data,
+            self._name, self._abi, self._functions, filename=self.filename
         )
 
     def __repr__(self):
@@ -331,26 +324,22 @@ class ABIContractFactory:
         abi: list[dict],
         functions: list[ABIFunction],
         filename: Optional[str] = None,
-        compiler_data: Optional[Any] = None,
     ):
         self._name = name
         self._abi = abi
         self._functions = functions
         self.filename = filename
-        self.compiler_data = compiler_data
 
     @cached_property
     def abi(self):
         return deepcopy(self._abi)
 
     @classmethod
-    def from_abi_dict(
-        cls, abi, name="<anonymous contract>", filename=None, compiler_data=None
-    ):
+    def from_abi_dict(cls, abi, name="<anonymous contract>", filename=None):
         functions = [
             ABIFunction(item, name) for item in abi if item.get("type") == "function"
         ]
-        return cls(name, abi, functions, filename, compiler_data)
+        return cls(name, abi, functions, filename)
 
     def at(self, address: Address | str) -> ABIContract:
         """
@@ -358,12 +347,7 @@ class ABIContractFactory:
         """
         address = Address(address)
         contract = ABIContract(
-            self._name,
-            self._abi,
-            self._functions,
-            address,
-            self.filename,
-            compiler_data=self.compiler_data,
+            self._name, self._abi, self._functions, address, self.filename
         )
         contract.env.register_contract(address, contract)
         return contract

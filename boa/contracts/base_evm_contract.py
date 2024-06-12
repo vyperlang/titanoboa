@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 from eth.abc import ComputationAPI
 
@@ -19,12 +19,10 @@ class _BaseEVMContract:
         env: Optional[Env] = None,
         filename: Optional[str] = None,
         address: Optional[Address] = None,
-        compiler_data: Optional[Any] = None,
     ):
         self.env = env or Env.get_singleton()
         self._address = address  # this can be overridden by subclasses
         self.filename = filename
-        self.compiler_data = compiler_data
 
     def stack_trace(self, computation: ComputationAPI):
         raise NotImplementedError
