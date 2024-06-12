@@ -158,7 +158,7 @@ def test(n: uint256) -> uint256:
     with pytest.raises(BoaError) as exc_info:
         c.test(0)
     frame = exc_info.value.args[0].last_frame
-    assert frame.error_detail == "test(uint256) -> ['uint256']"
+    assert frame.error_detail == "(test(uint256) -> ['uint256'])"
     assert frame.contract_repr.startswith("<revert test interface at")
 
     with pytest.raises(Exception) as exc_info:
@@ -168,7 +168,8 @@ def test(n: uint256) -> uint256:
 
 
 def test_abi_not_deployed():
-    f = ABIFunction({"name": "test", "inputs": [], "outputs": []}, contract_name="c")
+    fn_abi = {"name": "test", "inputs": [], "outputs": [], "type": "function"}
+    f = ABIFunction(fn_abi, contract_name="c")
     with pytest.raises(Exception) as exc_info:
         f()
     (error,) = exc_info.value.args
@@ -187,5 +188,5 @@ def test(n: uint256) -> uint256:
     with pytest.raises(BoaError) as exc_info:
         abi_contract.test(0)
     ((error,),) = exc_info.value.args
-    assert error.error_detail == "unknown method 0x29e99f07"
+    assert error.error_detail == "(unknown method 0x29e99f07)"
     assert error.contract_repr.startswith("<test contract interface at ")

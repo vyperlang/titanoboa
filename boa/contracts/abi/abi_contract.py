@@ -1,10 +1,10 @@
 from collections import defaultdict
 from copy import deepcopy
 from functools import cached_property
-from os.path import basename
 from typing import Any, Optional, Union
 from warnings import warn
 
+from eth.abc import ComputationAPI
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
@@ -27,7 +27,9 @@ class ABIFunction:
         self.contract: Optional["ABIContract"] = None
 
     @property
-    def name(self) -> str:
+    def name(self) -> str | None:
+        if self.is_constructor:
+            return None
         return self._abi["name"]
 
     @cached_property
@@ -48,15 +50,27 @@ class ABIFunction:
 
     @property
     def full_signature(self) -> str:
+        assert self.name is not None, "Constructor does not have a name."
         return f"{self.name}{self.signature}"
 
     @property
     def pretty_signature(self) -> str:
-        return f"{self.name}{self.signature} -> {self.return_type}"
+        return f"{self.pretty_name}{self.signature} -> {self.return_type}"
+
+    @cached_property
+    def pretty_name(self):
+        if self.is_constructor:
+            return "constructor"
+        return self.name
 
     @cached_property
     def method_id(self) -> bytes:
+        assert self.name, "Constructor does not have a method id."
         return method_id(self.name + self.signature)
+
+    @cached_property
+    def is_constructor(self):
+        return self._abi["type"] == "constructor"
 
     def __repr__(self) -> str:
         return f"ABI {self._contract_name}.{self.pretty_signature}"
@@ -81,7 +95,10 @@ class ABIFunction:
     def prepare_calldata(self, *args, **kwargs) -> bytes:
         """Prepare the call data for the function call."""
         abi_args = self._merge_kwargs(*args, **kwargs)
-        return self.method_id + abi_encode(self.signature, abi_args)
+        encoded_args = abi_encode(self.signature, abi_args)
+        if self.is_constructor:
+            return encoded_args
+        return self.method_id + encoded_args
 
     def _merge_kwargs(self, *args, **kwargs) -> list:
         """Merge positional and keyword arguments into a single list."""
@@ -147,7 +164,7 @@ class ABIOverload:
         self.functions = functions
 
     @cached_property
-    def name(self) -> str:
+    def name(self) -> str | None:
         return self.functions[0].name
 
     def prepare_calldata(self, *args, disambiguate_signature=None, **kwargs) -> bytes:
@@ -187,6 +204,7 @@ class ABIOverload:
             ]
             assert len(matches) <= 1, "ABI signature must be unique"
 
+        assert self.name, "Constructor does not have a name."
         match matches:
             case [function]:
                 return function
@@ -209,7 +227,7 @@ class ABIContract(_BaseEVMContract):
     def __init__(
         self,
         name: str,
-        abi: dict,
+        abi: list[dict],
         functions: list[ABIFunction],
         address: Address,
         filename: Optional[str] = None,
@@ -231,10 +249,12 @@ class ABIContract(_BaseEVMContract):
         for f in self._functions:
             overloads[f.name].append(f)
 
-        for name, group in overloads.items():
-            setattr(self, name, ABIOverload.create(group, self))
+        for fn_name, group in overloads.items():
+            if fn_name is not None:  # constructors have no name
+                setattr(self, fn_name, ABIOverload.create(group, self))
 
         self._address = Address(address)
+        self._computation: Optional[ComputationAPI] = None
 
     @property
     def abi(self):
@@ -246,7 +266,11 @@ class ABIContract(_BaseEVMContract):
         Returns a mapping from method id to function object.
         This is used to create the stack trace when an error occurs.
         """
-        return {function.method_id: function for function in self._functions}
+        return {
+            function.method_id: function
+            for function in self._functions
+            if not function.is_constructor
+        }
 
     def marshal_to_python(self, computation, abi_type: list[str]) -> tuple[Any, ...]:
         """
@@ -254,6 +278,7 @@ class ABIContract(_BaseEVMContract):
         :param computation: the computation object returned by `execute_code`
         :param abi_type: the ABI type of the return value.
         """
+        self._computation = computation
         # when there's no contract in the address, the computation output is empty
         if computation.is_error:
             raise self._create_error(computation)
@@ -265,19 +290,25 @@ class ABIContract(_BaseEVMContract):
             raise self._create_error(computation) from e
 
     def find_error_meta(self, computation):
+        reason = ""
+        if computation.is_error:
+            reason = " ".join(str(arg) for arg in computation.error.args if arg != b"")
+
         calldata_method_id = bytes(computation.msg.data[:4])
         if calldata_method_id not in self.method_id_map:
             # (private) function might not be specified in the ABI
-            return f"unknown method 0x{calldata_method_id.hex()}"
+            method_hex = f"0x{calldata_method_id.hex()}"
+            return f"{reason} (unknown method {method_hex})".strip()
 
-        return self.method_id_map[calldata_method_id].pretty_signature
+        method = self.method_id_map[calldata_method_id].pretty_signature
+        return f"{reason} ({method})".strip()
 
     @property
     def deployer(self) -> "ABIContractFactory":
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(self._name, self._abi, self._functions)
+        return ABIContractFactory(self._name, self._abi, filename=self.filename)
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
@@ -292,28 +323,26 @@ class ABIContractFactory:
     do any contract deployment.
     """
 
-    def __init__(
-        self,
-        name: str,
-        abi: dict,
-        functions: list[ABIFunction],
-        filename: Optional[str] = None,
-    ):
+    def __init__(self, name: str, abi: list[dict], filename: Optional[str] = None):
         self._name = name
         self._abi = abi
-        self._functions = functions
-        self._filename = filename
+        self.filename = filename
 
     @cached_property
     def abi(self):
         return deepcopy(self._abi)
 
-    @classmethod
-    def from_abi_dict(cls, abi, name="<anonymous contract>"):
-        functions = [
-            ABIFunction(item, name) for item in abi if item.get("type") == "function"
+    @cached_property
+    def functions(self):
+        return [
+            ABIFunction(item, self._name)
+            for item in self.abi
+            if item.get("type") == "function"
         ]
-        return cls(basename(name), abi, functions, filename=name)
+
+    @classmethod
+    def from_abi_dict(cls, abi, name="<anonymous contract>", filename=None):
+        return cls(name, abi, filename)
 
     def at(self, address: Address | str) -> ABIContract:
         """
@@ -321,7 +350,7 @@ class ABIContractFactory:
         """
         address = Address(address)
         contract = ABIContract(
-            self._name, self._abi, self._functions, address, self._filename
+            self._name, self._abi, self.functions, address, self.filename
         )
         contract.env.register_contract(contract.address, contract)
         return contract

@@ -43,8 +43,8 @@ class TraceObject:
     def is_error(self):
         if "structLogs" in self.raw_trace:
             return self.raw_trace["failed"]
-        else:
-            return "error" in self.raw_trace
+        # we can have `"error": null` in the payload
+        return self.raw_trace.get("error") is not None
 
 
 class _EstimateGasFailed(Exception):
@@ -55,12 +55,12 @@ class _EstimateGasFailed(Exception):
 class TransactionSettings:
     # when calculating the base fee, the number of blocks N ahead
     # to compute a cap for the Nth block.
-    # defaults to 4 (4 blocks ahead, pending block's baseFee * ~1.6)
+    # defaults to 5 (5 blocks ahead, pending block's baseFee * ~1.8)
     # but can be tweaked. if you get errors like
     # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
     # try increasing the constant.
     # do not recommend setting below 0.
-    base_fee_estimator_constant: int = 4
+    base_fee_estimator_constant: int = 5
 
     # amount of time to wait, in seconds before giving up on a transaction
     poll_timeout: float = 240.0
@@ -162,7 +162,7 @@ class NetworkEnv(Env):
             )
             rpc = EthereumRPC(rpc)
 
-        self._rpc = rpc
+        self._rpc: RPC = rpc
 
         self._reset_fork()
 
@@ -236,7 +236,7 @@ class NetworkEnv(Env):
     def get_eip1559_fee(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
         reqs = [
-            ("eth_getBlockByNumber", ["pending", False]),
+            ("eth_getBlockByNumber", ["latest", False]),
             ("eth_maxPriorityFeePerGas", []),
             ("eth_chainId", []),
         ]
@@ -471,7 +471,12 @@ class NetworkEnv(Env):
             tx_data["maxPriorityFeePerGas"] = max_priority_fee
             tx_data["maxFeePerGas"] = max_fee
             tx_data["chainId"] = chain_id
-        except (RPCError, KeyError):
+        except (RPCError, KeyError) as e:
+            warnings.warn(
+                "No EIP-1559 transaction available, falling back to legacy",
+                stacklevel=3,
+            )
+            warnings.warn(str(e), stacklevel=3)
             gas_price, chain_id = self.get_static_fee()
             tx_data["gasPrice"] = gas_price
             tx_data["chainId"] = chain_id
@@ -484,7 +489,7 @@ class NetworkEnv(Env):
             except RPCError as e:
                 if e.code == 3:
                     # execution failed at estimateGas, probably the txn reverted
-                    raise _EstimateGasFailed()
+                    raise _EstimateGasFailed() from e
                 raise e from e
 
         if from_ not in self._accounts:
@@ -517,6 +522,11 @@ class NetworkEnv(Env):
 
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
+
+    def get_chain_id(self) -> int:
+        """Get the current chain ID of the network as an integer."""
+        chain_id = self._rpc.fetch("eth_chainId", [])
+        return int(chain_id, 16)
 
     def set_balance(self, address, value):
         raise NotImplementedError("Cannot use set_balance in network mode")

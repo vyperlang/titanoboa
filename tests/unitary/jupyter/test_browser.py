@@ -108,6 +108,7 @@ def mock_callback(mocked_token, display_mock):
 def mock_fork(mock_callback):
     mock_callback("evm_snapshot", "0x123456")
     mock_callback("evm_revert", "0x12345678")
+    mock_callback("eth_chainId", "0x1")
     data = {"number": "0x123", "timestamp": "0x65bbb460"}
     mock_callback("eth_getBlockByNumber", data)
 
@@ -135,9 +136,9 @@ def test_nest_applied():
 
 def test_browser_sign_typed_data(display_mock, mock_callback, env):
     signature = env.generate_address()
-    mock_callback("signTypedData", signature)
+    mock_callback("eth_signTypedData_v4", signature)
     data = env.signer.sign_typed_data(
-        {"name": "My App"}, {"types": []}, {"data": "0x1234"}
+        full_message={"domain": {"name": "My App"}, "types": [], "data": "0x1234"}
     )
     assert data == signature
 
@@ -165,8 +166,8 @@ def test_browser_chain_id(token, env, display_mock, mock_callback):
     assert env.get_chain_id() == 4660
     mock_callback("wallet_switchEthereumChain")
     env.set_chain_id(1)
-    assert display_mock.call_count == 3
-    (js,), _ = display_mock.call_args_list[-2]
+    assert display_mock.call_count == 4
+    (js,), _ = display_mock.call_args_list[1]
     assert (
         f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x1"}}])'
         in js.data
@@ -177,7 +178,7 @@ def test_browser_rpc(token, display_mock, mock_callback, account, mock_fork, env
     mock_callback("eth_gasPrice", "0x123")
     assert env.get_gas_price() == 291
 
-    assert display_mock.call_count == 6
+    assert display_mock.call_count == 7
     (js,), _ = display_mock.call_args
     assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
 
@@ -205,8 +206,50 @@ def test_browser_rpc_server_error(
     assert str(exc_info.value) == "-32603: server error"
 
 
+def test_browser_rpc_internal_error(mock_callback, env):
+    # this error was found while testing zksync in Google Colab with the browser RPC
+    # we are agnostic to the exact data, just testing that we find the key properly
+    error = {
+        "code": -32603,
+        "message": "Internal JSON-RPC error.",
+        "data": {
+            "code": 3,
+            "message": "insufficient funds for gas + value. balance: 0, fee: 116, value: 0",
+            "data": "0x",
+            "cause": None,
+        },
+    }
+    mock_callback("eth_gasPrice", error=error)
+    with pytest.raises(RPCError) as exc_info:
+        env.get_gas_price()
+    assert (
+        str(exc_info.value)
+        == "3: insufficient funds for gas + value. balance: 0, fee: 116, value: 0"
+    )
+
+
+def test_browser_rpc_debug_error(mock_callback, env):
+    # this error was found while testing zksync in Google Colab with the browser RPC
+    # we are agnostic to the exact data, just testing that we find the key properly
+    message = 'The method "debug_traceCall" does not exist / is not available.'
+    error = {
+        "error": {
+            "code": -32601,
+            "message": message,
+            "data": {
+                "origin": "https://44wgpcbsrwx-496ff2e9c6d22116-0-colab.googleusercontent.com",
+                "cause": None,
+            },
+        }
+    }
+    mock_callback("eth_gasPrice", error=error)
+    with pytest.raises(RPCError) as exc_info:
+        env.get_gas_price()
+    assert str(exc_info.value) == f"-32601: {message}"
+
+
 def test_browser_js_error(token, display_mock, mock_callback, account, mock_fork):
     mock_callback("loadSigner", error={"message": "custom message", "stack": ""})
     with pytest.raises(RPCError) as exc_info:
         BrowserSigner()
-    assert str(exc_info.value) == "CALLBACK_ERROR: custom message"
+    assert str(exc_info.value) == "-1: custom message"
