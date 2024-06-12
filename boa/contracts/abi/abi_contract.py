@@ -301,9 +301,7 @@ class ABIContract(_BaseEVMContract):
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(
-            self._name, self._abi, self._functions, filename=self.filename
-        )
+        return ABIContractFactory(self._name, self._abi, filename=self.filename)
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
@@ -318,28 +316,26 @@ class ABIContractFactory:
     do any contract deployment.
     """
 
-    def __init__(
-        self,
-        name: str,
-        abi: list[dict],
-        functions: list[ABIFunction],
-        filename: Optional[str] = None,
-    ):
+    def __init__(self, name: str, abi: list[dict], filename: Optional[str] = None):
         self._name = name
         self._abi = abi
-        self._functions = functions
         self.filename = filename
 
     @cached_property
     def abi(self):
         return deepcopy(self._abi)
 
+    @cached_property
+    def functions(self):
+        return [
+            ABIFunction(item, self._name)
+            for item in self.abi
+            if item.get("type") == "function"
+        ]
+
     @classmethod
     def from_abi_dict(cls, abi, name="<anonymous contract>", filename=None):
-        functions = [
-            ABIFunction(item, name) for item in abi if item.get("type") == "function"
-        ]
-        return cls(name, abi, functions, filename)
+        return cls(name, abi, filename)
 
     def at(self, address: Address | str) -> ABIContract:
         """
@@ -347,7 +343,7 @@ class ABIContractFactory:
         """
         address = Address(address)
         contract = ABIContract(
-            self._name, self._abi, self._functions, address, self.filename
+            self._name, self._abi, self.functions, address, self.filename
         )
         contract.env.register_contract(address, contract)
         return contract
