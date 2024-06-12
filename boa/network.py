@@ -4,6 +4,7 @@ import warnings
 from dataclasses import dataclass
 from functools import cached_property
 from math import ceil
+from pathlib import Path
 
 from eth_account import Account
 from requests.exceptions import HTTPError
@@ -20,6 +21,7 @@ from boa.rpc import (
     trim_dict,
 )
 from boa.util.abi import Address
+from boa.util.deploy_cache import DeployCache
 
 
 class TraceObject:
@@ -145,6 +147,9 @@ class NetworkEnv(Env):
 
     # always prefetch state in network mode
     _fork_try_prefetch_state = True
+    _deploy_cache_path = Path(
+        "~/.local/share/titanoboa/deploy_cache.sqlite"
+    ).expanduser()
 
     def __init__(
         self,
@@ -350,21 +355,45 @@ class NetworkEnv(Env):
         return computation
 
     # OVERRIDES
-    def deploy(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
+    def deploy(
+        self,
+        sender=None,
+        gas=None,
+        value=0,
+        bytecode=b"",
+        source_code=None,
+        deploy_id=None,
+        **kwargs,
+    ):
+        if trim_dict(kwargs):
+            raise TypeError(f"invalid kwargs to `deploy`: {kwargs}")
+
+        # todo: use integrity hash instead of source code after vyper>=0.4
+        # note: bytecode already includes the constructor args
+
+        sender = self._check_sender(self._get_sender(sender))
+
+        chain_id = self.get_chain_id()
+        receipt, trace = self._deploys.get(source_code, bytecode, deploy_id, chain_id)
+
+        # deploy to evm
         local_address, computation = super().deploy(
-            sender=sender, gas=gas, value=value, bytecode=bytecode
+            sender=sender,
+            gas=gas,
+            value=value,
+            bytecode=bytecode,
+            override_address=receipt["contractAddress"] if receipt else None,
         )
         if computation.is_error:
             return local_address, computation
 
-        if trim_dict(kwargs):
-            raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
-        bytecode = to_hex(bytecode)
-        sender = self._check_sender(self._get_sender(sender))
-
-        receipt, trace = self._send_txn(
-            from_=sender, value=value, gas=gas, data=bytecode
-        )
+        if receipt is None:  # not in cache, send tx to network now
+            receipt, trace = self._send_txn(
+                from_=sender, value=value, gas=gas, data=bytecode
+            )
+            self._deploys.set(
+                source_code, bytecode, deploy_id, chain_id, receipt, trace
+            )
 
         create_address = Address(receipt["contractAddress"])
 
@@ -385,6 +414,10 @@ class NetworkEnv(Env):
         print(f"contract deployed at {create_address}")
 
         return create_address, computation
+
+    @cached_property
+    def _deploys(self):
+        return DeployCache(self._deploy_cache_path)
 
     @cached_property
     def _tracer(self):
@@ -522,6 +555,10 @@ class NetworkEnv(Env):
 
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
+
+    def get_chain_id(self) -> int:
+        chain_id = self._rpc.fetch("eth_chainId", [])
+        return int.from_bytes(bytes.fromhex(chain_id[2:]), "big")
 
     def set_balance(self, address, value):
         raise NotImplementedError("Cannot use set_balance in network mode")

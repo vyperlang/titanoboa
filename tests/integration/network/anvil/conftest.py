@@ -3,6 +3,7 @@
 import subprocess
 import sys
 import time
+from shutil import rmtree
 
 import pytest
 import requests
@@ -75,8 +76,13 @@ def anvil_env(free_port):
 # XXX: maybe parametrize across anvil, hardhat and geth --dev for
 # max coverage across VM implementations?
 @pytest.fixture(scope="module", autouse=True)
-def networked_env(accounts, anvil_env):
+def networked_env(accounts, anvil_env, tmp_path_factory):
+    tmp_path = tmp_path_factory.mktemp(
+        "anvil"
+    )  # normal tmp_path fixture is function-scoped
+    anvil_env._deploy_cache_path = tmp_path / "deploy_cache.sqlite"
     with boa.swap_env(anvil_env):
         for account in accounts:
             boa.env.add_account(account)
         yield
+    rmtree(tmp_path)
