@@ -22,7 +22,7 @@ from boa.vm.utils import ceil32, to_bytes, to_int
 _keccak_cache = lrudict(256)
 
 
-# todo: this is not used, remove?
+# note: This is used in the generated code for `Sha3_64` below.
 def keccak256(x):
     return _keccak_cache.setdefault_lambda(x, keccak)
 
@@ -374,7 +374,7 @@ class OpcodeIRExecutor(IRExecutor):
 
         super().__init__(*args)
 
-    def __repr__(self):  # pragma: no cover
+    def __repr__(self):
         args = ",".join(repr(arg) for arg in self.args)
         return f"{self.name}({args})"
 
