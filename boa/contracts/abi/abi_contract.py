@@ -307,6 +307,7 @@ class ABIContract(_BaseEVMContract):
         return ABIContractFactory(
             self._name,
             self._abi,
+            self._functions,
             filename=self.filename,
             compiler_data=self.compiler_data,
         )
@@ -328,14 +329,13 @@ class ABIContractFactory:
         self,
         name: str,
         abi: list[dict],
+        functions: list[ABIFunction],
         filename: Optional[str] = None,
         compiler_data: Optional[Any] = None,
     ):
         self._name = name
         self._abi = abi
-        self._functions = [
-            ABIFunction(item, name) for item in abi if item.get("type") == "function"
-        ]
+        self._functions = functions
         self.filename = filename
         self.compiler_data = compiler_data
 
@@ -347,7 +347,10 @@ class ABIContractFactory:
     def from_abi_dict(
         cls, abi, name="<anonymous contract>", filename=None, compiler_data=None
     ):
-        return cls(name, abi, filename, compiler_data)
+        functions = [
+            ABIFunction(item, name) for item in abi if item.get("type") == "function"
+        ]
+        return cls(name, abi, functions, filename, compiler_data)
 
     def at(self, address: Address | str) -> ABIContract:
         """
