@@ -18,6 +18,7 @@ from boa.contracts.vyper.vyper_contract import (
     VyperContract,
     VyperDeployer,
 )
+from boa.environment import Env
 from boa.explorer import fetch_abi_from_etherscan
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
@@ -75,8 +76,12 @@ class BoaLoader(SourceFileLoader):
 sys.meta_path.append(BoaImporter())
 
 
-def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerData:
+def compiler_data(
+    source_code: str, contract_name: str, deployer=None, **kwargs
+) -> CompilerData:
     global _disk_cache
+    if deployer is None:
+        deployer = _get_default_deployer_class()
 
     def _ifaces():
         # use get_interface_codes to get the interface source dict
@@ -86,22 +91,27 @@ def compiler_data(source_code: str, contract_name: str, **kwargs) -> CompilerDat
 
     if _disk_cache is None:
         ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
-        return ret
+        return deployer.create_compiler_data(
+            source_code, contract_name, interface_codes=ifaces, **kwargs
+        )
 
     def func():
         ifaces = _ifaces()
-        ret = CompilerData(source_code, contract_name, interface_codes=ifaces, **kwargs)
+        ret = deployer.create_compiler_data(
+            source_code, contract_name, interface_codes=ifaces, **kwargs
+        )
         with anchor_compiler_settings(ret):
             _ = ret.bytecode, ret.bytecode_runtime  # force compilation to happen
         return ret
 
-    cache_key = str((contract_name, source_code, kwargs))
+    assert isinstance(deployer, type)
+    deployer_id = repr(deployer)  # a unique str identifying the deployer class
+    cache_key = str((contract_name, source_code, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, func)
 
 
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
-    name = filename
+    name = Path(filename).stem
     # TODO: investigate if we can just put name in the signature
     if "name" in kwargs:
         name = kwargs.pop("name")
@@ -149,11 +159,12 @@ def loads_partial(
 
     compiler_args = compiler_args or {}
 
-    data = compiler_data(source_code, name, **compiler_args)
-    return VyperDeployer(data, filename=filename)
+    deployer_class = _get_default_deployer_class()
+    data = compiler_data(source_code, name, deployer_class, **compiler_args)
+    return deployer_class(data, filename=filename)
 
 
-def load_partial(filename: str, compiler_args=None) -> VyperDeployer:  # type: ignore
+def load_partial(filename: str, compiler_args=None):
     with open(filename) as f:
         return loads_partial(
             f.read(), name=filename, filename=filename, compiler_args=compiler_args
@@ -166,6 +177,13 @@ def from_etherscan(
     addr = Address(address)
     abi = fetch_abi_from_etherscan(addr, uri, api_key)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
+
+
+def _get_default_deployer_class():
+    env = Env.get_singleton()
+    if hasattr(env, "deployer_class"):
+        return env.deployer_class
+    return VyperDeployer
 
 
 __all__ = []  # type: ignore
