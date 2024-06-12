@@ -180,7 +180,8 @@ def test(n: uint256) -> uint256:
 
 
 def test_abi_not_deployed():
-    f = ABIFunction({"name": "test", "inputs": [], "outputs": []}, contract_name="c")
+    fn_abi = {"name": "test", "inputs": [], "outputs": [], "type": "function"}
+    f = ABIFunction(fn_abi, contract_name="c")
     with pytest.raises(Exception) as exc_info:
         f()
     (error,) = exc_info.value.args

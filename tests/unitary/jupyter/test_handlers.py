@@ -77,7 +77,7 @@ def test_value_error(callback_handler, token, shared_memory):
     callback_handler.post(token)
     assert callback_handler.get_status() == 413
     callback_handler.finish.assert_called_once_with(
-        {"error": "Request body has 51201 bytes, but only 51200 are allowed"}
+        {"error": "Request body has 102401 bytes, but only 102400 are allowed"}
     )
 
 
