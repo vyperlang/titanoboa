@@ -1,5 +1,4 @@
 from collections import defaultdict
-from copy import deepcopy
 from functools import cached_property
 from typing import Any, Optional, Union
 from warnings import warn
@@ -340,7 +339,7 @@ class ABIContractFactory:
 
     @cached_property
     def abi(self):
-        return deepcopy(self._abi)
+        return self._abi
 
     @cached_property
     def functions(self):

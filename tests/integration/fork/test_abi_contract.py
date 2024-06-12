@@ -45,7 +45,7 @@ def test_tricrypto(tricrypto):
     assert tricrypto.get_virtual_price() == 1003146380129683788
     assert tricrypto.gamma() == 11809167828997
     assert tricrypto.fee() == 7069800
-    # TODO: test the overloaded functions
+    assert tricrypto.initial_A_gamma() == 581076037942835227425498917514114728328226821
 
 
 def test_no_bytecode(get_filepath):
