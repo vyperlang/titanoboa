@@ -43,8 +43,8 @@ class TraceObject:
     def is_error(self):
         if "structLogs" in self.raw_trace:
             return self.raw_trace["failed"]
-        else:
-            return "error" in self.raw_trace
+        # we can have `"error": null` in the payload
+        return self.raw_trace.get("error") is not None
 
 
 class _EstimateGasFailed(Exception):
@@ -162,7 +162,7 @@ class NetworkEnv(Env):
             )
             rpc = EthereumRPC(rpc)
 
-        self._rpc = rpc
+        self._rpc: RPC = rpc
 
         self._reset_fork()
 
@@ -489,7 +489,7 @@ class NetworkEnv(Env):
             except RPCError as e:
                 if e.code == 3:
                     # execution failed at estimateGas, probably the txn reverted
-                    raise _EstimateGasFailed()
+                    raise _EstimateGasFailed() from e
                 raise e from e
 
         if from_ not in self._accounts:
@@ -522,6 +522,11 @@ class NetworkEnv(Env):
 
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
+
+    def get_chain_id(self) -> int:
+        """Get the current chain ID of the network as an integer."""
+        chain_id = self._rpc.fetch("eth_chainId", [])
+        return int(chain_id, 16)
 
     def set_balance(self, address, value):
         raise NotImplementedError("Cannot use set_balance in network mode")

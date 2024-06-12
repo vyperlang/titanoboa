@@ -74,21 +74,16 @@ class BrowserSigner:
         )
         return convert_frontend_dict(sign_data)
 
-    def sign_typed_data(
-        self, domain: dict[str, Any], types: dict[str, list], value: dict[str, Any]
-    ) -> str:
+    def sign_typed_data(self, full_message: dict[str, Any]) -> str:
         """
         Sign typed data value with types data structure for domain using the EIP-712 specification.
-        :param domain: The domain data structure.
-        :param types: The types data structure.
-        :param value: The value to sign.
+        :param full_message: The full message to sign.
         :return: The signature.
         """
         return _javascript_call(
-            "signTypedData",
-            domain,
-            types,
-            value,
+            "rpc",
+            "eth_signTypedData_v4",
+            [self.address, full_message],
             timeout_message=TRANSACTION_TIMEOUT_MESSAGE,
         )
 
@@ -141,18 +136,10 @@ class BrowserEnv(NetworkEnv):
         self.signer = BrowserSigner(address)
         self.set_eoa(self.signer)
 
-    def get_chain_id(self) -> int:
-        chain_id = _javascript_call(
-            "rpc", "eth_chainId", timeout_message=RPC_TIMEOUT_MESSAGE
-        )
-        return int.from_bytes(bytes.fromhex(chain_id[2:]), "big")
-
     def set_chain_id(self, chain_id: int | str):
-        _javascript_call(
-            "rpc",
+        self._rpc.fetch(
             "wallet_switchEthereumChain",
             [{"chainId": chain_id if isinstance(chain_id, str) else hex(chain_id)}],
-            timeout_message=RPC_TIMEOUT_MESSAGE,
         )
         self._reset_fork()
 
@@ -169,7 +156,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     :return: The result of the Javascript snippet sent to the API.
     """
     token = _generate_token()
-    args_str = ", ".join(json.dumps(p) for p in chain([token], args))
+    args_str = ", ".join(json.dumps(p, cls=_BytesEncoder) for p in chain([token], args))
     js_code = f"window._titanoboa.{js_func}({args_str});"
     if BrowserRPC._debug_mode:
         logging.warning(f"Calling {js_func} with {args_str}")
@@ -224,9 +211,31 @@ def _parse_js_result(result: dict) -> Any:
     if "data" in result:
         return result["data"]
 
+    def _find_key(input_dict, target_key, typ) -> Any:
+        for key, value in input_dict.items():
+            if isinstance(value, dict):
+                found = _find_key(value, target_key, typ)
+                if found is not None:
+                    return found
+            if key == target_key and isinstance(value, typ) and value != "error":
+                return value
+        return None
+
     # raise the error in the Jupyter cell so that the user can see it
     error = result["error"]
-    error = error.get("info", error).get("error", error)
+    error = error.get("data", error)
     raise RPCError(
-        message=error.get("message", error), code=error.get("code", "CALLBACK_ERROR")
+        message=_find_key(error, "message", str) or _find_key(error, "error", str),
+        code=_find_key(error, "code", int) or -1,
     )
+
+
+class _BytesEncoder(json.JSONEncoder):
+    """
+    A JSONEncoder that converts bytes to hex strings to be passed to JavaScript.
+    """
+
+    def default(self, o):
+        if isinstance(o, bytes):
+            return "0x" + o.hex()
+        return super().default(o)
