@@ -33,8 +33,9 @@ class ABIFunction:
 
     @property
     def name(self) -> str | None:
-        # note: the `constructor` definition does not have a name
-        return self._abi.get("name")
+        if self.is_constructor:
+            return None
+        return self._abi["name"]
 
     @cached_property
     def argument_types(self) -> list:
@@ -54,17 +55,27 @@ class ABIFunction:
 
     @property
     def full_signature(self) -> str:
+        assert self.name is not None, "Constructor does not have a name."
         return f"{self.name}{self.signature}"
 
     @property
     def pretty_signature(self) -> str:
-        return f"{self.name}{self.signature} -> {self.return_type}"
+        return f"{self.pretty_name}{self.signature} -> {self.return_type}"
+
+    @cached_property
+    def pretty_name(self):
+        if self.is_constructor:
+            return "constructor"
+        return self.name
 
     @cached_property
     def method_id(self) -> bytes:
-        if self.name is None:
-            return b""  # constructors don't have method IDs
+        assert self.name, "Constructor does not have a method id."
         return method_id(self.name + self.signature)
+
+    @cached_property
+    def is_constructor(self):
+        return self._abi["type"] == "constructor"
 
     def __repr__(self) -> str:
         return f"ABI {self._contract_name}.{self.pretty_signature}"
@@ -89,7 +100,10 @@ class ABIFunction:
     def prepare_calldata(self, *args, **kwargs) -> bytes:
         """Prepare the call data for the function call."""
         abi_args = self._merge_kwargs(*args, **kwargs)
-        return self.method_id + abi_encode(self.signature, abi_args)
+        encoded_args = abi_encode(self.signature, abi_args)
+        if self.is_constructor:
+            return encoded_args
+        return self.method_id + encoded_args
 
     def _merge_kwargs(self, *args, **kwargs) -> list:
         """Merge positional and keyword arguments into a single list."""
@@ -257,7 +271,11 @@ class ABIContract(_BaseEVMContract):
         Returns a mapping from method id to function object.
         This is used to create the stack trace when an error occurs.
         """
-        return {function.method_id: function for function in self._functions}
+        return {
+            function.method_id: function
+            for function in self._functions
+            if not function.is_constructor
+        }
 
     def marshal_to_python(self, computation, abi_type: list[str]) -> tuple[Any, ...]:
         """
@@ -281,9 +299,8 @@ class ABIContract(_BaseEVMContract):
         Create a stack trace for a failed contract call.
         """
         reason = ""
-        # revert without reason has args=[None], so we don't want to include that
-        if computation.is_error and any(computation.error.args):
-            reason = " ".join(str(arg) for arg in computation.error.args)
+        if computation.is_error:
+            reason = " ".join(str(arg) for arg in computation.error.args if arg != b"")
 
         calldata_method_id = bytes(computation.msg.data[:4])
         if calldata_method_id in self.method_id_map:
