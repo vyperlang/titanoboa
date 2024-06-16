@@ -3,11 +3,11 @@ from functools import cached_property
 from typing import Any, Optional, Union
 from warnings import warn
 
-from eth.abc import ComputationAPI
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
 from boa.contracts.base_evm_contract import _BaseEVMContract
+from boa.contracts.trace import TraceSource
 from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
 
 
@@ -232,8 +232,7 @@ class ABIContract(_BaseEVMContract):
         filename: Optional[str] = None,
         env=None,
     ):
-        super().__init__(env, filename=filename, address=address)
-        self._name = name
+        super().__init__(name, env, filename=filename, address=address)
         self._abi = abi
         self._functions = functions
 
@@ -253,7 +252,6 @@ class ABIContract(_BaseEVMContract):
                 setattr(self, fn_name, ABIOverload.create(group, self))
 
         self._address = Address(address)
-        self._computation: Optional[ComputationAPI] = None
 
     @property
     def abi(self):
@@ -288,6 +286,13 @@ class ABIContract(_BaseEVMContract):
         except ABIError as e:
             raise self._create_error(computation) from e
 
+    def find_source_of(self, computation) -> "ABITraceSource":
+        """
+        Find the source of the error in the contract.
+        :param computation: the computation object returned by `execute_code`
+        """
+        return ABITraceSource(self, self.method_id_map[computation.msg.data[:4]])
+
     def find_error_meta(self, computation):
         reason = ""
         if computation.is_error:
@@ -307,12 +312,12 @@ class ABIContract(_BaseEVMContract):
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(self._name, self._abi, filename=self.filename)
+        return ABIContractFactory(self.contract_name, self._abi, filename=self.filename)
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
         warn_str = "" if self._bytecode else " (WARNING: no bytecode at this address!)"
-        return f"<{self._name} interface at {self.address}{warn_str}>{file_str}"
+        return f"<{self.contract_name} interface at {self.address}{warn_str}>{file_str}"
 
 
 class ABIContractFactory:
@@ -353,6 +358,26 @@ class ABIContractFactory:
         )
         contract.env.register_contract(contract.address, contract)
         return contract
+
+
+class ABITraceSource(TraceSource):
+    def __init__(self, contract: ABIContract, function: ABIFunction):
+        self.contract = contract
+        self.function = function
+
+    def __str__(self):
+        return f"{self.contract.contract_name}.{self.function.pretty_name}"
+
+    def __repr__(self):
+        return repr(self.function)
+
+    @property
+    def _input_schema(self):
+        return f"({_format_abi_type(self.function.argument_types)})"
+
+    @property
+    def _output_schema(self):
+        return f"({_format_abi_type(self.function.return_type)})"
 
 
 def _abi_from_json(abi: dict) -> str:

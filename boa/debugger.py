@@ -17,7 +17,7 @@ class BoaDebug(pdb.Pdb):
         computation = self.contract._computation
         ast_source = self.contract.find_source_of(computation)
         if ast_source is not None:
-            return str(VyperException("breakpoint at:", ast_source))
+            return str(VyperException("breakpoint at:", ast_source.node))
 
     def start(self):
         self.set_trace()

@@ -137,7 +137,7 @@ def loads(
 
 def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     if name is None:
-        name = filename
+        name = Path(filename).stem
     with open(filename) as fp:
         return loads_abi(fp.read(), *args, name=name, **kwargs)
 

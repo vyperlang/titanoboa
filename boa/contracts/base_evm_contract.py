@@ -3,10 +3,9 @@ from typing import Optional
 
 from eth.abc import ComputationAPI
 from eth.exceptions import VMError
-from vyper import ast as vy_ast
 from vyper.exceptions import VyperException
 
-from boa.contracts.vyper.ast_utils import reason_at
+from boa.contracts.trace import DevReason, TraceSource
 from boa.environment import Env
 from boa.util.abi import Address, abi_decode
 from boa.util.exceptions import strip_internal_frames
@@ -23,48 +22,28 @@ class FrameDetail(dict):
 
 
 @dataclass
-class DevReason:
-    reason_type: str
-    reason_str: str
-
-    @classmethod
-    def at_source_location(
-        cls, source_code: str, lineno: int, end_lineno: int
-    ) -> Optional["DevReason"]:
-        s = reason_at(source_code, lineno, end_lineno)
-        if s is None:
-            return None
-        reason_type, reason_str = s
-        return cls(reason_type, reason_str)
-
-    def __str__(self):
-        return f"<{self.reason_type}: {self.reason_str}>"
-
-
-@dataclass
 class ErrorDetail:
     vm_error: VMError | None  # the error that caused the revert
     contract_repr: str  # string representation of the contract for the error
     error_detail: str  # compiler provided error detail
     dev_reason: DevReason | None = None
     frame_detail: FrameDetail | None = None
-    ast_source: vy_ast.VyperNode | None = None
+    source: TraceSource | None = None
 
     @classmethod
     def from_computation(
         cls, computation, contract: Optional["_BaseEVMContract"] = None
     ):
-        ast_source, reason, frame_detail = None, None, None
+        source, reason, frame_detail = None, None, None
         if contract is None:
             contract_repr = "0x" + computation.msg.code_address.hex()
             error_detail = f"<Unknown location in unknown contract {contract_repr}>"
         else:
             contract_repr = repr(contract)
             error_detail = contract.find_error_meta(computation)
-            ast_source = contract.find_source_of(computation)
-            if ast_source:
-                reason = contract.find_dev_reason(ast_source)
-                frame_detail = contract.debug_frame(computation)
+            source = contract.find_source_of(computation)
+            reason = source.dev_reason
+            frame_detail = contract.debug_frame(computation)
 
         return cls(
             vm_error=computation.error if computation.is_error else None,
@@ -72,7 +51,7 @@ class ErrorDetail:
             error_detail=error_detail,
             dev_reason=reason,
             frame_detail=frame_detail,
-            ast_source=ast_source,
+            source=source,
         )
 
     @property
@@ -91,9 +70,9 @@ class ErrorDetail:
         if self.error_detail is not None:
             msg += f" <compiler: {self.error_detail}>"
 
-        if self.ast_source is not None:
+        if self.source is not None:
             # VyperException.__str__ does a lot of formatting for us
-            msg = str(VyperException(msg, self.ast_source))
+            msg = str(VyperException(msg, self.source))
 
         if self.frame_detail is not None:
             self.frame_detail.fn_name = "locals"  # override the displayed name
@@ -111,17 +90,23 @@ class _BaseEVMContract:
 
     def __init__(
         self,
+        name: str,
         env: Optional[Env] = None,
         filename: Optional[str] = None,
         address: Optional[Address] = None,
     ):
         self.env = env or Env.get_singleton()
+        self.contract_name = name
         self._address = address  # this can be overridden by subclasses
         self.filename = filename
-        self._computation = None
+        self._computation: Optional[ComputationAPI] = None
 
     def find_error_meta(self, computation: ComputationAPI) -> str:  # pragma: no cover
         raise NotImplementedError
+
+    def call_trace(self):
+        assert self._computation is not None, "No computation to trace"
+        return self._computation.trace
 
     def _create_error(self, computation):
         try:
@@ -139,14 +124,11 @@ class _BaseEVMContract:
         assert self._address is not None
         return self._address
 
-    def find_source_of(self, computation) -> vy_ast.VyperNode | None:
-        return None
-
-    def find_dev_reason(self, ast_source: vy_ast.VyperNode) -> DevReason | None:
+    def find_source_of(self, computation) -> TraceSource | None:
         raise NotImplementedError
 
     def debug_frame(self, computation=None) -> FrameDetail | None:
-        raise NotImplementedError
+        return None
 
 
 class StackTrace(list[ErrorDetail]):

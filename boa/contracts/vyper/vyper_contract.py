@@ -30,12 +30,8 @@ from vyper.semantics.analysis.data_positions import set_data_positions
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
-from boa.contracts.base_evm_contract import (
-    BoaError,
-    DevReason,
-    FrameDetail,
-    _BaseEVMContract,
-)
+from boa.contracts.base_evm_contract import BoaError, FrameDetail, _BaseEVMContract
+from boa.contracts.trace import DevReason, TraceSource
 from boa.contracts.vyper.ast_utils import ast_map_of, get_fn_ancestor_from_node
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
@@ -127,7 +123,7 @@ class _BaseVyperContract(_BaseEVMContract):
         env: Optional[Env] = None,
         filename: Optional[str] = None,
     ):
-        super().__init__(env, filename)
+        super().__init__(compiler_data.contract_name, env, filename)
         self.compiler_data = compiler_data
 
         with anchor_compiler_settings(self.compiler_data):
@@ -241,7 +237,7 @@ def check_boa_error_matches(error, *args, **kwargs):
     # assume it is a dev reason string
     else:
         assert_ast_types = (vy_ast.Assert, vy_ast.Raise)
-        if frame.ast_source.get_ancestor(assert_ast_types) is not None:
+        if frame.source.node.get_ancestor(assert_ast_types) is not None:
             # if it's a dev reason on an assert statement, check that
             # we are actually handling the user assertion and not some other
             # error_detail.
@@ -501,8 +497,8 @@ class VyperContract(_BaseVyperContract):
         return ast_map_of(self.compiler_data.vyper_module)
 
     def _get_fn_from_computation(self, computation):
-        node = self.find_source_of(computation)
-        return get_fn_ancestor_from_node(node)
+        source = self.find_source_of(computation)
+        return get_fn_ancestor_from_node(source.node)
 
     def debug_frame(self, computation=None):
         if computation is None:
@@ -554,22 +550,19 @@ class VyperContract(_BaseVyperContract):
                 return error_map[pc]
         return None
 
-    def find_source_of(self, computation):
+    def find_source_of(self, computation) -> Optional["VyperTraceSource"]:
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
-            return self.ast_map.get(computation.vyper_source_pos)
+            node = self.ast_map.get(computation.vyper_source_pos)
+            return VyperTraceSource(self, node)
 
         code_stream = computation.code
         pc_map = self.source_map["pc_pos_map"]
         for pc in reversed(code_stream._trace):
             if pc in pc_map and pc_map[pc] in self.ast_map:
-                return self.ast_map[pc_map[pc]]
+                node = self.ast_map[pc_map[pc]]
+                return VyperTraceSource(self, node)
         return None
-
-    def find_dev_reason(self, ast_source) -> DevReason | None:
-        return DevReason.at_source_location(
-            self.compiler_data.source_code, ast_source.lineno, ast_source.end_lineno
-        )
 
     # ## handling events
     def _get_logs(self, computation, include_child_logs):
@@ -980,6 +973,42 @@ class VyperInternalFunction(VyperFunction):
     def _source_map(self):
         _, _, _, source_map, _ = self._compiled
         return source_map
+
+
+class VyperTraceSource(TraceSource):
+    def __init__(self, contract: VyperContract, node: vy_ast.VyperNode):
+        self.contract = contract
+        self.node = node
+
+    def __str__(self):
+        return f"{self.contract.contract_name}.{self.func_ast.name}:{self.node.lineno}"
+
+    def __repr__(self):
+        return repr(self.node)
+
+    @cached_property
+    def func_ast(self) -> vy_ast.FunctionDef:
+        return self.node.get_ancestor(vy_ast.FunctionDef)
+
+    @cached_property
+    def func_t(self):
+        return getattr(self.contract, self.func_ast.name).func_t
+
+    @cached_property
+    def _input_schema(self) -> str:  # must be implemented by subclasses
+        return self.function.args.abi_type.selector_name()
+
+    @cached_property
+    def _output_schema(self) -> str:  # must be implemented by subclasses
+        return self.function.returns.abi_type.selector_name()
+
+    @cached_property
+    def dev_reason(self) -> DevReason | None:
+        return DevReason.at_source_location(
+            self.contract.compiler_data.source_code,
+            self.node.lineno,
+            self.node.end_lineno,
+        )
 
 
 class _InjectVyperFunction(VyperFunction):

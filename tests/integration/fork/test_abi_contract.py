@@ -173,3 +173,23 @@ def foo(x: ERC20, from_: address):
     frame = error.stack_trace[0]
     assert "crvusd_abi.json interface at 0x" in frame.contract_repr
     assert "transferFrom(address,address,uint256)" in frame.error_detail
+
+
+def test_abi_call_trace(crvusd):
+    c = boa.loads(
+        """
+from vyper.interfaces import ERC20
+@external
+def foo(x: ERC20):
+    x.transfer(self, 100)
+    """
+    )
+    boa.env.set_balance(boa.env.eoa, 1000)
+    with boa.reverts():
+        c.foo(crvusd)
+
+    bt = c.call_trace()
+    assert str(bt).splitlines() == [
+        f"[5290] VyperContract.foo:5({crvusd.address.lower()}) => None",
+        f"    [2502] crvusd_abi.transfer({crvusd.address}, 100) => None",
+    ]
