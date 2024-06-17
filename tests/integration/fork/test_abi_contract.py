@@ -171,7 +171,7 @@ def foo(x: ERC20, from_: address):
 
     error = c._create_error(c._computation)
     frame = error.stack_trace[0]
-    assert "crvusd_abi.json interface at 0x" in frame.contract_repr
+    assert "crvusd_abi interface at 0x" in frame.contract_repr
     assert "transferFrom(address,address,uint256)" in frame.error_detail
 
 

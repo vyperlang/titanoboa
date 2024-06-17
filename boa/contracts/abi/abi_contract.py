@@ -286,12 +286,15 @@ class ABIContract(_BaseEVMContract):
         except ABIError as e:
             raise self._create_error(computation) from e
 
-    def find_source_of(self, computation) -> "ABITraceSource":
+    def find_source_of(self, computation) -> Optional["ABITraceSource"]:
         """
         Find the source of the error in the contract.
         :param computation: the computation object returned by `execute_code`
         """
-        return ABITraceSource(self, self.method_id_map[computation.msg.data[:4]])
+        method_id_ = computation.msg.data[:4]
+        if method_id_ not in self.method_id_map:
+            return None
+        return ABITraceSource(self, self.method_id_map[method_id_])
 
     def find_error_meta(self, computation):
         reason = ""
