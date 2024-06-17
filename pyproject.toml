@@ -40,6 +40,9 @@ dependencies = [
 [project.optional-dependencies]
 forking-recommended = ["ujson"]
 
+# colab has antient ipykernel which causes bugs with decimals: https://github.com/jupyter/notebook/issues/5260
+colab = ["ipykernel>=6.29.4"]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 
