@@ -12,13 +12,15 @@ class TraceSource:
         return f"{self}{self._format_input(input)}{self._format_output(output)}"
 
     def _format_input(self, input: bytes):
-        return f"{abi_decode(self._input_schema, input)}"
+        decoded = abi_decode(self._input_schema, input)
+        args = [f"{name} = {str(d)}" for d, name in zip(decoded, self._argument_names)]
+        return f"({', '.join(args)})"
 
     def _format_output(self, output: bytes):
         if output == b"":
             return " => None"
         decoded = abi_decode(self._output_schema, output)
-        return f" => {decoded}"
+        return f" => ({', '.join(str(d) for d in decoded)})"
 
     @cached_property
     def dev_reason(self) -> Optional["DevReason"]:
@@ -26,6 +28,10 @@ class TraceSource:
 
     @property
     def _input_schema(self) -> str:  # must be implemented by subclasses
+        raise NotImplementedError  # pragma: no cover
+
+    @property
+    def _argument_names(self) -> list[str]:  # must be implemented by subclasses
         raise NotImplementedError  # pragma: no cover
 
     @property

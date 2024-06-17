@@ -190,6 +190,6 @@ def foo(x: ERC20):
 
     bt = c.call_trace()
     assert str(bt).splitlines() == [
-        f"[5290] VyperContract.foo:5({crvusd.address.lower()}) => None",
-        f"    [2502] crvusd_abi.transfer({crvusd.address}, 100) => None",
+        f"[5290] VyperContract.foo:5(x = {crvusd.address}) => None",
+        f"    [2502] crvusd_abi.transfer(_to = {c.address}, _value = 100) => None",
     ]

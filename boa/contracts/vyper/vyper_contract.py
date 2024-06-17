@@ -554,14 +554,14 @@ class VyperContract(_BaseVyperContract):
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
             node = self.ast_map.get(computation.vyper_source_pos)
-            return VyperTraceSource(self, node)
+            return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
 
         code_stream = computation.code
         pc_map = self.source_map["pc_pos_map"]
         for pc in reversed(code_stream._trace):
             if pc in pc_map and pc_map[pc] in self.ast_map:
                 node = self.ast_map[pc_map[pc]]
-                return VyperTraceSource(self, node)
+                return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
         return None
 
     # ## handling events
@@ -976,9 +976,12 @@ class VyperInternalFunction(VyperFunction):
 
 
 class VyperTraceSource(TraceSource):
-    def __init__(self, contract: VyperContract, node: vy_ast.VyperNode):
+    def __init__(
+        self, contract: VyperContract, node: vy_ast.VyperNode, method_id: bytes
+    ):
         self.contract = contract
         self.node = node
+        self.method_id = int(method_id.hex(), 16)
 
     def __str__(self):
         return f"{self.contract.contract_name}.{self.func_ast.name}:{self.node.lineno}"
@@ -996,11 +999,23 @@ class VyperTraceSource(TraceSource):
 
     @cached_property
     def _input_schema(self) -> str:  # must be implemented by subclasses
-        return self.function.args.abi_type.selector_name()
+        schema = next(
+            schema
+            for schema, id_ in self.func_t.method_ids.items()
+            if id_ == self.method_id
+        )
+        return schema.replace(f"{self.func_ast.name}(", "(")
+
+    @cached_property
+    def _argument_names(self) -> list[str]:
+        return [arg.name for arg in self.func_t.arguments]
 
     @cached_property
     def _output_schema(self) -> str:  # must be implemented by subclasses
-        return self.function.returns.abi_type.selector_name()
+        typ = self.func_t.return_type
+        if typ is None:
+            return "()"
+        return typ.abi_type.selector_name()
 
     @cached_property
     def dev_reason(self) -> DevReason | None:

@@ -34,7 +34,7 @@ class ErrorDetail:
     def from_computation(
         cls, computation, contract: Optional["_BaseEVMContract"] = None
     ):
-        source, reason, frame_detail = None, None, None
+        source, frame_detail = None, None
         if contract is None:
             contract_repr = "0x" + computation.msg.code_address.hex()
             error_detail = f"<Unknown location in unknown contract {contract_repr}>"
@@ -42,14 +42,13 @@ class ErrorDetail:
             contract_repr = repr(contract)
             error_detail = contract.find_error_meta(computation)
             source = contract.find_source_of(computation)
-            reason = source.dev_reason
             frame_detail = contract.debug_frame(computation)
 
         return cls(
             vm_error=computation.error if computation.is_error else None,
             contract_repr=computation._contract_repr_before_revert or contract_repr,
             error_detail=error_detail,
-            dev_reason=reason,
+            dev_reason=source.dev_reason if source else None,
             frame_detail=frame_detail,
             source=source,
         )
