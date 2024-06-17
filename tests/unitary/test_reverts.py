@@ -117,6 +117,14 @@ def test_compiler_reason_does_not_stop_dev_reason(contract):
             contract.bar(3)
 
 
+def test_strip_internal_frames(contract):
+    # but only in assert statements. in other cases, stomp!
+    with pytest.raises(BoaError) as context:
+        contract.baz(2**256 - 1)
+
+    assert str(context.traceback[-1].path) == __file__
+
+
 @pytest.mark.parametrize(
     "type_,empty", [("DynArray[uint8, 8]", []), ("String[8]", ""), ("Bytes[8]", b"")]
 )
@@ -198,6 +206,31 @@ def math_call_with_reason():
         p.math_call()
     with boa.reverts(dev="call math"):
         p.math_call_with_reason()
+
+
+def test_stack_trace(contract):
+    c = boa.loads(
+        """
+interface HasFoo:
+     def foo(x: uint256): nonpayable
+
+@external
+def revert(contract: HasFoo):
+    contract.foo(5)
+    """
+    )
+
+    with pytest.raises(BoaError) as context:
+        c.revert(contract.address)
+
+    trace = [
+        (line.contract_repr, line.error_detail, line.pretty_vm_reason)
+        for line in context.value.stack_trace
+    ]
+    assert trace == [
+        (repr(contract), "user revert with reason", "x is not 4"),
+        (repr(c), "external call failed", "x is not 4"),
+    ]
 
 
 def test_trace_constructor_revert():

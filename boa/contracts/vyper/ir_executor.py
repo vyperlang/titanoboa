@@ -25,6 +25,7 @@ from boa.vm.utils import ceil32, to_bytes, to_int
 _keccak_cache = lrudict(256)
 
 
+# note: This is used in the generated code for `Sha3_64` below.
 def keccak256(x):
     return _keccak_cache.setdefault_lambda(x, keccak)
 
@@ -110,14 +111,14 @@ class CompileContext:
         return _mkalphanum(f"{self.contract_name}_{self.uuid}_{label}")
 
     def add_unique_symbol(self, symbol):
-        if symbol in self.unique_symbols:
+        if symbol in self.unique_symbols:  # pragma: no cover
             raise ValueError(
                 "duplicated symbol {symbol}, this is likely a bug in vyper!"
             )
         self.unique_symbols.add(symbol)
 
     def add_label(self, labelname, executor):
-        if labelname in self.labels:
+        if labelname in self.labels:  # pragma: no cover
             raise ValueError("duplicated label: {labelname}")
         self.labels[labelname] = executor
 
@@ -240,7 +241,7 @@ class IRExecutor:
         else:
             self.builder.append(res)
 
-    def _compile(self, context):
+    def _compile(self, context):  # pragma: no cover
         raise RuntimeError("must be overridden in subclass!")
 
     def compile_main(self, contract_name=""):
@@ -776,7 +777,7 @@ class Seq(IRExecutor):
                 arg.compile(out=None)
             else:
                 return arg.compile(out=out, out_typ=out_typ)
-        else:
+        else:  # pragma: no cover
             raise RuntimeError("loop should have broken")
 
 

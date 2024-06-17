@@ -394,16 +394,15 @@ class PyEVM:
 
         self.patch.timestamp = int(block_info["timestamp"], 16)
         self.patch.block_number = int(block_info["number"], 16)
-        # TODO patch the other stuff
+        self.patch.chain_id = int(rpc.fetch("eth_chainId", []), 16)
 
         self.vm.state._account_db._rpc._init_db()
 
     @property
     def is_forked(self):
-        return self.vm.__class__._state_class.account_db_class == AccountDBFork
-
-    def _set_account_db_class(self, account_db_class: type):
-        self.vm.__class__._state_class.account_db_class = account_db_class
+        return issubclass(
+            self.vm.__class__._state_class.account_db_class, AccountDBFork
+        )
 
     def get_gas_meter_class(self):
         return self.vm.state.computation_class._gas_meter_class

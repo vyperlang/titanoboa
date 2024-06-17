@@ -68,6 +68,8 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
 class VyperDeployer:
+    create_compiler_data = CompilerData  # this may be a different class in plugins
+
     def __init__(self, compiler_data, filename=None):
         self.compiler_data = compiler_data
 
@@ -306,6 +308,11 @@ def check_boa_error_matches(error, *args, **kwargs):
         assert len(args) == 1, "multiple args!"
         assert len(kwargs) == 0, "can't mix args and kwargs!"
         err = args[0]
+        if isinstance(frame, str):
+            # frame for unknown contracts is a string
+            _check(err in frame, f"{frame} does not match {args}")
+            return
+
         # try to match anything
         _check(
             err == frame.pretty_vm_reason
@@ -317,6 +324,10 @@ def check_boa_error_matches(error, *args, **kwargs):
 
     # try to match a specific kwarg
     assert len(kwargs) == 1 and len(args) == 0
+
+    if isinstance(frame, str):
+        # frame for unknown contracts is a string
+        raise ValueError(f"expected {kwargs} but got {frame}")
 
     # don't accept magic
     if frame.dev_reason:
@@ -581,6 +592,7 @@ class VyperContract(_BaseVyperContract):
         to_check = bytecode
         if self.data_section_size != 0:
             to_check = bytecode[: -self.data_section_size]
+        assert isinstance(self.compiler_data, CompilerData)
         if to_check != self.compiler_data.bytecode_runtime:
             warnings.warn(
                 f"casted bytecode does not match compiled bytecode at {self}",
