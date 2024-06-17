@@ -12,6 +12,8 @@ def strip_internal_frames(exc, module_name=None):
         # use the parent module of the module where the exception was raised
         module_name = frame.f_globals["__name__"].rsplit(".", 1)[0]
 
+    # currently, module_name is always
+    # `boa.contracts.vyper`, `boa.contracts.abi` or `boa.contracts`
     while frame.f_globals.get("__name__", "").startswith(module_name):
         frame = frame.f_back
 
