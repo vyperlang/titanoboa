@@ -152,7 +152,6 @@ def compiler_data(
     fingerprint = get_module_fingerprint(module_t)
 
     def get_compiler_data():
-        print(f"miss: {cache_key}")
         with anchor_settings(ret.settings):
             # force compilation to happen so DiskCache will cache the compiled artifact:
             _ = ret.bytecode, ret.bytecode_runtime
