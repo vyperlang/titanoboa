@@ -216,7 +216,7 @@ interface HasFoo:
 
 @external
 def revert(contract: HasFoo):
-    contract.foo(5)
+    extcall contract.foo(5)
     """
     )
 

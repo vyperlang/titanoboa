@@ -152,6 +152,7 @@ def compiler_data(
     fingerprint = get_module_fingerprint(module_t)
 
     def get_compiler_data():
+        print(f"miss: {cache_key}")
         with anchor_settings(ret.settings):
             # force compilation to happen so DiskCache will cache the compiled artifact:
             _ = ret.bytecode, ret.bytecode_runtime
@@ -214,7 +215,7 @@ def loads_partial(
     compiler_args = compiler_args or {}
 
     deployer_class = _get_default_deployer_class()
-    data = compiler_data(source_code, name, deployer_class, **compiler_args)
+    data = compiler_data(source_code, name, filename, deployer_class, **compiler_args)
     return deployer_class(data, filename=filename)
 
 
