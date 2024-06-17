@@ -24,7 +24,7 @@ class _BaseEVMContract:
         self._address = address  # this can be overridden by subclasses
         self.filename = filename
 
-    def stack_trace(self, computation: ComputationAPI):
+    def stack_trace(self, computation: ComputationAPI):  # pragma: no cover
         raise NotImplementedError
 
     def handle_error(self, computation):
@@ -61,10 +61,9 @@ class StackTrace(list):
 
 
 def _trace_for_unknown_contract(computation, env):
-    ret = StackTrace(
-        [f"<Unknown location in unknown contract {computation.msg.code_address.hex()}>"]
-    )
-    return _handle_child_trace(computation, env, ret)
+    err = f"   <Unknown contract 0x{computation.msg.code_address.hex()}>"
+    trace = StackTrace([err])
+    return _handle_child_trace(computation, env, trace)
 
 
 def _handle_child_trace(computation, env, return_trace):

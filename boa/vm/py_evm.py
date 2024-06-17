@@ -394,7 +394,7 @@ class PyEVM:
 
         self.patch.timestamp = int(block_info["timestamp"], 16)
         self.patch.block_number = int(block_info["number"], 16)
-        # TODO patch the other stuff
+        self.patch.chain_id = int(rpc.fetch("eth_chainId", []), 16)
 
         self.vm.state._account_db._rpc._init_db()
 

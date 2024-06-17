@@ -41,9 +41,12 @@ def _install_javascript_triggers():
     """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
     cur_dir = dirname(realpath(__file__))
     with open(join(cur_dir, "jupyter.js")) as f:
-        jupyter_js = f.read()
+        js = f.read()
+
     prefix = os.getenv("JUPYTERHUB_SERVICE_PREFIX", "..")
-    js = jupyter_js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix)
+    js = js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix)
+    js = js.replace("$$BOA_DEBUG_MODE", json.dumps(BrowserRPC._debug_mode))
+
     display(Javascript(js))
 
 
@@ -51,6 +54,8 @@ class BrowserRPC(RPC):
     """
     An RPC object that sends requests to the browser via Javascript.
     """
+
+    _debug_mode = False
 
     def __init__(self):
         if not colab_eval_js:
@@ -126,19 +131,16 @@ class BrowserSigner:
         )
         return {"hash": hash}
 
-    def sign_typed_data(
-        self, domain: dict[str, Any], types: dict[str, list], value: dict[str, Any]
-    ) -> str:
+    def sign_typed_data(self, full_message: dict[str, Any]) -> str:
         """
         Sign typed data value with types data structure for domain using the EIP-712 specification.
-        :param domain: The domain data structure.
-        :param types: The types data structure.
-        :param value: The value to sign.
+        :param full_message: The full message to sign.
         :return: The signature.
         """
-        payload = json.dumps({"domain": domain, "types": types, "value": value})
         return self._rpc.fetch(
-            "eth_signTypedData_v4", [self.address, payload], TRANSACTION_TIMEOUT_MESSAGE
+            "eth_signTypedData_v4",
+            [self.address, full_message],
+            TRANSACTION_TIMEOUT_MESSAGE,
         )
 
 
@@ -178,9 +180,10 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     :return: The result of the Javascript snippet sent to the API.
     """
     token = _generate_token()
-    args_str = ", ".join(json.dumps(p) for p in chain([token], args))
+    args_str = ", ".join(json.dumps(p, cls=_BytesEncoder) for p in chain([token], args))
     js_code = f"window._titanoboa.{js_func}({args_str});"
-    # logging.warning(f"Calling {js_func} with {args_str}")
+    if BrowserRPC._debug_mode:
+        logging.warning(f"Calling {js_func} with {args_str}")
 
     if colab_eval_js:
         _install_javascript_triggers()
@@ -232,9 +235,31 @@ def _parse_js_result(result: dict) -> Any:
     if "data" in result:
         return result["data"]
 
+    def _find_key(input_dict, target_key, typ) -> Any:
+        for key, value in input_dict.items():
+            if isinstance(value, dict):
+                found = _find_key(value, target_key, typ)
+                if found is not None:
+                    return found
+            if key == target_key and isinstance(value, typ) and value != "error":
+                return value
+        return None
+
     # raise the error in the Jupyter cell so that the user can see it
     error = result["error"]
-    error = error.get("info", error).get("error", error)
+    error = error.get("data", error)
     raise RPCError(
-        message=error.get("message", error), code=error.get("code", "CALLBACK_ERROR")
+        message=_find_key(error, "message", str) or _find_key(error, "error", str),
+        code=_find_key(error, "code", int) or -1,
     )
+
+
+class _BytesEncoder(json.JSONEncoder):
+    """
+    A JSONEncoder that converts bytes to hex strings to be passed to JavaScript.
+    """
+
+    def default(self, o):
+        if isinstance(o, bytes):
+            return "0x" + o.hex()
+        return super().default(o)
