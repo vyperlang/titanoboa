@@ -202,6 +202,7 @@ def dummy() -> bool:
     mock_callback("eth_gasPrice", "0x0")
     mock_callback("eth_chainId", "0x1")
     mock_callback("eth_estimateGas", "0x0")
+    mock_callback("debug_traceCall", {})  # for prefetch state
     mock_callback("sendTransaction", {"hash": "0x123"})
     mock_callback(
         "waitForTransactionReceipt",
