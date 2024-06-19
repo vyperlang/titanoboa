@@ -9,9 +9,12 @@ def strip_internal_frames(exc, module_name=None):
     frame = traceback.tb_frame
 
     if module_name is None:
-        module_name = frame.f_globals["__name__"]
+        # use the parent module of the module where the exception was raised
+        module_name = frame.f_globals["__name__"].rsplit(".", 1)[0]
 
-    while frame.f_globals.get("__name__", None) == module_name:
+    # currently, module_name is always
+    # `boa.contracts.vyper`, `boa.contracts.abi` or `boa.contracts`
+    while frame.f_globals.get("__name__", "").startswith(module_name):
         frame = frame.f_back
 
     # kwargs incompatible with pypy here

@@ -1,6 +1,6 @@
 [project]
 name = "titanoboa"
-version = "0.1.9"
+version = "0.1.10b1"
 description = "A Vyper interpreter"
 #authors = []
 license = { file = "LICENSE" }
@@ -34,11 +34,14 @@ dependencies = [
     "requests",
 
     # required for networked accounts
-    "eth-account",
+    "eth-account>=0.13.0",
 ]
 
 [project.optional-dependencies]
 forking-recommended = ["ujson"]
+
+# colab has antient ipykernel which causes bugs with decimals: https://github.com/jupyter/notebook/issues/5260
+colab = ["ipykernel>=6.29.4"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

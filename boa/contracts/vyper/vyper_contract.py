@@ -74,6 +74,8 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
 class VyperDeployer:
+    create_compiler_data = CompilerData  # this may be a different class in plugins
+
     def __init__(self, compiler_data, filename=None):
         self.compiler_data = compiler_data
 
@@ -120,8 +122,7 @@ class VyperDeployer:
         address = Address(address)
 
         ret = self.deploy(override_address=address, skip_initcode=True)
-        vm = ret.env.vm
-        bytecode = vm.state.get_code(address.canonical_address)
+        bytecode = ret.env.get_code(address)
 
         ret._set_bytecode(bytecode)
 
@@ -143,6 +144,14 @@ class _BaseVyperContract(_BaseEVMContract):
 
         with anchor_compiler_settings(self.compiler_data):
             _ = compiler_data.bytecode, compiler_data.bytecode_runtime
+
+        if (capabilities := getattr(env, "capabilities", None)) is not None:
+            compiler_evm_version = self.compiler_data.settings.evm_version
+            if not capabilities.check_evm_version(compiler_evm_version):
+                msg = "EVM version mismatch! tried to deploy "
+                msg += f"{compiler_evm_version} but network only has "
+                msg += f"{capabilities.describe_capabilities()}"
+                raise Exception(msg)
 
     @cached_property
     def abi(self):
@@ -177,9 +186,13 @@ class VyperBlueprint(_BaseVyperContract):
 
         deploy_bytecode += blueprint_bytecode
 
-        addr, self.bytecode = self.env.deploy_code(
+        addr, computation = self.env.deploy(
             bytecode=deploy_bytecode, override_address=override_address, gas=gas
         )
+        if computation.is_error:
+            raise computation.error
+
+        self.bytecode = computation.output
 
         self._address = Address(addr)
 
@@ -293,6 +306,11 @@ def check_boa_error_matches(error, *args, **kwargs):
         assert len(args) == 1, "multiple args!"
         assert len(kwargs) == 0, "can't mix args and kwargs!"
         err = args[0]
+        if isinstance(frame, str):
+            # frame for unknown contracts is a string
+            _check(err in frame, f"{frame} does not match {args}")
+            return
+
         # try to match anything
         _check(
             err == frame.pretty_vm_reason
@@ -304,6 +322,10 @@ def check_boa_error_matches(error, *args, **kwargs):
 
     # try to match a specific kwarg
     assert len(kwargs) == 1 and len(args) == 0
+
+    if isinstance(frame, str):
+        # frame for unknown contracts is a string
+        raise ValueError(f"expected {kwargs} but got {frame}")
 
     # don't accept magic
     if frame.dev_reason:
@@ -367,8 +389,7 @@ def setpath(lens, path, val):
 class StorageVar:
     def __init__(self, contract, slot, typ):
         self.contract = contract
-        self.addr = self.contract._address.canonical_address
-        self.accountdb = contract.env.vm.state._account_db
+        self.addr = self.contract._address
         self.slot = slot
         self.typ = typ
 
@@ -377,7 +398,7 @@ class StorageVar:
         if truncate_limit is not None and n > truncate_limit:
             return None  # indicate failure to caller
 
-        fakemem = ByteAddressableStorage(self.accountdb, self.addr, slot)
+        fakemem = ByteAddressableStorage(self.contract.env.evm, self.addr, slot)
         return decode_vyper_object(fakemem, typ)
 
     def _dealias(self, maybe_address):
@@ -467,6 +488,7 @@ class VyperContract(_BaseVyperContract):
         self,
         compiler_data: CompilerData,
         *args,
+        value=0,
         env: Env = None,
         override_address: Address = None,
         # whether to skip constructor
@@ -478,6 +500,8 @@ class VyperContract(_BaseVyperContract):
         super().__init__(compiler_data, env, filename)
 
         self.created_from = created_from
+        self._computation = None
+        self._source_map = None
 
         # add all exposed functions from the interface to the contract
         external_fns = {
@@ -492,9 +516,13 @@ class VyperContract(_BaseVyperContract):
             self._ctor = VyperFunction(external_fns.pop("__init__"), self)
 
         if skip_initcode:
+            if value:
+                raise Exception("nonzero value but initcode is being skipped")
             addr = Address(override_address)
         else:
-            addr = self._run_init(*args, override_address=override_address, gas=gas)
+            addr = self._run_init(
+                *args, value=value, override_address=override_address, gas=gas
+            )
         self._address = addr
 
         for fn_name, fn in external_fns.items():
@@ -510,27 +538,31 @@ class VyperContract(_BaseVyperContract):
         self._storage = StorageModel(self)
 
         self._eval_cache = lrudict(0x1000)
-        self._source_map = None
-        self._computation = None
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, override_address=None, gas=None):
+    def _run_init(self, *args, value=0, override_address=None, gas=None):
         encoded_args = b""
         if self._ctor:
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
-        addr, self.bytecode = self.env.deploy_code(
-            bytecode=initcode, override_address=override_address, gas=gas
+        address, computation = self.env.deploy(
+            bytecode=initcode, value=value, override_address=override_address, gas=gas
         )
-        return Address(addr)
+        self._computation = computation
+        self.bytecode = computation.output
+
+        if computation.is_error:
+            raise BoaError(self.stack_trace(computation))
+        return address
 
     # manually set the runtime bytecode, instead of using deploy
     def _set_bytecode(self, bytecode: bytes) -> None:
         to_check = bytecode
         if self.data_section_size != 0:
             to_check = bytecode[: -self.data_section_size]
+        assert isinstance(self.compiler_data, CompilerData)
         if to_check != self.compiler_data.bytecode_runtime:
             warnings.warn(
                 f"casted bytecode does not match compiled bytecode at {self}",
@@ -708,7 +740,7 @@ class VyperContract(_BaseVyperContract):
             self.handle_error(computation)
 
         # cache gas used for call if profiling is enabled
-        gas_meter = self.env.vm.state.computation_class._gas_meter_class
+        gas_meter = self.env.get_gas_meter_class()
         if gas_meter == ProfilingGasMeter:
             cache_gas_used_for_computation(self, computation)
 
