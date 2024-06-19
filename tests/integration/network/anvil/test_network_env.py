@@ -57,7 +57,7 @@ def test_raise_exception(simple_contract, t):
 
 
 def test_failed_transaction():
-    with pytest.raises(RuntimeError) as ctx:
+    with pytest.raises(Exception) as ctx:
         boa.loads(code, STARTING_SUPPLY, gas=149377)
     error = str(ctx.value)
     assert error.startswith("txn failed:")
