@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 from functools import cached_property
 from itertools import chain
+from pathlib import Path
 from typing import Optional
 
 from boa.contracts.vyper.ast_utils import reason_at
+from boa.rpc import json
 from boa.util.abi import abi_decode
 
 
@@ -52,11 +54,34 @@ class TraceFrame:
     children: list["TraceFrame"]
 
     def __str__(self):
-        my_str = (
-            f"{' ' * self.depth * 4}[{self.gas_used}] "
-            f"{self.source.format(self.input, self.output)}"
-        )
-        return "\n".join(chain((my_str,), (str(child) for child in self.children)))
+        text = f"{' ' * self.depth * 4}{self.text}"
+        return "\n".join(chain((text,), (str(child) for child in self.children)))
+
+    @property
+    def text(self):
+        return f"[{self.gas_used}] {self.source.format(self.input, self.output)}"
+
+    def to_dict(self) -> dict:
+        return {
+            "depth": self.depth,
+            "gas_used": self.gas_used,
+            "source": str(self.source),
+            "input": "0x" + self.input.hex(),
+            "output": "0x" + self.output.hex(),
+            "children": [child.to_dict() for child in self.children],
+            "text": self.text,
+        }
+
+    def export_html(self, destination: str | Path):
+        with open(destination, "w") as f:
+            f.write(self.to_html())
+        print(f"Trace written to file://{Path(destination).absolute()}")
+
+    def to_html(self):
+        with open(Path(__file__).parent / "trace-template.html") as f:
+            template = f.read()
+        trace_json = json.dumps(self.to_dict()).replace("\\", "\\\\")
+        return template.replace("$$TRACE", trace_json)
 
 
 @dataclass

@@ -1,4 +1,3 @@
-import json
 import sys
 import textwrap
 from importlib.abc import MetaPathFinder
@@ -20,6 +19,7 @@ from boa.contracts.vyper.vyper_contract import (
 )
 from boa.environment import Env
 from boa.explorer import fetch_abi_from_etherscan
+from boa.rpc import json
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
 

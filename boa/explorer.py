@@ -1,8 +1,9 @@
-import json
 from time import sleep
 from typing import Optional
 
 import requests
+
+from boa.rpc import json
 
 SESSION = requests.Session()
 

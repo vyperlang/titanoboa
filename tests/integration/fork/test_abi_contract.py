@@ -188,8 +188,8 @@ def foo(x: ERC20):
     with boa.reverts():
         c.foo(crvusd)
 
-    bt = c.call_trace()
-    assert str(bt).splitlines() == [
+    tree = c.call_trace()
+    assert str(tree).splitlines() == [
         f"[5290] VyperContract.foo:5(x = {crvusd.address}) => None",
         f"    [2502] crvusd_abi.transfer(_to = {c.address}, _value = 100) => None",
     ]

@@ -5,7 +5,7 @@ from eth.abc import ComputationAPI
 from eth.exceptions import VMError
 from vyper.exceptions import VyperException
 
-from boa.contracts.trace import DevReason, TraceSource
+from boa.contracts.trace import DevReason, TraceFrame, TraceSource
 from boa.environment import Env
 from boa.util.abi import Address, abi_decode
 from boa.util.exceptions import strip_internal_frames
@@ -103,7 +103,7 @@ class _BaseEVMContract:
     def find_error_meta(self, computation: ComputationAPI) -> str:  # pragma: no cover
         raise NotImplementedError
 
-    def call_trace(self):
+    def call_trace(self) -> TraceFrame:
         assert self._computation is not None, "No computation to trace"
         return self._computation.trace
 
