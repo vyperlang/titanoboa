@@ -395,10 +395,8 @@ def _abi_from_json(abi: dict) -> str:
     """
     if "components" in abi:
         components = ",".join([_abi_from_json(item) for item in abi["components"]])
-        if abi["type"] == "tuple":
-            return f"({components})"
-        if abi["type"] == "tuple[]":
-            return f"({components})[]"
+        if abi["type"].startswith("tuple"):
+            return f"({components}){abi['type'][5:]}"
         raise ValueError("Components found in non-tuple type " + abi["type"])
 
     return abi["type"]

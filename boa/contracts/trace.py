@@ -6,7 +6,7 @@ from typing import Optional
 
 from boa.contracts.vyper.ast_utils import reason_at
 from boa.rpc import json
-from boa.util.abi import abi_decode
+from boa.util.abi import Address, abi_decode
 
 
 class TraceSource:
@@ -14,7 +14,7 @@ class TraceSource:
         return f"{self}{self._format_input(input)}{self._format_output(output)}"
 
     def _format_input(self, input: bytes):
-        decoded = abi_decode(self._input_schema, input)
+        decoded = abi_decode(self._input_schema, input[4:])
         args = [f"{name} = {str(d)}" for d, name in zip(decoded, self._argument_names)]
         return f"({', '.join(args)})"
 
@@ -46,9 +46,10 @@ class TraceSource:
 
 @dataclass
 class TraceFrame:
+    address: Address
     depth: int
     gas_used: int
-    source: TraceSource
+    source: TraceSource | None
     input: bytes
     output: bytes
     children: list["TraceFrame"]
@@ -59,10 +60,16 @@ class TraceFrame:
 
     @property
     def text(self):
-        return f"[{self.gas_used}] {self.source.format(self.input, self.output)}"
+        text = (
+            self.source.format(self.input, self.output)
+            if self.source
+            else f"Unknown contract {self.address}.0x{self.input[:4].hex()}"
+        )
+        return f"[{self.gas_used}] {text}"
 
     def to_dict(self) -> dict:
         return {
+            "address": str(self.address),
             "depth": self.depth,
             "gas_used": self.gas_used,
             "source": str(self.source),
@@ -73,8 +80,9 @@ class TraceFrame:
         }
 
     def export_html(self, destination: str | Path):
+        html = self.to_html()
         with open(destination, "w") as f:
-            f.write(self.to_html())
+            f.write(html)
         print(f"Trace written to file://{Path(destination).absolute()}")
 
     def to_html(self):

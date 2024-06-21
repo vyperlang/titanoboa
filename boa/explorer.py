@@ -9,7 +9,12 @@ SESSION = requests.Session()
 
 
 def _fetch_etherscan(
-    uri: str, api_key: Optional[str] = None, num_retries=10, backoff_ms=400, **params
+    uri: str,
+    api_key: Optional[str] = None,
+    num_retries=10,
+    backoff_ms=400,
+    backoff_factor=1.2,
+    **params,
 ) -> dict:
     """
     Fetch data from Etherscan API.
@@ -29,9 +34,12 @@ def _fetch_etherscan(
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
-        if data.get("result") != "Max rate limit reached":
+        if isinstance(data.get("result"), str) and not data["result"].startswith(
+            "Max rate limit reached"
+        ):
             break
         sleep(backoff_ms / 1000)
+        backoff_ms *= backoff_factor
 
     if int(data["status"]) != 1:
         raise ValueError(f"Failed to retrieve data from API: {data}")

@@ -336,19 +336,21 @@ class titanoboa_computation:
         return finalize(computation)
 
     @cached_property
-    def trace(self):
+    def trace(self) -> TraceFrame:
         return self._trace()
 
-    def _trace(self, depth=0):
+    def _trace(self, depth=0) -> TraceFrame:
         computation: ComputationAPI = self
         address = computation.msg.code_address
-        contract = self.env._lookup_contract_fast(address)
-        if contract is None:
+        env = self.env  # type: ignore
+        contract = env._lookup_contract_fast(address)
+        if contract is None:  # TODO: Retrieve from etherscan?
             source = None
         else:
             source = contract.find_source_of(computation)
 
         return TraceFrame(
+            address=Address(address),
             depth=depth,
             gas_used=computation.get_gas_used(),
             source=source,
