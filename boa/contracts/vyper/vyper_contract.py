@@ -157,6 +157,7 @@ class VyperBlueprint(_BaseVyperContract):
         override_address=None,
         blueprint_preamble=b"\xFE\x71\x00",
         filename=None,
+        gas=None,
     ):
         # note slight code duplication with VyperContract ctor,
         # maybe use common base class?
@@ -174,7 +175,7 @@ class VyperBlueprint(_BaseVyperContract):
         deploy_bytecode += blueprint_bytecode
 
         addr, computation = self.env.deploy(
-            bytecode=deploy_bytecode, override_address=override_address
+            bytecode=deploy_bytecode, override_address=override_address, gas=gas
         )
         if computation.is_error:
             raise computation.error
@@ -393,6 +394,7 @@ class VyperContract(_BaseVyperContract):
         skip_initcode=False,
         created_from: Address = None,
         filename: str = None,
+        gas=None,
     ):
         super().__init__(compiler_data, env, filename)
 
@@ -416,7 +418,9 @@ class VyperContract(_BaseVyperContract):
                 raise Exception("nonzero value but initcode is being skipped")
             addr = Address(override_address)
         else:
-            addr = self._run_init(*args, value=value, override_address=override_address)
+            addr = self._run_init(
+                *args, value=value, override_address=override_address, gas=gas
+            )
         self._address = addr
 
         for fn_name, fn in external_fns.items():
@@ -435,14 +439,14 @@ class VyperContract(_BaseVyperContract):
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, value=0, override_address=None):
+    def _run_init(self, *args, value=0, override_address=None, gas=None):
         encoded_args = b""
         if self._ctor:
             encoded_args = self._ctor.prepare_calldata(*args)
 
         initcode = self.compiler_data.bytecode + encoded_args
         address, computation = self.env.deploy(
-            bytecode=initcode, value=value, override_address=override_address
+            bytecode=initcode, value=value, override_address=override_address, gas=gas
         )
         self._computation = computation
         self.bytecode = computation.output
