@@ -2,6 +2,7 @@ import pytest
 
 import boa
 
+
 @pytest.fixture(scope="module")
 def vyper_contract():
     source_code = """
@@ -25,16 +26,17 @@ def set_vars(a_input: uint256, b_input: uint256):
     return source_code
 
 
-def test_contract_unregistered_after_rollback(vyper_contract,):
+def test_contract_unregistered_after_rollback(vyper_contract):
     with boa.env.anchor():
         contract_a = boa.loads(vyper_contract, 1, 2)
         with boa.env.anchor():
             contract_b = boa.loads(vyper_contract, 2, 2)
         assert boa.env.lookup_contract(contract_a.address) != None
         assert boa.env.lookup_contract(contract_b.address) == None
-    assert(len(boa.env._contracts) == 0)
+    assert len(boa.env._contracts) == 0
 
-def test_contract_unregistered_nested_anchor(vyper_contract,):
+
+def test_contract_unregistered_nested_anchor(vyper_contract):
     with boa.env.anchor():
         contract_a = boa.loads(vyper_contract, 1, 2)
         with boa.env.anchor():
@@ -44,4 +46,4 @@ def test_contract_unregistered_nested_anchor(vyper_contract,):
             assert boa.env.lookup_contract(contract_c.address) == None
         assert boa.env.lookup_contract(contract_a.address) != None
         assert boa.env.lookup_contract(contract_b.address) == None
-    assert(len(boa.env._contracts) == 0)
+    assert len(boa.env._contracts) == 0

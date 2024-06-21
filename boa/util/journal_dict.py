@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
+
 class JournalingDict(dict):
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.stack = []
@@ -23,12 +23,12 @@ class JournalingDict(dict):
 
     def __setitem__(self, key, value):
         if self.stack:
-            self.stack[-1].append((key, self.get(key,None)))
+            self.stack[-1].append((key, self.get(key, None)))
         super().__setitem__(key, value)
 
     def __delitem__(self, key):
         if self.stack:
-            self.stack[-1].append((key, self.get(key,None)))
+            self.stack[-1].append((key, self.get(key, None)))
         super().__delitem__(key)
 
     @contextmanager
