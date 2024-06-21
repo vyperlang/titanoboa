@@ -15,7 +15,7 @@ classifiers = ["Topic :: Software Development"]
 
 # Requirements
 dependencies = [
-    "vyper >= 0.3.10",
+    "vyper == 0.3.10",
     "eth-stdlib>=0.2.7,<0.3.0",
     "eth-abi",
     "py-evm>=0.10.0b4",
@@ -39,6 +39,9 @@ dependencies = [
 
 [project.optional-dependencies]
 forking-recommended = ["ujson"]
+
+# colab has antient ipykernel which causes bugs with decimals: https://github.com/jupyter/notebook/issues/5260
+colab = ["ipykernel>=6.29.4"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

@@ -206,6 +206,7 @@ def dummy() -> bool:
     mock_callback("eth_chainId", "0x1")
     mock_callback("eth_estimateGas", "0x0")
     mock_callback("debug_traceCall", {})  # for prefetch state
+    mock_callback("debug_traceCall", {})  # for prefetch state
     mock_callback("eth_sendTransaction", {"hash": "0x123"})
     mock_callback(
         "waitForTransactionReceipt",
@@ -213,6 +214,7 @@ def dummy() -> bool:
             "blockHash": "0x123",
             "blockNumber": "0x123",
             "contractAddress": "0x520c4BbBb1153fBB42742fEf935283e19Bb2a2e0",
+            "status": "0x1",
         },
     )
     mock_callback("debug_traceTransaction", error={"message": "error"})
