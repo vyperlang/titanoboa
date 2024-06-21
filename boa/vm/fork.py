@@ -2,13 +2,6 @@ import os
 import sys
 from typing import Any, Type
 
-from requests import HTTPError
-
-try:
-    import ujson as json
-except ImportError:
-    import json  # type: ignore
-
 import rlp
 from eth.db.account import AccountDB, keccak
 from eth.db.backends.memory import MemoryDB
@@ -18,8 +11,9 @@ from eth.rlp.accounts import Account
 from eth.vm.interrupt import MissingBytecode
 from eth.vm.message import Message
 from eth_utils import int_to_big_endian, to_canonical_address, to_checksum_address
+from requests import HTTPError
 
-from boa.rpc import RPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
+from boa.rpc import RPC, RPCError, fixup_dict, json, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
 
 TIMEOUT = 60  # default timeout for http requests in seconds
@@ -96,9 +90,14 @@ class CachingRPC(RPC):
         return json.dumps({"method": method, "params": params}).encode("utf-8")
 
     def fetch(self, method, params):
-        # dispatch into fetch_multi for caching behavior.
-        (res,) = self.fetch_multi([(method, params)])
-        return res
+        # cannot dispatch into fetch_multi, doesn't work for debug_traceCall.
+        key = self._mk_key(method, params)
+        if key in self._db:
+            return json.loads(self._db[key])
+
+        result = self._rpc.fetch(method, params)
+        self._db[key] = json.dumps(result).encode("utf-8")
+        return result
 
     def fetch_uncached(self, method, params):
         return self._rpc.fetch_uncached(method, params)
@@ -214,20 +213,15 @@ class AccountDBFork(AccountDB):
                 "data": msg.data,
             }
         )
-        # TODO: skip debug_traceCall if we have seen these specific
-        # arguments with this specific block before
         try:
-            tracer = {"tracer": "prestateTracer"}
-            res = self._rpc.fetch_uncached(
-                "debug_traceCall", [args, self._block_id, tracer]
-            )
+            trace_args = [args, self._block_id, {"tracer": "prestateTracer"}]
+            trace = self._rpc.fetch("debug_traceCall", trace_args)
         except (RPCError, HTTPError):
             return
 
         snapshot = self.record()
 
-        # everything is returned in hex
-        for address, v in res.items():
+        for address, account_dict in trace.items():
             try:
                 address = to_canonical_address(address)
             except ValueError:
@@ -237,15 +231,13 @@ class AccountDBFork(AccountDB):
 
             # set account if we don't already have it
             if self._get_account_helper(address) is None:
-                balance = to_int(v.get("balance", "0x"))
-                code = to_bytes(v.get("code", "0x"))
-                nonce = v.get("nonce", 0)  # already an int
+                balance = to_int(account_dict.get("balance", "0x"))
+                code = to_bytes(account_dict.get("code", "0x"))
+                nonce = account_dict.get("nonce", 0)  # already an int
                 self._set_account(address, Account(nonce=nonce, balance=balance))
                 self.set_code(address, code)
 
-            storage = v.get("storage", dict())
-
-            account_store = super()._get_address_store(address)
+            storage = account_dict.get("storage", {})
             for hexslot, hexvalue in storage.items():
                 slot = to_int(hexslot)
                 value = to_int(hexvalue)
@@ -253,19 +245,22 @@ class AccountDBFork(AccountDB):
                 # see AccountStorageDB.get()
                 # note we explicitly write 0s, so that they appear
                 # in the journal later when called by get_storage
-                key = int_to_big_endian(slot)
                 if not self._helper_have_storage(address, slot):
-                    account_store._journal_storage[key] = rlp.encode(value)  # type: ignore
-        self.lock_changes()
+                    self.set_storage(address, slot, value)
+
+        # the prefetch is lost on later reverts, however the RPC calls are cached
+        self.commit(snapshot)
 
     def get_code(self, address):
         try:
             return super().get_code(address)
         except MissingBytecode:  # will get thrown if code_hash != hash(empty)
-            ret = self._rpc.fetch(
-                "eth_getCode", [to_checksum_address(address), self._block_id]
-            )
-            return to_bytes(ret)
+            pass
+
+        code_args = [to_checksum_address(address), self._block_id]
+        code = to_bytes(self._rpc.fetch("eth_getCode", code_args))
+        self.set_code(address, code)
+        return code
 
     def discard(self, checkpoint):
         super().discard(checkpoint)
@@ -297,11 +292,12 @@ class AccountDBFork(AccountDB):
         if self._helper_have_storage(address, slot, from_journal=from_journal):
             return val
 
-        addr = to_checksum_address(address)
-        raw_val = self._rpc.fetch(
-            "eth_getStorageAt", [addr, to_hex(slot), self._block_id]
-        )
-        return to_int(raw_val)
+        fetch_args = [to_checksum_address(address), to_hex(slot), self._block_id]
+        val = to_int(self._rpc.fetch("eth_getStorageAt", fetch_args))
+        if from_journal:
+            # when not from journal, don't override changes
+            self.set_storage(address, slot, val)
+        return val
 
     def set_storage(self, address, slot, value):
         super().set_storage(address, slot, value)
@@ -312,5 +308,4 @@ class AccountDBFork(AccountDB):
     def account_exists(self, address):
         if super().account_exists(address):
             return True
-
         return self.get_balance(address) > 0 or self.get_nonce(address) > 0

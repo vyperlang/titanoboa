@@ -10,7 +10,7 @@ class lrudict(dict):
         return val
 
     def __setitem__(self, k, val):
-        if len(self) == self.n:
+        if len(self) == self.n and k not in self:
             del self[next(iter(self))]
         super().__setitem__(k, val)
 

@@ -56,6 +56,9 @@ _id = 0
 
 
 def pytest_fixture_setup(fixturedef, request):
+    if request.node.get_closest_marker("ignore_isolation"):
+        return
+
     global _id
     task_id = _id
     _id += 1

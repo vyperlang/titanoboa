@@ -15,7 +15,7 @@ class BoaDebug(pdb.Pdb):
     @property
     def intro(self):
         computation = self.contract._computation
-        ast_source = self.contract.find_source_of(computation.code)
+        ast_source = self.contract.find_source_of(computation)
         if ast_source is not None:
             return str(VyperException("breakpoint at:", ast_source))
 

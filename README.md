@@ -196,10 +196,11 @@ Cast current deployed addresses to vyper contract
 ```
 
 ### Network Mode
+
 ```python
->>> import boa; from boa.network import NetworkEnv
+>>> import boa
+>>> boa.env.set_network_env("<rpc server address>")
 >>> from eth_account import Account
->>> boa.env.set_env(NetworkEnv("<rpc server address>"))
 >>> # in a real codebase, always load private keys safely from an encrypted store!
 >>> boa.env.add_account(Account(<a private key>))
 >>> c = boa.load("examples/ERC20.vy", "My Token", "TKN", 10**18, 10)
@@ -209,7 +210,46 @@ Cast current deployed addresses to vyper contract
 
 ### Jupyter Integration
 
-You can use Jupyter to execute titanoboa code in network mode from your browser using any wallet, using `boa.integrations.jupyter.BrowserSigner` as a drop-in replacement for `eth_account.Account`. For a full example, please see [this example Jupyter notebook](examples/jupyter_browser_signer.ipynb)
+You can use Jupyter to execute titanoboa code in network mode from your browser using any wallet.
+We provide a `BrowserSigner` as a drop-in replacement for `eth_account.Account`.
+The `BrowserRPC` may be used to interact with the RPC server from the browser.
+
+For a full example, please see [this example Jupyter notebook](examples/jupyter_browser_signer.ipynb)
+
+#### JupyterLab
+
+Before being able to use the plugin, you need to install it.
+You can do this by running the following command in the terminal:
+
+```bash
+pip install titanoboa
+jupyter lab extension enable boa
+```
+To activate our IPython extension, you need to run the following command in the notebook:
+```jupyter
+%load_ext boa.ipython
+```
+
+For ease of use, add the following to `ipython_config.py`:
+```python
+c.InteractiveShellApp.extensions = ["boa.ipython"]
+c.InteractiveShellApp.exec_lines = ['import boa']
+```
+
+We provide a multi-user setup with JupyterLab in [try.vyperlang.org](https://try.vyperlang.org/), where the extension is installed and activated.
+The source code for this website is available in the [GitHub repository](https://github.com/vyperlang/try.vyperlang.org).
+
+#### Colab
+It is also possible to run our plugin in [Google Colab](https://colab.research.google.com/).
+To do this, you need to install the plugin by running the following commands:
+```jupyter
+!pip install titanoboa
+%load_ext boa.ipython
+```
+
+#### IPython extensions
+
+This activates the `%%vyper`, `%%contract` and `%%eval` magics.
 
 
 ### Basic tests
