@@ -13,6 +13,7 @@ from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
+from boa.util.journal_dict import JournalingDict
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
 
@@ -34,8 +35,8 @@ class Env:
         # TODO differentiate between origin and sender
         self.eoa = self.generate_address("eoa")
 
-        self._contracts = {}
-        self._code_registry = {}
+        self._contracts = JournalingDict()
+        self._code_registry = JournalingDict()
 
         self.sha3_trace: dict = {}
         self.sstore_trace: dict = {}
@@ -44,9 +45,6 @@ class Env:
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
         self._coverage_data = {}
-
-        # New contracts since last snapshot
-        self._new_contracts = []
 
         self._gas_tracker = 0
 
@@ -123,19 +121,14 @@ class Env:
         novel_bytecode = bytecode not in self._code_registry
         if novel_bytecode:
             self._code_registry[bytecode] = obj
-        # Remember this address as a new contract
-        self._new_contracts.append((addr, novel_bytecode))
 
     # Unregister a contract, e.g., while reverting to a snapshot
     # addr should be an Address
     def unregister_contract(self, addr, unregister_bytecode=True):
-        if addr.canonical_address in self._contracts:
-            del self._contracts[addr.canonical_address]
-
+        self._contracts.pop(addr.canonical_address, None)
         if unregister_bytecode:
             bytecode = self.evm.get_code(addr)
-            if bytecode in self._code_registry:
-                del self._code_registry[bytecode]
+            self._code_registry.pop(bytecode, None)
 
     def register_blueprint(self, bytecode, obj):
         self._code_registry[bytecode] = obj
@@ -170,15 +163,10 @@ class Env:
     @contextlib.contextmanager
     def anchor(self):
         snapshot_id = self.evm.snapshot()
-        # Remember new contracts from this snapshot
-        self._new_contracts = []
         try:
-            with self.evm.patch.anchor():
+            with self.evm.patch.anchor(), self._contracts.scoped(), self._code_registry.scoped():
                 yield
         finally:
-            # Unregister new contracts since snapshot
-            for addr, novel_bytecode in self._new_contracts:
-                self.unregister_contract(addr, novel_bytecode)
             self.evm.revert(snapshot_id)
 
     @contextlib.contextmanager
