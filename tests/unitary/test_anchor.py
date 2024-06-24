@@ -31,8 +31,8 @@ def test_contract_unregistered_after_rollback(vyper_contract):
         contract_a = boa.loads(vyper_contract, 1, 2)
         with boa.env.anchor():
             contract_b = boa.loads(vyper_contract, 2, 2)
-        assert boa.env.lookup_contract(contract_a.address) != None
-        assert boa.env.lookup_contract(contract_b.address) == None
+        assert boa.env.lookup_contract(contract_a.address) is not None
+        assert boa.env.lookup_contract(contract_b.address) is None
     assert len(boa.env._contracts) == 0
 
 
@@ -43,7 +43,7 @@ def test_contract_unregistered_nested_anchor(vyper_contract):
             contract_b = boa.loads(vyper_contract, 2, 2)
             with boa.env.anchor():
                 contract_c = boa.loads(vyper_contract, 2, 2)
-            assert boa.env.lookup_contract(contract_c.address) == None
-        assert boa.env.lookup_contract(contract_a.address) != None
-        assert boa.env.lookup_contract(contract_b.address) == None
+            assert boa.env.lookup_contract(contract_c.address) is None
+        assert boa.env.lookup_contract(contract_a.address) is not None
+        assert boa.env.lookup_contract(contract_b.address) is None
     assert len(boa.env._contracts) == 0

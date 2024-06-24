@@ -1,5 +1,3 @@
-import pytest
-
 from boa.util.journal_dict import JournalingDict
 
 
