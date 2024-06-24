@@ -1,11 +1,20 @@
 from time import sleep
 from typing import Optional
 
-import requests
-
 from boa.rpc import json
 
-SESSION = requests.Session()
+try:
+    from requests_cache import CachedSession
+
+    SESSION = CachedSession(
+        "etherscan_cache",
+        allowable_codes=[200],
+        filter_fn=lambda response: int(response.json().get("status", 0)) == 1,
+    )
+except ImportError:
+    from requests import Session
+
+    SESSION = Session()
 
 
 def _fetch_etherscan(
