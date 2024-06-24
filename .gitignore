@@ -13,3 +13,4 @@ venv/
 
 .coverage
 .coverage.*
+etherscan_cache.sqlite

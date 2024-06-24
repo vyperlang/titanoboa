@@ -14,15 +14,17 @@ class TraceSource:
         return f"{self}{self._format_input(input)}{self._format_output(output)}"
 
     def _format_input(self, input: bytes):
-        decoded = abi_decode(self._input_schema, input[4:])
-        args = [f"{name} = {str(d)}" for d, name in zip(decoded, self._argument_names)]
+        decoded = abi_decode(self._input_schema, input)
+        args = [
+            f"{name} = {_to_str(d)}" for d, name in zip(decoded, self._argument_names)
+        ]
         return f"({', '.join(args)})"
 
     def _format_output(self, output: bytes):
         if output == b"":
             return " => None"
         decoded = abi_decode(self._output_schema, output)
-        return f" => ({', '.join(str(d) for d in decoded)})"
+        return f" => ({', '.join(_to_str(d) for d in decoded)})"
 
     @cached_property
     def dev_reason(self) -> Optional["DevReason"]:
@@ -60,11 +62,13 @@ class TraceFrame:
 
     @property
     def text(self):
-        text = (
-            self.source.format(self.input, self.output)
-            if self.source
-            else f"Unknown contract {self.address}.0x{self.input[:4].hex()}"
-        )
+        if self.source:
+            text = self.source.format(self.input, self.output)
+        else:
+            text = f"Unknown contract {self.address}"
+            if self.input != b"":
+                text += ".0x" + self.input[:4].hex()
+
         return f"[{self.gas_used}] {text}"
 
     def to_dict(self) -> dict:
@@ -109,3 +113,13 @@ class DevReason:
 
     def __str__(self):
         return f"<{self.reason_type}: {self.reason_str}>"
+
+
+def _to_str(d):
+    if isinstance(d, bytes):
+        return "0x" + d.hex()
+    if isinstance(d, (list, tuple)):
+        return f"[{', '.join(_to_str(x) for x in d)}]"
+    if isinstance(d, str):
+        return f'"{d}"'
+    return str(d)
