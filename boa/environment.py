@@ -13,6 +13,7 @@ from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
+from boa.util.journal_dict import JournalingDict
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
 
@@ -34,8 +35,8 @@ class Env:
         # TODO differentiate between origin and sender
         self.eoa = self.generate_address("eoa")
 
-        self._contracts = {}
-        self._code_registry = {}
+        self._contracts = JournalingDict()
+        self._code_registry = JournalingDict()
 
         self.sha3_trace: dict = {}
         self.sstore_trace: dict = {}
@@ -117,7 +118,17 @@ class Env:
         # also register it in the registry for
         # create_minimal_proxy_to and create_copy_of
         bytecode = self.evm.get_code(addr)
-        self._code_registry[bytecode] = obj
+        novel_bytecode = bytecode not in self._code_registry
+        if novel_bytecode:
+            self._code_registry[bytecode] = obj
+
+    # Unregister a contract, e.g., while reverting to a snapshot
+    # addr should be an Address
+    def unregister_contract(self, addr, unregister_bytecode=True):
+        self._contracts.pop(addr.canonical_address, None)
+        if unregister_bytecode:
+            bytecode = self.evm.get_code(addr)
+            self._code_registry.pop(bytecode, None)
 
     def register_blueprint(self, bytecode, obj):
         self._code_registry[bytecode] = obj
@@ -153,7 +164,7 @@ class Env:
     def anchor(self):
         snapshot_id = self.evm.snapshot()
         try:
-            with self.evm.patch.anchor():
+            with self.evm.patch.anchor(), self._contracts.scoped(), self._code_registry.scoped():
                 yield
         finally:
             self.evm.revert(snapshot_id)
