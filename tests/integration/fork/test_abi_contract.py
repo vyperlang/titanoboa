@@ -169,6 +169,7 @@ def foo(x: ERC20, from_: address):
     with boa.reverts():
         c.foo(crvusd, t)
 
-    bt = c.stack_trace()
-    assert "crvusd_abi.json interface at 0x" in bt[0]
-    assert "transferFrom(address,address,uint256)" in bt[0]
+    error = c._create_error(c._computation)
+    frame = error.stack_trace[0]
+    assert "crvusd_abi.json interface at 0x" in frame.contract_repr
+    assert "transferFrom(address,address,uint256)" in frame.error_detail

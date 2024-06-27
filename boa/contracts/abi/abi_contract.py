@@ -7,12 +7,7 @@ from eth.abc import ComputationAPI
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
-from boa.contracts.base_evm_contract import (
-    BoaError,
-    StackTrace,
-    _BaseEVMContract,
-    _handle_child_trace,
-)
+from boa.contracts.base_evm_contract import _BaseEVMContract
 from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
 
 
@@ -285,32 +280,27 @@ class ABIContract(_BaseEVMContract):
         self._computation = computation
         # when there's no contract in the address, the computation output is empty
         if computation.is_error:
-            return self.handle_error(computation)
+            raise self._create_error(computation)
 
         schema = f"({_format_abi_type(abi_type)})"
         try:
             return abi_decode(schema, computation.output)
         except ABIError as e:
-            raise BoaError(self.stack_trace(computation)) from e
+            raise self._create_error(computation) from e
 
-    def stack_trace(self, computation: ComputationAPI) -> StackTrace:
-        """
-        Create a stack trace for a failed contract call.
-        """
+    def find_error_meta(self, computation):
         reason = ""
         if computation.is_error:
             reason = " ".join(str(arg) for arg in computation.error.args if arg != b"")
 
         calldata_method_id = bytes(computation.msg.data[:4])
-        if calldata_method_id in self.method_id_map:
-            function = self.method_id_map[calldata_method_id]
-            msg = f"  {reason}({self}.{function.pretty_signature})"
-        else:
-            # Method might not be specified in the ABI
-            msg = f"  {reason}(unknown method id {self}.0x{calldata_method_id.hex()})"
+        if calldata_method_id not in self.method_id_map:
+            # (private) function might not be specified in the ABI
+            method_hex = f"0x{calldata_method_id.hex()}"
+            return f"{reason} (unknown method {method_hex})".strip()
 
-        return_trace = StackTrace([msg])
-        return _handle_child_trace(computation, self.env, return_trace)
+        method = self.method_id_map[calldata_method_id].pretty_signature
+        return f"{reason} ({method})".strip()
 
     @property
     def deployer(self) -> "ABIContractFactory":
@@ -361,7 +351,7 @@ class ABIContractFactory:
         contract = ABIContract(
             self._name, self._abi, self.functions, address, self.filename
         )
-        contract.env.register_contract(address, contract)
+        contract.env.register_contract(contract.address, contract)
         return contract
 
 
