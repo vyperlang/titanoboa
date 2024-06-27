@@ -4,14 +4,13 @@ import pytest
 
 import boa
 from boa import Env
-from boa.rpc import to_bytes
+from boa.rpc import to_bytes, to_int
 
 
 @pytest.fixture(scope="module", autouse=True)
 def forked_env(rpc_url):
     with boa.swap_env(Env()):
-        block_id = 20102742  # some block we know the state of
-        boa.env.fork(rpc_url, block_identifier=block_id)
+        boa.env.fork(rpc_url, block_identifier=20102743)
         yield
 
 
@@ -20,12 +19,15 @@ def api_key():
     return os.environ.get("ETHERSCAN_API_KEY")
 
 
-# https://dashboard.tenderly.co/tx/mainnet/0xde001d295a15f427e613fa28adb12c8dbf6c03b9c1d647f438709eb444b747e8
-def test_call_trace(api_key):
-    boa.from_etherscan(
-        "0x004c167d27ada24305b76d80762997fa6eb8d9b2",
-        name="CurveTwocryptoOptimized",
-        api_key=api_key,
+# https://app.blocksec.com/explorer/tx/eth/0xde001d295a15f427e613fa28adb12c8dbf6c03b9c1d647f438709eb444b747e8
+def test_call_trace(api_key, get_filepath):
+    # boa.from_etherscan(
+    #     "0x004c167d27ada24305b76d80762997fa6eb8d9b2",
+    #     name="CurveTwocryptoOptimized",
+    #     api_key=api_key,
+    # )
+    twocrypto = boa.load_partial(get_filepath("CurveTwoCryptoOptimized.vy")).at(
+        "0x004c167d27ada24305b76d80762997fa6eb8d9b2"
     )
     boa.from_etherscan(
         "0x2005995a71243be9fb995dab4742327dc76564df",
@@ -42,7 +44,7 @@ def test_call_trace(api_key):
         name="GPv2Settlement",
         api_key=api_key,
     )
-    boa.from_etherscan(
+    cvg = boa.from_etherscan(
         "0x97effb790f2fbb701d88f89db4521348a2b77be8", name="Cvg", api_key=api_key
     )
     boa.from_etherscan(
@@ -50,7 +52,7 @@ def test_call_trace(api_key):
         name="GPv2AllowListAuthentication",
         api_key=api_key,
     )
-    boa.from_etherscan(
+    weth = boa.from_etherscan(
         "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", name="WETH9", api_key=api_key
     )
     boa.from_etherscan(
@@ -59,14 +61,14 @@ def test_call_trace(api_key):
         api_key=api_key,
     )
 
+    sender = "0x0DdcB0769a3591230cAa80F85469240b71442089"
+
+    weth_balance = weth.balanceOf(sender)
+    assert weth_balance > 7027378344680119359698
+
+    ether = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     settlement.settle(
-        tokens=[  # address[]
-            "0x97effb790f2fbb701d88f89db4521348a2b77be8",
-            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-            "0x97effb790f2fbb701d88f89db4521348a2b77be8",
-            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        ],
+        tokens=[cvg.address, ether, ether, cvg.address, ether],  # address[]
         clearingPrices=[  # uint256[]
             386907945258610235,
             7027378344680119359698,
@@ -99,29 +101,43 @@ def test_call_trace(api_key):
             [],
             [
                 (
-                    "0x004c167d27ada24305b76d80762997fa6eb8d9b2",
+                    twocrypto.address,
                     0,
-                    to_bytes(
-                        "0x5b41b908000000000000000000000000000000000000000000000000000000000"
-                        "0000000010000000000000000000000000000000000000000000000000000000000"
-                        "000000000000000000000000000000000000000000000000017cf4772bd7231858d"
-                        "2000000000000000000000000000000000000000000000000055e92b9edea6e3b"
+                    twocrypto.exchange.prepare_calldata(
+                        to_int(
+                            "0000000000000000000000000000000000000000000000000000000000000000"
+                        ),
+                        to_int(
+                            "0100000000000000000000000000000000000000000000000000000000000000"
+                        ),
+                        to_int(
+                            "00000000000000000000000000000000000000000000017cf4772bd7231858d2"
+                        ),
+                        to_int(
+                            "000000000000000000000000000000000000000000000000055e92b9edea6e3b"
+                        ),
                     ),
                 ),
                 (
-                    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    weth.address,
                     0,
-                    to_bytes(
-                        "0x2e1a7d4d000000000000000000000000000000000000000000000000055e92b9edea6e3b"
+                    weth.withdraw.prepare_calldata(
+                        to_int(
+                            "000000000000000000000000000000000000000000000000055e92b9edea6e3b"
+                        )
                     ),
                 ),
             ],
             [],
         ),
-        sender="0x0DdcB0769a3591230cAa80F85469240b71442089",
+        sender=sender,
         gas=585030,
     )
-    trace_dict = settlement.call_trace().to_dict()
+
+    trace = settlement.call_trace()
+    trace.export_html("trace.html")
+
+    trace_dict = trace.to_dict()
     assert trace_dict["address"] == settlement.address
     assert len(trace_dict["children"]) == 6
     assert trace_dict["children"][3]["text"] == (
