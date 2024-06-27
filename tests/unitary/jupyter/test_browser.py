@@ -11,7 +11,7 @@ import pytest
 from eth_account import Account
 
 import boa
-from boa.integrations.jupyter import BrowserSigner
+from boa.integrations.jupyter import BrowserRPC, BrowserSigner
 from boa.integrations.jupyter.browser import _generate_token
 from boa.rpc import RPCError
 
@@ -32,7 +32,7 @@ def mocked_token(token):
 
 @pytest.fixture()
 def env(account, mock_fork, mock_callback):
-    mock_callback("loadSigner", account.address)
+    mock_callback("eth_requestAccounts", [account.address])
     boa.set_browser_env(account)
     return boa.env
 
@@ -77,9 +77,7 @@ def find_response(mock_calls, func_to_body_dict):
 def mock_callback(mocked_token, display_mock):
     """Returns a function that allows mocking the result of the frontend callback."""
 
-    with mock.patch(
-        "boa.integrations.jupyter.browser.get_running_loop"
-    ) as mock_get_loop:
+    with mock.patch("boa.integrations.jupyter.browser.get_event_loop") as mock_get_loop:
         io_loop = mock_get_loop.return_value
         io_loop.time.return_value = 0
         func_to_body_dict = {}
@@ -153,27 +151,32 @@ def test_browser_sign_typed_data(display_mock, mock_callback, env):
     assert data == signature
 
 
+def test_browser_rpc_inject_js(mocked_token, display_mock, mock_callback):
+    _ = BrowserRPC()  # test the constructor
+    (((js1,), _),) = display_mock.call_args_list
+    assert "window._titanoboa = " in js1.data
+
+
 def test_browser_signer_colab(colab_eval_mock, mocked_token, display_mock):
     address = boa.env.generate_address()
-    colab_eval_mock.return_value = json.dumps({"data": address})
+    colab_eval_mock.return_value = json.dumps({"data": [address]})
     signer = BrowserSigner()
     assert signer.address == address
     colab_eval_mock.assert_called_once()
     (js,), _ = colab_eval_mock.call_args
-    assert f'loadSigner("{mocked_token}", null)' in js
+    assert f'rpc("{mocked_token}", "eth_requestAccounts", [])' in js
+    display_mock.assert_called_once()
 
 
 def test_browser_load_signer(token, display_mock, mock_callback, account, mock_fork):
-    mock_callback("loadSigner", account.address)
+    mock_callback("eth_requestAccounts", [account.address])
     boa.set_browser_env()
     assert boa.env.eoa == account.address
     assert type(boa.env._accounts[boa.env.eoa]).__name__ == BrowserSigner.__name__
 
 
 def test_browser_timeout():
-    with mock.patch(
-        "boa.integrations.jupyter.browser.get_running_loop"
-    ) as mock_get_loop:
+    with mock.patch("boa.integrations.jupyter.browser.get_event_loop") as mock_get_loop:
         io_loop = mock_get_loop.return_value
         now = datetime.now().timestamp()
         io_loop.time.side_effect = [now, now, now + 1000]
@@ -203,7 +206,8 @@ def dummy() -> bool:
     mock_callback("eth_chainId", "0x1")
     mock_callback("eth_estimateGas", "0x0")
     mock_callback("debug_traceCall", {})  # for prefetch state
-    mock_callback("sendTransaction", {"hash": "0x123"})
+    mock_callback("debug_traceCall", {})  # for prefetch state
+    mock_callback("eth_sendTransaction", {"hash": "0x123"})
     mock_callback(
         "waitForTransactionReceipt",
         {
@@ -231,11 +235,11 @@ def test_browser_chain_id(token, env, display_mock, mock_callback):
     )
 
 
-def test_browser_rpc(token, display_mock, mock_callback, account, mock_fork, env):
+def test_browser_rpc_gas_price(
+    token, display_mock, mock_callback, account, mock_fork, env
+):
     mock_callback("eth_gasPrice", "0x123")
     assert env.get_gas_price() == 291
-
-    assert display_mock.call_count == 7
     (js,), _ = display_mock.call_args
     assert f'rpc("{token}", "eth_gasPrice", [])' in js.data
     assert env._rpc.name == "BrowserRPC"
@@ -307,7 +311,9 @@ def test_browser_rpc_debug_error(mock_callback, env):
 
 
 def test_browser_js_error(token, display_mock, mock_callback, account, mock_fork):
-    mock_callback("loadSigner", error={"message": "custom message", "stack": ""})
+    mock_callback(
+        "eth_requestAccounts", error={"message": "custom message", "stack": ""}
+    )
     with pytest.raises(RPCError) as exc_info:
         BrowserSigner()
     assert str(exc_info.value) == "-1: custom message"
