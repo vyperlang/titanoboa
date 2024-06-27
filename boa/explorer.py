@@ -1,14 +1,29 @@
-import json
 from time import sleep
 from typing import Optional
 
-import requests
+from boa.rpc import json
 
-SESSION = requests.Session()
+try:
+    from requests_cache import CachedSession, Response
+
+    def _filter_fn(res: Response) -> bool:
+        data = res.json()
+        return _is_success_response(data) and not _is_rate_limited(data)
+
+    SESSION = CachedSession("etherscan_cache", filter_fn=_filter_fn)
+except ImportError:
+    from requests import Session
+
+    SESSION = Session()
 
 
 def _fetch_etherscan(
-    uri: str, api_key: Optional[str] = None, num_retries=10, backoff_ms=400, **params
+    uri: str,
+    api_key: Optional[str] = None,
+    num_retries=10,
+    backoff_ms=400,
+    backoff_factor=1.2,
+    **params,
 ) -> dict:
     """
     Fetch data from Etherscan API.
@@ -28,14 +43,25 @@ def _fetch_etherscan(
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
-        if data.get("result") != "Max rate limit reached":
+        if not _is_rate_limited(data):
             break
+        print(f"Retrying in {backoff_ms}ms {params.get('address')}... {data}")
         sleep(backoff_ms / 1000)
+        backoff_ms *= backoff_factor
 
-    if int(data["status"]) != 1:
+    if not _is_success_response(data):
         raise ValueError(f"Failed to retrieve data from API: {data}")
 
     return data
+
+
+def _is_success_response(data: dict) -> bool:
+    return int(data["status"]) == 1
+
+
+def _is_rate_limited(data: dict) -> bool:
+    result = data.get("result")
+    return isinstance(result, str) and result.startswith("Max rate limit reached")
 
 
 def fetch_abi_from_etherscan(

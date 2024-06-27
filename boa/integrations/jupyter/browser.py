@@ -2,10 +2,11 @@
 This module implements the BrowserSigner class, which is used to sign transactions
 in IPython/JupyterLab/Google Colab.
 """
-import json
+
 import logging
 from asyncio import get_running_loop, sleep
 from itertools import chain
+from json import JSONEncoder, dumps
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
 from typing import Any
@@ -27,7 +28,7 @@ from boa.integrations.jupyter.utils import (
     install_jupyter_javascript_triggers,
 )
 from boa.network import NetworkEnv
-from boa.rpc import RPC, RPCError
+from boa.rpc import RPC, RPCError, json
 from boa.util.abi import Address
 
 try:
@@ -156,7 +157,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
     :return: The result of the Javascript snippet sent to the API.
     """
     token = _generate_token()
-    args_str = ", ".join(json.dumps(p, cls=_BytesEncoder) for p in chain([token], args))
+    args_str = ", ".join(dumps(p, cls=_BytesEncoder) for p in chain([token], args))
     js_code = f"window._titanoboa.{js_func}({args_str});"
     if BrowserRPC._debug_mode:
         logging.warning(f"Calling {js_func} with {args_str}")
@@ -230,7 +231,7 @@ def _parse_js_result(result: dict) -> Any:
     )
 
 
-class _BytesEncoder(json.JSONEncoder):
+class _BytesEncoder(JSONEncoder):
     """
     A JSONEncoder that converts bytes to hex strings to be passed to JavaScript.
     """

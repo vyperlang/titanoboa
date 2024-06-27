@@ -1,4 +1,3 @@
-import json
 import sys
 import textwrap
 from importlib.abc import MetaPathFinder
@@ -20,6 +19,7 @@ from boa.contracts.vyper.vyper_contract import (
 )
 from boa.environment import Env
 from boa.explorer import fetch_abi_from_etherscan
+from boa.rpc import json
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
 
@@ -137,7 +137,7 @@ def loads(
 
 def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     if name is None:
-        name = filename
+        name = Path(filename).stem
     with open(filename) as fp:
         return loads_abi(fp.read(), *args, name=name, **kwargs)
 

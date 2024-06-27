@@ -1,8 +1,9 @@
-import json
 import os
 from os.path import dirname, join, realpath
 
 from IPython.display import Javascript, display
+
+from boa.rpc import json
 
 
 def install_jupyter_javascript_triggers(debug_mode=False):
