@@ -10,7 +10,7 @@
     Vote weight decays linearly over time.
     A user can unlock funds early incurring a penalty.
 """
-from vyper.interfaces import ERC20
+from ethereum.ercs import IERC20
 
 interface RewardPool:
     def burn(amount: uint256) -> bool: nonpayable
@@ -56,10 +56,10 @@ event Supply:
     ts: uint256
 
 event Initialized:
-    token: ERC20
+    token: IERC20
     reward_pool: RewardPool
 
-YFI: immutable(ERC20)
+YFI: immutable(IERC20)
 REWARD_POOL: immutable(RewardPool)
 
 DAY: constant(uint256) = 86400
@@ -76,8 +76,8 @@ point_history: public(HashMap[address, HashMap[uint256, Point]])  # epoch -> uns
 slope_changes: public(HashMap[address, HashMap[uint256, int128]])  # time -> signed slope change
 
 
-@external
-def __init__(token: ERC20, reward_pool: RewardPool):
+@deploy
+def __init__(token: IERC20, reward_pool: RewardPool):
     """
     @notice Contract constructor
     @param token YFI token address
@@ -182,7 +182,7 @@ def _checkpoint_global() -> Point:
 
     # apply weekly slope changes and record weekly global snapshots
     t_i: uint256 = self.round_to_week(last_checkpoint)
-    for i in range(255):
+    for i: uint256 in range(255):
         t_i = min(t_i + WEEK, block.timestamp)
         last_point.bias -= last_point.slope * convert(t_i - last_checkpoint, int128)
         last_point.slope += self.slope_changes[self][t_i]  # will read 0 if not aligned to week
@@ -347,7 +347,7 @@ def find_epoch_by_block(user: address, height: uint256, max_epoch: uint256) -> u
     """
     _min: uint256 = 0
     _max: uint256 = max_epoch
-    for i in range(128):  # Will be always enough for 128-bit numbers
+    for i: uint256 in range(128):  # Will be always enough for 128-bit numbers
         if _min >= _max:
             break
         _mid: uint256 = (_min + _max + 1) / 2
@@ -369,7 +369,7 @@ def find_epoch_by_timestamp(user: address, ts: uint256, max_epoch: uint256) -> u
     """
     _min: uint256 = 0
     _max: uint256 = max_epoch
-    for i in range(128):  # Will be always enough for 128-bit numbers
+    for i: uint256 in range(128):  # Will be always enough for 128-bit numbers
         if _min >= _max:
             break
         _mid: uint256 = (_min + _max + 1) / 2
@@ -386,7 +386,7 @@ def replay_slope_changes(user: address, point: Point, ts: uint256) -> Point:
     upoint: Point = point
     t_i: uint256 = self.round_to_week(upoint.ts)
 
-    for i in range(500):
+    for i: uint256 in range(500):
         t_i += WEEK
         d_slope: int128 = 0
         if t_i > ts:
@@ -468,7 +468,7 @@ def getPriorVotes(user: address, height: uint256) -> uint256:
 def totalSupply(ts: uint256 = block.timestamp) -> uint256:
     """
     @notice Calculate total voting power
-    @dev Adheres to the ERC20 `totalSupply` interface for Aragon compatibility
+    @dev Adheres to the IERC20 `totalSupply` interface for Aragon compatibility
     @return Total voting power
     """
     epoch: uint256 = self.epoch[self]
@@ -506,7 +506,7 @@ def totalSupplyAt(height: uint256) -> uint256:
 
 @view
 @external
-def token() -> ERC20:
+def token() -> IERC20:
     return YFI
 
 

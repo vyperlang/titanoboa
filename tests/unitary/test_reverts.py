@@ -178,33 +178,34 @@ def test_reverts_dev_reason():
     pool_code = """
 @external
 @pure
-def some_math(x: uint256):
+def some_math(x: uint256) -> uint256:
     assert x < 10 # dev: math not ok
+    return x
 """
     math_code = """
 math: address
 
 interface Math:
-    def some_math(x: uint256): pure
+    def some_math(x: uint256) -> uint256: pure
 
-@external
+@deploy
 def __init__(math: address):
     self.math = math
 
 @external
-def ext_call():
-    Math(self.math).some_math(11)
+def math_call():
+    _: uint256 = staticcall Math(self.math).some_math(11)
 
 @external
-def ext_call2():
-    Math(self.math).some_math(11)  # dev: call math
+def math_call_with_reason():
+    _: uint256 = staticcall Math(self.math).some_math(11)  # dev: call math
 """
     m = boa.loads(pool_code)
     p = boa.loads(math_code, m.address)
     with boa.reverts(dev="math not ok"):
-        p.ext_call()
+        p.math_call()
     with boa.reverts(dev="call math"):
-        p.ext_call2()
+        p.math_call_with_reason()
 
 
 def test_stack_trace(contract):
@@ -215,7 +216,7 @@ interface HasFoo:
 
 @external
 def revert(contract: HasFoo):
-    contract.foo(5)
+    extcall contract.foo(5)
     """
     )
 
@@ -234,7 +235,7 @@ def revert(contract: HasFoo):
 
 def test_trace_constructor_revert():
     code = """
-@external
+@deploy
 def __init__():
     assert False, "revert reason"
 """
@@ -242,3 +243,29 @@ def __init__():
         boa.loads(code)
 
     assert "revert reason" in str(error_context.value)
+
+
+def test_trace_constructor_stack_trace():
+    called_code = """
+@external
+@pure
+def check(x: uint256) -> uint256:
+    assert x < 10 # dev: less than 10
+    return x
+"""
+    caller_code = """
+interface Called:
+    def check(x: uint256) -> uint256: pure
+
+@deploy
+def __init__(math: address, x: uint256):
+    _: uint256 = staticcall Called(math).check(x)
+"""
+    called = boa.loads(called_code)
+    boa.loads(caller_code, called.address, 0)
+    with pytest.raises(BoaError) as error_context:
+        boa.loads(caller_code, called.address, 10)
+
+    trace = error_context.value.stack_trace
+    assert [repr(frame.vm_error) for frame in trace] == ["Revert(b'')"] * 2
+    assert [frame.dev_reason.reason_str for frame in trace] == ["less than 10"] * 2

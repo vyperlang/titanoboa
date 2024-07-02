@@ -37,7 +37,7 @@ def _test_bool(a: uint256, b: bool = False) -> bool:
 @internal
 def _test_repeat(z: int128) -> int128:
     x: int128 = 0
-    for i in range(6):
+    for i: int128 in range(6):
         x = x + z
     return x
 

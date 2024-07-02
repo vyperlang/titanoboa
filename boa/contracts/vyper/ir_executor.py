@@ -11,9 +11,12 @@ from eth.exceptions import Halt
 from eth.exceptions import Revert as VMRevert
 from eth.exceptions import WriteProtection
 from eth_hash.auto import keccak
+from vyper.ast.nodes import VyperNode
+from vyper.codegen.ir_node import IRnode
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
-from vyper.utils import mkalphanum, unsigned_to_signed
+from vyper.ir.compile_ir import getpos
+from vyper.utils import unsigned_to_signed
 
 from boa.util.lrudict import lrudict
 from boa.vm.fast_mem import FastMem
@@ -25,6 +28,11 @@ _keccak_cache = lrudict(256)
 # note: This is used in the generated code for `Sha3_64` below.
 def keccak256(x):
     return _keccak_cache.setdefault_lambda(x, keccak)
+
+
+def _mkalphanum(string):
+    # map a string to only-alphanumeric chars
+    return "".join([c if c.isalnum() else "_" for c in string])
 
 
 @dataclass
@@ -97,10 +105,10 @@ class CompileContext:
 
     @cached_property
     def contract_name(self):
-        return mkalphanum(PurePath(self.vyper_compiler_data.contract_name).name)
+        return _mkalphanum(PurePath(self.vyper_compiler_data.contract_path).name)
 
     def translate_label(self, label):
-        return f"{self.contract_name}_{self.uuid}_{label}"
+        return _mkalphanum(f"{self.contract_name}_{self.uuid}_{label}")
 
     def add_unique_symbol(self, symbol):
         if symbol in self.unique_symbols:  # pragma: no cover
@@ -236,7 +244,7 @@ class IRExecutor:
     def _compile(self, context):  # pragma: no cover
         raise RuntimeError("must be overridden in subclass!")
 
-    def compile_main(self, contract_path=""):
+    def compile_main(self, contract_name=""):
         self.builder.extend("import vyper.utils\nimport _operator")
 
         main_name = self.compile_ctx.translate_label("main")
@@ -248,7 +256,7 @@ class IRExecutor:
             self.builder.extend("\n\n")
             func.compile_func()
 
-        py_file = f"{contract_path}{self.compile_ctx.uuid}.py"
+        py_file = f"{contract_name}{self.compile_ctx.uuid}.py"
 
         # uncomment for debugging the python code:
         # with open(py_file, "w") as f:
@@ -838,7 +846,7 @@ class Assert(IRExecutor):
         self.builder.extend(
             f"""
         if not bool({test}):
-            VM.vyper_source_pos = {repr(self.ir_node.source_pos)}
+            VM.vyper_source_pos = {repr(_get_ir_pos(self.ir_node))}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert("")  # venom assert
         """
@@ -854,7 +862,7 @@ class _IRRevert(IRExecutor):
         self.builder.extend(
             f"""
             VM.output = VM.memory_read_bytes({ptr}, {size})
-            VM.vyper_source_pos = {repr(self.ir_node.source_pos)}
+            VM.vyper_source_pos = {repr(_get_ir_pos(self.ir_node))}
             VM.vyper_error_msg = {repr(self.ir_node.error_msg)}
             raise VMRevert(VM.output)  # venom revert
         """
@@ -1114,24 +1122,27 @@ class Set(IRExecutor):
         val.compile(out=variable.out_name, out_typ=int)
 
 
-def _ensure_source_pos(ir_node, source_pos=None, error_msg=None):
-    if ir_node.source_pos is None:
-        ir_node.source_pos = source_pos
+def _ensure_ast_source(
+    ir_node: IRnode, ast_source: VyperNode = None, error_msg: str = None
+):
+    if ir_node.ast_source is None:
+        ir_node.ast_source = ast_source
     if ir_node.error_msg is None:
         ir_node.error_msg = error_msg
     for arg in ir_node.args:
-        _ensure_source_pos(arg, ir_node.source_pos, ir_node.error_msg)
+        _ensure_ast_source(arg, ir_node.ast_source, ir_node.error_msg)
 
 
 def executor_from_ir(ir_node, vyper_compiler_data) -> Any:
-    _ensure_source_pos(ir_node)
-    ret = _executor_from_ir(ir_node, CompileContext(vyper_compiler_data))
+    _ensure_ast_source(ir_node)
+    ctx = CompileContext(vyper_compiler_data)
+    ret = _executor_from_ir(ir_node, ctx)
 
     ret = ret.analyze()
 
     # TODO: rename this, this is "something.vy", but we maybe want
     # "something.py <compiled from .vy>"
-    ret.compile_main(vyper_compiler_data.contract_name)
+    ret.compile_main(ctx.contract_name)
     return ret
 
 
@@ -1152,3 +1163,9 @@ def _executor_from_ir(ir_node, compile_ctx) -> Any:
     assert len(ir_node.args) == 0, ir_node
     assert isinstance(ir_node.value, str)
     return StringExecutor(compile_ctx, ir_node.value)
+
+
+def _get_ir_pos(ir_node):
+    if ir_node.ast_source is None:
+        return None
+    return getpos(ir_node.ast_source)

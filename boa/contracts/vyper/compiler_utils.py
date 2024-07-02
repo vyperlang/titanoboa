@@ -1,13 +1,15 @@
-import contextlib
 import textwrap
 
 import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
-from vyper.ast.utils import parse_to_ast
-from vyper.codegen.core import anchor_opt_level
-from vyper.codegen.function_definitions import generate_ir_for_function
+from vyper.ast.parse import parse_to_ast
+from vyper.codegen.function_definitions import (
+    generate_ir_for_external_function,
+    generate_ir_for_internal_function,
+)
 from vyper.codegen.ir_node import IRnode
-from vyper.evm.opcodes import anchor_evm_version
+from vyper.codegen.module import _runtime_reachable_functions
+from vyper.compiler.settings import anchor_settings
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.utils import get_exact_type_from_node
@@ -16,13 +18,6 @@ from boa.contracts.vyper.ir_executor import executor_from_ir
 
 # id used internally for method id name
 _METHOD_ID_VAR = "_calldata_method_id"
-
-
-@contextlib.contextmanager
-def anchor_compiler_settings(compiler_data):
-    settings = compiler_data.settings
-    with anchor_opt_level(settings.optimize), anchor_evm_version(settings.evm_version):
-        yield
 
 
 def compile_vyper_function(vyper_function, contract):
@@ -35,22 +30,20 @@ def compile_vyper_function(vyper_function, contract):
 
     compiler_data = contract.compiler_data
 
-    with anchor_compiler_settings(compiler_data):
-        global_ctx = contract.global_ctx
-        ifaces = compiler_data.interface_codes
-        ast = parse_to_ast(vyper_function, ifaces)
-        vy_ast.folding.fold(ast)
+    with anchor_settings(compiler_data.settings):
+        module_t = contract.module_t
+        ast = parse_to_ast(vyper_function)
 
         # override namespace and add wrapper code at the top
         with contract.override_vyper_namespace():
-            analysis.add_module_namespace(ast, ifaces)
-            analysis.validate_functions(ast)
+            analysis.analyze_module(ast, compiler_data.input_bundle)
 
         ast = ast.body[0]
-        func_t = ast._metadata["type"]
+        func_t = ast._metadata["func_type"]
 
-        external_func_info = generate_ir_for_function(ast, global_ctx, False)
-        ir = external_func_info.common_ir
+        contract.ensure_id(func_t)
+        funcinfo = generate_ir_for_external_function(ast, module_t)
+        ir = funcinfo.common_ir
 
         entry_label = func_t._ir_info.external_function_base_entry_label
 
@@ -63,7 +56,20 @@ def compile_vyper_function(vyper_function, contract):
         # all labels are present, and then optimize all together
         # (use unoptimized IR, ir_executor can't handle optimized selector tables)
         _, contract_runtime = contract.unoptimized_ir
-        ir = IRnode.from_list(["seq", ir, contract_runtime])
+        ir_list = ["seq", ir, contract_runtime]
+        reachable = func_t.reachable_internal_functions
+
+        already_compiled = _runtime_reachable_functions(module_t, contract)
+        missing_functions = reachable.difference(already_compiled)
+        # TODO: cache function compilations or something
+        for f in missing_functions:
+            assert f.ast_def is not None
+            contract.ensure_id(f)
+            ir_list.append(
+                generate_ir_for_internal_function(f.ast_def, module_t, False).func_ir
+            )
+
+        ir = IRnode.from_list(ir_list)
         ir = optimizer.optimize(ir)
 
         assembly = compile_ir.compile_to_assembly(ir)
@@ -119,7 +125,7 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
     """Wraps arbitrary stmts with external fn and generates bytecode"""
 
     ast = parse_to_ast(source_code)
-    vy_ast.folding.fold(ast)
+
     ast = ast.body[0]
 
     return_sig = ""
