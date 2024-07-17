@@ -146,6 +146,10 @@ def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFa
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
 
 
+def loads_fn_sig(fn_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
+    return ABIContractFactory.from_fn_sig(fn_str, name, *args, **kwargs)
+
+
 def loads_partial(
     source_code: str,
     name: str = None,

@@ -13,6 +13,7 @@ from boa.interpret import (
     loads,
     loads_abi,
     loads_partial,
+    loads_fn_sig,
 )
 from boa.network import NetworkEnv
 from boa.precompile import precompile
