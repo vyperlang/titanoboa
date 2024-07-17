@@ -11,12 +11,13 @@ from boa.contracts.vyper.ast_utils import get_fn_name_from_lineno, get_line
 from boa.environment import Env
 
 
-def safe_relpath(path):
+def _safe_relpath(path):
     try:
-        relpath = os.path.relpath(path)
-    except ValueError:  # for Windows, if path is not on os.curdir
-        relpath = ""
-    return relpath
+        return os.path.relpath(path)
+    except ValueError:
+        # on Windows, if path and curdir are on different drives, an exception
+        # can be thrown
+        return path
 
 
 @dataclass(unsafe_hash=True)
@@ -339,7 +340,7 @@ def get_call_profile_table(env: Env) -> Table:
             fn_name = profile.fn_name
             stats = list(stats.net_gas_stats.get_str_repr())
             if c == 0:
-                relpath = safe_relpath(profile.contract_name)
+                relpath = _safe_relpath(profile.contract_name)
                 contract_data_str = (
                     f"Path: {os.path.dirname(relpath)}\n"
                     f"Name: {os.path.basename(relpath)}\n"
@@ -370,7 +371,7 @@ def get_line_profile_table(env: Env) -> Table:
 
     table = _create_table(for_line_profile=True)
     for (contract_name, contract_address), fn_data in contracts.items():
-        relpath = safe_relpath(contract_name)
+        relpath = _safe_relpath(contract_name)
         contract_data_str = (
             f"Path: {os.path.dirname(relpath)}\n"
             f"Name: {os.path.basename(relpath)}\n"
