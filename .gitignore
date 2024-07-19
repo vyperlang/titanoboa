@@ -10,6 +10,8 @@ dist/
 .pytest_cache
 venv/
 *.env
+.env
+.env.unsafe
 
 .coverage
 .coverage.*
