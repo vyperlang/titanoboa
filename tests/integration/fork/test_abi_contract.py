@@ -40,6 +40,15 @@ def tricrypto(get_filepath):
     return abi.at("0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B")
 
 
+def test_load_fn_sig():
+    fn = boa.loads_fn_sig("def balanceOf(a: address) -> uint256: view")
+    crv = fn.at("0xD533a949740bb3306d119CC777fa900bA034cd52")
+    assert (
+        crv.balanceOf("0x5f3b5DfEb7B28CDbD7FAba78963EE202a494e2A2")
+        == 778928018935537455445214842
+    )
+
+
 def test_tricrypto(tricrypto):
     assert tricrypto.fee_receiver() == "0xeCb456EA5365865EbAb8a2661B0c503410e9B347"
     assert tricrypto.get_virtual_price() == 1003146380129683788
