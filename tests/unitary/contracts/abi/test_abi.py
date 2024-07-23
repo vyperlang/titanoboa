@@ -242,7 +242,7 @@ def test_abi_factory_multi_deploy():
     code = """
 foo: public(uint256)
 
-@external
+@deploy
 def __init__(x: uint256):
     self.foo = x
     """
