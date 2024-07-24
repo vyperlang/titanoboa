@@ -15,7 +15,7 @@ def boa_contract():
 a: public(uint256)
 b: public(address)
 
-@external
+@deploy
 def __init__(a_input: uint256, b_input: address):
 
     self.a = a_input

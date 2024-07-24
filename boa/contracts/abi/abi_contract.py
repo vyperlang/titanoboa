@@ -339,7 +339,7 @@ class ABIContractFactory:
     def abi(self):
         return self._abi
 
-    @cached_property
+    @property
     def functions(self):
         return [
             ABIFunction(item, self._name)

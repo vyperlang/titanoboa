@@ -10,7 +10,10 @@ dist/
 .pytest_cache
 venv/
 *.env
+.env
+.env.unsafe
 
 .coverage
 .coverage.*
 etherscan_cache.sqlite
+.DS_Store

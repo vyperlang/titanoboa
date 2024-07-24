@@ -274,6 +274,10 @@ class NetworkEnv(Env):
         is_modifying=True,
         ir_executor=None,  # maybe just have **kwargs to collect extra kwargs
     ):
+        if is_modifying:
+            # reset to latest block for code simulation
+            self._reset_fork()
+
         # call execute_code for tracing side effects
         # note: we could get a perf improvement if we ran this in
         # the background while waiting on RPC network calls
@@ -351,6 +355,10 @@ class NetworkEnv(Env):
 
     # OVERRIDES
     def deploy(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
+        # reset to latest block for simulation
+        self._reset_fork()
+
+        # simulate the deployment
         local_address, computation = super().deploy(
             sender=sender, gas=gas, value=value, bytecode=bytecode
         )

@@ -1,7 +1,7 @@
 from typing import Any
 
 from vyper.ast import parse_to_ast
-from vyper.builtins._signatures import BuiltinFunction
+from vyper.builtins._signatures import BuiltinFunctionT
 from vyper.builtins.functions import DISPATCH_TABLE, STMT_DISPATCH_TABLE
 from vyper.builtins.functions import abi_encode as abi_encode_ir
 from vyper.builtins.functions import ir_tuple_from_args, process_inputs
@@ -17,9 +17,9 @@ from boa.util.abi import abi_decode, abi_encode
 from boa.vm.py_evm import register_raw_precompile
 
 
-class PrecompileBuiltin(BuiltinFunction):
+class PrecompileBuiltin(BuiltinFunctionT):
     def __init__(self, name, args, return_type, address):
-        # override BuiltinFunction attributes
+        # override BuiltinFunctionT attributes
         self._id = name
         self._inputs = args  # list[tuple[str, VyperType]]
         self._return_type = return_type
