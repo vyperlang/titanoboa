@@ -11,10 +11,19 @@ from boa.contracts.vyper.ast_utils import get_fn_name_from_lineno, get_line
 from boa.environment import Env
 
 
+def _safe_relpath(path):
+    try:
+        return os.path.relpath(path)
+    except ValueError:
+        # on Windows, if path and curdir are on different drives, an exception
+        # can be thrown
+        return path
+
+
 @dataclass(unsafe_hash=True)
 class LineInfo:
     address: str
-    contract_name: str
+    contract_path: str
     lineno: int
     line_src: str
     fn_name: str
@@ -23,7 +32,7 @@ class LineInfo:
 @dataclass(unsafe_hash=True)
 class ContractMethodInfo:
     address: str
-    contract_name: str
+    contract_path: str
     fn_name: str
 
 
@@ -135,13 +144,14 @@ class _SingleComputation:
     @cached_property
     def by_line(self):
         ret = {}
-        line_map = self.contract.source_map["pc_pos_map"]
+        source_map = self.contract.source_map["pc_raw_ast_map"]
         current_line = None
         seen = set()
         for pc in self.computation.code._trace:
-            if line_map.get(pc) is not None:
-                current_line, _, _, _ = line_map[pc]
+            if (node := source_map.get(pc)) is not None:
+                current_line = node.lineno
 
+            # NOTE: do we still need the `current_line is not None` guard?
             if current_line is not None and pc not in seen:
                 ret.setdefault(current_line, Datum())
                 ret[current_line].merge(self.by_pc[pc])
@@ -186,7 +196,7 @@ class LineProfile:
         for (contract, line), datum in raw_summary:
             data = ", ".join(f"{c}: {getattr(datum, c)}" for c in display_columns)
             line_src = get_line(contract.compiler_data.source_code, line)
-            x = f"{contract.address}:{contract.compiler_data.contract_name}:{line} {data}"
+            x = f"{contract.address}:{contract.compiler_data.contract_path}:{line} {data}"
             tmp.append((x, line_src))
 
         just = max(len(t[0]) for t in tmp)
@@ -199,12 +209,12 @@ class LineProfile:
 
         line_gas_data = {}
         for (contract, line), datum in raw_summary:
-            fn_name = get_fn_name_from_lineno(contract.ast_map, line)
+            fn_name = get_fn_name_from_lineno(contract.source_map, line)
 
             # here we use net_gas to include child computation costs:
             line_info = LineInfo(
                 address=contract.address,
-                contract_name=contract.compiler_data.contract_name,
+                contract_path=contract.compiler_data.contract_path,
                 lineno=line,
                 line_src=get_line(contract.compiler_data.source_code, line),
                 fn_name=fn_name,
@@ -225,7 +235,7 @@ class _String(str):
 def cache_gas_used_for_computation(contract, computation):
     profile = contract.line_profile(computation)
     env = contract.env
-    contract_name = contract.compiler_data.contract_name
+    contract_path = contract.compiler_data.contract_path
 
     # -------------------- CACHE CALL PROFILE --------------------
     # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
@@ -242,7 +252,7 @@ def cache_gas_used_for_computation(contract, computation):
         fn_name = fn.name
 
     fn = ContractMethodInfo(
-        contract_name=contract_name,
+        contract_path=contract_path,
         address=to_checksum_address(contract.address),
         fn_name=fn_name,
     )
@@ -275,21 +285,17 @@ def cache_gas_used_for_computation(contract, computation):
 def _create_table(for_line_profile: bool = False) -> Table:
     table = Table(title="\n")
 
-    if not for_line_profile:
-        table.add_column(
-            "Contract", justify="left", style="cyan", no_wrap=True, width=30
-        )
-        table.add_column("Address", justify="left", style="cyan", no_wrap=True)
-        table.add_column(
-            "Computation", justify="left", style="cyan", no_wrap=True, width=30
-        )
-    else:
-        table.add_column(
-            "Contract", justify="left", style="cyan", no_wrap=True, width=52
-        )
-        table.add_column(
-            "Computation", justify="left", style="cyan", no_wrap=True, width=79
-        )
+    table.add_column("Contract", justify="left", style="cyan", no_wrap=True, width=52)
+    computation_column_width = 30
+    if for_line_profile:
+        computation_column_width = 79
+    table.add_column(
+        "Computation",
+        justify="left",
+        style="cyan",
+        no_wrap=True,
+        width=computation_column_width,
+    )
 
     table.add_column("Count", style="magenta")
     table.add_column("Mean", style="magenta")
@@ -306,38 +312,45 @@ def get_call_profile_table(env: Env) -> Table:
 
     cache = env._cached_call_profiles
     cached_contracts = env._profiled_contracts
-    contract_vs_mean_gas = []
+    contract_vs_median_gas = []
     for profile in cache:
         cache[profile].compute_stats()
-        contract_vs_mean_gas.append(
-            (cache[profile].net_gas_stats.avg_gas, profile.address)
+        contract_vs_median_gas.append(
+            (cache[profile].net_gas_stats.median_gas, profile.address)
         )
 
     # arrange from most to least expensive contracts:
-    sort_gas = sorted(contract_vs_mean_gas, key=lambda x: x[0], reverse=True)
+    sort_gas = sorted(contract_vs_median_gas, key=lambda x: x[0], reverse=True)
     sorted_addresses = list(set([x[1] for x in sort_gas]))
 
     # --------------- POPULATE TABLE -----------------
 
     for address in sorted_addresses:
-        fn_vs_mean_gas = []
+        fn_vs_median_gas = []
         for profile in cached_contracts[address]:
-            fn_vs_mean_gas.append((cache[profile].net_gas_stats.avg_gas, profile))
+            fn_vs_median_gas.append((cache[profile].net_gas_stats.median_gas, profile))
 
         # arrange from most to least expensive contracts:
-        fn_vs_mean_gas = sorted(fn_vs_mean_gas, key=lambda x: x[0], reverse=True)
+        fn_vs_median_gas = sorted(fn_vs_median_gas, key=lambda x: x[0], reverse=True)
 
-        for c, (_, profile) in enumerate(fn_vs_mean_gas):
+        for c, (_, profile) in enumerate(fn_vs_median_gas):
             stats = cache[profile]
 
             # only first line should be populated for name and address
             cname = ""
-            caddr = ""
-            if c == 0:
-                cname = profile.contract_name
-                caddr = address
             fn_name = profile.fn_name
-            table.add_row(cname, caddr, fn_name, *stats.net_gas_stats.get_str_repr())
+            stats = list(stats.net_gas_stats.get_str_repr())
+            if c == 0:
+                relpath = _safe_relpath(profile.contract_name)
+                contract_data_str = (
+                    f"Path: {os.path.dirname(relpath)}\n"
+                    f"Name: {os.path.basename(relpath)}\n"
+                    f"Address: {address}\n"
+                )
+                cname = contract_data_str
+                fn_name = "\n\n\n" + profile.fn_name
+                stats = [f"\n\n\n{value}" for value in stats]
+            table.add_row(cname, fn_name, *stats)
 
         table.add_section()
 
@@ -347,7 +360,7 @@ def get_call_profile_table(env: Env) -> Table:
 def get_line_profile_table(env: Env) -> Table:
     contracts: dict = {}
     for lp, gas_data in env._cached_line_profiles.items():
-        contract_uid = (lp.contract_name, lp.address)
+        contract_uid = (lp.contract_path, lp.address)
 
         # add spaces so numbers take up equal space
         lineno = str(lp.lineno).rjust(3)
@@ -358,11 +371,13 @@ def get_line_profile_table(env: Env) -> Table:
         )
 
     table = _create_table(for_line_profile=True)
-    for (contract_name, contract_address), fn_data in contracts.items():
-        contract_file_path = os.path.split(contract_name)
+
+    for (contract_path, contract_address), fn_data in contracts.items():
+        relpath = _safe_relpath(contract_path)
+
         contract_data_str = (
-            f"Path: {contract_file_path[0]}\n"
-            f"Name: {contract_file_path[1]}\n"
+            f"Path: {os.path.dirname(relpath)}\n"
+            f"Name: {os.path.basename(relpath)}\n"
             f"Address: {contract_address}\n"
             f"{'-'*52}"
         )
@@ -385,11 +400,11 @@ def get_line_profile_table(env: Env) -> Table:
                 if code.endswith("\n"):
                     code = code[:-1]
                 stats = Stats(gas_used)
-                data = (contract_name, fn_name, code, *stats.get_str_repr())
+                data = (contract_path, fn_name, code, *stats.get_str_repr())
                 l_profile.append(data)
 
-            # sorted by mean (x[4]):
-            l_profile = sorted(l_profile, key=lambda x: int(x[4]), reverse=True)
+            # sorted by median (x[5]):
+            l_profile = sorted(l_profile, key=lambda x: int(x[5]), reverse=True)
 
             for c, profile in enumerate(l_profile):
                 cname = ""

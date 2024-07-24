@@ -16,7 +16,7 @@ weth9: constant(address) = {WETH_ADDRESS}
 @external
 @payable
 def deposit():
-    IWETH(weth9).deposit(value=msg.value)
+    extcall IWETH(weth9).deposit(value=msg.value)
 
 """
 
