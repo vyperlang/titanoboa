@@ -30,8 +30,13 @@ from vyper.ir.optimizer import optimize
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
-from boa.contracts.base_evm_contract import BoaError, FrameDetail, _BaseEVMContract
-from boa.contracts.trace import DevReason, TraceSource
+from boa.contracts.base_evm_contract import (
+    BoaError,
+    DevReason,
+    FrameDetail,
+    _BaseEVMContract,
+)
+from boa.contracts.trace import TraceSource
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
@@ -610,6 +615,11 @@ class VyperContract(_BaseVyperContract):
                 node = ast_map[pc]
                 return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
         return None
+
+    def find_dev_reason(self, ast_source) -> DevReason | None:
+        return DevReason.at_source_location(
+            self.compiler_data.source_code, ast_source.lineno, ast_source.end_lineno
+        )
 
     # ## handling events
     def _get_logs(self, computation, include_child_logs):
