@@ -149,6 +149,7 @@ class NetworkEnv(Env):
     def __init__(
         self,
         rpc: str | RPC,
+        nickname: str = None,
         accounts: dict[str, Account] = None,
         fork_try_prefetch_state=True,
         **kwargs,
@@ -163,6 +164,8 @@ class NetworkEnv(Env):
             rpc = EthereumRPC(rpc)
 
         self._rpc: RPC = rpc
+
+        self.nickname = nickname or rpc.identifier
 
         self._reset_fork()
 
@@ -200,6 +203,9 @@ class NetworkEnv(Env):
             self._rpc.fetch("evm_revert", [snapshot_id])
             # wipe forked state
             self._reset_fork(block_number)
+
+    def set_nickname(self, nickname: str):
+        self.nickname = nickname
 
     # add account, or "Account-like" object. MUST expose
     # `sign_transaction` or `send_transaction` method!

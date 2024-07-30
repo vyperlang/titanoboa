@@ -36,6 +36,15 @@ def test_env_type():
     assert isinstance(boa.env, NetworkEnv)
 
 
+def test_network_env_nickname():
+    assert boa.env.nickname == "pyevm"
+
+def test_network_env_set_nickname():
+    new_nickname = "new_nickname"
+    boa.env.set_nickname(new_nickname)
+    assert boa.env.nickname == new_nickname
+
+
 def test_total_supply(simple_contract):
     assert simple_contract.totalSupply() == STARTING_SUPPLY
 

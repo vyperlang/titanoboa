@@ -47,10 +47,15 @@ class Env:
 
         self._gas_tracker = 0
 
+        self.nickname = "pyevm"
+
         self.evm = PyEVM(self, fast_mode_enabled, fork_try_prefetch_state)
 
     def set_random_seed(self, seed=None):
         self._random = random.Random(seed)
+    
+    def set_nickname(self, nickname):
+        self.nickname = nickname
 
     def get_gas_price(self):
         return self._gas_price or 0
