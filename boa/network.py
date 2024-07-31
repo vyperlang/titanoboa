@@ -204,9 +204,6 @@ class NetworkEnv(Env):
             # wipe forked state
             self._reset_fork(block_number)
 
-    def set_nickname(self, nickname: str):
-        self.nickname = nickname
-
     # add account, or "Account-like" object. MUST expose
     # `sign_transaction` or `send_transaction` method!
     def add_account(self, account: Account, force_eoa=False):
