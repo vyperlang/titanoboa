@@ -7,6 +7,7 @@ from importlib.util import spec_from_loader
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
+import vvm
 import vyper
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
@@ -21,6 +22,7 @@ from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
+from boa.contracts.vvm.vvm_contract import VVMDeployer
 from boa.contracts.vyper.vyper_contract import (
     VyperBlueprint,
     VyperContract,
@@ -223,6 +225,42 @@ def load_partial(filename: str, compiler_args=None):
         return loads_partial(
             f.read(), name=filename, filename=filename, compiler_args=compiler_args
         )
+
+
+def loads_partial_vvm(source_code: str, version: str):
+    # will install the request version if not already installed
+    vvm.install_vyper(version=version)
+    compiled_src = vvm.compile_source(source_code)
+
+    abi = compiled_src["<stdin>"]["abi"]
+    bytecode = compiled_src["<stdin>"]["bytecode"]
+    # remove the 0x prefix
+    bytecode = bytes.fromhex(bytecode[2:])
+
+    return VVMDeployer(abi, bytecode, filename="<stdin>")
+
+
+def loads_vvm(source_code: str, version: str, *args):
+    d = loads_partial_vvm(source_code, version)
+    return d.deploy(*args)
+
+
+def load_partial_vvm(filename: str, version: str):
+    # will install the request version if not already installed
+    vvm.install_vyper(version=version)
+    compiled_src = vvm.compile_files([filename])
+
+    abi = compiled_src[filename]["abi"]
+    bytecode = compiled_src[filename]["bytecode"]
+    # remove the 0x prefix
+    bytecode = bytes.fromhex(bytecode[2:])
+
+    return VVMDeployer(abi, bytecode, filename=filename)
+
+
+def load_vvm(filename: str, version: str, *args):
+    d = load_partial_vvm(filename, version)
+    return d.deploy(*args)
 
 
 def from_etherscan(
