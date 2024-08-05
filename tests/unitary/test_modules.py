@@ -9,3 +9,5 @@ def test_throw():
     c = boa.load(FIXTURES / "module_contract.vy")
     with boa.reverts("Error with message"):
         c.fail()
+    with boa.reverts("error message for devs"):
+        c.fail()

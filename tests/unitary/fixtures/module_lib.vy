@@ -3,4 +3,4 @@
 @internal
 @view
 def throw():
-    raise "Error with message"
+    raise "Error with message"  # dev: error message for devs
