@@ -3,6 +3,15 @@ from eth_abi import abi
 from boa import Env
 from boa.contracts.abi.abi_contract import ABIContractFactory
 
+VERSION_RE = re.compile(r"\s*#\s*(pragma\s+version|@version)\s+(\d+\.\d+\.\d+)")
+# TODO: maybe move this up to vvm?
+def _detect_version(source_code: str):
+    res = VERSION_RE.findall(source_code)
+    if len(res) < 1:
+        return None
+    # TODO: handle len(res) > 1
+    res[0][1]
+
 
 class VVMDeployer:
     def __init__(self, abi, bytecode, filename=None, env: Env = None):

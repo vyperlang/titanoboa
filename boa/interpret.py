@@ -22,7 +22,7 @@ from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
-from boa.contracts.vvm.vvm_contract import VVMDeployer
+from boa.contracts.vvm.vvm_contract import VVMDeployer, _detect_version
 from boa.contracts.vyper.vyper_contract import (
     VyperBlueprint,
     VyperContract,
@@ -213,6 +213,10 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
+    version = _detect_version(source_code)
+    if version is not None and version != vyper.__version__:
+        return _loads_partial_vvm(source_code, version, filename)
+
     compiler_args = compiler_args or {}
 
     deployer_class = _get_default_deployer_class()
@@ -227,40 +231,13 @@ def load_partial(filename: str, compiler_args=None):
         )
 
 
-def loads_partial_vvm(source_code: str, version: str):
+def _loads_partial_vvm(source_code: str, version: str, filename:str):
     # will install the request version if not already installed
     vvm.install_vyper(version=version)
-    compiled_src = vvm.compile_source(source_code)
+    compiled_src = vvm.compile_source(source_code, vyper_version=version)
 
-    abi = compiled_src["<stdin>"]["abi"]
-    bytecode = compiled_src["<stdin>"]["bytecode"]
-    # remove the 0x prefix
-    bytecode = bytes.fromhex(bytecode[2:])
-
-    return VVMDeployer(abi, bytecode, filename="<stdin>")
-
-
-def loads_vvm(source_code: str, version: str, *args):
-    d = loads_partial_vvm(source_code, version)
-    return d.deploy(*args)
-
-
-def load_partial_vvm(filename: str, version: str):
-    # will install the request version if not already installed
-    vvm.install_vyper(version=version)
-    compiled_src = vvm.compile_files([filename])
-
-    abi = compiled_src[filename]["abi"]
-    bytecode = compiled_src[filename]["bytecode"]
-    # remove the 0x prefix
-    bytecode = bytes.fromhex(bytecode[2:])
-
-    return VVMDeployer(abi, bytecode, filename=filename)
-
-
-def load_vvm(filename: str, version: str, *args):
-    d = load_partial_vvm(filename, version)
-    return d.deploy(*args)
+    compiler_output = compiled_src["<stdin>"]
+    return VVMDeployer.from_compiler_output(compiler_output, filename=filename)
 
 
 def from_etherscan(
