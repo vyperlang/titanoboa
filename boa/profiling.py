@@ -341,7 +341,7 @@ def get_call_profile_table(env: Env) -> Table:
             fn_name = profile.fn_name
             stats = list(stats.net_gas_stats.get_str_repr())
             if c == 0:
-                relpath = _safe_relpath(profile.contract_name)
+                relpath = _safe_relpath(profile.contract_path)
                 contract_data_str = (
                     f"Path: {os.path.dirname(relpath)}\n"
                     f"Name: {os.path.basename(relpath)}\n"
