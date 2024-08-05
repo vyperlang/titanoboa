@@ -1,0 +1,29 @@
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-pypi:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Python
+      uses: actions/setup-python@v5
+      with:
+        cache: "pip"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install setuptools wheel twine build
+
+    - name: Build
+      run: python -m build
+
+    - name: Publish
+      uses: pypa/gh-action-pypi-publish@release/v1
