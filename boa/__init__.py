@@ -10,13 +10,9 @@ from boa.interpret import (
     load,
     load_abi,
     load_partial,
-    load_partial_vvm,
-    load_vvm,
     loads,
     loads_abi,
     loads_partial,
-    loads_partial_vvm,
-    loads_vvm,
 )
 from boa.network import NetworkEnv
 from boa.precompile import precompile
