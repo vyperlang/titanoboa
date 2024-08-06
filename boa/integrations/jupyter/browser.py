@@ -149,16 +149,12 @@ class BrowserEnv(NetworkEnv):
     A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
     """
 
-    def __init__(self, address=None, rpc=None, **kwargs):
-        if rpc is None:
-            rpc = BrowserRPC()
-        super().__init__(rpc=rpc, **kwargs)
-        self.signer = BrowserSigner(address, rpc)
-        self.set_eoa(self.signer)
+    _rpc = BrowserRPC()  # Browser is always global anyway, we can make it static
 
-    def get_chain_id(self) -> int:
-        chain_id: str = self._rpc.fetch("eth_chainId", [])
-        return int(chain_id, 0)
+    def __init__(self, address=None, **kwargs):
+        super().__init__(self._rpc, **kwargs)
+        self.signer = BrowserSigner(address, self._rpc)
+        self.set_eoa(self.signer)
 
     def set_chain_id(self, chain_id: int | str):
         self._rpc.fetch(
