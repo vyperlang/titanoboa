@@ -9,7 +9,7 @@ struct Point:
 
 point: Point
 
-@external
+@deploy
 def __init__():
     self.point = Point({x: 1, y: 2})
 """
@@ -21,7 +21,7 @@ def test_decode_tuple():
     code = """
 point: (int8, int8)
 
-@external
+@deploy
 def __init__():
     self.point[0] = 1
     self.point[1] = 2
@@ -33,7 +33,7 @@ def test_decode_string_array():
     code = """
 point: int8[2]
 
-@external
+@deploy
 def __init__():
     self.point[0] = 1
     self.point[1] = 2
@@ -45,7 +45,7 @@ def test_decode_bytes_m():
     code = """
 b: bytes2
 
-@external
+@deploy
 def __init__():
     self.b = 0xd9b6
 """
@@ -56,7 +56,7 @@ def test_decode_dynarray():
     code = """
 point: DynArray[int8, 10]
 
-@external
+@deploy
 def __init__():
     self.point = [1, 2]
 """

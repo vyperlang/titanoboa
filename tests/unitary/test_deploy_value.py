@@ -3,7 +3,7 @@ import pytest
 import boa
 
 fund_me_source = """
-@external
+@deploy
 @payable
 def __init__():
     pass
