@@ -295,24 +295,39 @@ class Env:
             contract=contract,
         )
         if self._coverage_enabled:
-            self._hook_trace_computation(ret, contract)
+            self._trace_computation(ret, contract)
 
         if ret._gas_meter_class != NoGasMeter:
             self._update_gas_used(ret.get_gas_used())
 
         return ret
 
-    def _hook_trace_computation(self, computation, contract=None):
-        # XXX perf: don't trace if contract is None
-        for _pc in computation.code._trace:
-            # loop over pc so that it is available when coverage hooks into it
-            pass
+    # trace pcs for coverage sake. dummy function which
+    # just issues the right calls to _trace_cov() to get picked
+    # up by coverage. bit ugly, but tracer only allows
+    # dynamic_source_filename to be set once per (python) function call,
+    # so we need to use this in case the pc trace covers multiple files
+    def _trace_computation(self, computation, contract=None):
+        # perf: don't trace if contract is None
+        if contract is not None:
+            ast_map = contract.source_map["pc_raw_ast_map"]
+            seen_pcs = set()
+            for pc in computation.code._trace:
+                if pc in seen_pcs:
+                    continue
+                if (node := ast_map.get(pc)) is not None:
+                    mod = node.module_node
+                    self._trace_cov(mod.path, node.lineno)
+                seen_pcs.add(pc)
 
         for child in computation.children:
             if child.msg.code_address == b"":
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
-            self._hook_trace_computation(child, child_contract)
+            self._trace_computation(child, child_contract)
+
+    def _trace_cov(self, filename, lineno):
+        pass
 
     def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))
