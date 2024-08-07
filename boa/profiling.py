@@ -233,6 +233,8 @@ class _String(str):
 
 # cache gas_used for all computation (including children)
 def cache_gas_used_for_computation(contract, computation):
+    env = contract.env
+
     def _recurse():
         # recursion for child computations
         for _computation in computation.children:
@@ -248,7 +250,6 @@ def cache_gas_used_for_computation(contract, computation):
         return
 
     profile = contract.line_profile(computation)
-    env = contract.env
     contract_path = contract.compiler_data.contract_path
 
     # -------------------- CACHE CALL PROFILE --------------------
