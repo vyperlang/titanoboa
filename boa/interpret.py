@@ -159,7 +159,7 @@ def compiler_data(
             _ = ret.bytecode, ret.bytecode_runtime
         return ret
 
-    assert isinstance(deployer, type)
+    assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
     cache_key = str((contract_name, fingerprint, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)

@@ -99,7 +99,7 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
 
 
 # helper function. null returns get optimized directly into a jump
-# to function cleanup which maps to the parnet FunctionDef ast.
+# to function cleanup which maps to the parent FunctionDef ast.
 def _is_null_return(ast_node):
     match ast_node:
         case vy_ast.Return(value=None):
@@ -113,7 +113,7 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
 
     @cached_property
     def _compiler_data(self):
-        return boa.interpret.compiler_data(self.source(), self.filename)
+        return boa.interpret.compiler_data(self.source(), self.filename, self.filename)
 
     def arcs(self):
         ret = set()
