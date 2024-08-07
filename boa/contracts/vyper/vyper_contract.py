@@ -805,7 +805,7 @@ class VyperContract(_BaseVyperContract):
         for child in computation.children:
             child_obj = self.env.lookup_contract(child.msg.code_address)
             # TODO: child obj is opaque contract that calls back into known contract
-            if child_obj is not None:
+            if child_obj is not None and isinstance(child_obj, VyperContract):
                 ret.merge(child_obj.line_profile(child))
         return ret
 
