@@ -233,6 +233,20 @@ class _String(str):
 
 # cache gas_used for all computation (including children)
 def cache_gas_used_for_computation(contract, computation):
+    def _recurse():
+        # recursion for child computations
+        for _computation in computation.children:
+            child_contract = env.lookup_contract(_computation.msg.code_address)
+
+            # ignore black box contracts
+            if child_contract is not None:
+                cache_gas_used_for_computation(child_contract, _computation)
+
+    if not hasattr(contract, "line_profile"):
+        # it's not a VyperContract, we don't have source information. recurse!
+        _recurse()
+        return
+
     profile = contract.line_profile(computation)
     env = contract.env
     contract_path = contract.compiler_data.contract_path
@@ -272,14 +286,7 @@ def cache_gas_used_for_computation(contract, computation):
         env._cached_line_profiles.setdefault(line, []).append(gas_used)
 
     # ------------------------- RECURSION -------------------------
-
-    # recursion for child computations
-    for _computation in computation.children:
-        child_contract = env.lookup_contract(_computation.msg.code_address)
-
-        # ignore black box contracts
-        if child_contract is not None:
-            cache_gas_used_for_computation(child_contract, _computation)
+    _recurse()
 
 
 def _create_table(for_line_profile: bool = False) -> Table:
