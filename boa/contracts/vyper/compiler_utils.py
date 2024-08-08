@@ -106,7 +106,8 @@ def generate_bytecode_for_internal_fn(fn):
     _fn_sig = []
 
     # kludge: InterfaceT is missing a __str__ implementation.
-    # should be fixed in 0.4.1.
+    # should be fixed in 0.4.1, at which point we can remove this
+    # monkey patch.
     if not hasattr(InterfaceT, "__str__"):
         InterfaceT.__str__ = _interface_str
 
