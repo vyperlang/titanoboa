@@ -87,6 +87,7 @@ def compile_vyper_function(vyper_function, contract):
 def _interface_str(self):
     return f"{self._id}"
 
+
 # kludge: InterfaceT is missing a __str__ implementation.
 # should be fixed in 0.4.1, at which point we can remove this
 # monkey patch.
