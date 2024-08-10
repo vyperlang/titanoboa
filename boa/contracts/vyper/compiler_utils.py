@@ -14,7 +14,6 @@ from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.constant_folding import ConstantFolder
 from vyper.semantics.analysis.utils import get_exact_type_from_node
-from vyper.semantics.types.module import InterfaceT
 
 from boa.contracts.vyper.ir_executor import executor_from_ir
 
@@ -96,16 +95,6 @@ def compile_vyper_function(vyper_function, contract):
         ir_executor = executor_from_ir(ir, compiler_data)
 
         return ast, ir_executor, bytecode, source_map, typ
-
-
-def _interface_str(self):
-    return f"{self._id}"
-
-
-# kludge: InterfaceT is missing a __str__ implementation.
-# should be fixed in 0.4.1, at which point we can remove this
-# monkey patch.
-InterfaceT.__str__ = _interface_str
 
 
 def generate_bytecode_for_internal_fn(fn):
