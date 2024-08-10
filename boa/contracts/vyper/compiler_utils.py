@@ -113,7 +113,8 @@ def generate_bytecode_for_internal_fn(fn):
     fn_call += f"self.{fn_name}({fn_args})"
 
     if len(fn.func_t.arguments) == 0:
-        # special case, if there are no arguments then node_source_code is garbage
+        # special case - when there are no arguments, node_source_code is
+        # garbage
         fn_sig = ""
     else:
         fn_sig = fn_ast.args.node_source_code
