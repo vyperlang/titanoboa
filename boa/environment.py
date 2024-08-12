@@ -203,6 +203,8 @@ class Env:
         start_pc: int = 0,  # TODO: This isn't used
         # override the target address:
         override_address: Optional[_AddressType] = None,
+        # the calling vyper contract
+        contract: Any = None,
     ):
         sender = self._get_sender(sender)
 
@@ -223,10 +225,11 @@ class Env:
         )
 
         if self._coverage_enabled:
-            self._trace_computation(ret, contract)
+            self._trace_computation(computation, contract)
 
         if computation._gas_meter_class != NoGasMeter:
             self._update_gas_used(computation.get_gas_used())
+
         return target_address, computation
 
     def deploy_code(self, *args, **kwargs) -> tuple[Address, bytes]:

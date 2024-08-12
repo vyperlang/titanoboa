@@ -576,9 +576,8 @@ class VyperContract(_BaseVyperContract):
                 value=value,
                 override_address=override_address,
                 gas=gas,
+                contract=self,
             )
-            self._computation = computation
-            self.bytecode = computation.output
 
             self._computation = computation
             self.bytecode = computation.output
