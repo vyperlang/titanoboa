@@ -60,7 +60,10 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
     def dynamic_source_filename(self, filename, frame):
         if not self._valid_frame(frame):
             return None
-        return frame.f_locals["filename"]
+        ret = frame.f_locals["filename"]
+        if ret is not None and not ret.endswith(".vy"):
+            return None
+        return ret
 
     def has_dynamic_source_filename(self):
         return True

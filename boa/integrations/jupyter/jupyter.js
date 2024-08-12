@@ -5,9 +5,7 @@
 (() => {
     const rpc = async (method, params) => {
         const {ethereum} = window;
-        if (!ethereum) {
-            throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
-        }
+        console.assert(ethereum, 'No Ethereum plugin found. Please authorize the site on your browser wallet.');
         return ethereum.request({method, params});
     };
 
