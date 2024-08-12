@@ -222,6 +222,9 @@ class Env:
             bytecode=bytecode,
         )
 
+        if self._coverage_enabled:
+            self._trace_computation(ret, contract)
+
         if computation._gas_meter_class != NoGasMeter:
             self._update_gas_used(computation.get_gas_used())
         return target_address, computation
