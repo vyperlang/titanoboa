@@ -15,5 +15,4 @@ venv/
 
 .coverage
 .coverage.*
-etherscan_cache.sqlite
 .DS_Store
