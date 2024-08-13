@@ -617,11 +617,6 @@ class VyperContract(_BaseVyperContract):
                 return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
         return None
 
-    def find_dev_reason(self, ast_source) -> DevReason | None:
-        return DevReason.at_source_location(
-            ast_source.full_source_code, ast_source.lineno, ast_source.end_lineno
-        )
-
     # ## handling events
     def _get_logs(self, computation, include_child_logs):
         if computation is None:
@@ -1019,7 +1014,7 @@ class VyperTraceSource(TraceSource):
     ):
         self.contract = contract
         self.node = node
-        self.method_id = int(method_id.hex(), 16)
+        self.method_id = method_id
 
     def __str__(self):
         return f"{self.contract.contract_name}.{self.func_ast.name}:{self.node.lineno}"
@@ -1037,10 +1032,11 @@ class VyperTraceSource(TraceSource):
 
     @cached_property
     def _input_schema(self) -> str:  # must be implemented by subclasses
+        method_id_int = int(self.method_id.hex(), 16)
         schema = next(
             schema
             for schema, id_ in self.func_t.method_ids.items()
-            if id_ == self.method_id
+            if id_ == method_id_int
         )
         return schema.replace(f"{self.func_ast.name}(", "(")
 
@@ -1058,9 +1054,7 @@ class VyperTraceSource(TraceSource):
     @cached_property
     def dev_reason(self) -> DevReason | None:
         return DevReason.at_source_location(
-            self.contract.compiler_data.source_code,
-            self.node.lineno,
-            self.node.end_lineno,
+            self.node.full_source_code, self.node.lineno, self.node.end_lineno
         )
 
 
