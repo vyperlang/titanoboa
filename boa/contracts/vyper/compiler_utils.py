@@ -117,7 +117,7 @@ def generate_bytecode_for_internal_fn(fn):
         # garbage
         fn_sig = ""
     else:
-        fn_sig = fn_ast.args.node_source_code
+        fn_sig = fn_ast.args.node_source_code.replace("\n", " ")
 
     wrapper_code = textwrap.dedent(
         f"""
