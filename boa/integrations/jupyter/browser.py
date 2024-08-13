@@ -4,10 +4,12 @@ in IPython/JupyterLab/Google Colab.
 """
 import json
 import logging
-from asyncio import get_running_loop, sleep
+import os
+from asyncio import get_event_loop, sleep
 from itertools import chain
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
+from os.path import dirname, join, realpath
 from typing import Any
 
 import nest_asyncio
@@ -22,10 +24,6 @@ from boa.integrations.jupyter.constants import (
     SHARED_MEMORY_LENGTH,
     TRANSACTION_TIMEOUT_MESSAGE,
 )
-from boa.integrations.jupyter.utils import (
-    convert_frontend_dict,
-    install_jupyter_javascript_triggers,
-)
 from boa.network import NetworkEnv
 from boa.rpc import RPC, RPCError
 from boa.util.abi import Address
@@ -39,53 +37,17 @@ except ImportError:
 nest_asyncio.apply()
 
 
-if not colab_eval_js:
-    # colab creates a new iframe for every call, we need to re-inject it every time
-    # for jupyterlab we only need to do it once
-    install_jupyter_javascript_triggers()
+def _install_javascript_triggers():
+    """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
+    cur_dir = dirname(realpath(__file__))
+    with open(join(cur_dir, "jupyter.js")) as f:
+        js = f.read()
 
+    prefix = os.getenv("JUPYTERHUB_SERVICE_PREFIX", "..")
+    js = js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix)
+    js = js.replace("$$BOA_DEBUG_MODE", json.dumps(BrowserRPC._debug_mode))
 
-class BrowserSigner:
-    """
-    A BrowserSigner is a class that can be used to sign transactions in IPython/JupyterLab.
-    """
-
-    def __init__(self, address=None):
-        """
-        Create a BrowserSigner instance.
-        :param address: The account address. If not provided, it will be requested from the browser.
-        """
-        address = getattr(address, "address", address)
-        address = _javascript_call(
-            "loadSigner", address, timeout_message=ADDRESS_TIMEOUT_MESSAGE
-        )
-        self.address = Address(address)
-
-    def send_transaction(self, tx_data: dict) -> dict:
-        """
-        Implements the Account class' send_transaction method.
-        It executes a Javascript snippet that requests the user's signature for the transaction.
-        Then, it waits for the signature to be received via the API.
-        :param tx_data: The transaction data to sign.
-        :return: The signed transaction data.
-        """
-        sign_data = _javascript_call(
-            "sendTransaction", tx_data, timeout_message=TRANSACTION_TIMEOUT_MESSAGE
-        )
-        return convert_frontend_dict(sign_data)
-
-    def sign_typed_data(self, full_message: dict[str, Any]) -> str:
-        """
-        Sign typed data value with types data structure for domain using the EIP-712 specification.
-        :param full_message: The full message to sign.
-        :return: The signature.
-        """
-        return _javascript_call(
-            "rpc",
-            "eth_signTypedData_v4",
-            [self.address, full_message],
-            timeout_message=TRANSACTION_TIMEOUT_MESSAGE,
-        )
+    display(Javascript(js))
 
 
 class BrowserRPC(RPC):
@@ -95,6 +57,12 @@ class BrowserRPC(RPC):
 
     _debug_mode = False
 
+    def __init__(self):
+        if not colab_eval_js:
+            # colab creates a new iframe for every call, we need to re-inject it every time
+            # for jupyterlab we only need to do it once
+            _install_javascript_triggers()
+
     @property
     def identifier(self) -> str:
         return type(self).__name__  # every instance does the same
@@ -103,15 +71,15 @@ class BrowserRPC(RPC):
     def name(self):
         return self.identifier
 
-    def fetch(self, method: str, params: Any) -> Any:
-        return _javascript_call(
-            "rpc", method, params, timeout_message=RPC_TIMEOUT_MESSAGE
-        )
+    def fetch(
+        self, method: str, params: Any, timeout_message=RPC_TIMEOUT_MESSAGE
+    ) -> Any:
+        return _javascript_call("rpc", method, params, timeout_message=timeout_message)
 
-    def fetch_multi(self, payloads: list[tuple[str, Any]]) -> list[Any]:
-        return _javascript_call(
-            "multiRpc", payloads, timeout_message=RPC_TIMEOUT_MESSAGE
-        )
+    def fetch_multi(
+        self, payloads: list[tuple[str, Any]], timeout_message=RPC_TIMEOUT_MESSAGE
+    ) -> list[Any]:
+        return _javascript_call("multiRpc", payloads, timeout_message=timeout_message)
 
     def wait_for_tx_receipt(self, tx_hash, timeout: float, poll_latency=1):
         # we do the polling in the browser to avoid too many callbacks
@@ -126,14 +94,66 @@ class BrowserRPC(RPC):
         )
 
 
+class BrowserSigner:
+    """
+    A BrowserSigner is a class that can be used to sign transactions in IPython/JupyterLab.
+    """
+
+    def __init__(self, address=None, rpc=None):
+        """
+        Create a BrowserSigner instance.
+        :param address: The account address. If not provided, it will be requested from the browser.
+        """
+        if rpc is None:
+            rpc = BrowserRPC()  # note: the browser window is global anyway
+        self._rpc = rpc
+        address = getattr(address, "address", address)
+        accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
+
+        if address is None and len(accounts) > 0:
+            address = accounts[0]
+
+        if address not in accounts:
+            raise ValueError(f"Address {address} is not available in the browser")
+
+        self.address = Address(address)
+
+    def send_transaction(self, tx_data: dict) -> dict:
+        """
+        Implements the Account class' send_transaction method.
+        It executes a Javascript snippet that requests the user's signature for the transaction.
+        Then, it waits for the signature to be received via the API.
+        :param tx_data: The transaction data to sign.
+        :return: The signed transaction data.
+        """
+        hash = self._rpc.fetch(
+            "eth_sendTransaction", [tx_data], TRANSACTION_TIMEOUT_MESSAGE
+        )
+        return {"hash": hash}
+
+    def sign_typed_data(self, full_message: dict[str, Any]) -> str:
+        """
+        Sign typed data value with types data structure for domain using the EIP-712 specification.
+        :param full_message: The full message to sign.
+        :return: The signature.
+        """
+        return self._rpc.fetch(
+            "eth_signTypedData_v4",
+            [self.address, full_message],
+            TRANSACTION_TIMEOUT_MESSAGE,
+        )
+
+
 class BrowserEnv(NetworkEnv):
     """
     A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
     """
 
+    _rpc = BrowserRPC()  # Browser is always global anyway, we can make it static
+
     def __init__(self, address=None, **kwargs):
-        super().__init__(rpc=BrowserRPC(), **kwargs)
-        self.signer = BrowserSigner(address)
+        super().__init__(self._rpc, **kwargs)
+        self.signer = BrowserSigner(address, self._rpc)
         self.set_eoa(self.signer)
 
     def set_chain_id(self, chain_id: int | str):
@@ -162,7 +182,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
         logging.warning(f"Calling {js_func} with {args_str}")
 
     if colab_eval_js:
-        install_jupyter_javascript_triggers(BrowserRPC._debug_mode)
+        _install_javascript_triggers()
         result = colab_eval_js(js_code)
         return _parse_js_result(json.loads(result))
 
@@ -192,7 +212,7 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str) -> bytes:
     """
 
     async def _async_wait(deadline: float) -> bytes:
-        inner_loop = get_running_loop()
+        inner_loop = get_event_loop()
         while buffer.tobytes().startswith(NUL):
             if inner_loop.time() > deadline:
                 raise TimeoutError(timeout_message)
@@ -200,7 +220,7 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str) -> bytes:
 
         return buffer.tobytes().split(NUL)[0]
 
-    loop = get_running_loop()
+    loop = get_event_loop()
     future = _async_wait(deadline=loop.time() + CALLBACK_TOKEN_TIMEOUT.total_seconds())
     task = loop.create_task(future)
     loop.run_until_complete(task)

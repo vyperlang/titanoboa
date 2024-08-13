@@ -480,9 +480,8 @@ class VyperContract(_BaseVyperContract):
                 value=value,
                 override_address=override_address,
                 gas=gas,
+                contract=self,
             )
-            self._computation = computation
-            self.bytecode = computation.output
 
             self._computation = computation
             self.bytecode = computation.output
@@ -556,7 +555,9 @@ class VyperContract(_BaseVyperContract):
             # TODO: figure out why fn is None.
             return None
 
-        frame_info = self.compiler_data.function_signatures[fn.name]._ir_info.frame_info
+        fn_t = fn._metadata["func_type"]
+
+        frame_info = fn_t._ir_info.frame_info
 
         mem = computation._memory
         frame_detail = FrameDetail(fn.name)
@@ -611,7 +612,7 @@ class VyperContract(_BaseVyperContract):
 
     def find_dev_reason(self, ast_source) -> DevReason | None:
         return DevReason.at_source_location(
-            self.compiler_data.source_code, ast_source.lineno, ast_source.end_lineno
+            ast_source.full_source_code, ast_source.lineno, ast_source.end_lineno
         )
 
     # ## handling events

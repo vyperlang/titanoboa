@@ -354,13 +354,15 @@ class NetworkEnv(Env):
         return computation
 
     # OVERRIDES
-    def deploy(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
+    def deploy(
+        self, sender=None, gas=None, value=0, bytecode=b"", contract=None, **kwargs
+    ):
         # reset to latest block for simulation
         self._reset_fork()
 
         # simulate the deployment
         local_address, computation = super().deploy(
-            sender=sender, gas=gas, value=value, bytecode=bytecode
+            sender=sender, gas=gas, value=value, bytecode=bytecode, contract=contract
         )
         if computation.is_error:
             return local_address, computation
@@ -493,7 +495,9 @@ class NetworkEnv(Env):
 
         if gas is None:
             try:
-                tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
+                tx_data["gas"] = self._rpc.fetch(
+                    "eth_estimateGas", [tx_data, "pending"]
+                )
             except RPCError as e:
                 if e.code == 3:
                     # execution failed at estimateGas, probably the txn reverted
