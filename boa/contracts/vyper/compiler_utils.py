@@ -119,14 +119,12 @@ def generate_bytecode_for_internal_fn(fn):
     else:
         fn_sig = fn_ast.args.node_source_code.replace("\n", " ")
 
-    wrapper_code = textwrap.dedent(
-        f"""
-        @external
-        @payable
-        def __boa_private_{fn_name}__({fn_sig}){return_sig}:
-            {fn_call}
+    wrapper_code = f"""
+@external
+@payable
+def __boa_private_{fn_name}__({fn_sig}){return_sig}:
+    {fn_call}
     """
-    )
     return compile_vyper_function(wrapper_code, contract)
 
 
