@@ -323,7 +323,7 @@ class Env:
                     continue
                 if (node := ast_map.get(pc)) is not None:
                     mod = node.module_node
-                    self._trace_cov(mod.path, node)
+                    self._trace_cov(mod.resolved_path, node)
                 seen_pcs.add(pc)
 
         for child in computation.children:
