@@ -6,6 +6,7 @@ from importlib.util import spec_from_loader
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
+import vvm
 import vyper
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
@@ -20,6 +21,7 @@ from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
+from boa.contracts.vvm.vvm_contract import VVMDeployer, _detect_version
 from boa.contracts.vyper.vyper_contract import (
     VyperBlueprint,
     VyperContract,
@@ -157,7 +159,7 @@ def compiler_data(
             _ = ret.bytecode, ret.bytecode_runtime
         return ret
 
-    assert isinstance(deployer, type)
+    assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
     cache_key = str((contract_name, fingerprint, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)
@@ -211,6 +213,11 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
+    version = _detect_version(source_code)
+    if version is not None and version != vyper.__version__:
+        filename = str(filename)  # help mypy
+        return _loads_partial_vvm(source_code, version, filename)
+
     compiler_args = compiler_args or {}
 
     deployer_class = _get_default_deployer_class()
@@ -223,6 +230,16 @@ def load_partial(filename: str, compiler_args=None):
         return loads_partial(
             f.read(), name=filename, filename=filename, compiler_args=compiler_args
         )
+
+
+def _loads_partial_vvm(source_code: str, version: str, filename: str):
+    # will install the request version if not already installed
+    vvm.install_vyper(version=version)
+    # TODO: implement caching
+    compiled_src = vvm.compile_source(source_code, vyper_version=version)
+
+    compiler_output = compiled_src["<stdin>"]
+    return VVMDeployer.from_compiler_output(compiler_output, filename=filename)
 
 
 def from_etherscan(
