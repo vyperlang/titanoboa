@@ -354,13 +354,15 @@ class NetworkEnv(Env):
         return computation
 
     # OVERRIDES
-    def deploy(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
+    def deploy(
+        self, sender=None, gas=None, value=0, bytecode=b"", contract=None, **kwargs
+    ):
         # reset to latest block for simulation
         self._reset_fork()
 
         # simulate the deployment
         local_address, computation = super().deploy(
-            sender=sender, gas=gas, value=value, bytecode=bytecode
+            sender=sender, gas=gas, value=value, bytecode=bytecode, contract=contract
         )
         if computation.is_error:
             return local_address, computation
