@@ -335,6 +335,10 @@ class Env:
     def _trace_cov(self, filename, node):
         pass
 
+    @property
+    def state(self):
+        return self.evm.state
+
     def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))
 

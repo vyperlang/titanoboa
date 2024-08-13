@@ -55,8 +55,8 @@ def test_prefetch_state(rpc_url, fresh_env, crvusd_contract):
         code=crvusd_contract._bytecode,
         data=crvusd_contract.burn.prepare_calldata(0),
     )
-    state = env.evm.vm.state
-    db = state._account_db
+
+    db = env.state._account_db
     db.try_prefetch_state(msg)
 
     # patch the RPC, so we make sure to use the cache
