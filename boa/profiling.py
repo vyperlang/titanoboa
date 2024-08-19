@@ -19,6 +19,7 @@ def _safe_relpath(path):
         # can be thrown
         return path
 
+import csv
 
 @dataclass(unsafe_hash=True)
 class LineInfo:
@@ -370,6 +371,10 @@ def get_line_profile_table(env: Env) -> Table:
             gas_data
         )
 
+    csv_file_name = "gas-profile.csv"
+    with open(csv_file_name, 'w', newline='') as csvfile:  #rewrite if the file already exists
+        pass
+
     table = _create_table(for_line_profile=True)
 
     for (contract_path, contract_address), fn_data in contracts.items():
@@ -381,6 +386,15 @@ def get_line_profile_table(env: Env) -> Table:
             f"Address: {contract_address}\n"
             f"{'-'*52}"
         )
+
+        with open(csv_file_name, 'a', newline='') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerows([[""], ["*" * 200]])
+            csvwriter.writerow(
+                ["Contract", "Computation", "Count", "Mean", "Median", "Stdev", "Min", "Max"])
+            csvwriter.writerow([f"Path: {contract_file_path[0]}"])
+            csvwriter.writerow([f"Name: {contract_file_path[1]}"])
+            csvwriter.writerow([f"Address: {contract_address}"])
 
         table.add_row(
             contract_data_str,
@@ -410,8 +424,14 @@ def get_line_profile_table(env: Env) -> Table:
                 cname = ""
                 if c == 0:
                     cname = f"Function: {fn_name}"
+                with open(csv_file_name, 'a', newline='') as csvfile:
+                    csvwriter = csv.writer(csvfile, delimiter=',')
+                    csvwriter.writerow([cname,*profile[2:]])
                 table.add_row(cname, *profile[2:])
-
+            with open(csv_file_name, 'a', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile, delimiter=',')
+                csvwriter.writerow([""])  # empty row after each function
+                
             if not num_fn + 1 == len(fn_data):
                 table.add_row("-" * 52, "-" * 74, *["-----"] * (len(profile[2:]) - 1))
                 num_fn += 1
