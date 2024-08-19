@@ -247,8 +247,7 @@ def cache_gas_used_for_computation(contract, computation):
             else:
                 cache_gas_used_for_computation(child_contract, _computation)
 
-    if not hasattr(contract, "line_profile"):
-        # it's not a VyperContract, we don't have source information. recurse!
+    if not getattr(contract, "_can_line_profile", False):
         _recurse(computation)
         return
 
