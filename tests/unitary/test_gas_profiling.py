@@ -2,6 +2,7 @@ import pytest
 from hypothesis import given, settings
 
 import boa
+from boa.profiling import global_profile
 from boa.test import strategy
 
 
@@ -74,12 +75,13 @@ def _barfoo(a: uint256, b: uint256, c: uint256) -> uint256:
 )
 @pytest.mark.ignore_profiling
 def test_ignore_profiling(variable_loop_contract, a, b, c):
-    cached_profiles = [boa.env._cached_call_profiles, boa.env._cached_line_profiles]
+    # TODO: not sure this is testing what it intends to
+    cached_profiles = [global_profile().call_profiles, global_profile().line_profiles]
 
     variable_loop_contract.foo(a, b, c)
 
-    assert boa.env._cached_call_profiles == cached_profiles[0]
-    assert boa.env._cached_line_profiles == cached_profiles[1]
+    assert global_profile().call_profiles == cached_profiles[0]
+    assert global_profile().line_profiles == cached_profiles[1]
 
 
 @pytest.mark.parametrize(
@@ -90,8 +92,8 @@ def test_call_variable_iter_method(variable_loop_contract, a, b, c):
     variable_loop_contract.foo(a, b, c)
     variable_loop_contract._barfoo(a, b, c)
 
-    assert boa.env._cached_call_profiles
-    assert boa.env._cached_line_profiles
+    assert global_profile().call_profiles
+    assert global_profile().line_profiles
 
 
 @given(

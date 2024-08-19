@@ -8,7 +8,6 @@ from eth_utils import to_checksum_address
 from rich.table import Table
 
 from boa.contracts.vyper.ast_utils import get_fn_name_from_lineno, get_line
-from boa.environment import Env
 
 
 def _safe_relpath(path):
@@ -225,6 +224,30 @@ class LineProfile:
         return line_gas_data
 
 
+# singleton profile object which collects gas+line profiles over test runs
+class GlobalProfile:
+    _singleton = None
+
+    def __init__(self):
+        self.profiled_contracts = {}
+        self.call_profiles = {}
+        self.line_profiles = {}
+
+    @classmethod
+    def get_singleton(cls):
+        if cls._singleton is None:
+            cls._singleton = cls()
+        return cls._singleton
+
+    @classmethod
+    def clear_singleton(cls):
+        cls._singleton = None
+
+
+def global_profile():
+    return GlobalProfile.get_singleton()
+
+
 # stupid class whose __str__ method doesn't escape (good for repl)
 class _String(str):
     def __repr__(self):
@@ -274,19 +297,19 @@ def cache_gas_used_for_computation(contract, computation):
         fn_name=fn_name,
     )
 
-    env._cached_call_profiles.setdefault(fn, CallGasStats()).merge_gas_data(
+    global_profile().call_profiles.setdefault(fn, CallGasStats()).merge_gas_data(
         sum_net_gas, sum_net_tot_gas
     )
 
-    s = env._profiled_contracts.setdefault(fn.address, [])
-    if fn not in env._profiled_contracts[fn.address]:
+    s = global_profile().profiled_contracts.setdefault(fn.address, [])
+    if fn not in global_profile().profiled_contracts[fn.address]:
         s.append(fn)
 
     # -------------------- CACHE LINE PROFILE --------------------
     line_profile = profile.get_line_data()
 
     for line, gas_used in line_profile.items():
-        env._cached_line_profiles.setdefault(line, []).append(gas_used)
+        global_profile().line_profiles.setdefault(line, []).append(gas_used)
 
     # ------------------------- RECURSION -------------------------
     _recurse(computation)
@@ -317,11 +340,11 @@ def _create_table(for_line_profile: bool = False) -> Table:
     return table
 
 
-def get_call_profile_table(env: Env) -> Table:
+def get_call_profile_table() -> Table:
     table = _create_table()
 
-    cache = env._cached_call_profiles
-    cached_contracts = env._profiled_contracts
+    cache = global_profile().call_profiles
+    cached_contracts = global_profile().profiled_contracts
     contract_vs_median_gas = []
     for profile in cache:
         cache[profile].compute_stats()
@@ -367,9 +390,9 @@ def get_call_profile_table(env: Env) -> Table:
     return table
 
 
-def get_line_profile_table(env: Env) -> Table:
+def get_line_profile_table() -> Table:
     contracts: dict = {}
-    for lp, gas_data in env._cached_line_profiles.items():
+    for lp, gas_data in global_profile().line_profiles.items():
         contract_uid = (lp.contract_path, lp.address)
 
         # add spaces so numbers take up equal space
