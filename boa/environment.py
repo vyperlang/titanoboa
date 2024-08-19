@@ -43,7 +43,6 @@ class Env:
         self._profiled_contracts = {}
         self._cached_call_profiles = {}
         self._cached_line_profiles = {}
-        self._coverage_data = {}
 
         self._gas_tracker = 0
 
