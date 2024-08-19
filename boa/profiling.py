@@ -144,17 +144,21 @@ class _SingleComputation:
     def by_line(self):
         ret = {}
         source_map = self.contract.source_map["pc_raw_ast_map"]
-        current_line = None
         seen = set()
         for pc in self.computation.code._trace:
-            if (node := source_map.get(pc)) is not None:
-                current_line = node.lineno
+            if pc in seen:
+                # TODO: this is a kludge, it prevents lines from being
+                # over-represented when they appear in loops. but we should
+                # probably either not have this guard, or actually count
+                # the number of times a line is hit per- computation.
+                continue
+            if (node := source_map.get(pc)) is None:
+                continue
 
-            # NOTE: do we still need the `current_line is not None` guard?
-            if current_line is not None and pc not in seen:
-                ret.setdefault(current_line, Datum())
-                ret[current_line].merge(self.by_pc[pc])
-                seen.add(pc)
+            current_line = node.lineno
+            ret.setdefault(current_line, Datum()).merge(self.by_pc[pc])
+
+            seen.add(pc)
 
         return ret
 
