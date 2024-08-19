@@ -114,5 +114,5 @@ def pytest_sessionfinish(session, exitstatus):
         from rich.console import Console
 
         console = Console(file=sys.stdout)
-        console.print(get_call_profile_table(boa.env))
-        console.print(get_line_profile_table(boa.env))
+        console.print(get_call_profile_table())
+        console.print(get_line_profile_table())

@@ -274,20 +274,23 @@ def cache_gas_used_for_computation(contract, computation):
         _recurse(computation)
         return
 
-    profile = contract.line_profile(computation)
+    profile = LineProfile.from_single(contract, computation)
     contract_path = contract.compiler_data.contract_path
 
     # -------------------- CACHE CALL PROFILE --------------------
     # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
     # because a call's profile includes children call costs.
     # There will be double counting, but that is by choice.
+    #
+    # TODO: make it user configurable / present it to the user,
+    # similar to cProfile tottime vs cumtime.
 
     sum_net_gas = sum([i.net_gas for i in profile.profile.values()])
     sum_net_tot_gas = sum([i.net_tot_gas for i in profile.profile.values()])
 
     fn = contract._get_fn_from_computation(computation)
     if fn is None:
-        fn_name = "unnamed"
+        fn_name = "<none>"
     else:
         fn_name = fn.name
 
@@ -302,7 +305,7 @@ def cache_gas_used_for_computation(contract, computation):
     )
 
     s = global_profile().profiled_contracts.setdefault(fn.address, [])
-    if fn not in global_profile().profiled_contracts[fn.address]:
+    if fn not in s:
         s.append(fn)
 
     # -------------------- CACHE LINE PROFILE --------------------
