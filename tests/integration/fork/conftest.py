@@ -3,7 +3,6 @@ import os
 import pytest
 
 import boa
-from boa.environment import Env
 
 
 @pytest.fixture(scope="module")
