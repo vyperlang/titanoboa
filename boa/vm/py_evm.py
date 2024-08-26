@@ -388,6 +388,12 @@ class PyEVM:
             unpatch_pyevm_state_object(self.vm.state)
 
     def fork_rpc(self, rpc: RPC, block_identifier: str, **kwargs):
+        if len(self.vm.state._account_db._journaltrie._journal._current_values) > 0:
+            warnings.warn(
+                "forking with a dirty state, this is likely to cause issues",
+                stacklevel=2,
+            )
+
         account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
         self._init_vm(account_db_class)
         block_info = self.vm.state._account_db._block_info
