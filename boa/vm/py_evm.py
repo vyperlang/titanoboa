@@ -387,12 +387,15 @@ class PyEVM:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork_rpc(self, rpc: RPC, block_identifier: str, **kwargs):
-        if len(self.vm.state._account_db._journaltrie._journal._current_values) > 0:
-            warnings.warn(
-                "forking with a dirty state, this is likely to cause issues",
-                stacklevel=2,
-            )
+    def fork_rpc(self, rpc: RPC, block_identifier: str, force: bool = False, **kwargs):
+        dirty_state = (
+            # we use the line below as a detection mechanism for dirty state
+            len(self.vm.state._account_db._journaltrie._journal._current_values)
+            > 0
+        )
+
+        if dirty_state and not force:
+            raise Exception("Cannot fork on a dirty state. Set force=True to override.")
 
         account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
         self._init_vm(account_db_class)
