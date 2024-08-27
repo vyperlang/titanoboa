@@ -8,7 +8,7 @@ from math import ceil
 from eth_account import Account
 from requests.exceptions import HTTPError
 
-from boa.environment import Env
+from boa.environment import Env, _AddressType
 from boa.rpc import (
     RPC,
     EthereumRPC,
@@ -43,8 +43,8 @@ class TraceObject:
     def is_error(self):
         if "structLogs" in self.raw_trace:
             return self.raw_trace["failed"]
-        else:
-            return "error" in self.raw_trace
+        # we can have `"error": null` in the payload
+        return self.raw_trace.get("error") is not None
 
 
 class _EstimateGasFailed(Exception):
@@ -55,12 +55,12 @@ class _EstimateGasFailed(Exception):
 class TransactionSettings:
     # when calculating the base fee, the number of blocks N ahead
     # to compute a cap for the Nth block.
-    # defaults to 4 (4 blocks ahead, pending block's baseFee * ~1.6)
+    # defaults to 5 (5 blocks ahead, pending block's baseFee * ~1.8)
     # but can be tweaked. if you get errors like
     # `boa.rpc.RPCError: -32000: err: max fee per gas less than block base fee`
     # try increasing the constant.
     # do not recommend setting below 0.
-    base_fee_estimator_constant: int = 4
+    base_fee_estimator_constant: int = 5
 
     # amount of time to wait, in seconds before giving up on a transaction
     poll_timeout: float = 240.0
@@ -80,6 +80,62 @@ class ExternalAccount:
         return {"hash": txhash}
 
 
+class Capabilities:
+    """
+    Describes the capabilities of a chain (right now, EVM opcode support)
+    """
+
+    def __init__(self, rpc):
+        self._rpc = rpc
+
+    def _get_capability(self, hex_bytecode):
+        try:
+            self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}])
+            return True
+        except RPCError:
+            return False
+
+    @cached_property
+    def has_push0(self):
+        # PUSH0
+        return self._get_capability("0x5f")
+
+    @cached_property
+    def has_mcopy(self):
+        # PUSH1 0 DUP1 DUP1 MCOPY
+        return self._get_capability("0x600080805E")
+
+    @cached_property
+    def has_transient(self):
+        # PUSH1 0 DUP1 TLOAD
+        return self._get_capability("0x60005C")
+
+    @cached_property
+    def has_cancun(self):
+        return self.has_shanghai and self.has_mcopy and self.has_transient
+
+    @cached_property
+    def has_shanghai(self):
+        return self.has_push0
+
+    def describe_capabilities(self):
+        if not self.has_shanghai:
+            return "pre-shanghai"
+        if not self.has_cancun:
+            return "shanghai"
+        return "cancun"
+
+    def check_evm_version(self, evm_version):
+        if evm_version == "cancun":
+            return self.has_cancun
+        if evm_version == "shanghai":
+            return self.has_shanghai
+        # don't care about pre-shanghai since there aren't really new
+        # opcodes between constantinople and shanghai (and pre-constantinople
+        # is no longer even supported by vyper compiler).
+        return True
+
+
 class NetworkEnv(Env):
     """
     An Env object which can be swapped in via `boa.set_env()`.
@@ -90,8 +146,14 @@ class NetworkEnv(Env):
     # always prefetch state in network mode
     _fork_try_prefetch_state = True
 
-    def __init__(self, rpc: str | RPC, accounts: dict[str, Account] = None):
-        super().__init__()
+    def __init__(
+        self,
+        rpc: str | RPC,
+        accounts: dict[str, Account] = None,
+        fork_try_prefetch_state=True,
+        **kwargs,
+    ):
+        super().__init__(fork_try_prefetch_state, **kwargs)
 
         if isinstance(rpc, str):
             warnings.warn(
@@ -100,7 +162,7 @@ class NetworkEnv(Env):
             )
             rpc = EthereumRPC(rpc)
 
-        self._rpc = rpc
+        self._rpc: RPC = rpc
 
         self._reset_fork()
 
@@ -111,6 +173,8 @@ class NetworkEnv(Env):
         self._gas_price = None
 
         self.tx_settings = TransactionSettings()
+        self.capabilities = Capabilities(rpc)
+        self._suppress_debug_tt = False
 
     @cached_property
     def _rpc_has_snapshot(self):
@@ -118,7 +182,7 @@ class NetworkEnv(Env):
             snapshot_id = self._rpc.fetch("evm_snapshot", [])
             self._rpc.fetch("evm_revert", [snapshot_id])
             return True
-        except RPCError:
+        except (RPCError, HTTPError):
             return False
 
     # OVERRIDES
@@ -126,16 +190,16 @@ class NetworkEnv(Env):
     def anchor(self):
         if not self._rpc_has_snapshot:
             raise RuntimeError("RPC does not have `evm_snapshot` capability!")
+        block_number = self.evm.patch.block_number
+        snapshot_id = self._rpc.fetch("evm_snapshot", [])
         try:
-            blkid = self.vm.state._account_db._block_id
-            snapshot_id = self._rpc.fetch("evm_snapshot", [])
             yield
             # note we cannot call super.anchor() because vm/accountdb fork
             # state is reset after every txn.
         finally:
             self._rpc.fetch("evm_revert", [snapshot_id])
             # wipe forked state
-            self._reset_fork(blkid)
+            self._reset_fork(block_number)
 
     # add account, or "Account-like" object. MUST expose
     # `sign_transaction` or `send_transaction` method!
@@ -172,7 +236,7 @@ class NetworkEnv(Env):
     def get_eip1559_fee(self) -> tuple[str, str, str, str]:
         # returns: base_fee, max_fee, max_priority_fee
         reqs = [
-            ("eth_getBlockByNumber", ["pending", False]),
+            ("eth_getBlockByNumber", ["latest", False]),
             ("eth_maxPriorityFeePerGas", []),
             ("eth_chainId", []),
         ]
@@ -192,10 +256,10 @@ class NetworkEnv(Env):
         # non eip-1559 transaction
         return tuple(self._rpc.fetch_multi([("eth_gasPrice", []), ("eth_chainId", [])]))
 
-    def _check_sender(self, address):
+    def _check_sender(self, address: Address):
         if address is None:
             raise ValueError("No sender!")
-        return Address(address)
+        return address
 
     # OVERRIDES
     def execute_code(
@@ -210,6 +274,10 @@ class NetworkEnv(Env):
         is_modifying=True,
         ir_executor=None,  # maybe just have **kwargs to collect extra kwargs
     ):
+        if is_modifying:
+            # reset to latest block for code simulation
+            self._reset_fork()
+
         # call execute_code for tracing side effects
         # note: we could get a perf improvement if we ran this in
         # the background while waiting on RPC network calls
@@ -286,10 +354,19 @@ class NetworkEnv(Env):
         return computation
 
     # OVERRIDES
-    def deploy_code(self, sender=None, gas=None, value=0, bytecode=b"", **kwargs):
-        local_address, local_bytecode = super().deploy_code(
-            sender=sender, gas=gas, value=value, bytecode=bytecode
+    def deploy(
+        self, sender=None, gas=None, value=0, bytecode=b"", contract=None, **kwargs
+    ):
+        # reset to latest block for simulation
+        self._reset_fork()
+
+        # simulate the deployment
+        local_address, computation = super().deploy(
+            sender=sender, gas=gas, value=value, bytecode=bytecode, contract=contract
         )
+        if computation.is_error:
+            return local_address, computation
+
         if trim_dict(kwargs):
             raise TypeError(f"invalid kwargs to execute_code: {kwargs}")
         bytecode = to_hex(bytecode)
@@ -301,9 +378,7 @@ class NetworkEnv(Env):
 
         create_address = Address(receipt["contractAddress"])
 
-        deployed_bytecode = local_bytecode
-
-        if trace is not None and local_bytecode != trace.returndata_bytes:
+        if trace is not None and computation.output != trace.returndata_bytes:
             # not sure what to do about this, for now just complain
             warnings.warn(
                 "local fork did not match node! this indicates state got out "
@@ -311,7 +386,7 @@ class NetworkEnv(Env):
                 stacklevel=2,
             )
             # return what the node returned anyway
-            deployed_bytecode = trace.returndata_bytes
+            computation.output = trace.returndata_bytes
 
         if local_address != create_address:
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
@@ -319,7 +394,7 @@ class NetworkEnv(Env):
         # TODO get contract info in here
         print(f"contract deployed at {create_address}")
 
-        return create_address, deployed_bytecode
+        return create_address, computation
 
     @cached_property
     def _tracer(self):
@@ -358,6 +433,30 @@ class NetworkEnv(Env):
 
         return call_tracer
 
+    def suppress_debug_tt(self, new_value=True):
+        self._suppress_debug_tt = new_value
+
+    def _debug_tt(self, tx_hash):
+        if self._tracer is None:
+            return None
+        try:
+            return self._rpc.fetch_uncached(
+                "debug_traceTransaction", [tx_hash, self._tracer]
+            )
+        except (HTTPError, RPCError) as e:
+            if self._suppress_debug_tt:
+                warnings.warn(f"Couldn't get a trace for {tx_hash}!", stacklevel=3)
+            else:
+                warnings.warn(
+                    f"Couldn't get a trace for {tx_hash}! If you want to"
+                    " suppress this error, call `boa.env.suppress_debug_tt()`"
+                    " first.",
+                    stacklevel=3,
+                )
+                raise e
+
+        return None
+
     def _get_nonce(self, addr):
         return self._rpc.fetch("eth_getTransactionCount", [addr, "latest"])
 
@@ -373,7 +472,6 @@ class NetworkEnv(Env):
             block_identifier=block_identifier,
             cache_file=None,
         )
-        self.vm.state._account_db._rpc._init_mem_db()
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
         tx_data = fixup_dict(
@@ -386,7 +484,12 @@ class NetworkEnv(Env):
             tx_data["maxPriorityFeePerGas"] = max_priority_fee
             tx_data["maxFeePerGas"] = max_fee
             tx_data["chainId"] = chain_id
-        except (RPCError, KeyError):
+        except (RPCError, KeyError) as e:
+            warnings.warn(
+                "No EIP-1559 transaction available, falling back to legacy",
+                stacklevel=3,
+            )
+            warnings.warn(str(e), stacklevel=3)
             gas_price, chain_id = self.get_static_fee()
             tx_data["gasPrice"] = gas_price
             tx_data["chainId"] = chain_id
@@ -395,11 +498,13 @@ class NetworkEnv(Env):
 
         if gas is None:
             try:
-                tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data])
+                tx_data["gas"] = self._rpc.fetch(
+                    "eth_estimateGas", [tx_data, "pending"]
+                )
             except RPCError as e:
                 if e.code == 3:
                     # execution failed at estimateGas, probably the txn reverted
-                    raise _EstimateGasFailed()
+                    raise _EstimateGasFailed() from e
                 raise e from e
 
         if from_ not in self._accounts:
@@ -411,7 +516,7 @@ class NetworkEnv(Env):
 
             # note: signed.rawTransaction has type HexBytes
             tx_hash = self._rpc.fetch(
-                "eth_sendRawTransaction", [to_hex(bytes(signed.rawTransaction))]
+                "eth_sendRawTransaction", [to_hex(bytes(signed.raw_transaction))]
             )
         else:
             # some providers (i.e. metamask) don't have sign_transaction
@@ -422,12 +527,10 @@ class NetworkEnv(Env):
         print(f"tx broadcasted: {tx_hash}")
 
         receipt = self._rpc.wait_for_tx_receipt(tx_hash, self.tx_settings.poll_timeout)
+        if receipt.get("status") != "0x1":
+            raise Exception(f"txn failed: {receipt}")
 
-        trace = None
-        if self._tracer is not None:
-            trace = self._rpc.fetch_uncached(
-                "debug_traceTransaction", [tx_hash, self._tracer]
-            )
+        trace = self._debug_tt(tx_hash)
 
         print(f"{tx_hash} mined in block {receipt['blockHash']}!")
 
@@ -436,3 +539,17 @@ class NetworkEnv(Env):
 
         t_obj = TraceObject(trace) if trace is not None else None
         return receipt, t_obj
+
+    def get_chain_id(self) -> int:
+        """Get the current chain ID of the network as an integer."""
+        chain_id = self._rpc.fetch("eth_chainId", [])
+        return int(chain_id, 16)
+
+    def set_balance(self, address, value):
+        raise NotImplementedError("Cannot use set_balance in network mode")
+
+    def set_code(self, address: _AddressType, code: bytes) -> None:
+        raise NotImplementedError("Cannot use set_code in network mode")
+
+    def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
+        raise NotImplementedError("Cannot use set_storage in network mode")

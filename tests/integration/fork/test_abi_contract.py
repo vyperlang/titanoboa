@@ -45,7 +45,7 @@ def test_tricrypto(tricrypto):
     assert tricrypto.get_virtual_price() == 1003146380129683788
     assert tricrypto.gamma() == 11809167828997
     assert tricrypto.fee() == 7069800
-    # TODO: test the overloaded functions
+    assert tricrypto.initial_A_gamma() == 581076037942835227425498917514114728328226821
 
 
 def test_no_bytecode(get_filepath):
@@ -133,16 +133,17 @@ def test_fork_write(crvusd, n):
 def test_fork_write_flip(crvusd):
     e = boa.loads(
         f"""
-from vyper.interfaces import ERC20
-crvUSD: ERC20
-@external
+from ethereum.ercs import IERC20
+crvUSD: IERC20
+
+@deploy
 def __init__():
-    self.crvUSD = ERC20({crvusd.address})
+    self.crvUSD = IERC20({crvusd.address})
 @external
 def flip_from(_input: uint256) -> uint256:
-    self.crvUSD.transferFrom(msg.sender, self, _input)
-    self.crvUSD.transfer(msg.sender, _input / 2)
-    return _input / 2
+    extcall self.crvUSD.transferFrom(msg.sender, self, _input)
+    extcall self.crvUSD.transfer(msg.sender, _input // 2)
+    return _input // 2
     """
     )
     pool = "0x4dece678ceceb27446b35c672dc7d61f30bad69e"
@@ -157,10 +158,10 @@ def flip_from(_input: uint256) -> uint256:
 def test_abi_stack_trace(crvusd):
     c = boa.loads(
         """
-from vyper.interfaces import ERC20
+from ethereum.ercs import IERC20
 @external
-def foo(x: ERC20, from_: address):
-    x.transferFrom(from_, self, 100)
+def foo(x: IERC20, from_: address):
+    extcall x.transferFrom(from_, self, 100)
     """
     )
 

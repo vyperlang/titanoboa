@@ -30,7 +30,7 @@ def test_imports(tmp_path):
     code = """
 totalSupply: public(uint256)
 
-@external
+@deploy
 def __init__(initial_supply: uint256):
     self.totalSupply = initial_supply
     """

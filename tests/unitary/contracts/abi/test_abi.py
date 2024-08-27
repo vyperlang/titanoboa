@@ -2,6 +2,7 @@ import re
 
 import pytest
 import yaml
+from eth.constants import ZERO_ADDRESS
 
 import boa
 from boa import BoaError
@@ -24,7 +25,7 @@ def load_solidity_from_yaml(get_filepath):
     """
 
     def _load(yaml_filename):
-        with open(get_filepath(f"fixtures/solidity_{yaml_filename}.yaml")) as f:
+        with open(get_filepath(f"../../fixtures/solidity_{yaml_filename}.yaml")) as f:
             data = yaml.safe_load(f)
         bytecode = bytes.fromhex(data["bytecode"]["object"])
         address, _ = boa.env.deploy_code(bytecode=bytecode)
@@ -85,6 +86,7 @@ def test(_a: address) -> address:
     result = abi_contract.test(sender)
     assert result == sender
     assert isinstance(result, Address)
+    assert repr(result) == f"Address('{sender}')"
 
 
 def test_address_nested():
@@ -97,8 +99,8 @@ struct Test:
 @view
 def test(_a: DynArray[uint256, 100]) -> ((DynArray[Test, 2], uint256), uint256):
     first: DynArray[Test, 2] = [
-        Test({address: msg.sender, number: _a[0]}),
-        Test({address: msg.sender, number: _a[1]}),
+        Test(address=msg.sender, number=_a[0]),
+        Test(address=msg.sender, number=_a[1]),
     ]
     return (first, _a[2]), _a[3]
     """
@@ -145,8 +147,17 @@ def test(a: uint128 = 0, b: uint128 = 0) -> uint128:
 
 
 def test_bad_address():
+    code = """
+@external
+def test() -> uint256:
+    return 0
+"""
+    abi_contract, _ = load_via_abi(code)
     with pytest.warns(UserWarning, match=r"there is no bytecode at that address!$"):
-        ABIContractFactory.from_abi_dict([]).at(boa.env.eoa)
+        abi_contract = abi_contract.deployer.at(ZERO_ADDRESS)
+    with pytest.raises(BoaError) as e:
+        abi_contract.test()
+    assert "no bytecode at this address!" in str(e.value)
 
 
 def test_abi_reverts():
@@ -169,7 +180,8 @@ def test(n: uint256) -> uint256:
 
 
 def test_abi_not_deployed():
-    f = ABIFunction({"name": "test", "inputs": [], "outputs": []}, contract_name="c")
+    fn_abi = {"name": "test", "inputs": [], "outputs": [], "type": "function"}
+    f = ABIFunction(fn_abi, contract_name="c")
     with pytest.raises(Exception) as exc_info:
         f()
     (error,) = exc_info.value.args
@@ -189,3 +201,58 @@ def test(n: uint256) -> uint256:
         abi_contract.test(0)
     ((error,),) = exc_info.value.args
     assert re.match(r"^ +\(unknown method id .*\.0x29e99f07\)$", error)
+
+
+def test_prepare_calldata():
+    code = """
+@external
+def overloaded(n: uint256 = 0) -> uint256:
+    return n
+
+@external
+def argumented(n: uint256) -> uint256:
+    return n
+"""
+    abi_contract, _ = load_via_abi(code)
+    assert abi_contract.overloaded.prepare_calldata() == b"\x07\x8e\xec\xb4"
+    assert (
+        abi_contract.argumented.prepare_calldata(0) == b"\xedu\x96\x8d" + b"\x00" * 32
+    )
+    assert len(abi_contract.abi) == 3
+    assert abi_contract.deployer.abi == abi_contract.abi
+
+
+def test_abi_invalid_components():
+    contract = ABIContractFactory.from_abi_dict(
+        [
+            {
+                "type": "function",
+                "name": "test",
+                "inputs": [{"name": "n", "type": "uint256", "components": []}],
+                "outputs": [],
+            }
+        ]
+    ).at(ZERO_ADDRESS)
+    with pytest.raises(Exception) as exc_info:
+        _ = contract.test.argument_types
+
+    assert "Components found in non-tuple type uint256" == str(exc_info.value)
+
+
+def test_abi_factory_multi_deploy():
+    code = """
+foo: public(uint256)
+
+@deploy
+def __init__(x: uint256):
+    self.foo = x
+    """
+    contract = boa.loads(code, 5)
+    contract2 = boa.loads(code, 6)
+    factory = ABIContractFactory.from_abi_dict(contract.abi)
+
+    wrapper = factory.at(contract.address)
+    wrapper2 = factory.at(contract2.address)
+
+    assert wrapper.foo() == 5
+    assert wrapper2.foo() == 6

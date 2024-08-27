@@ -4,7 +4,7 @@ import sys
 from boa.contracts.base_evm_contract import BoaError
 from boa.contracts.vyper.vyper_contract import check_boa_error_matches
 from boa.debugger import BoaDebug
-from boa.environment import Env, enable_pyevm_verbose_logging, patch_opcode
+from boa.environment import Env
 from boa.interpret import (
     from_etherscan,
     load,
@@ -17,10 +17,11 @@ from boa.interpret import (
 from boa.network import NetworkEnv
 from boa.precompile import precompile
 from boa.test.strategies import fuzz
+from boa.vm.py_evm import enable_pyevm_verbose_logging, patch_opcode
 
 # turn off tracebacks if we are in repl
 # https://stackoverflow.com/a/64523765
-if hasattr(sys, "ps1"):
+if hasattr(sys, "ps1"):  # pragma: no cover
     pass
     # sys.tracebacklimit = 0
 

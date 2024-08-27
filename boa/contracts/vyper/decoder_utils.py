@@ -14,13 +14,14 @@ from vyper.semantics.types import (
 )
 from vyper.utils import unsigned_to_signed
 
+from boa.util.abi import Address
 from boa.vm.utils import ceil32, floor32
 
 
 # wrap storage in something which looks like memory
 class ByteAddressableStorage:
-    def __init__(self, db, address, key):
-        self.db = db
+    def __init__(self, evm, address: Address, key: int):
+        self.evm = evm
         self.address = address
         self.key = key
 
@@ -31,14 +32,14 @@ class ByteAddressableStorage:
             stop = subscript.stop
             i = self.key + start // 32
             while i < self.key + ceil32(stop) // 32:
-                ret += self.db.get_storage(self.address, i).to_bytes(32, "big")
+                ret += self.evm.get_storage_slot(self.address, i)
                 i += 1
 
             start_ofst = floor32(start)
             start -= start_ofst
             stop -= start_ofst
             return memoryview(ret[start:stop])
-        else:
+        else:  # pragma: no cover
             raise Exception("Must slice {self}")
 
 
@@ -64,7 +65,7 @@ def _get_length(mem, bound):
 def decode_vyper_object(mem, typ):
     if isinstance(typ, BytesM_T):
         # TODO tag return value like `vyper_object` does
-        return mem[: typ.m_bits].tobytes()
+        return mem[: typ.m].tobytes()
     if isinstance(typ, (AddressT, InterfaceT)):
         return to_checksum_address(mem[12:32].tobytes())
     if isinstance(typ, BoolT):
@@ -113,4 +114,4 @@ def decode_vyper_object(mem, typ):
             ofst += n
         return tuple(ret)
 
-    return f"unimplemented decoder for `{typ}`"
+    return f"unimplemented decoder for `{typ}`"  # pragma: no cover

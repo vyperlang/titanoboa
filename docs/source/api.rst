@@ -403,6 +403,12 @@ Low-Level Functionality
 
         The global py-evm chain instance.
 
+    .. method:: enable_fast_mode(flag: bool = True) -> None:
+
+        Enable or disable fast mode. This can be useful for speeding up tests.
+
+        :param flag: Whether to enable or disable fast mode.
+
     .. method:: alias(address: str, name: str) -> None
 
         Associates an alias with an address. This is useful to make the address more human-readable in tracebacks.

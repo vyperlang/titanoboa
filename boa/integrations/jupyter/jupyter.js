@@ -5,14 +5,15 @@
 (() => {
     const rpc = async (method, params) => {
         const {ethereum} = window;
-        if (!ethereum) {
-            throw new Error('No Ethereum plugin found. Please authorize the site on your browser wallet.');
-        }
+        console.assert(ethereum, 'No Ethereum plugin found. Please authorize the site on your browser wallet.');
         return ethereum.request({method, params});
     };
 
-    // When opening in lab view, the base path contains extra folders
-    const base = `$$JUPYTERHUB_SERVICE_PREFIX`;  // gets replaced by the JupyterLab extension
+    // the following vars get replaced by the backend
+    const config = {
+        base: `$$JUPYTERHUB_SERVICE_PREFIX`,  // in lab view, base path is deeper
+        debug: $$BOA_DEBUG_MODE,
+    };
 
     /** Stringify data, converting big ints to strings */
     const stringify = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
@@ -36,26 +37,18 @@
     async function callbackAPI(token, body) {
         const headers = {['X-XSRFToken']: getCookie('_xsrf')};
         const init = {method: 'POST', body, headers};
-        const url = `${base}/titanoboa_jupyterlab/callback/${token}`;
+        const url = `${config.base}/titanoboa_jupyterlab/callback/${token}`;
         const response = await fetch(url, init);
         return response.text();
     }
 
-    let from;
     const loadSigner = async (address) => {
         const accounts = await rpc('eth_requestAccounts');
-        from = accounts.includes(address) ? address : accounts[0];
-        return from;
+        return accounts.includes(address) ? address : accounts[0];
     };
 
     /** Sign a transaction via ethers */
     const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
-
-    /** Sign a typed data via ethers */
-    const signTypedData = (domain, types, value) => rpc(
-        'eth_signTypedData_v4',
-        [from, JSON.stringify({domain, types, value})]
-    );
 
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
@@ -87,14 +80,26 @@
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
         if (!colab) {
-            // Check if the cell was already executed. In Colab, eval_js() doesn't replay.
+            // Check backend and whether cell was executed. In Colab, eval_js() doesn't replay.
             const response = await fetch(`${base}/titanoboa_jupyterlab/callback/${token}`);
-            // !response.ok indicates the cell has already been executed
-            if (!response.ok) return;
+            if (response.status === 404 && response.headers.get('Content-Type') === 'application/json') {
+                return; // the cell has already been executed
+            }
+            if (!response.ok) {
+                const error = 'Could not connect to the titanoboa backend. Please make sure the Jupyter extension is installed by running the following command:';
+                const command = 'jupyter lab extension enable boa';
+                if (element) {
+                    element.style.display = "block";  // show the output element in JupyterLab
+                    element.innerHTML = `<h3 style="color: red">${error}</h3><pre>${command}</pre>`;
+                } else {
+                    prompt(error, command);
+                }
+                return;
+            }
         }
 
         const body = stringify(await parsePromise(func(...args)));
-        // console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
+        config.debug && console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {
             return body;
         }
@@ -105,7 +110,6 @@
     window._titanoboa = {
         loadSigner: handleCallback(loadSigner),
         sendTransaction: handleCallback(sendTransaction),
-        signTypedData: handleCallback(signTypedData),
         waitForTransactionReceipt: handleCallback(waitForTransactionReceipt),
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),

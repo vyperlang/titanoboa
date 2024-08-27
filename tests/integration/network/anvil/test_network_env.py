@@ -9,7 +9,7 @@ code = """
 totalSupply: public(uint256)
 balances: HashMap[address, uint256]
 
-@external
+@deploy
 def __init__(t: uint256):
     self.totalSupply = t
     self.balances[self] = t
@@ -54,6 +54,13 @@ def test_update_total_supply(simple_contract, t):
 def test_raise_exception(simple_contract, t):
     with boa.reverts("oh no!"):
         simple_contract.raise_exception(t)
+
+
+def test_failed_transaction():
+    with pytest.raises(Exception) as ctx:
+        boa.loads(code, STARTING_SUPPLY, gas=149377)
+    error = str(ctx.value)
+    assert error.startswith("txn failed:")
 
 
 # XXX: probably want to test deployment revert behavior

@@ -5,8 +5,8 @@
 name: integration
 
 on:
-  pull_request_target:
   push:  # all
+  pull_request_target:
 
 jobs:
   integration:
@@ -14,10 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Checkout (push)
+        uses: actions/checkout@v4
+        if: github.event_name != 'pull_request_target'
 
       # given we use the pull_request_trigger, only allow contributors to run tests with secrets
       - name: Check if the user is a contributor
         uses: actions/github-script@v7
+        if: github.event_name == 'pull_request_target'
         with:
           script: |
             const { actor: username, repo: { owner, repo } } = context;
@@ -26,16 +30,13 @@ jobs:
               core.setFailed(username + ' is not a contributor');
             }
 
-      # this will check out the base branch, not the head branch
-      - uses: actions/checkout@v4
+      - name: Checkout ${{ github.event.pull_request.head.repo.full_name }}@${{ github.event.pull_request.head.sha }}
+        uses: actions/checkout@v4
+        if: github.event_name == 'pull_request_target'
         with:
           fetch-depth: 0 # we need the history to be able to merge
-
-      # now merge the head branch into the base branch, so we can run the tests with the head branch's changes
-      - name: Merge head branch
-        run: |
-          git fetch origin ${{ github.head_ref }}
-          git merge origin/${{ github.head_ref }} --no-edit
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
