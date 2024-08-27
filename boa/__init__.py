@@ -1,5 +1,6 @@
 import contextlib
 import sys
+from typing import Union
 
 from boa.contracts.base_evm_contract import BoaError
 from boa.contracts.vyper.vyper_contract import check_boa_error_matches
@@ -45,12 +46,17 @@ def set_env(new_env):
     Env._singleton = new_env
 
 
-def set_browser_env(address=None):
+def set_browser_env(address=None, chain_id: Union[None, str, int] = None):
     """Set the environment to use the browser's network in Jupyter/Colab"""
     # import locally because jupyter is generally not installed
-    from boa.integrations.jupyter import BrowserEnv
+    from boa.integrations.jupyter.browser import BrowserRPC, BrowserSigner
 
-    set_env(BrowserEnv(address))
+    rpc = BrowserRPC(chain_id)
+    e = NetworkEnv(rpc)
+    signer = BrowserSigner(address, rpc)
+    setattr(e, "signer", signer)
+    e.set_eoa(signer)
+    return set_env(e)
 
 
 def set_network_env(url):
@@ -58,14 +64,29 @@ def set_network_env(url):
     set_env(NetworkEnv.from_url(url))
 
 
-def fork(*args, **kwargs):
+def fork(*args, try_prefetch_state=False, fast_mode_enabled=False, **kwargs):
     """Fork the current environment to use a custom network URL"""
-    e = Env()
-    if env.__name__ == "BrowserEnv":
-        e.fork_rpc(*args, **kwargs)
-    else:
-        e.fork(*args, **kwargs)
-    set_env(e)
+    e = Env(try_prefetch_state, fast_mode_enabled)
+    e.fork(*args, **kwargs)
+    return set_env(e)
+
+
+def fork_browser(
+    url: str,
+    address=None,
+    *args,
+    chain_id: Union[None, str, int] = None,
+    try_prefetch_state=False,
+    fast_mode_enabled=False,
+    **kwargs,
+):
+    """Fork the current environment to use browser RPC"""
+    from boa.integrations.jupyter import BrowserRPC, BrowserSigner
+
+    rpc = BrowserRPC(url)
+    e = Env(try_prefetch_state, fast_mode_enabled)
+    e.fork_rpc(rpc, *args, **kwargs)
+    return set_env(e)
 
 
 def reset_env():

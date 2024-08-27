@@ -10,7 +10,7 @@ from itertools import chain
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
 from os.path import dirname, join, realpath
-from typing import Any
+from typing import Any, Union
 
 import nest_asyncio
 from IPython.display import Javascript, display
@@ -24,7 +24,6 @@ from boa.integrations.jupyter.constants import (
     SHARED_MEMORY_LENGTH,
     TRANSACTION_TIMEOUT_MESSAGE,
 )
-from boa.network import NetworkEnv
 from boa.rpc import RPC, RPCError
 from boa.util.abi import Address
 
@@ -57,7 +56,9 @@ class BrowserRPC(RPC):
 
     _debug_mode = False
 
-    def __init__(self):
+    def __init__(self, chain_id: Union[None, str, int] = None):
+        if chain_id is not None:
+            self.set_chain_id(chain_id)
         if not colab_eval_js:
             # colab creates a new iframe for every call, we need to re-inject it every time
             # for jupyterlab we only need to do it once
@@ -91,6 +92,12 @@ class BrowserRPC(RPC):
             timeout_ms,
             pool_latency_ms,
             timeout_message=RPC_TIMEOUT_MESSAGE,
+        )
+
+    def set_chain_id(self, chain_id: int | str):
+        return self.fetch(
+            "wallet_switchEthereumChain",
+            [{"chainId": chain_id if isinstance(chain_id, str) else hex(chain_id)}],
         )
 
 
@@ -142,26 +149,6 @@ class BrowserSigner:
             [self.address, full_message],
             TRANSACTION_TIMEOUT_MESSAGE,
         )
-
-
-class BrowserEnv(NetworkEnv):
-    """
-    A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
-    """
-
-    _rpc = BrowserRPC()  # Browser is always global anyway, we can make it static
-
-    def __init__(self, address=None, **kwargs):
-        super().__init__(self._rpc, **kwargs)
-        self.signer = BrowserSigner(address, self._rpc)
-        self.set_eoa(self.signer)
-
-    def set_chain_id(self, chain_id: int | str):
-        self._rpc.fetch(
-            "wallet_switchEthereumChain",
-            [{"chainId": chain_id if isinstance(chain_id, str) else hex(chain_id)}],
-        )
-        self._reset_fork()
 
 
 def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:

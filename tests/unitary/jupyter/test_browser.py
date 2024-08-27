@@ -226,8 +226,8 @@ def test_browser_chain_id(token, env, display_mock, mock_callback):
     mock_callback("eth_chainId", "0x1234")
     assert env.get_chain_id() == 4660
     mock_callback("wallet_switchEthereumChain")
-    env.set_chain_id(1)
-    assert display_mock.call_count == 4
+    env._rpc.set_chain_id(1)
+    assert display_mock.call_count == 2
     (js,), _ = display_mock.call_args_list[1]
     assert (
         f'rpc("{token}", "wallet_switchEthereumChain", [{{"chainId": "0x1"}}])'
