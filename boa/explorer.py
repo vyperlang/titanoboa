@@ -24,7 +24,7 @@ def _fetch_etherscan(
     if api_key is not None:
         params["apikey"] = api_key
 
-    for _ in range(num_retries):
+    for i in range(num_retries):
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
