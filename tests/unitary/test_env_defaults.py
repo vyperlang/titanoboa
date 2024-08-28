@@ -1,6 +1,6 @@
 import pytest
 
-from boa import Env, NetworkEnv
+from boa import Env
 
 
 @pytest.fixture
