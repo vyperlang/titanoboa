@@ -43,6 +43,8 @@ class Env:
 
         self._gas_tracker = 0
 
+        self.nickname = "pyevm"
+
         self.evm = PyEVM(self, fast_mode_enabled, fork_try_prefetch_state)
 
     def set_random_seed(self, seed=None):

@@ -111,7 +111,10 @@ class EthereumRPC(RPC):
         # url stripped out (content which you might not want to end up
         # in logs)
         parse_result = urlparse(self._rpc_url)
-        return f"{parse_result.scheme}://{parse_result.netloc} (URL partially masked for privacy)"
+        partial_ret = f"{parse_result.scheme}://{parse_result.netloc}"
+        if partial_ret != self._rpc_url:
+            return f"{partial_ret} (URL partially masked for privacy)"
+        return self._rpc_url
 
     def fetch(self, method, params):
         # the obvious thing to do here is dispatch into fetch_multi.
