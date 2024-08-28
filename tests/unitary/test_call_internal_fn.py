@@ -9,6 +9,9 @@ import boa
 from boa.test import strategy
 
 source_code = """
+interface Foo:
+    def foo(): nonpayable
+
 _a: uint256
 
 @internal
@@ -43,6 +46,11 @@ def _test_repeat(z: int128) -> int128:
 
 
 @internal
+def _test_interface(s: Foo) -> Foo:
+    return s
+
+
+@internal
 @pure
 def _sqrt(val: uint256) -> uint256:
     return isqrt(val)
@@ -70,7 +78,6 @@ def _sort(unsorted_x: uint256[3]) -> uint256[3]:
         x[2] = temp_var
 
     return x
-
 
 @external
 @view
@@ -114,6 +121,11 @@ def test_internal_void_fn(contract):
 
 def test_repeat(contract):
     assert contract.internal._test_repeat(9) == 54
+
+
+@given(a=strategy("address"))
+def test_interface(contract, a):
+    assert contract.internal._test_interface(a) == a
 
 
 @given(a=strategy("uint256"))

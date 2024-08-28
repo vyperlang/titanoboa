@@ -9,7 +9,7 @@ Since ``titanoboa`` is framework-agnostic any other testing framework should wor
 Gas Profiling
 -----------------------
 
-Titanoboa has native gas profiling tools that store and generate statistics upon calling a contract. When enabled, gas costs are stored per call in global ``boa.env._cached_call_profiles`` and ``boa.env._cached_line_profiles`` dictionaries.
+Titanoboa has native gas profiling tools that store and generate statistics upon calling a contract. When enabled, gas costs are stored per call in ``global_profile().call_profiles`` and ``global_profile().line_profiles`` dictionaries.
 To enable gas profiling,
 
 1. decorate tests with ``@pytest.mark.gas_profile``, or
@@ -88,7 +88,7 @@ or,
 
 .. code-block::
 
-    pytest --cov= ...
+    pytest --cov= --cov-branch ...
 
 `pytest-cov <https://pytest-cov.readthedocs.io/en/latest/readme.html#usage>`_ is a wrapper around ``coverage.py`` for using with pytest; using it is recommended because it smooths out some quirks of using ``coverage.py`` with pytest.
 

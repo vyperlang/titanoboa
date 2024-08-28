@@ -52,7 +52,7 @@ from boa.contracts.vyper.decoder_utils import (
 from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
-from boa.profiling import LineProfile, cache_gas_used_for_computation
+from boa.profiling import cache_gas_used_for_computation
 from boa.util.abi import Address, abi_decode, abi_encode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
@@ -251,9 +251,7 @@ class ErrorDetail:
         reason = None
         if ast_source is not None:
             reason = DevReason.at_source_location(
-                contract.compiler_data.source_code,
-                ast_source.lineno,
-                ast_source.end_lineno,
+                ast_source.full_source_code, ast_source.lineno, ast_source.end_lineno
             )
         frame_detail = contract.debug_frame(computation)
 
@@ -503,6 +501,8 @@ class ConstantsModel:
 
 
 class VyperContract(_BaseVyperContract):
+    _can_line_profile = True
+
     def __init__(
         self,
         compiler_data: CompilerData,
@@ -578,9 +578,8 @@ class VyperContract(_BaseVyperContract):
                 value=value,
                 override_address=override_address,
                 gas=gas,
+                contract=self,
             )
-            self._computation = computation
-            self.bytecode = computation.output
 
             self._computation = computation
             self.bytecode = computation.output
@@ -800,16 +799,6 @@ class VyperContract(_BaseVyperContract):
         if error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS:
             return ret
         return _handle_child_trace(computation, self.env, ret)
-
-    def line_profile(self, computation=None):
-        computation = computation or self._computation
-        ret = LineProfile.from_single(self, computation)
-        for child in computation.children:
-            child_obj = self.env.lookup_contract(child.msg.code_address)
-            # TODO: child obj is opaque contract that calls back into known contract
-            if child_obj is not None:
-                ret.merge(child_obj.line_profile(child))
-        return ret
 
     def ensure_id(self, fn_t):  # mimic vyper.codegen.module.IDGenerator api
         if fn_t._function_id is None:

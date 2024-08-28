@@ -14,6 +14,6 @@ SEPOLIA_URI = os.environ["SEPOLIA_ENDPOINT"]
 # run all tests with testnet
 @pytest.fixture(scope="module", autouse=True)
 def sepolia_env():
-    with boa.swap_env(boa.NetworkEnv(SEPOLIA_URI)):
+    with boa.set_network_env(SEPOLIA_URI):
         boa.env.add_account(Account.from_key(PKEY))
         yield
