@@ -53,7 +53,7 @@ class Env:
 
     def set_random_seed(self, seed=None):
         self._random = random.Random(seed)
-    
+
     def set_nickname(self, nickname):
         self.nickname = nickname
 

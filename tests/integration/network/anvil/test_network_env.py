@@ -39,6 +39,7 @@ def test_env_type():
 def test_network_env_nickname():
     assert boa.env.nickname == "pyevm"
 
+
 def test_network_env_set_nickname():
     new_nickname = "new_nickname"
     boa.env.set_nickname(new_nickname)

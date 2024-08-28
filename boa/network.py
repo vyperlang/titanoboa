@@ -496,7 +496,9 @@ class NetworkEnv(Env):
 
         if gas is None:
             try:
-                tx_data["gas"] = self._rpc.fetch("eth_estimateGas", [tx_data, "pending"])
+                tx_data["gas"] = self._rpc.fetch(
+                    "eth_estimateGas", [tx_data, "pending"]
+                )
             except RPCError as e:
                 if e.code == 3:
                     # execution failed at estimateGas, probably the txn reverted
