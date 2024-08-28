@@ -8,7 +8,6 @@ from eth_utils import to_checksum_address
 from rich.table import Table
 
 from boa.contracts.vyper.ast_utils import get_fn_name_from_lineno, get_line
-from boa.environment import Env
 
 
 def _safe_relpath(path):
@@ -145,17 +144,21 @@ class _SingleComputation:
     def by_line(self):
         ret = {}
         source_map = self.contract.source_map["pc_raw_ast_map"]
-        current_line = None
         seen = set()
         for pc in self.computation.code._trace:
-            if (node := source_map.get(pc)) is not None:
-                current_line = node.lineno
+            if pc in seen:
+                # TODO: this is a kludge, it prevents lines from being
+                # over-represented when they appear in loops. but we should
+                # probably either not have this guard, or actually count
+                # the number of times a line is hit per- computation.
+                continue
+            if (node := source_map.get(pc)) is None:
+                continue
 
-            # NOTE: do we still need the `current_line is not None` guard?
-            if current_line is not None and pc not in seen:
-                ret.setdefault(current_line, Datum())
-                ret[current_line].merge(self.by_pc[pc])
-                seen.add(pc)
+            current_line = node.lineno
+            ret.setdefault(current_line, Datum()).merge(self.by_pc[pc])
+
+            seen.add(pc)
 
         return ret
 
@@ -225,6 +228,30 @@ class LineProfile:
         return line_gas_data
 
 
+# singleton profile object which collects gas+line profiles over test runs
+class GlobalProfile:
+    _singleton = None
+
+    def __init__(self):
+        self.profiled_contracts = {}
+        self.call_profiles = {}
+        self.line_profiles = {}
+
+    @classmethod
+    def get_singleton(cls):
+        if cls._singleton is None:
+            cls._singleton = cls()
+        return cls._singleton
+
+    @classmethod
+    def clear_singleton(cls):
+        cls._singleton = None
+
+
+def global_profile():
+    return GlobalProfile.get_singleton()
+
+
 # stupid class whose __str__ method doesn't escape (good for repl)
 class _String(str):
     def __repr__(self):
@@ -233,21 +260,41 @@ class _String(str):
 
 # cache gas_used for all computation (including children)
 def cache_gas_used_for_computation(contract, computation):
-    profile = contract.line_profile(computation)
     env = contract.env
+
+    def _recurse(computation):
+        # recursion for child computations
+        for _computation in computation.children:
+            child_contract = env.lookup_contract(_computation.msg.code_address)
+
+            if child_contract is None:
+                # for black box contracts, we don't profile the contract,
+                # but we recurse into the subcalls
+                _recurse(_computation)
+            else:
+                cache_gas_used_for_computation(child_contract, _computation)
+
+    if not getattr(contract, "_can_line_profile", False):
+        _recurse(computation)
+        return
+
+    profile = LineProfile.from_single(contract, computation)
     contract_path = contract.compiler_data.contract_path
 
     # -------------------- CACHE CALL PROFILE --------------------
     # get gas used. We use Datum().net_gas here instead of Datum().net_tot_gas
     # because a call's profile includes children call costs.
     # There will be double counting, but that is by choice.
+    #
+    # TODO: make it user configurable / present it to the user,
+    # similar to cProfile tottime vs cumtime.
 
     sum_net_gas = sum([i.net_gas for i in profile.profile.values()])
     sum_net_tot_gas = sum([i.net_tot_gas for i in profile.profile.values()])
 
     fn = contract._get_fn_from_computation(computation)
     if fn is None:
-        fn_name = "unnamed"
+        fn_name = "<none>"
     else:
         fn_name = fn.name
 
@@ -257,29 +304,22 @@ def cache_gas_used_for_computation(contract, computation):
         fn_name=fn_name,
     )
 
-    env._cached_call_profiles.setdefault(fn, CallGasStats()).merge_gas_data(
+    global_profile().call_profiles.setdefault(fn, CallGasStats()).merge_gas_data(
         sum_net_gas, sum_net_tot_gas
     )
 
-    s = env._profiled_contracts.setdefault(fn.address, [])
-    if fn not in env._profiled_contracts[fn.address]:
+    s = global_profile().profiled_contracts.setdefault(fn.address, [])
+    if fn not in s:
         s.append(fn)
 
     # -------------------- CACHE LINE PROFILE --------------------
     line_profile = profile.get_line_data()
 
     for line, gas_used in line_profile.items():
-        env._cached_line_profiles.setdefault(line, []).append(gas_used)
+        global_profile().line_profiles.setdefault(line, []).append(gas_used)
 
     # ------------------------- RECURSION -------------------------
-
-    # recursion for child computations
-    for _computation in computation.children:
-        child_contract = env.lookup_contract(_computation.msg.code_address)
-
-        # ignore black box contracts
-        if child_contract is not None:
-            cache_gas_used_for_computation(child_contract, _computation)
+    _recurse(computation)
 
 
 def _create_table(for_line_profile: bool = False) -> Table:
@@ -307,11 +347,11 @@ def _create_table(for_line_profile: bool = False) -> Table:
     return table
 
 
-def get_call_profile_table(env: Env) -> Table:
+def get_call_profile_table() -> Table:
     table = _create_table()
 
-    cache = env._cached_call_profiles
-    cached_contracts = env._profiled_contracts
+    cache = global_profile().call_profiles
+    cached_contracts = global_profile().profiled_contracts
     contract_vs_median_gas = []
     for profile in cache:
         cache[profile].compute_stats()
@@ -357,9 +397,9 @@ def get_call_profile_table(env: Env) -> Table:
     return table
 
 
-def get_line_profile_table(env: Env) -> Table:
+def get_line_profile_table() -> Table:
     contracts: dict = {}
-    for lp, gas_data in env._cached_line_profiles.items():
+    for lp, gas_data in global_profile().line_profiles.items():
         contract_uid = (lp.contract_path, lp.address)
 
         # add spaces so numbers take up equal space

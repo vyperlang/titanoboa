@@ -41,11 +41,6 @@ class Env:
         self.sha3_trace: dict = {}
         self.sstore_trace: dict = {}
 
-        self._profiled_contracts = {}
-        self._cached_call_profiles = {}
-        self._cached_line_profiles = {}
-        self._coverage_data = {}
-
         self._gas_tracker = 0
 
         self.evm = PyEVM(self, fast_mode_enabled, fork_try_prefetch_state)
