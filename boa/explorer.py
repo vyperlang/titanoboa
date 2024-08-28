@@ -1,5 +1,5 @@
 import json
-from time import sleep
+import time
 from typing import Optional
 
 import requests
@@ -24,13 +24,14 @@ def _fetch_etherscan(
     if api_key is not None:
         params["apikey"] = api_key
 
-    for _ in range(num_retries):
+    for i in range(num_retries):
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
         if not (data.get("status") == "0" and "rate limit" in data.get("result", "")):
             break
-        sleep(backoff_ms / 1000)
+        backoff_factor = 1.1**i  # 1.1**10 ~= 2.59
+        time.sleep(backoff_factor * backoff_ms / 1000)
 
     if int(data["status"]) != 1:
         raise ValueError(f"Failed to retrieve data from API: {data}")
