@@ -388,15 +388,6 @@ class PyEVM:
             unpatch_pyevm_state_object(self.vm.state)
 
     def fork_rpc(self, rpc: RPC, block_identifier: str, force: bool = False, **kwargs):
-        dirty_state = (
-            # we use the line below as a detection mechanism for dirty state
-            len(self.vm.state._account_db._journaltrie._journal._current_values)
-            > 0
-        )
-
-        if dirty_state and not force:
-            raise Exception("Cannot fork on a dirty state. Set force=True to override.")
-
         account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
         self._init_vm(account_db_class)
         block_info = self.vm.state._account_db._block_info
@@ -412,6 +403,11 @@ class PyEVM:
         return issubclass(
             self.vm.__class__._state_class.account_db_class, AccountDBFork
         )
+
+    @property
+    def is_state_dirty(self):
+        # detect if state has been written to
+        return len(self.vm.state._account_db._journaltrie._journal._current_values) > 0
 
     def get_gas_meter_class(self):
         return self.vm.state.computation_class._gas_meter_class
