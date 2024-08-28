@@ -54,9 +54,6 @@ class Env:
     def set_random_seed(self, seed=None):
         self._random = random.Random(seed)
 
-    def set_nickname(self, nickname):
-        self.nickname = nickname
-
     def get_gas_price(self):
         return self._gas_price or 0
 

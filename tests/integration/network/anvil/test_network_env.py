@@ -40,12 +40,6 @@ def test_network_env_nickname(free_port):
     assert boa.env.nickname == f"http://localhost:{free_port}"
 
 
-def test_network_env_set_nickname():
-    new_nickname = "new_nickname"
-    boa.env.set_nickname(new_nickname)
-    assert boa.env.nickname == new_nickname
-
-
 def test_total_supply(simple_contract):
     assert simple_contract.totalSupply() == STARTING_SUPPLY
 
