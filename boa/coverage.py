@@ -60,7 +60,10 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
     def dynamic_source_filename(self, filename, frame):
         if not self._valid_frame(frame):
             return None
-        return frame.f_locals["filename"]
+        ret = frame.f_locals["filename"]
+        if ret is not None and not ret.endswith(".vy"):
+            return None
+        return ret
 
     def has_dynamic_source_filename(self):
         return True
@@ -70,11 +73,13 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
         if not self._valid_frame(frame):
             return (-1, -1)
 
-        start_lineno = frame.f_locals["lineno"]
+        ast_node = frame.f_locals["node"]
 
-        # end_lineno = node.end_lineno
-        # note: `return start_lineno, end_lineno` doesn't seem to work.
-        return start_lineno, start_lineno
+        start_lineno = ast_node.lineno
+        end_lineno = ast_node.end_lineno
+        if end_lineno is None:
+            end_lineno = start_lineno
+        return start_lineno, end_lineno
 
     # XXX: dynamic context. return function name or something
     def dynamic_context(self, frame):
@@ -140,7 +145,7 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
 
     def exit_counts(self):
         ret = {}
-        for ast_node in self._ast:
+        for ast_node in self._ast.get_descendants(vy_ast.If):
             ret[ast_node.lineno] = 2
         return ret
 
@@ -151,11 +156,14 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
         functions = self._ast.get_children(vy_ast.FunctionDef)
 
         for f in functions:
-            # add entry to the function for external functions?
-            # ret.add(f.lineno)
             for stmt in f.body:
                 ret.add(stmt.lineno)
                 for node in stmt.get_descendants():
+                    if isinstance(node, vy_ast.AnnAssign) and isinstance(
+                        node.parent, vy_ast.For
+                    ):
+                        # tokenizer bug with vyper parser, just ignore it
+                        continue
                     ret.add(node.lineno)
 
         return ret

@@ -6,6 +6,7 @@ The entry point for managing the execution environment.
 
 import contextlib
 import random
+import warnings
 from typing import Any, Optional, TypeAlias
 
 import eth.constants as constants
@@ -53,7 +54,16 @@ class Env:
     def enable_fast_mode(self, flag: bool = True):
         self.evm.enable_fast_mode(flag)
 
-    def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork(
+        self,
+        url: str,
+        reset_traces=True,
+        block_identifier="safe",
+        deprecated=True,
+        **kwargs,
+    ):
+        if deprecated:
+            warnings.warn("using boa.env.fork directly is deprecated; use `boa.fork`!")
         return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
 
     def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):
@@ -198,6 +208,8 @@ class Env:
         start_pc: int = 0,  # TODO: This isn't used
         # override the target address:
         override_address: Optional[_AddressType] = None,
+        # the calling vyper contract
+        contract: Any = None,
     ):
         sender = self._get_sender(sender)
 
@@ -217,8 +229,12 @@ class Env:
             bytecode=bytecode,
         )
 
+        if self._coverage_enabled:
+            self._trace_computation(computation, contract)
+
         if computation._gas_meter_class != NoGasMeter:
             self._update_gas_used(computation.get_gas_used())
+
         return target_address, computation
 
     def deploy_code(self, *args, **kwargs) -> tuple[Address, bytes]:
@@ -312,7 +328,7 @@ class Env:
                     continue
                 if (node := ast_map.get(pc)) is not None:
                     mod = node.module_node
-                    self._trace_cov(mod.path, node.lineno)
+                    self._trace_cov(mod.resolved_path, node)
                 seen_pcs.add(pc)
 
         for child in computation.children:
@@ -321,7 +337,7 @@ class Env:
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._trace_computation(child, child_contract)
 
-    def _trace_cov(self, filename, lineno):
+    def _trace_cov(self, filename, node):
         pass
 
     def get_code(self, address: _AddressType) -> bytes:

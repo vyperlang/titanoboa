@@ -88,7 +88,7 @@ or,
 
 .. code-block::
 
-    pytest --cov= ...
+    pytest --cov= --cov-branch ...
 
 `pytest-cov <https://pytest-cov.readthedocs.io/en/latest/readme.html#usage>`_ is a wrapper around ``coverage.py`` for using with pytest; using it is recommended because it smooths out some quirks of using ``coverage.py`` with pytest.
 

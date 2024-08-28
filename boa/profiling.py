@@ -160,7 +160,6 @@ class _SingleComputation:
             ret.setdefault((filepath, current_line), Datum()).merge(self.by_pc[pc])
 
             global_profile().cache_module_source(filepath, node.full_source_code)
-
             seen.add(pc)
 
         return ret
