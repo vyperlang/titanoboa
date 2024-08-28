@@ -63,7 +63,9 @@ class _TmpEnvMgr:
         set_env(self.old_env)
 
 
-def fork(url: str, block_identifier: int | str, allow_dirty: bool = False, **kwargs):
+def fork(
+    url: str, block_identifier: int | str = "safe", allow_dirty: bool = False, **kwargs
+):
     global env
     if env.evm.is_state_dirty and not allow_dirty:
         raise Exception(
