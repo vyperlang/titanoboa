@@ -36,8 +36,8 @@ def test_env_type():
     assert isinstance(boa.env, NetworkEnv)
 
 
-def test_network_env_nickname():
-    assert boa.env.nickname == "pyevm"
+def test_network_env_nickname(free_port):
+    assert boa.env.nickname == f"http://localhost:{free_port}"
 
 
 def test_network_env_set_nickname():
