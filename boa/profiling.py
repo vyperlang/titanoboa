@@ -7,7 +7,7 @@ from textwrap import dedent
 from eth_utils import to_checksum_address
 from rich.table import Table
 
-from boa.contracts.vyper.ast_utils import get_fn_name_from_lineno, get_line
+from boa.contracts.vyper.ast_utils import get_fn_name_from_lineno
 
 
 def _safe_relpath(path):
@@ -19,16 +19,16 @@ def _safe_relpath(path):
         return path
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(frozen=True)
 class LineInfo:
     address: str
     contract_path: str
+    module_path: str
     lineno: int
-    line_src: str
     fn_name: str
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(frozen=True)
 class ContractMethodInfo:
     address: str
     contract_path: str
@@ -156,8 +156,10 @@ class _SingleComputation:
                 continue
 
             current_line = node.lineno
-            ret.setdefault(current_line, Datum()).merge(self.by_pc[pc])
+            filepath = node.module_node.resolved_path
+            ret.setdefault((filepath, current_line), Datum()).merge(self.by_pc[pc])
 
+            global_profile().cache_module_source(filepath, node.full_source_code)
             seen.add(pc)
 
         return ret
@@ -178,48 +180,29 @@ class LineProfile:
         return list(self.profile.items())
 
     def merge_single(self, single: _SingleComputation) -> None:
-        for line, datum in single.by_line.items():
-            self.profile.setdefault((single.contract, line), Datum()).merge(datum)
+        for (path, line), datum in single.by_line.items():
+            self.profile.setdefault((single.contract, path, line), Datum()).merge(datum)
 
+    # TODO: this method seems like dead code
     def merge(self, other: "LineProfile") -> None:
-        for (contract, line), datum in other.profile.items():
-            self.profile.setdefault((contract, line), Datum()).merge(datum)
+        for (contract, path, line), datum in other.profile.items():
+            self.profile.setdefault((contract, path, line), Datum()).merge(datum)
 
-    def summary(
-        self, display_columns=("net_tot_gas",), sortkey="net_tot_gas", limit=10
-    ):
-        raw_summary = self.raw_summary()
-
-        if sortkey is not None:
-            raw_summary.sort(reverse=True, key=lambda x: getattr(x[1], sortkey))
-        if limit is not None and limit > 0:
-            raw_summary = raw_summary[:limit]
-
-        tmp = []
-        for (contract, line), datum in raw_summary:
-            data = ", ".join(f"{c}: {getattr(datum, c)}" for c in display_columns)
-            line_src = get_line(contract.compiler_data.source_code, line)
-            x = f"{contract.address}:{contract.compiler_data.contract_path}:{line} {data}"
-            tmp.append((x, line_src))
-
-        just = max(len(t[0]) for t in tmp)
-        ret = [f"{l.ljust(just)}  {r.strip()}" for (l, r) in tmp]
-        return _String("\n".join(ret))
-
-    def get_line_data(self):
+    def get_line_data(self) -> dict[LineInfo, int]:
         raw_summary = self.raw_summary()
         raw_summary.sort(reverse=True, key=lambda x: x[1].net_gas)
 
         line_gas_data = {}
-        for (contract, line), datum in raw_summary:
-            fn_name = get_fn_name_from_lineno(contract.source_map, line)
+        for (contract, path, line), datum in raw_summary:
+            source_map = contract.source_map["pc_raw_ast_map"]
+            fn_name = get_fn_name_from_lineno(source_map, path, line)
 
             # here we use net_gas to include child computation costs:
             line_info = LineInfo(
                 address=contract.address,
                 contract_path=contract.compiler_data.contract_path,
                 lineno=line,
-                line_src=get_line(contract.compiler_data.source_code, line),
+                module_path=path,
                 fn_name=fn_name,
             )
 
@@ -235,7 +218,20 @@ class GlobalProfile:
     def __init__(self):
         self.profiled_contracts = {}
         self.call_profiles = {}
+
+        # dict[LineInfo => gas used <int>]
         self.line_profiles = {}
+
+        # dict[resolved_path => source code]
+        self.module_sources = {}
+
+    def cache_module_source(self, resolved_path, source_code):
+        if resolved_path in self.module_sources:
+            return
+        self.module_sources[resolved_path] = source_code.splitlines(keepends=True)
+
+    def get_module_line(self, resolved_path, lineno):
+        return self.module_sources[resolved_path][lineno - 1]
 
     @classmethod
     def get_singleton(cls):
@@ -404,11 +400,11 @@ def get_line_profile_table() -> Table:
 
         # add spaces so numbers take up equal space
         lineno = str(lp.lineno).rjust(3)
-        gas_data = (lineno + ": " + dedent(lp.line_src), gas_data)
+        line_source = global_profile().get_module_line(lp.module_path, lp.lineno)
+        gas_data = (lineno + ": " + dedent(line_source), gas_data)
 
-        contracts.setdefault(contract_uid, {}).setdefault(lp.fn_name, []).append(
-            gas_data
-        )
+        fn_uid = (lp.module_path, lp.fn_name)
+        contracts.setdefault(contract_uid, {}).setdefault(fn_uid, []).append(gas_data)
 
     table = _create_table(for_line_profile=True)
 
@@ -434,7 +430,7 @@ def get_line_profile_table() -> Table:
         )
 
         num_fn = 0
-        for fn_name, _data in fn_data.items():
+        for (module_path, fn_name), _data in fn_data.items():
             l_profile = []
             for code, gas_used in _data:
                 if code.endswith("\n"):
@@ -447,9 +443,7 @@ def get_line_profile_table() -> Table:
             l_profile = sorted(l_profile, key=lambda x: int(x[5]), reverse=True)
 
             for c, profile in enumerate(l_profile):
-                cname = ""
-                if c == 0:
-                    cname = f"Function: {fn_name}"
+                cname = f"{_safe_relpath(module_path)}:{fn_name}"
                 table.add_row(cname, *profile[2:])
 
             if not num_fn + 1 == len(fn_data):
