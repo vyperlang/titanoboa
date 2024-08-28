@@ -14,6 +14,9 @@ class _BaseEVMContract:
     This includes ABI and Vyper contract.
     """
 
+    # flag to signal whether this contract can be line profiled
+    _can_line_profile = False
+
     def __init__(
         self,
         env: Optional[Env] = None,

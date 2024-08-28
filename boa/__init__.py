@@ -45,17 +45,41 @@ def set_env(new_env):
     Env._singleton = new_env
 
 
+# Simple context manager which functions like the `open()` builtin -
+# if simply called, it never calls __exit__, but if used as a context manager,
+# it calls __exit__ at scope exit
+class _TmpEnvMgr:
+    def __init__(self, new_env):
+        global env
+        self.old_env = env
+
+        set_env(new_env)
+
+    def __enter__(self):
+        # dummy
+        pass
+
+    def __exit__(self, *args):
+        set_env(self.old_env)
+
+
+def fork(url: str, block_identifier: int | str, **kwargs):
+    new_env = Env()
+    new_env.fork(url=url, block_identifier=block_identifier, deprecated=False, **kwargs)
+    return _TmpEnvMgr(new_env)
+
+
 def set_browser_env(address=None):
     """Set the environment to use the browser's network in Jupyter/Colab"""
     # import locally because jupyter is generally not installed
     from boa.integrations.jupyter import BrowserEnv
 
-    set_env(BrowserEnv(address))
+    return _TmpEnvMgr(BrowserEnv(address))
 
 
 def set_network_env(url):
     """Set the environment to use a custom network URL"""
-    set_env(NetworkEnv.from_url(url))
+    return _TmpEnvMgr(NetworkEnv.from_url(url))
 
 
 def reset_env():
