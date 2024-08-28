@@ -165,7 +165,7 @@ class NetworkEnv(Env):
 
         self._rpc: RPC = rpc
 
-        self.nickname = nickname or rpc.identifier
+        self.nickname = nickname or rpc.name
 
         self._reset_fork()
 
