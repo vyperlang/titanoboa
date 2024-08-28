@@ -333,7 +333,7 @@ class Env:
                     continue
                 if (node := ast_map.get(pc)) is not None:
                     mod = node.module_node
-                    self._trace_cov(mod.path, node.lineno)
+                    self._trace_cov(mod.resolved_path, node)
                 seen_pcs.add(pc)
 
         for child in computation.children:
@@ -342,7 +342,7 @@ class Env:
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._trace_computation(child, child_contract)
 
-    def _trace_cov(self, filename, lineno):
+    def _trace_cov(self, filename, node):
         pass
 
     def get_code(self, address: _AddressType) -> bytes:
