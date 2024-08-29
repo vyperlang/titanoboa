@@ -1,14 +1,29 @@
-import json
 import time
 from typing import Optional
 
-import requests
+from boa.rpc import json
 
-SESSION = requests.Session()
+try:
+    from requests_cache import CachedSession, Response
+
+    def _filter_fn(res: Response) -> bool:
+        data = res.json()
+        return _is_success_response(data) and not _is_rate_limited(data)
+
+    SESSION = CachedSession("etherscan_cache", filter_fn=_filter_fn)
+except ImportError:
+    from requests import Session
+
+    SESSION = Session()
 
 
 def _fetch_etherscan(
-    uri: str, api_key: Optional[str] = None, num_retries=10, backoff_ms=400, **params
+    uri: str,
+    api_key: Optional[str] = None,
+    num_retries=10,
+    backoff_ms=400,
+    backoff_exp=1.1,
+    **params,
 ) -> dict:
     """
     Fetch data from Etherscan API.
@@ -25,18 +40,35 @@ def _fetch_etherscan(
         params["apikey"] = api_key
 
     for i in range(num_retries):
+        print(f"Fetching {uri} with params {params}")
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
-        if not (data.get("status") == "0" and "rate limit" in data.get("result", "")):
+        if not _is_rate_limited(data):
             break
-        backoff_factor = 1.1**i  # 1.1**10 ~= 2.59
+        backoff_factor = backoff_exp**i  # 1.1**10 ~= 2.59
         time.sleep(backoff_factor * backoff_ms / 1000)
 
-    if int(data["status"]) != 1:
+    if not _is_success_response(data):
         raise ValueError(f"Failed to retrieve data from API: {data}")
 
     return data
+
+
+def _is_success_response(data: dict) -> bool:
+    return int(data["status"]) == 1
+
+
+def _is_rate_limited(data: dict) -> bool:
+    """
+    Check if the response is rate limited. Possible error messages:
+    - Max calls per sec rate limit reached (X/sec)
+    - Max rate limit reached, please use API Key for higher rate limit
+    - Max rate limit reached
+    :param data: Etherscan API response
+    :return: True if rate limited, False otherwise
+    """
+    return int(data["status"]) == 0 and "rate limit" in data.get("result", "")
 
 
 def fetch_abi_from_etherscan(
