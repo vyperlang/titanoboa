@@ -39,8 +39,8 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
-from boa.contracts.trace import DevReason, TraceSource
-from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
+from boa.contracts.trace import TraceSource
+from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
     compile_vyper_function,
@@ -217,6 +217,25 @@ class FrameDetail(dict):
     def __repr__(self):
         detail = ", ".join(f"{k}={v}" for (k, v) in self.items())
         return f"<{self.fn_name}: {detail}>"
+
+
+@dataclass
+class DevReason:
+    reason_type: str
+    reason_str: str
+
+    @classmethod
+    def at_source_location(
+        cls, source_code: str, lineno: int, end_lineno: int
+    ) -> Optional["DevReason"]:
+        s = reason_at(source_code, lineno, end_lineno)
+        if s is None:
+            return None
+        reason_type, reason_str = s
+        return cls(reason_type, reason_str)
+
+    def __str__(self):
+        return f"<{self.reason_type}: {self.reason_str}>"
 
 
 @dataclass
@@ -1125,12 +1144,6 @@ class VyperTraceSource(TraceSource):
         if typ is None:
             return "()"
         return typ.abi_type.selector_name()
-
-    @cached_property
-    def dev_reason(self) -> Optional[DevReason]:
-        return DevReason.at_source_location(
-            self.node.full_source_code, self.node.lineno, self.node.end_lineno
-        )
 
 
 class _InjectVyperFunction(VyperFunction):

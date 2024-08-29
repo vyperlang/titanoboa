@@ -1,10 +1,7 @@
 from dataclasses import dataclass
-from functools import cached_property
 from itertools import chain
 from pathlib import Path
-from typing import Optional
 
-from boa.contracts.vyper.ast_utils import reason_at
 from boa.rpc import json
 from boa.util.abi import Address, abi_decode
 
@@ -25,10 +22,6 @@ class TraceSource:
             return " => None"
         decoded = abi_decode(self._output_schema, output)
         return f" => ({', '.join(_to_str(d) for d in decoded)})"
-
-    @cached_property
-    def dev_reason(self) -> Optional["DevReason"]:
-        return None
 
     @property
     def _input_schema(self) -> str:  # must be implemented by subclasses
@@ -94,25 +87,6 @@ class TraceFrame:
             template = f.read()
         trace_json = json.dumps(self.to_dict()).replace("\\", "\\\\")
         return template.replace("$$TRACE", trace_json)
-
-
-@dataclass
-class DevReason:
-    reason_type: str
-    reason_str: str
-
-    @classmethod
-    def at_source_location(
-        cls, source_code: str, lineno: int, end_lineno: int
-    ) -> Optional["DevReason"]:
-        s = reason_at(source_code, lineno, end_lineno)
-        if s is None:
-            return None
-        reason_type, reason_str = s
-        return cls(reason_type, reason_str)
-
-    def __str__(self):
-        return f"<{self.reason_type}: {self.reason_str}>"
 
 
 def _to_str(d):

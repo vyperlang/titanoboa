@@ -9,7 +9,7 @@ from boa.util.abi import Address
 from boa.util.exceptions import strip_internal_frames
 
 if TYPE_CHECKING:
-    from boa.contracts.trace import DevReason
+    from boa.contracts.vyper.vyper_contract import DevReason
 
 
 class _BaseEVMContract:
@@ -113,7 +113,7 @@ class BoaError(Exception):
     # stack trace but does not require the actual stack trace itself.
     def __str__(self):
         frame = self.stack_trace.last_frame
-        if getattr(frame, "vm_error", None) is not None:
+        if hasattr(frame, "vm_error"):
             err = frame.vm_error
             if not getattr(err, "_already_pretty", False):
                 # avoid double patching when str() is called more than once

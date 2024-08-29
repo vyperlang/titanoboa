@@ -2,7 +2,6 @@
 This module implements the BrowserSigner class, which is used to sign transactions
 in IPython/JupyterLab/Google Colab.
 """
-
 import json
 import logging
 import os
