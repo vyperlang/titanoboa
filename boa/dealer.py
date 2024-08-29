@@ -17,33 +17,37 @@ class SloadTracer:
         self.trace.append(slot)
 
 
-def find_storage_slot(token, function_selector, *args):
+def find_storage_slot(contract, function_selector: str, *args):
+    # we use instantiate a tracker to track storage slots accessed by the SLOAD opcode
     sload_tracer = SloadTracer(
         boa.env.evm.vm.state.computation_class.opcodes[SLOAD_OPCODE]
     )
     boa.patch_opcode(SLOAD_OPCODE, sload_tracer)
 
     try:
-        result = getattr(token, function_selector)(*args)
+        result = getattr(contract, function_selector)(*args)
     except AttributeError:
-        raise ValueError(
-            f"Invalid erc20 contract, function {function_selector} not found"
-        )
+        raise ValueError(f"Function {function_selector} not found in {contract}")
 
+    # we iterate over all the storage slots accessed by the SLOAD opcode
+    # until we find the one that contains the result of the function call
     target_slot = None
     for slot in sload_tracer.trace:
-        slot_value = boa.env.get_storage(token.address, slot)
+        slot_value = boa.env.get_storage(contract.address, slot)
 
         if slot_value == result:
+            # sanity check in a sandboxed environment to avoid false positives
             with boa.env.anchor():
-                boa.env.set_storage(token.address, slot, 123456789)
-                if getattr(token, function_selector)(*args) != 123456789:
+                boa.env.set_storage(contract.address, slot, 123456789)
+                if getattr(contract, function_selector)(*args) != 123456789:
                     continue
 
+            # if the slot contains the result, and it's not a false positive
+            # we found the target slot
             target_slot = slot
             break
 
-    # TODO unpatch opcode
+    # TODO unpatch opcode here
 
     if target_slot is None:
         raise ValueError(
@@ -55,6 +59,10 @@ def find_storage_slot(token, function_selector, *args):
 
 
 def deal(token, amount: int, receiver: Address, adjust_supply: bool = True):
+    """
+    Mints `amount` of tokens to `receiver` and adjusts the total supply if `adjust_supply` is True.
+    Inspired by `deal` implementation from forge-std StdCheats library.
+    """
     # find the storage slot for the balance of the receiver
     balance_slot = find_storage_slot(token, "balanceOf", receiver)
 
