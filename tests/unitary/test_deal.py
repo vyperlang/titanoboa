@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 import boa
@@ -97,7 +99,7 @@ def test_deal_failure_non_erc20():
     contract = boa.loads(source)
 
     with pytest.raises(
-        ValueError, match="Invalid erc20 contract, function balanceOf not found"
+        ValueError, match=re.escape(f"Function balanceOf not found in {contract}")
     ):
         boa.deal(contract, 100, boa.env.generate_address())
 
@@ -111,7 +113,7 @@ def test_deal_failure_non_erc20_totalSupply():
     contract = boa.loads(source)
 
     with pytest.raises(
-        ValueError, match="Invalid erc20 contract, function totalSupply not found"
+        ValueError, match=re.escape(f"Function totalSupply not found in {contract}")
     ):
         boa.deal(contract, 100, boa.env.generate_address())
 
