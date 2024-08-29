@@ -17,57 +17,66 @@ class SloadTracer:
         self.trace.append(slot)
 
 
-# TODO what's the correct type annotation for token (not only VyperContract)
-def deal(token, amount: int, receiver: Address):
-    # we need to trace all sloads to find the
-    # slot containing the balance of the target
+def find_storage_slot(token, function_selector, *args):
     sload_tracer = SloadTracer(
         boa.env.evm.vm.state.computation_class.opcodes[SLOAD_OPCODE]
     )
     boa.patch_opcode(SLOAD_OPCODE, sload_tracer)
 
-    # since we have patched sload opcode,
-    # we can now trace the slot that contains
-    # the balance of the receiver.
-    # TODO handle custom signatures (i.e. `scaledBalanceOf`) for aTokens
     try:
-        target_balance = token.balanceOf(receiver)
+        result = getattr(token, function_selector)(*args)
     except AttributeError:
-        raise ValueError("Invalid token contract, are you sure it's an ERC20?")
+        raise ValueError(
+            f"Invalid erc20 contract, function {function_selector} not found"
+        )
 
-    # we iteratively look for the slot that contains
-    # the balance of the receiver among all the slots accessed
-    # during the `balanceOf` call.
-
-    # This approach works on any memory layout as long as:
-    # 1. the balance is stored in a single unpacked slot.
-    # 2. the balance is not computed on the fly.
     target_slot = None
     for slot in sload_tracer.trace:
         slot_value = boa.env.get_storage(token.address, slot)
 
-        # containing the same value (very common if balance is 0)
-        if slot_value == target_balance:
-            # we try changing the balance in an anchored environment
-            # to make sure we hit the right slot
+        if slot_value == result:
             with boa.env.anchor():
                 boa.env.set_storage(token.address, slot, 123456789)
-                if token.balanceOf(receiver) != 123456789:
+                if getattr(token, function_selector)(*args) != 123456789:
                     continue
 
-            # if we hit the right slot, we can break the loop
             target_slot = slot
             break
 
+    # TODO unpatch opcode
+
     if target_slot is None:
         raise ValueError(
-            "Could not find the target slot, this is expected if the token"
-            " packs storage slots or computes the balance on the fly"
+            f"Could not find the target slot for {function_selector}, this is expected if the token"
+            " packs storage slots or computes the value on the fly"
         )
 
-    boa.env.set_storage(token.address, target_slot, amount)
+    return target_slot
 
-    assert token.balanceOf(receiver) == amount
 
-    # TODO unpatch opcode
-    # TODO correct total supply (probably needs a refactor of the slot tracing logic)
+def deal(token, amount: int, receiver: Address, adjust_supply: bool = True):
+    # find the storage slot for the balance of the receiver
+    balance_slot = find_storage_slot(token, "balanceOf", receiver)
+
+    # backup the current balance to adjust the total supply later
+    old_balance = boa.env.get_storage(token.address, balance_slot)
+
+    # overwrite the old balance with the new one
+    boa.env.set_storage(token.address, balance_slot, amount)
+
+    assert token.balanceOf(receiver) == amount, "balance update failed, this is a bug"
+
+    if adjust_supply:
+        # find the storage slot for the total supply
+        supply_slot = find_storage_slot(token, "totalSupply")
+
+        # compute the new total supply
+        old_supply = boa.env.get_storage(token.address, supply_slot)
+        new_supply = old_supply + (amount - old_balance)
+
+        # overwrite the old total supply with the new one
+        boa.env.set_storage(token.address, supply_slot, new_supply)
+
+        assert (
+            token.totalSupply() == new_supply
+        ), "total supply update failed, this is a bug"
