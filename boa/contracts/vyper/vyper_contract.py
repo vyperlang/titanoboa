@@ -1125,7 +1125,7 @@ class VyperTraceSource(TraceSource):
         return getattr(self.contract, self.func_ast.name).func_t
 
     @cached_property
-    def _input_schema(self) -> str:  # must be implemented by subclasses
+    def args_abi_type(self) -> str:  # must be implemented by subclasses
         method_id_int = int(self.method_id.hex(), 16)
         schema = next(
             schema
@@ -1139,7 +1139,7 @@ class VyperTraceSource(TraceSource):
         return [arg.name for arg in self.func_t.arguments]
 
     @cached_property
-    def _output_schema(self) -> str:  # must be implemented by subclasses
+    def return_schema(self) -> str:  # must be implemented by subclasses
         typ = self.func_t.return_type
         if typ is None:
             return "()"

@@ -8,23 +8,23 @@ from boa.util.abi import Address, abi_decode
 
 class TraceSource:
     def format(self, input: bytes, output: bytes):
-        return f"{self}{self._format_input(input)}{self._format_output(output)}"
+        return f"{self}{self._format_input(input)}{self.format_output(output)}"
 
     def _format_input(self, input: bytes):
-        decoded = abi_decode(self._input_schema, input)
+        decoded = abi_decode(self.args_abi_type, input)
         args = [
             f"{name} = {_to_str(d)}" for d, name in zip(decoded, self._argument_names)
         ]
         return f"({', '.join(args)})"
 
-    def _format_output(self, output: bytes):
+    def format_output(self, output: bytes):
         if output == b"":
             return " => None"
-        decoded = abi_decode(self._output_schema, output)
+        decoded = abi_decode(self.return_schema, output)
         return f" => ({', '.join(_to_str(d) for d in decoded)})"
 
     @property
-    def _input_schema(self) -> str:  # must be implemented by subclasses
+    def args_abi_type(self) -> str:  # must be implemented by subclasses
         raise NotImplementedError  # pragma: no cover
 
     @property
@@ -32,7 +32,7 @@ class TraceSource:
         raise NotImplementedError  # pragma: no cover
 
     @property
-    def _output_schema(self) -> str:  # must be implemented by subclasses
+    def return_schema(self) -> str:  # must be implemented by subclasses
         raise NotImplementedError  # pragma: no cover
 
     def __str__(self):  # must be implemented by subclasses

@@ -370,7 +370,7 @@ class ABIContractFactory:
         contract = ABIContract(
             self._name, self._abi, self.functions, address, self.filename
         )
-        contract.env.register_contract(contract.address, contract)
+        contract.env.register_contract(address, contract)
         return contract
 
 
@@ -386,7 +386,7 @@ class ABITraceSource(TraceSource):
         return repr(self.function)
 
     @cached_property
-    def _input_schema(self):
+    def args_abi_type(self):
         return f"({_format_abi_type(self.function.argument_types)})"
 
     @cached_property
@@ -394,7 +394,7 @@ class ABITraceSource(TraceSource):
         return [arg["name"] for arg in self.function._abi["inputs"]]
 
     @cached_property
-    def _output_schema(self):
+    def return_schema(self):
         return f"({_format_abi_type(self.function.return_type)})"
 
 
