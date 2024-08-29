@@ -1,3 +1,5 @@
+import re
+
 import pytest
 import yaml
 from eth.constants import ZERO_ADDRESS
@@ -168,9 +170,8 @@ def test(n: uint256) -> uint256:
     c, _ = load_via_abi(code, "revert test")
     with pytest.raises(BoaError) as exc_info:
         c.test(0)
-    frame = exc_info.value.args[0].last_frame
-    assert frame.error_detail == "(test(uint256) -> ['uint256'])"
-    assert frame.contract_repr.startswith("<revert test interface at")
+    ((error,),) = exc_info.value.args
+    assert re.match(r"^ +\(.*\.test\(uint256\) -> \['uint256']\)$", error)
 
     with pytest.raises(Exception) as exc_info:
         c.test(1, 2)
@@ -199,8 +200,7 @@ def test(n: uint256) -> uint256:
     with pytest.raises(BoaError) as exc_info:
         abi_contract.test(0)
     ((error,),) = exc_info.value.args
-    assert error.error_detail == "(unknown method 0x29e99f07)"
-    assert error.contract_repr.startswith("<test contract interface at ")
+    assert re.match(r"^ +\(unknown method id .*\.0x29e99f07\)$", error)
 
 
 def test_prepare_calldata():

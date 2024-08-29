@@ -170,19 +170,18 @@ def foo(x: IERC20, from_: address):
     with boa.reverts():
         c.foo(crvusd, t)
 
-    error = c._create_error(c._computation)
-    frame = error.stack_trace[0]
-    assert "crvusd_abi interface at 0x" in frame.contract_repr
-    assert "transferFrom(address,address,uint256)" in frame.error_detail
+    bt = c.stack_trace()
+    assert "crvusd_abi interface at 0x" in bt[0]
+    assert "transferFrom(address,address,uint256)" in bt[0]
 
 
 def test_abi_call_trace(crvusd):
     c = boa.loads(
         """
-from vyper.interfaces import ERC20
+from ethereum.ercs import IERC20
 @external
-def foo(x: ERC20):
-    x.transfer(self, 100)
+def foo(x: IERC20):
+    extcall x.transfer(self, 100)
     """
     )
     boa.env.set_balance(boa.env.eoa, 1000)

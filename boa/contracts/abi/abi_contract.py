@@ -1,14 +1,14 @@
 from collections import defaultdict
-from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Optional, Union
 from warnings import warn
 
-from eth.exceptions import VMError
+from eth.abc import ComputationAPI
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
 from boa.contracts.base_evm_contract import (
+    BoaError,
     StackTrace,
     _BaseEVMContract,
     _handle_child_trace,
@@ -226,36 +226,6 @@ class ABIOverload:
                 )
 
 
-@dataclass
-class AbiErrorDetail:
-    vm_error: VMError | None  # None if computation succeeded but failed decoding
-    contract_repr: str | None  # string representation of the contract for the error
-    error_detail: str | None  # compiler provided error detail
-    dev_reason: Any = None  # dev revert reason if any, may be propagated from the child
-
-    @classmethod
-    def from_computation(cls, contract, computation):
-        vm_error = computation.error if computation.is_error else None
-        contract_repr = computation._contract_repr_before_revert or repr(contract)
-        return cls(vm_error, contract_repr, contract.find_error_meta(computation))
-
-    @property
-    def pretty_vm_reason(self):
-        err = self.vm_error
-        # decode error msg if it's "Error(string)"
-        # b"\x08\xc3y\xa0" == method_id("Error(string)")
-        if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
-            return abi_decode("(string)", err.args[0][4:])[0]
-
-        return repr(err)
-
-    def __str__(self):
-        msg = f"{self.contract_repr}\n"
-        if self.error_detail is not None:
-            msg += f" <compiler: {self.error_detail}>"
-        return msg
-
-
 class ABIContract(_BaseEVMContract):
     """A deployed contract loaded via an ABI."""
 
@@ -288,6 +258,7 @@ class ABIContract(_BaseEVMContract):
                 setattr(self, fn_name, ABIOverload.create(group, self))
 
         self._address = Address(address)
+        self._computation: Optional[ComputationAPI] = None
 
     @property
     def abi(self):
@@ -318,15 +289,29 @@ class ABIContract(_BaseEVMContract):
         schema = f"({_format_abi_type(abi_type)})"
         try:
             return abi_decode(schema, computation.output)
-        except ABIError:
-            return self.handle_error(computation)
+        except ABIError as e:
+            raise BoaError(self.stack_trace(computation)) from e
 
-    def stack_trace(self, computation=None):
-        computation = computation or self._computation
-        ret = StackTrace([AbiErrorDetail.from_computation(self, computation)])
-        return _handle_child_trace(computation, self.env, ret)
+    def stack_trace(self, computation: ComputationAPI) -> StackTrace:
+        """
+        Create a stack trace for a failed contract call.
+        """
+        reason = ""
+        if computation.is_error:
+            reason = " ".join(str(arg) for arg in computation.error.args if arg != b"")
 
-    def find_source_of(self, computation) -> Optional["ABITraceSource"]:
+        calldata_method_id = bytes(computation.msg.data[:4])
+        if calldata_method_id in self.method_id_map:
+            function = self.method_id_map[calldata_method_id]
+            msg = f"  {reason}({self}.{function.pretty_signature})"
+        else:
+            # Method might not be specified in the ABI
+            msg = f"  {reason}(unknown method id {self}.0x{calldata_method_id.hex()})"
+
+        return_trace = StackTrace([msg])
+        return _handle_child_trace(computation, self.env, return_trace)
+
+    def trace_source(self, computation) -> Optional["ABITraceSource"]:
         """
         Find the source of the error in the contract.
         :param computation: the computation object returned by `execute_code`
@@ -335,20 +320,6 @@ class ABIContract(_BaseEVMContract):
         if method_id_ not in self.method_id_map:
             return None
         return ABITraceSource(self, self.method_id_map[method_id_])
-
-    def find_error_meta(self, computation):
-        reason = ""
-        if computation.is_error:
-            reason = " ".join(str(arg) for arg in computation.error.args if arg != b"")
-
-        calldata_method_id = bytes(computation.msg.data[:4])
-        if calldata_method_id not in self.method_id_map:
-            # (private) function might not be specified in the ABI
-            method_hex = f"0x{calldata_method_id.hex()}"
-            return f"{reason} (unknown method {method_hex})".strip()
-
-        method = self.method_id_map[calldata_method_id].pretty_signature
-        return f"{reason} ({method})".strip()
 
     @property
     def deployer(self) -> "ABIContractFactory":

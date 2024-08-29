@@ -220,7 +220,7 @@ class FrameDetail(dict):
 
 
 @dataclass
-class VyperErrorDetail:
+class ErrorDetail:
     vm_error: VMError
     contract_repr: str  # string representation of the contract for the error
     error_detail: str  # compiler provided error detail
@@ -328,7 +328,7 @@ def check_boa_error_matches(error, *args, **kwargs):
     # assume it is a dev reason string
     else:
         assert_ast_types = (vy_ast.Assert, vy_ast.Raise)
-        if frame.source.node.get_ancestor(assert_ast_types) is not None:
+        if frame.ast_source.get_ancestor(assert_ast_types) is not None:
             # if it's a dev reason on an assert statement, check that
             # we are actually handling the user assertion and not some other
             # error_detail.
@@ -622,10 +622,8 @@ class VyperContract(_BaseVyperContract):
         return self.deployer.at(address)
 
     def _get_fn_from_computation(self, computation):
-        source = self.find_source_of(computation)
-        if source is None:
-            return None
-        return get_fn_ancestor_from_node(source.node)
+        node = self.find_source_of(computation)
+        return get_fn_ancestor_from_node(node)
 
     def debug_frame(self, computation=None):
         if computation is None:
@@ -679,21 +677,22 @@ class VyperContract(_BaseVyperContract):
                 return error_map[pc]
         return None
 
-    def find_source_of(
-        self, computation, is_initcode=False
-    ) -> Optional["VyperTraceSource"]:
+    def find_source_of(self, computation):
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
-            node = self.source_map.get(computation.vyper_source_pos)
-            return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
+            return self.source_map.get(computation.vyper_source_pos)
 
         code_stream = computation.code
         ast_map = self.source_map["pc_raw_ast_map"]
         for pc in reversed(code_stream._trace):
             if pc in ast_map:
-                node = ast_map[pc]
-                return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
+                return ast_map[pc]
         return None
+
+    def trace_source(self, computation) -> Optional["VyperTraceSource"]:
+        if (node := self.find_source_of(computation)) is None:
+            return None
+        return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
 
     # ## handling events
     def _get_logs(self, computation, include_child_logs):
@@ -784,9 +783,9 @@ class VyperContract(_BaseVyperContract):
 
     def stack_trace(self, computation=None):
         computation = computation or self._computation
-        frame = VyperErrorDetail.from_computation(self, computation)
-        ret = StackTrace([frame])
-        if frame.error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS:
+        ret = StackTrace([ErrorDetail.from_computation(self, computation)])
+        error_detail = self.find_error_meta(computation)
+        if error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS:
             return ret
         return _handle_child_trace(computation, self.env, ret)
 

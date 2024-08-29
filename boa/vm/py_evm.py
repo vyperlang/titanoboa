@@ -347,7 +347,7 @@ class titanoboa_computation:
         if contract is None:  # TODO: Retrieve from etherscan?
             source = None
         else:
-            source = contract.find_source_of(computation)
+            source = contract.trace_source(computation)
 
         return TraceFrame(
             address=Address(address),

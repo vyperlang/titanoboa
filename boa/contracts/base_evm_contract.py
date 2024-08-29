@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 from eth.abc import ComputationAPI
 
@@ -9,7 +9,7 @@ from boa.util.abi import Address
 from boa.util.exceptions import strip_internal_frames
 
 if TYPE_CHECKING:
-    from boa.contracts.vyper.vyper_contract import VyperErrorDetail
+    from boa.contracts.trace import DevReason
 
 
 class _BaseEVMContract:
@@ -57,12 +57,12 @@ class _BaseEVMContract:
         return self._address
 
 
-class StackTrace(list[Union[str, "VyperErrorDetail"]]):
+class StackTrace(list):  # list[str|ErrorDetail]
     def __str__(self):
         return "\n\n".join(str(x) for x in self)
 
     @property
-    def dev_reason(self) -> str | None:
+    def dev_reason(self) -> Optional["DevReason"]:
         if self.last_frame is None or isinstance(self.last_frame, str):
             return None
         return self.last_frame.dev_reason
