@@ -33,7 +33,7 @@ def deal(token, amount: int, receiver: Address):
     # TODO handle custom signatures (i.e. `scaledBalanceOf`) for aTokens
     try:
         target_balance = token.balanceOf(receiver)
-    except BoaError:
+    except AttributeError:
         raise ValueError("Invalid token contract, are you sure it's an ERC20?")
 
     # we iteratively look for the slot that contains
@@ -47,16 +47,27 @@ def deal(token, amount: int, receiver: Address):
     for slot in sload_tracer.trace:
         slot_value = boa.env.get_storage(token.address, slot)
 
-        # TODO handle balanceOf value collision with other storage slots
         # containing the same value (very common if balance is 0)
         if slot_value == target_balance:
+            # we try changing the balance in an anchored environment
+            # to make sure we hit the right slot
+            with boa.env.anchor():
+                boa.env.set_storage(token.address, slot, 123456789)
+                if token.balanceOf(receiver) != 123456789:
+                    continue
+
+            # if we hit the right slot, we can break the loop
             target_slot = slot
             break
 
-    assert target_slot is not None
+    if target_slot is None:
+        raise ValueError(
+            "Could not find the target slot, this is expected if the token packs storage slots or computes the balance on the fly"
+        )
 
     boa.env.set_storage(token.address, target_slot, amount)
 
     assert token.balanceOf(receiver) == amount
 
     # TODO unpatch opcode
+    # TODO correct total supply (probably needs a refactor of the slot tracing logic)
