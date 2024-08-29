@@ -1,12 +1,18 @@
 from collections import defaultdict
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Optional, Union
 from warnings import warn
 
+from eth.exceptions import VMError
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
-from boa.contracts.base_evm_contract import _BaseEVMContract
+from boa.contracts.base_evm_contract import (
+    StackTrace,
+    _BaseEVMContract,
+    _handle_child_trace,
+)
 from boa.contracts.trace import TraceSource
 from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
 
@@ -220,6 +226,36 @@ class ABIOverload:
                 )
 
 
+@dataclass
+class AbiErrorDetail:
+    vm_error: VMError | None  # None if computation succeeded but failed decoding
+    contract_repr: str | None  # string representation of the contract for the error
+    error_detail: str | None  # compiler provided error detail
+    dev_reason: Any = None  # dev revert reason if any, may be propagated from the child
+
+    @classmethod
+    def from_computation(cls, contract, computation):
+        vm_error = computation.error if computation.is_error else None
+        contract_repr = computation._contract_repr_before_revert or repr(contract)
+        return cls(vm_error, contract_repr, contract.find_error_meta(computation))
+
+    @property
+    def pretty_vm_reason(self):
+        err = self.vm_error
+        # decode error msg if it's "Error(string)"
+        # b"\x08\xc3y\xa0" == method_id("Error(string)")
+        if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
+            return abi_decode("(string)", err.args[0][4:])[0]
+
+        return repr(err)
+
+    def __str__(self):
+        msg = f"{self.contract_repr}\n"
+        if self.error_detail is not None:
+            msg += f" <compiler: {self.error_detail}>"
+        return msg
+
+
 class ABIContract(_BaseEVMContract):
     """A deployed contract loaded via an ABI."""
 
@@ -276,15 +312,19 @@ class ABIContract(_BaseEVMContract):
         :param abi_type: the ABI type of the return value.
         """
         self._computation = computation
-        # when there's no contract in the address, the computation output is empty
         if computation.is_error:
-            raise self._create_error(computation)
+            return self.handle_error(computation)
 
         schema = f"({_format_abi_type(abi_type)})"
         try:
             return abi_decode(schema, computation.output)
-        except ABIError as e:
-            raise self._create_error(computation) from e
+        except ABIError:
+            return self.handle_error(computation)
+
+    def stack_trace(self, computation=None):
+        computation = computation or self._computation
+        ret = StackTrace([AbiErrorDetail.from_computation(self, computation)])
+        return _handle_child_trace(computation, self.env, ret)
 
     def find_source_of(self, computation) -> Optional["ABITraceSource"]:
         """

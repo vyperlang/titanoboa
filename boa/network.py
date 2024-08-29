@@ -149,6 +149,7 @@ class NetworkEnv(Env):
     def __init__(
         self,
         rpc: str | RPC,
+        nickname: str = None,
         accounts: dict[str, Account] = None,
         fork_try_prefetch_state=True,
         **kwargs,
@@ -163,6 +164,8 @@ class NetworkEnv(Env):
             rpc = EthereumRPC(rpc)
 
         self._rpc: RPC = rpc
+
+        self.nickname = nickname or rpc.name
 
         self._reset_fork()
 

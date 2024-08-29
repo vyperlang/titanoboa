@@ -5,6 +5,7 @@
 import contextlib
 import copy
 import warnings
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Optional
@@ -13,6 +14,7 @@ import vyper
 import vyper.ast as vy_ast
 import vyper.ir.compile_ir as compile_ir
 import vyper.semantics.namespace as vy_ns
+from eth.exceptions import VMError
 from vyper.ast.nodes import VariableDecl
 from vyper.ast.parse import parse_to_ast
 from vyper.codegen.core import calculate_type_for_external_return
@@ -26,17 +28,18 @@ from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
 from vyper.compiler.output import build_abi_output
 from vyper.compiler.settings import OptimizationLevel, anchor_settings
+from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.types import AddressT, HashMapT, TupleT
 from vyper.utils import method_id
 
+from boa import BoaError
 from boa.contracts.base_evm_contract import (
-    BoaError,
-    DevReason,
-    FrameDetail,
+    StackTrace,
     _BaseEVMContract,
+    _handle_child_trace,
 )
-from boa.contracts.trace import TraceSource
+from boa.contracts.trace import DevReason, TraceSource
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
@@ -51,11 +54,16 @@ from boa.contracts.vyper.decoder_utils import (
 from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
-from boa.profiling import LineProfile, cache_gas_used_for_computation
+from boa.profiling import cache_gas_used_for_computation
 from boa.util.abi import Address, abi_decode, abi_encode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
+
+# error messages for external calls
+EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
+
+CREATE_ERRORS = ("create failed", "create2 failed")
 
 # error detail where user possibly provided dev revert reason
 DEV_REASON_ALLOWED = ("user raise", "user assert")
@@ -199,6 +207,74 @@ class VyperBlueprint(_BaseVyperContract):
     @cached_property
     def deployer(self):
         return VyperDeployer(self.compiler_data, filename=self.filename)
+
+
+class FrameDetail(dict):
+    def __init__(self, fn_name, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fn_name = fn_name
+
+    def __repr__(self):
+        detail = ", ".join(f"{k}={v}" for (k, v) in self.items())
+        return f"<{self.fn_name}: {detail}>"
+
+
+@dataclass
+class VyperErrorDetail:
+    vm_error: VMError
+    contract_repr: str  # string representation of the contract for the error
+    error_detail: str  # compiler provided error detail
+    dev_reason: DevReason
+    frame_detail: FrameDetail
+    ast_source: vy_ast.VyperNode
+
+    @classmethod
+    def from_computation(cls, contract, computation):
+        error_detail = contract.find_error_meta(computation)
+        ast_source = contract.find_source_of(computation)
+        reason = None
+        if ast_source is not None:
+            reason = DevReason.at_source_location(
+                ast_source.full_source_code, ast_source.lineno, ast_source.end_lineno
+            )
+        frame_detail = contract.debug_frame(computation)
+
+        contract_repr = computation._contract_repr_before_revert or repr(contract)
+        return cls(
+            vm_error=computation.error,
+            contract_repr=contract_repr,
+            error_detail=error_detail,
+            dev_reason=reason,
+            frame_detail=frame_detail,
+            ast_source=ast_source,
+        )
+
+    @property
+    def pretty_vm_reason(self):
+        err = self.vm_error
+        # decode error msg if it's "Error(string)"
+        # b"\x08\xc3y\xa0" == method_id("Error(string)")
+        if isinstance(err.args[0], bytes) and err.args[0][:4] == b"\x08\xc3y\xa0":
+            return abi_decode("(string)", err.args[0][4:])[0]
+
+        return repr(err)
+
+    def __str__(self):
+        msg = f"{self.contract_repr}\n"
+
+        if self.error_detail is not None:
+            msg += f" <compiler: {self.error_detail}>"
+
+        if self.ast_source is not None:
+            # VyperException.__str__ does a lot of formatting for us
+            msg = str(VyperException(msg, self.ast_source))
+
+        if self.frame_detail is not None:
+            self.frame_detail.fn_name = "locals"  # override the displayed name
+            if len(self.frame_detail) > 0:
+                msg += f" {self.frame_detail}"
+
+        return msg
 
 
 # "pattern match" a BoaError. tries to match fields of the error
@@ -353,7 +429,7 @@ class StorageVar:
 
 # data structure to represent the storage variables in a contract
 class StorageModel:
-    def __init__(self, contract: "VyperContract"):
+    def __init__(self, contract):
         compiler_data = contract.compiler_data
         # TODO: recurse into imported modules
         for k, v in contract.module_t.variables.items():
@@ -409,6 +485,8 @@ class ConstantsModel:
 
 
 class VyperContract(_BaseVyperContract):
+    _can_line_profile = True
+
     def __init__(
         self,
         compiler_data: CompilerData,
@@ -425,6 +503,7 @@ class VyperContract(_BaseVyperContract):
         super().__init__(compiler_data, env, filename)
 
         self.created_from = created_from
+        self._computation = None
         self._source_map = None
 
         # add all exposed functions from the interface to the contract
@@ -490,7 +569,7 @@ class VyperContract(_BaseVyperContract):
             self.bytecode = computation.output
 
             if computation.is_error:
-                raise self._create_error(computation)
+                raise BoaError(self.stack_trace(computation))
 
             return address
 
@@ -515,15 +594,12 @@ class VyperContract(_BaseVyperContract):
 
     def __repr__(self):
         ret = (
-            f"<{self.compiler_data.contract_path} at {self._address}, "
+            f"<{self.compiler_data.contract_path} at {self.address}, "
             f"compiled with vyper-{vyper.__version__}+{vyper.__commit__}>"
         )
 
         if self.created_from is not None:
             ret += f" (created by {self.created_from})"
-
-        if not self._address:
-            return ret  # error during deploy
 
         dump_storage = True  # maybe make this configurable in the future
         storage_detail = self._storage.dump()
@@ -603,7 +679,9 @@ class VyperContract(_BaseVyperContract):
                 return error_map[pc]
         return None
 
-    def find_source_of(self, computation) -> Optional["VyperTraceSource"]:
+    def find_source_of(
+        self, computation, is_initcode=False
+    ) -> Optional["VyperTraceSource"]:
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
             node = self.source_map.get(computation.vyper_source_pos)
@@ -685,7 +763,7 @@ class VyperContract(_BaseVyperContract):
         self._computation = computation  # for further inspection
 
         if computation.is_error:
-            raise self._create_error(computation)
+            self.handle_error(computation)
 
         # cache gas used for call if profiling is enabled
         gas_meter = self.env.get_gas_meter_class()
@@ -704,15 +782,13 @@ class VyperContract(_BaseVyperContract):
 
         return vyper_object(ret, vyper_typ)
 
-    def line_profile(self, computation=None):
+    def stack_trace(self, computation=None):
         computation = computation or self._computation
-        ret = LineProfile.from_single(self, computation)
-        for child in computation.children:
-            child_obj = self.env.lookup_contract(child.msg.code_address)
-            # TODO: child obj is opaque contract that calls back into known contract
-            if child_obj is not None:
-                ret.merge(child_obj.line_profile(child))
-        return ret
+        frame = VyperErrorDetail.from_computation(self, computation)
+        ret = StackTrace([frame])
+        if frame.error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS:
+            return ret
+        return _handle_child_trace(computation, self.env, ret)
 
     def ensure_id(self, fn_t):  # mimic vyper.codegen.module.IDGenerator api
         if fn_t._function_id is None:
@@ -1052,7 +1128,7 @@ class VyperTraceSource(TraceSource):
         return typ.abi_type.selector_name()
 
     @cached_property
-    def dev_reason(self) -> DevReason | None:
+    def dev_reason(self) -> Optional[DevReason]:
         return DevReason.at_source_location(
             self.node.full_source_code, self.node.lineno, self.node.end_lineno
         )

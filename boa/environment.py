@@ -6,6 +6,7 @@ The entry point for managing the execution environment.
 
 import contextlib
 import random
+import warnings
 from typing import Any, Optional, TypeAlias
 
 import eth.constants as constants
@@ -40,12 +41,9 @@ class Env:
         self.sha3_trace: dict = {}
         self.sstore_trace: dict = {}
 
-        self._profiled_contracts = {}
-        self._cached_call_profiles = {}
-        self._cached_line_profiles = {}
-        self._coverage_data = {}
-
         self._gas_tracker = 0
+
+        self.nickname = "pyevm"
 
         self.evm = PyEVM(self, fast_mode_enabled, fork_try_prefetch_state)
 
@@ -58,7 +56,16 @@ class Env:
     def enable_fast_mode(self, flag: bool = True):
         self.evm.enable_fast_mode(flag)
 
-    def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork(
+        self,
+        url: str,
+        reset_traces=True,
+        block_identifier="safe",
+        deprecated=True,
+        **kwargs,
+    ):
+        if deprecated:
+            warnings.warn("using boa.env.fork directly is deprecated; use `boa.fork`!")
         return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
 
     def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):

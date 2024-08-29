@@ -9,7 +9,7 @@ Since ``titanoboa`` is framework-agnostic any other testing framework should wor
 Gas Profiling
 -----------------------
 
-Titanoboa has native gas profiling tools that store and generate statistics upon calling a contract. When enabled, gas costs are stored per call in global ``boa.env._cached_call_profiles`` and ``boa.env._cached_line_profiles`` dictionaries.
+Titanoboa has native gas profiling tools that store and generate statistics upon calling a contract. When enabled, gas costs are stored per call in ``global_profile().call_profiles`` and ``global_profile().line_profiles`` dictionaries.
 To enable gas profiling,
 
 1. decorate tests with ``@pytest.mark.gas_profile``, or
