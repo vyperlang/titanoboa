@@ -40,7 +40,6 @@ def _fetch_etherscan(
         params["apikey"] = api_key
 
     for i in range(num_retries):
-        print(f"Fetching {uri} with params {params}")
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
