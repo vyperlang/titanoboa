@@ -1,5 +1,4 @@
 import boa
-from boa import BoaError
 from boa.util.abi import Address
 
 SLOAD_OPCODE = 0x54
@@ -62,7 +61,8 @@ def deal(token, amount: int, receiver: Address):
 
     if target_slot is None:
         raise ValueError(
-            "Could not find the target slot, this is expected if the token packs storage slots or computes the balance on the fly"
+            "Could not find the target slot, this is expected if the token"
+            " packs storage slots or computes the balance on the fly"
         )
 
     boa.env.set_storage(token.address, target_slot, amount)

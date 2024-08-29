@@ -32,7 +32,7 @@ def test_multiple_sloads_same_value():
     source = """
     foo: public(uint256)
     bar: public(uint256)
-    
+
     @view
     @external
     def balanceOf(receiver: address) -> uint256:
@@ -45,6 +45,7 @@ def test_multiple_sloads_same_value():
     boa.deal(contract, 100, receiver := boa.env.generate_address())
 
     assert contract.balanceOf(receiver) == 100
+
 
 def test_vvm_contract():
     source = """
@@ -68,8 +69,11 @@ def test_deal_failure_non_erc20():
 
     contract = boa.loads(source)
 
-    with pytest.raises(ValueError, match="Invalid token contract, are you sure it's an ERC20?"):
-        boa.deal(contract, 100, receiver := boa.env.generate_address())
+    with pytest.raises(
+        ValueError, match="Invalid token contract, are you sure it's an ERC20?"
+    ):
+        boa.deal(contract, 100, boa.env.generate_address())
+
 
 def test_deal_failure_exotic_token():
     code = """
@@ -81,5 +85,9 @@ def test_deal_failure_exotic_token():
 
     contract = boa.loads(code)
 
-    with pytest.raises(ValueError, match="Could not find the target slot, this is expected if the token packs storage slots or computes the balance on the fly"):
-        boa.deal(contract, 100, receiver := boa.env.generate_address())
+    with pytest.raises(
+        ValueError,
+        match="Could not find the target slot, this is expected if the token"
+        "packs storage slots or computes the balance on the fly",
+    ):
+        boa.deal(contract, 100, boa.env.generate_address())
