@@ -87,7 +87,7 @@ def test_deal_failure_exotic_token():
 
     with pytest.raises(
         ValueError,
-        match="Could not find the target slot, this is expected if the token"
+        match="Could not find the target slot, this is expected if the token "
         "packs storage slots or computes the balance on the fly",
     ):
         boa.deal(contract, 100, boa.env.generate_address())
