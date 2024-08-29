@@ -4,13 +4,14 @@ from typing import Optional
 from boa.rpc import json
 
 try:
-    from requests_cache import CachedSession, Response
+    from requests_cache import CachedSession
 
-    def _filter_fn(res: Response) -> bool:
-        data = res.json()
-        return _is_success_response(data) and not _is_rate_limited(data)
-
-    SESSION = CachedSession("etherscan_cache", filter_fn=_filter_fn)
+    SESSION = CachedSession(
+        "~/.cache/titanoboa/explorer_cache",
+        filter_fn=lambda response: _is_success_response(response.json()),
+        allowable_codes=[200],
+        cache_control=True,
+    )
 except ImportError:
     from requests import Session
 
@@ -18,12 +19,7 @@ except ImportError:
 
 
 def _fetch_etherscan(
-    uri: str,
-    api_key: Optional[str] = None,
-    num_retries=10,
-    backoff_ms=400,
-    backoff_exp=1.1,
-    **params,
+    uri: str, api_key: Optional[str] = None, num_retries=10, backoff_ms=400, **params
 ) -> dict:
     """
     Fetch data from Etherscan API.
@@ -45,7 +41,7 @@ def _fetch_etherscan(
         data = res.json()
         if not _is_rate_limited(data):
             break
-        backoff_factor = backoff_exp**i  # 1.1**10 ~= 2.59
+        backoff_factor = 1.1**i  # 1.1**10 ~= 2.59
         time.sleep(backoff_factor * backoff_ms / 1000)
 
     if not _is_success_response(data):
@@ -67,7 +63,7 @@ def _is_rate_limited(data: dict) -> bool:
     :param data: Etherscan API response
     :return: True if rate limited, False otherwise
     """
-    return int(data["status"]) == 0 and "rate limit" in data.get("result", "")
+    return "rate limit" in data.get("result", "")
 
 
 def fetch_abi_from_etherscan(

@@ -36,9 +36,8 @@ def test_cache(api_key, proxy_contract):
 
         # cache miss for non-cached contract
         with pytest.raises(AssertionError):
-            boa.from_etherscan(
-                boa.env.generate_address(), name="VotingAgent", api_key=api_key
-            )
+            address = boa.env.generate_address()
+            boa.from_etherscan(address, name="VotingAgent", api_key=api_key)
 
         # cache hit for cached contract
         c = boa.from_etherscan(
