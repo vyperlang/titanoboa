@@ -43,10 +43,10 @@ def reason_at(
     return None
 
 
-def get_fn_name_from_lineno(ast_map: dict, lineno: int) -> str:
-    # TODO: this could be a performance bottleneck
-    for source_map, node in ast_map.items():
-        if source_map[0] == lineno:
+# TODO: maybe move this into boa/profiling.py
+def get_fn_name_from_lineno(ast_map: dict, path: str, lineno: int) -> str:
+    for node in ast_map.values():
+        if node.lineno == lineno and node.module_node.resolved_path == path:
             fn_node = get_fn_ancestor_from_node(node)
             if fn_node:
                 return fn_node.name

@@ -406,6 +406,8 @@ class ConstantsModel:
 
 
 class VyperContract(_BaseVyperContract):
+    _can_line_profile = True
+
     def __init__(
         self,
         compiler_data: CompilerData,
