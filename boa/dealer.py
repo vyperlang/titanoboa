@@ -1,5 +1,6 @@
 import boa
 from boa.util.abi import Address
+from boa.contracts.base_evm_contract import _BaseEVMContract
 
 SLOAD_OPCODE = 0x54
 
@@ -17,8 +18,7 @@ class SloadTracer:
         self.trace.append(slot)
 
 
-# TODO what's the correct type annotation for token (not only VyperContract)
-def deal(token, amount: int, receiver: Address):
+def deal(token: _BaseEVMContract, amount: int, receiver: Address):
     # we need to trace all sloads to find the
     # slot containing the balance of the target
     sload_tracer = SloadTracer(
