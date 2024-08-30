@@ -394,7 +394,7 @@ class ABITraceSource(TraceSource):
         return [arg["name"] for arg in self.function._abi["inputs"]]
 
     @cached_property
-    def return_schema(self):
+    def return_abi_type(self):
         return f"({_format_abi_type(self.function.return_type)})"
 
 

@@ -20,7 +20,7 @@ class TraceSource:
     def format_output(self, output: bytes):
         if output == b"":
             return " => None"
-        decoded = abi_decode(self.return_schema, output)
+        decoded = abi_decode(self.return_abi_type, output)
         return f" => ({', '.join(_to_str(d) for d in decoded)})"
 
     @property
@@ -32,7 +32,7 @@ class TraceSource:
         raise NotImplementedError  # pragma: no cover
 
     @property
-    def return_schema(self) -> str:  # must be implemented by subclasses
+    def return_abi_type(self) -> str:  # must be implemented by subclasses
         raise NotImplementedError  # pragma: no cover
 
     def __str__(self):  # must be implemented by subclasses

@@ -1139,7 +1139,7 @@ class VyperTraceSource(TraceSource):
         return [arg.name for arg in self.func_t.arguments]
 
     @cached_property
-    def return_schema(self) -> str:  # must be implemented by subclasses
+    def return_abi_type(self) -> str:  # must be implemented by subclasses
         typ = self.func_t.return_type
         if typ is None:
             return "()"
