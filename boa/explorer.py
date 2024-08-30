@@ -51,7 +51,7 @@ def _fetch_etherscan(
 
 
 def _is_success_response(data: dict) -> bool:
-    return int(data["status"]) == 1
+    return data.get("status") == "1"
 
 
 def _is_rate_limited(data: dict) -> bool:
@@ -63,7 +63,7 @@ def _is_rate_limited(data: dict) -> bool:
     :param data: Etherscan API response
     :return: True if rate limited, False otherwise
     """
-    return "rate limit" in data.get("result", "")
+    return "rate limit" in data.get("result", "") and data.get("status") == "0"
 
 
 def fetch_abi_from_etherscan(
