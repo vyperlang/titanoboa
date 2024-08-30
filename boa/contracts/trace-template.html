@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Titanoboa Call Trace</title>
+    <link rel="icon" href="https://vyperlang.org/favicon.ico" type="image/x-icon">
+    <style>
+        .chevron {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 13.1l-8-8 2.1-2.2 5.9 5.9 5.9-5.9 2.1 2.2z'/%3E%3C/svg%3E");
+            height: 1em;
+            width: 1em;
+            display: inline-block;
+            transform: rotate(-90deg);
+            vertical-align: middle;
+        }
+        .open .chevron {
+            transform: rotate(0deg);
+        }
+        .leaf .chevron {
+            visibility: hidden;
+        }
+        li.trace-item {
+            list-style-type: none;
+            margin-left: 25px;
+            white-space: nowrap;
+        }
+        li.trace-item .parent {
+            font-family: monospace;
+        }
+        li.trace-item .parent:hover {
+            background-color: #f0f0f0;
+        }
+        li.trace-item > li.trace-item {
+            display: none;
+        }
+        li.trace-item.open > li.trace-item {
+            display: block;
+        }
+    </style>
+    <script lang="javascript">
+        (() => {
+            const addItem = (list, {depth, gas_used, source, input, output, children, text}) => {
+                const listItem = document.createElement('li');
+                listItem.classList.add('trace-item', children.length ? 'open' : 'leaf');
+
+                const parent = document.createElement('span');
+                parent.classList.add('parent');
+                listItem.appendChild(parent);
+
+                const chevron = document.createElement('i');
+                chevron.classList.add('chevron');
+                chevron.addEventListener('click', () => listItem.classList.toggle('open'));
+                parent.appendChild(chevron);
+
+                parent.appendChild(document.createTextNode(text));
+
+                children.forEach(child => addItem(listItem, child));
+                list.appendChild(listItem);
+                console.log(listItem);
+            };
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const trace = JSON.parse(`$$TRACE`);
+                const root = document.getElementById('call-trace');
+                addItem(root, trace);
+            });
+        })();
+    </script>
+</head>
+<body>
+<div id="call-trace"></div>
+</body>
+</html>

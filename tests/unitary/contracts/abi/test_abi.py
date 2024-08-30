@@ -10,9 +10,9 @@ from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
 from boa.util.abi import Address
 
 
-def load_via_abi(code):
+def load_via_abi(code, name="test contract"):
     contract = boa.loads(code)
-    factory = ABIContractFactory.from_abi_dict(contract.abi)
+    factory = ABIContractFactory.from_abi_dict(contract.abi, name)
     return factory.at(contract.address), contract
 
 
@@ -167,7 +167,7 @@ def test(n: uint256) -> uint256:
     assert n > 0
     return 0
 """
-    c, _ = load_via_abi(code)
+    c, _ = load_via_abi(code, "revert test")
     with pytest.raises(BoaError) as exc_info:
         c.test(0)
     ((error,),) = exc_info.value.args

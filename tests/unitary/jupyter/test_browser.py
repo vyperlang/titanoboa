@@ -1,5 +1,4 @@
 import asyncio
-import json
 import re
 from asyncio import get_event_loop
 from datetime import datetime
@@ -13,7 +12,7 @@ from eth_account import Account
 import boa
 from boa.integrations.jupyter import BrowserRPC, BrowserSigner
 from boa.integrations.jupyter.browser import _generate_token
-from boa.rpc import RPCError
+from boa.rpc import RPCError, json
 
 
 @pytest.fixture()

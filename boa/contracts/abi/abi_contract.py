@@ -13,6 +13,7 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
+from boa.contracts.call_trace import TraceSource
 from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
 
 
@@ -237,8 +238,7 @@ class ABIContract(_BaseEVMContract):
         filename: Optional[str] = None,
         env=None,
     ):
-        super().__init__(env, filename=filename, address=address)
-        self._name = name
+        super().__init__(name, env, filename=filename, address=address)
         self._abi = abi
         self._functions = functions
 
@@ -283,7 +283,6 @@ class ABIContract(_BaseEVMContract):
         :param abi_type: the ABI type of the return value.
         """
         self._computation = computation
-        # when there's no contract in the address, the computation output is empty
         if computation.is_error:
             return self.handle_error(computation)
 
@@ -312,17 +311,27 @@ class ABIContract(_BaseEVMContract):
         return_trace = StackTrace([msg])
         return _handle_child_trace(computation, self.env, return_trace)
 
+    def trace_source(self, computation) -> Optional["ABITraceSource"]:
+        """
+        Find the source of the error in the contract.
+        :param computation: the computation object returned by `execute_code`
+        """
+        method_id_ = computation.msg.data[:4]
+        if method_id_ not in self.method_id_map:
+            return None
+        return ABITraceSource(self, self.method_id_map[method_id_])
+
     @property
     def deployer(self) -> "ABIContractFactory":
         """
         Returns a factory that can be used to retrieve another deployed contract.
         """
-        return ABIContractFactory(self._name, self._abi, filename=self.filename)
+        return ABIContractFactory(self.contract_name, self._abi, filename=self.filename)
 
     def __repr__(self):
         file_str = f" (file {self.filename})" if self.filename else ""
         warn_str = "" if self._bytecode else " (WARNING: no bytecode at this address!)"
-        return f"<{self._name} interface at {self.address}{warn_str}>{file_str}"
+        return f"<{self.contract_name} interface at {self.address}{warn_str}>{file_str}"
 
 
 class ABIContractFactory:
@@ -365,6 +374,30 @@ class ABIContractFactory:
         return contract
 
 
+class ABITraceSource(TraceSource):
+    def __init__(self, contract: ABIContract, function: ABIFunction):
+        self.contract = contract
+        self.function = function
+
+    def __str__(self):
+        return f"{self.contract.contract_name}.{self.function.pretty_name}"
+
+    def __repr__(self):
+        return repr(self.function)
+
+    @cached_property
+    def args_abi_type(self):
+        return f"({_format_abi_type(self.function.argument_types)})"
+
+    @cached_property
+    def _argument_names(self) -> list[str]:
+        return [arg["name"] for arg in self.function._abi["inputs"]]
+
+    @cached_property
+    def return_abi_type(self):
+        return f"({_format_abi_type(self.function.return_type)})"
+
+
 def _abi_from_json(abi: dict) -> str:
     """
     Parses an ABI type into its schema string.
@@ -373,10 +406,8 @@ def _abi_from_json(abi: dict) -> str:
     """
     if "components" in abi:
         components = ",".join([_abi_from_json(item) for item in abi["components"]])
-        if abi["type"] == "tuple":
-            return f"({components})"
-        if abi["type"] == "tuple[]":
-            return f"({components})[]"
+        if abi["type"].startswith("tuple"):
+            return f"({components}){abi['type'][5:]}"
         raise ValueError("Components found in non-tuple type " + abi["type"])
 
     return abi["type"]

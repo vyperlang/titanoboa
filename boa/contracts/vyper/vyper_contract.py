@@ -7,6 +7,7 @@ import copy
 import warnings
 from dataclasses import dataclass
 from functools import cached_property
+from pathlib import Path
 from typing import Any, Optional
 
 import vyper
@@ -38,6 +39,7 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
+from boa.contracts.call_trace import TraceSource
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
@@ -138,7 +140,8 @@ class _BaseVyperContract(_BaseEVMContract):
         env: Optional[Env] = None,
         filename: Optional[str] = None,
     ):
-        super().__init__(env, filename)
+        contract_name = Path(compiler_data.contract_path).stem
+        super().__init__(contract_name, env, filename)
         self.compiler_data = compiler_data
 
         with anchor_settings(self.compiler_data.settings):
@@ -693,7 +696,7 @@ class VyperContract(_BaseVyperContract):
                 return error_map[pc]
         return None
 
-    def find_source_of(self, computation, is_initcode=False):
+    def find_source_of(self, computation):
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
             return self.source_map.get(computation.vyper_source_pos)
@@ -704,6 +707,11 @@ class VyperContract(_BaseVyperContract):
             if pc in ast_map:
                 return ast_map[pc]
         return None
+
+    def trace_source(self, computation) -> Optional["VyperTraceSource"]:
+        if (node := self.find_source_of(computation)) is None:
+            return None
+        return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
 
     # ## handling events
     def _get_logs(self, computation, include_child_logs):
@@ -1092,6 +1100,50 @@ class VyperInternalFunction(VyperFunction):
     def _source_map(self):
         _, _, _, source_map, _ = self._compiled
         return source_map
+
+
+class VyperTraceSource(TraceSource):
+    def __init__(
+        self, contract: VyperContract, node: vy_ast.VyperNode, method_id: bytes
+    ):
+        self.contract = contract
+        self.node = node
+        self.method_id = method_id
+
+    def __str__(self):
+        return f"{self.contract.contract_name}.{self.func_ast.name}:{self.node.lineno}"
+
+    def __repr__(self):
+        return repr(self.node)
+
+    @cached_property
+    def func_ast(self) -> vy_ast.FunctionDef:
+        return self.node.get_ancestor(vy_ast.FunctionDef)
+
+    @cached_property
+    def func_t(self):
+        return getattr(self.contract, self.func_ast.name).func_t
+
+    @cached_property
+    def args_abi_type(self) -> str:  # must be implemented by subclasses
+        method_id_int = int(self.method_id.hex(), 16)
+        schema = next(
+            schema
+            for schema, id_ in self.func_t.method_ids.items()
+            if id_ == method_id_int
+        )
+        return schema.replace(f"{self.func_ast.name}(", "(")
+
+    @cached_property
+    def _argument_names(self) -> list[str]:
+        return [arg.name for arg in self.func_t.arguments]
+
+    @cached_property
+    def return_abi_type(self) -> str:  # must be implemented by subclasses
+        typ = self.func_t.return_type
+        if typ is None:
+            return "()"
+        return typ.abi_type.selector_name()
 
 
 class _InjectVyperFunction(VyperFunction):

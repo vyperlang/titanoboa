@@ -1,11 +1,15 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from eth.abc import ComputationAPI
 
+from boa.contracts.call_trace import TraceFrame
 from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.exceptions import strip_internal_frames
+
+if TYPE_CHECKING:
+    from boa.contracts.vyper.vyper_contract import DevReason
 
 
 class _BaseEVMContract:
@@ -19,16 +23,23 @@ class _BaseEVMContract:
 
     def __init__(
         self,
+        name: str,
         env: Optional[Env] = None,
         filename: Optional[str] = None,
         address: Optional[Address] = None,
     ):
         self.env = env or Env.get_singleton()
+        self.contract_name = name
         self._address = address  # this can be overridden by subclasses
         self.filename = filename
+        self._computation: Optional[ComputationAPI] = None
 
     def stack_trace(self, computation: ComputationAPI):  # pragma: no cover
         raise NotImplementedError
+
+    def call_trace(self) -> TraceFrame:
+        assert self._computation is not None, "No computation to trace"
+        return self._computation.call_trace
 
     def handle_error(self, computation):
         try:
@@ -46,14 +57,12 @@ class _BaseEVMContract:
         return self._address
 
 
-# TODO: allow only ErrorDetail in here.
-# Currently this is list[str|ErrorDetail] (see _trace_for_unknown_contract below)
-class StackTrace(list):
+class StackTrace(list):  # list[str|ErrorDetail]
     def __str__(self):
         return "\n\n".join(str(x) for x in self)
 
     @property
-    def dev_reason(self) -> str | None:
+    def dev_reason(self) -> Optional["DevReason"]:
         if self.last_frame is None or isinstance(self.last_frame, str):
             return None
         return self.last_frame.dev_reason

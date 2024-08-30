@@ -7,12 +7,14 @@ import contextlib
 import logging
 import sys
 import warnings
+from functools import cached_property
 from typing import Any, Iterator, Optional, Type
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
+from eth.abc import ComputationAPI
 from eth.chains.mainnet import MainnetChain
 from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
@@ -24,6 +26,7 @@ from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_utils import setup_DEBUG2_logging
 
+from boa.contracts.call_trace import TraceFrame
 from boa.rpc import RPC
 from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
@@ -331,6 +334,32 @@ class titanoboa_computation:
         # return computation outside of with block; computation.__exit__
         # swallows exceptions (including Revert).
         return finalize(computation)
+
+    @cached_property
+    def call_trace(self) -> TraceFrame:
+        return self._compute_call_trace()
+
+    def _compute_call_trace(self, depth=0) -> TraceFrame:
+        computation: ComputationAPI = self
+        address = computation.msg.code_address
+        env = self.env  # type: ignore
+        contract = env._lookup_contract_fast(address)
+        if contract is None:  # TODO: Retrieve from etherscan?
+            source = None
+        else:
+            source = contract.trace_source(computation)
+
+        return TraceFrame(
+            address=Address(address),
+            depth=depth,
+            gas_used=computation.get_gas_used(),
+            source=source,
+            input=computation.msg.data_as_bytes[4:],
+            output=computation.output,
+            children=[
+                child._compute_call_trace(depth + 1) for child in computation.children
+            ],
+        )
 
 
 # Message object with extra attrs we can use to thread things through

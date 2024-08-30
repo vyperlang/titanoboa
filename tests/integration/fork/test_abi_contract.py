@@ -1,3 +1,6 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
 import hypothesis.strategies as st
 import pytest
 from hypothesis import given
@@ -171,5 +174,57 @@ def foo(x: IERC20, from_: address):
         c.foo(crvusd, t)
 
     bt = c.stack_trace()
-    assert "crvusd_abi.json interface at 0x" in bt[0]
+    assert "crvusd_abi interface at 0x" in bt[0]
     assert "transferFrom(address,address,uint256)" in bt[0]
+
+
+def test_call_trace_abi_and_vyper(crvusd):
+    c = boa.loads(
+        """
+from ethereum.ercs import IERC20
+@external
+def foo(x: IERC20):
+    extcall x.transfer(self, 100)
+    """
+    )
+    boa.env.set_balance(boa.env.eoa, 1000)
+    with boa.reverts():
+        c.foo(crvusd)
+
+    tree = c.call_trace()
+    assert str(tree).splitlines() == [
+        f'[5290] VyperContract.foo:5(x = "{crvusd.address}") => None',
+        f'    [2502] crvusd_abi.transfer(_to = "{c.address}", _value = 100) => None',
+    ]
+    assert tree.to_dict() == {
+        "address": "0xC6Acb7D16D51f72eAA659668F30A40d87E2E0551",
+        "children": [
+            {
+                "address": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+                "children": [],
+                "depth": 1,
+                "gas_used": 2502,
+                "input": "0x000000000000000000000000c6acb7d16d51f72eaa659668f30a40d87e2e0551000000"
+                "0000000000000000000000000000000000000000000000000000000064",
+                "output": "0x",
+                "source": "crvusd_abi.transfer",
+                "text": '[2502] crvusd_abi.transfer(_to = "'
+                '0xC6Acb7D16D51f72eAA659668F30A40d87E2E0551", _value = 100) => None',
+            }
+        ],
+        "depth": 0,
+        "gas_used": 5290,
+        "input": "0x000000000000000000000000f939e0a03fb07f59a73314e73794be0e57ac1b4e",
+        "output": "0x",
+        "source": "VyperContract.foo:5",
+        "text": '[5290] VyperContract.foo:5(x = "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E") =>'
+        " None",
+    }
+
+    with TemporaryDirectory() as tmpdir:
+        tmpfile = Path(tmpdir) / "trace.json"
+        tree.export_html(tmpfile)
+        with open(tmpfile) as f:
+            html = f.read()
+            assert html.startswith("<!DOCTYPE html>")
+            assert "JSON.parse(`{" in html
