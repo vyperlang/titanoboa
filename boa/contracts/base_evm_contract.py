@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Optional
 
 from eth.abc import ComputationAPI
 
-from boa.contracts.trace import TraceFrame
+from boa.contracts.call_trace import TraceFrame
 from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.exceptions import strip_internal_frames

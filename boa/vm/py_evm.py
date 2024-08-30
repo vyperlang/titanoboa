@@ -26,7 +26,7 @@ from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_utils import setup_DEBUG2_logging
 
-from boa.contracts.trace import TraceFrame
+from boa.contracts.call_trace import TraceFrame
 from boa.rpc import RPC
 from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
@@ -356,7 +356,9 @@ class titanoboa_computation:
             source=source,
             input=computation.msg.data_as_bytes[4:],
             output=computation.output,
-            children=[child._trace(depth + 1) for child in computation.children],
+            children=[
+                child._compute_call_trace(depth + 1) for child in computation.children
+            ],
         )
 
 

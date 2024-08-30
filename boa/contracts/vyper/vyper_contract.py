@@ -39,7 +39,7 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
-from boa.contracts.trace import TraceSource
+from boa.contracts.call_trace import TraceSource
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
