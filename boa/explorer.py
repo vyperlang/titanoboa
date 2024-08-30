@@ -11,6 +11,9 @@ try:
         filter_fn=lambda response: _is_success_response(response.json()),
         allowable_codes=[200],
         cache_control=True,
+        expire_after=3600*6,
+        stale_if_error=True,
+        stale_while_revalidate=True,
     )
 except ImportError:
     from requests import Session
