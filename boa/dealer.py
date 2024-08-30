@@ -1,5 +1,8 @@
+from typing import Any
+
 import boa
 from boa.util.abi import Address
+from boa.vm.utils import to_int
 
 SLOAD_OPCODE = 0x54
 
@@ -10,81 +13,83 @@ class SloadTracer:
         self.trace = []
 
     def __call__(self, computation):
-        # TODO find a way to peak instead of pop/repush
-        slot = computation.stack_pop1_int()
-        computation.stack_push_int(slot)
+        slot = to_int(computation._stack.values[-1])
         self.super_fn(computation)
         self.trace.append(slot)
 
 
-def find_storage_slot(contract, function_selector: str, *args):
-    # we use instantiate a tracker to track storage slots accessed by the SLOAD opcode
-    sload_tracer = SloadTracer(
-        boa.env.evm.vm.state.computation_class.opcodes[SLOAD_OPCODE]
-    )
-    boa.patch_opcode(SLOAD_OPCODE, sload_tracer)
+def update_storage_slot(contract, fn_name, mk_new_value: Any, args: Any):
+    tmp = boa.vm.py_evm._opcode_overrides
 
     try:
-        result = getattr(contract, function_selector)(*args)
+        # clean opcode overrides in case there is user-stuff in there - we
+        # don't want to trip user-overridden opcodes, since this is a
+        # "system" operation.
+        boa.vm.py_evm._opcode_overrides = {}
+        opcodes = boa.env.evm.vm.state.computation_class.opcodes
+        sload_tracer = SloadTracer(opcodes[SLOAD_OPCODE])
+        boa.patch_opcode(SLOAD_OPCODE, sload_tracer)
+
+        return _update_storage_slot(contract, fn_name, mk_new_value, sload_tracer, args)
+
+    finally:
+        # restore
+        boa.vm.py_evm._opcode_overrides = tmp
+
+
+def _get_func(contract, fn_name):
+    try:
+        return getattr(contract, fn_name)
     except AttributeError:
-        raise ValueError(f"Function {function_selector} not found in {contract}")
+        raise ValueError(f"Function {fn_name} not found in {contract}")
+
+
+def _update_storage_slot(contract, fn_name, mk_new_value: Any, sload_tracer, args):
+    fn = _get_func(contract, fn_name)
+    result = fn(*args)
 
     # we iterate over all the storage slots accessed by the SLOAD opcode
     # until we find the one that contains the result of the function call
-    target_slot = None
     for slot in sload_tracer.trace:
         slot_value = boa.env.get_storage(contract.address, slot)
 
-        if slot_value == result:
-            # sanity check in a sandboxed environment to avoid false positives
-            with boa.env.anchor():
-                boa.env.set_storage(contract.address, slot, 123456789)
-                if getattr(contract, function_selector)(*args) != 123456789:
-                    continue
+        # perf: don't bother checking the slot if it doesn't match the expected result
+        if slot_value != result:
+            continue
 
-            # if the slot contains the result, and it's not a false positive
-            # we found the target slot
-            target_slot = slot
-            break
+        # double check we have the right slot -- modifying the value should
+        # yield the expected value on calling the view function again
+        with boa.env.anchor():
+            poison = (result + 1) % 2**256
+            boa.env.set_storage(contract.address, slot, poison)
+            if fn(*args) != poison:
+                continue
 
-    # TODO unpatch opcode here
+        # we found the slot. update it
+        new_value = mk_new_value(slot_value)
+        boa.env.set_storage(contract.address, slot, new_value)
 
-    if target_slot is None:
-        raise ValueError(
-            f"Could not find the target slot for {function_selector}, this is expected if the token"
-            " packs storage slots or computes the value on the fly"
-        )
+        # sanity check
+        if fn(*args) != new_value:
+            # very unlikely, but this means the ERC20 implementation is totally weird
+            raise RuntimeError("new value does not match, unknown ERC20 implementation")
 
-    return target_slot
+        break
+
+    else:
+        msg = f"Could not find the target slot for {fn_name}"
+        msg += ", this is expected if the token packs storage slots or"
+        msg += " computes the value on the fly"
+        raise ValueError(msg)
 
 
-def deal(token, amount: int, receiver: Address, adjust_supply: bool = True):
+def deal(token, amount: int, receiver: Address):
     """
     Mints `amount` of tokens to `receiver` and adjusts the total supply if `adjust_supply` is True.
-    Inspired by `deal` implementation from forge-std StdCheats library.
+    Inspired by https://github.com/foundry-rs/forge-std/blob/07263d193d/src/StdCheats.sol#L728
     """
-    # find the storage slot for the balance of the receiver
-    balance_slot = find_storage_slot(token, "balanceOf", receiver)
+    new_balance = lambda balance: balance + amount  # noqa: E731
+    update_storage_slot(token, "balanceOf", new_balance, (receiver,))
 
-    # backup the current balance to adjust the total supply later
-    old_balance = boa.env.get_storage(token.address, balance_slot)
-
-    # overwrite the old balance with the new one
-    boa.env.set_storage(token.address, balance_slot, amount)
-
-    assert token.balanceOf(receiver) == amount, "balance update failed, this is a bug"
-
-    if adjust_supply:
-        # find the storage slot for the total supply
-        supply_slot = find_storage_slot(token, "totalSupply")
-
-        # compute the new total supply
-        old_supply = boa.env.get_storage(token.address, supply_slot)
-        new_supply = old_supply + (amount - old_balance)
-
-        # overwrite the old total supply with the new one
-        boa.env.set_storage(token.address, supply_slot, new_supply)
-
-        assert (
-            token.totalSupply() == new_supply
-        ), "total supply update failed, this is a bug"
+    new_supply = lambda totalSupply: totalSupply + amount  # noqa: E731
+    update_storage_slot(token, "totalSupply", new_supply, ())
