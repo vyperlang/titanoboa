@@ -3,9 +3,12 @@ from unittest.mock import patch
 
 import pytest
 from eth.vm.message import Message
+from requests_cache import CachedSession
 
 import boa
 from boa import Env
+from boa.contracts.abi.abi_contract import ABIContract
+from boa.explorer import SESSION
 
 crvusd = "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E"
 voting_agent = "0xE478de485ad2fe566d49342Cbd03E49ed7DB3356"
@@ -24,6 +27,24 @@ def crvusd_contract(api_key):
 @pytest.fixture(scope="module")
 def proxy_contract(api_key):
     return boa.from_etherscan(voting_agent, name="VotingAgent", api_key=api_key)
+
+
+def test_cache(api_key, proxy_contract):
+    assert isinstance(SESSION, CachedSession)
+    with patch("requests.adapters.HTTPAdapter.send") as mock:
+        mock.side_effect = AssertionError
+
+        # cache miss for non-cached contract
+        with pytest.raises(AssertionError):
+            address = boa.env.generate_address()
+            boa.from_etherscan(address, name="VotingAgent", api_key=api_key)
+
+        # cache hit for cached contract
+        c = boa.from_etherscan(
+            proxy_contract.address, name="VotingAgent", api_key=api_key
+        )
+
+    assert isinstance(c, ABIContract)
 
 
 def test_crvusd_contract(crvusd_contract):

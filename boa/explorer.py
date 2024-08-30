@@ -1,10 +1,24 @@
-import json
 import time
 from typing import Optional
 
-import requests
+from boa.rpc import json
 
-SESSION = requests.Session()
+try:
+    from requests_cache import CachedSession
+
+    SESSION = CachedSession(
+        "~/.cache/titanoboa/explorer_cache",
+        filter_fn=lambda response: _is_success_response(response.json()),
+        allowable_codes=[200],
+        cache_control=True,
+        expire_after=3600 * 6,
+        stale_if_error=True,
+        stale_while_revalidate=True,
+    )
+except ImportError:
+    from requests import Session
+
+    SESSION = Session()
 
 
 def _fetch_etherscan(
@@ -28,15 +42,31 @@ def _fetch_etherscan(
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
-        if not (data.get("status") == "0" and "rate limit" in data.get("result", "")):
+        if not _is_rate_limited(data):
             break
         backoff_factor = 1.1**i  # 1.1**10 ~= 2.59
         time.sleep(backoff_factor * backoff_ms / 1000)
 
-    if int(data["status"]) != 1:
+    if not _is_success_response(data):
         raise ValueError(f"Failed to retrieve data from API: {data}")
 
     return data
+
+
+def _is_success_response(data: dict) -> bool:
+    return data.get("status") == "1"
+
+
+def _is_rate_limited(data: dict) -> bool:
+    """
+    Check if the response is rate limited. Possible error messages:
+    - Max calls per sec rate limit reached (X/sec)
+    - Max rate limit reached, please use API Key for higher rate limit
+    - Max rate limit reached
+    :param data: Etherscan API response
+    :return: True if rate limited, False otherwise
+    """
+    return "rate limit" in data.get("result", "") and data.get("status") == "0"
 
 
 def fetch_abi_from_etherscan(

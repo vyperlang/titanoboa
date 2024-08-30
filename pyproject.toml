@@ -41,7 +41,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-forking-recommended = ["ujson"]
+forking-recommended = ["ujson>=5.10.0", "requests-cache>=1.2.1"]
 
 # colab has antient ipykernel which causes bugs with decimals: https://github.com/jupyter/notebook/issues/5260
 colab = ["ipykernel>=6.29.4"]

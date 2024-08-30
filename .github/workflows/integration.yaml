@@ -47,7 +47,7 @@ jobs:
       - name: Install Requirements
         run: |
           pip install -r dev-requirements.txt
-          pip install .
+          pip install .[forking-recommended]
 
       - name: Run Fork Mode Tests
         run: pytest -n auto tests/integration/fork/
