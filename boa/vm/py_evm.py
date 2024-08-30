@@ -336,10 +336,10 @@ class titanoboa_computation:
         return finalize(computation)
 
     @cached_property
-    def trace(self) -> TraceFrame:
-        return self._trace()
+    def call_trace(self) -> TraceFrame:
+        return self._compute_call_trace()
 
-    def _trace(self, depth=0) -> TraceFrame:
+    def _compute_call_trace(self, depth=0) -> TraceFrame:
         computation: ComputationAPI = self
         address = computation.msg.code_address
         env = self.env  # type: ignore

@@ -39,7 +39,7 @@ class _BaseEVMContract:
 
     def call_trace(self) -> TraceFrame:
         assert self._computation is not None, "No computation to trace"
-        return self._computation.trace
+        return self._computation.call_trace
 
     def handle_error(self, computation):
         try:
