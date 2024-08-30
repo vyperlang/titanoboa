@@ -19,6 +19,20 @@ def test_simple_mapping_zero_balance():
     assert contract.totalSupply() == 100
 
 
+def test_simple_mapping_no_supply_adjustment():
+    source = """
+    balanceOf: public(HashMap[address, uint256])
+    totalSupply: public(uint256)
+    """
+
+    contract = boa.loads(source)
+
+    boa.deal(contract, 100, receiver := boa.env.generate_address(), adjust_supply=False)
+
+    assert contract.balanceOf(receiver) == 100
+    assert contract.totalSupply() == 0
+
+
 def test_simple_mapping_non_zero_balance():
     source = """
     balanceOf: public(HashMap[address, uint256])

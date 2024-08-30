@@ -83,7 +83,7 @@ def _update_storage_slot(contract, fn_name, mk_new_value: Any, sload_tracer, arg
         raise ValueError(msg)
 
 
-def deal(token, amount: int, receiver: Address):
+def deal(token, amount: int, receiver: Address, adjust_supply: bool = True):
     """
     Mints `amount` of tokens to `receiver` and adjusts the total supply if `adjust_supply` is True.
     Inspired by https://github.com/foundry-rs/forge-std/blob/07263d193d/src/StdCheats.sol#L728
@@ -91,5 +91,6 @@ def deal(token, amount: int, receiver: Address):
     new_balance = lambda balance: balance + amount  # noqa: E731
     update_storage_slot(token, "balanceOf", new_balance, (receiver,))
 
-    new_supply = lambda totalSupply: totalSupply + amount  # noqa: E731
-    update_storage_slot(token, "totalSupply", new_supply, ())
+    if adjust_supply:
+        new_supply = lambda totalSupply: totalSupply + amount  # noqa: E731
+        update_storage_slot(token, "totalSupply", new_supply, ())
