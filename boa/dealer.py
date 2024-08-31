@@ -1,4 +1,4 @@
-from typing import Any
+import contextlib
 
 import boa
 from boa.util.abi import Address
@@ -18,7 +18,8 @@ class SloadTracer:
         self.trace.append(slot)
 
 
-def update_storage_slot(contract, fn_name, mk_new_value: Any, args: Any):
+@contextlib.contextmanager
+def patch_sload():
     tmp = boa.vm.py_evm._opcode_overrides
 
     try:
@@ -30,7 +31,7 @@ def update_storage_slot(contract, fn_name, mk_new_value: Any, args: Any):
         sload_tracer = SloadTracer(opcodes[SLOAD_OPCODE])
         boa.patch_opcode(SLOAD_OPCODE, sload_tracer)
 
-        return _update_storage_slot(contract, fn_name, mk_new_value, sload_tracer, args)
+        yield sload_tracer
 
     finally:
         # restore
@@ -44,13 +45,17 @@ def _get_func(contract, fn_name):
         raise ValueError(f"Function {fn_name} not found in {contract}")
 
 
-def _update_storage_slot(contract, fn_name, mk_new_value: Any, sload_tracer, args):
+def update_storage_slot(contract, fn_name, new_value: int, args):
+    # TODO: we should really protect all user-facing trace data-structures in
+    # this function, including profiling/gas tracing, sstore+sha3tracer, etc.
     fn = _get_func(contract, fn_name)
-    result = fn(*args)
+    with patch_sload() as sload_tracer:
+        result = fn(*args)
+        trace = sload_tracer.trace
 
     # we iterate over all the storage slots accessed by the SLOAD opcode
     # until we find the one that contains the result of the function call
-    for slot in sload_tracer.trace:
+    for slot in trace:
         slot_value = boa.env.get_storage(contract.address, slot)
 
         # perf: don't bother checking the slot if it doesn't match the expected result
@@ -66,7 +71,6 @@ def _update_storage_slot(contract, fn_name, mk_new_value: Any, sload_tracer, arg
                 continue
 
         # we found the slot. update it
-        new_value = mk_new_value(slot_value)
         boa.env.set_storage(contract.address, slot, new_value)
 
         # sanity check
@@ -74,13 +78,12 @@ def _update_storage_slot(contract, fn_name, mk_new_value: Any, sload_tracer, arg
             # very unlikely, but this means the ERC20 implementation is totally weird
             raise RuntimeError("new value does not match, unknown ERC20 implementation")
 
-        break
+        return result
 
-    else:
-        msg = f"Could not find the target slot for {fn_name}"
-        msg += ", this is expected if the token packs storage slots or"
-        msg += " computes the value on the fly"
-        raise ValueError(msg)
+    msg = f"Could not find the target slot for {fn_name}"
+    msg += ", this is expected if the token packs storage slots or"
+    msg += " computes the value on the fly"
+    raise ValueError(msg)
 
 
 def deal(token, amount: int, receiver: Address, adjust_supply: bool = True):
@@ -88,9 +91,8 @@ def deal(token, amount: int, receiver: Address, adjust_supply: bool = True):
     Mints `amount` of tokens to `receiver` and adjusts the total supply if `adjust_supply` is True.
     Inspired by https://github.com/foundry-rs/forge-std/blob/07263d193d/src/StdCheats.sol#L728
     """
-    new_balance = lambda balance: balance + amount  # noqa: E731
-    update_storage_slot(token, "balanceOf", new_balance, (receiver,))
+    old_balance = update_storage_slot(token, "balanceOf", amount, (receiver,))
 
     if adjust_supply:
-        new_supply = lambda totalSupply: totalSupply + amount  # noqa: E731
+        new_supply = amount - old_balance
         update_storage_slot(token, "totalSupply", new_supply, ())
