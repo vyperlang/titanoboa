@@ -95,6 +95,10 @@ def deal(token, receiver: Address, amount: int, adjust_supply: bool = True):
     Inspired by https://github.com/foundry-rs/forge-std/blob/07263d193d/src/StdCheats.sol#L728
     """
     update_balance = lambda _: amount  # noqa: E731
+    # we could handle "exotic" tokens if we accepted an additional argument, "expect_amount"
+    # so that user with low-level knowledge of how the token works can call deal() with the
+    # exact value of the storage slot and instead of checking `balanceOf` returns `amount`,
+    # we check that balanceOf returns `expect_amount`.
     old_balance = update_storage_slot(token, "balanceOf", update_balance, (receiver,))
 
     if adjust_supply:
