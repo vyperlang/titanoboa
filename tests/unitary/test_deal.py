@@ -139,7 +139,7 @@ def test_deal_failure_exotic_token_balanceOf():
         match="Could not find the target slot for balanceOf, this is expected if"
         " the token packs storage slots or computes the value on the fly",
     ):
-        boa.deal(contract, boa.env.generate_address(), 100)
+        boa.deal(contract, boa.env.generate_address(), 101)
 
 
 def test_deal_failure_exotic_token_totalSupply():
@@ -158,4 +158,4 @@ def test_deal_failure_exotic_token_totalSupply():
         match="Could not find the target slot for totalSupply, this is expected if"
         " the token packs storage slots or computes the value on the fly",
     ):
-        boa.deal(contract, boa.env.generate_address(), 100)
+        boa.deal(contract, boa.env.generate_address(), 101)
