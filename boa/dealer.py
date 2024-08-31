@@ -1,4 +1,5 @@
 import contextlib
+from typing import Any
 
 import boa
 from boa.util.abi import Address
@@ -45,7 +46,7 @@ def _get_func(contract, fn_name):
         raise ValueError(f"Function {fn_name} not found in {contract}")
 
 
-def update_storage_slot(contract, fn_name, new_value: int, args):
+def update_storage_slot(contract, fn_name, mk_new_value: Any, args):
     # TODO: we should really protect all user-facing trace data-structures in
     # this function, including profiling/gas tracing, sstore+sha3tracer, etc.
     fn = _get_func(contract, fn_name)
@@ -71,6 +72,7 @@ def update_storage_slot(contract, fn_name, new_value: int, args):
                 continue
 
         # we found the slot. update it
+        new_value = mk_new_value(slot_value)
         boa.env.set_storage(contract.address, slot, new_value)
 
         # sanity check
@@ -86,13 +88,16 @@ def update_storage_slot(contract, fn_name, new_value: int, args):
     raise ValueError(msg)
 
 
-def deal(token, amount: int, receiver: Address, adjust_supply: bool = True):
+def deal(token, receiver: Address, amount: int, adjust_supply: bool = True):
     """
-    Mints `amount` of tokens to `receiver` and adjusts the total supply if `adjust_supply` is True.
+    Modifies `receiver` balance of `token` to `amount`, and adjusts the total supply if
+    `adjust_supply` is True.
     Inspired by https://github.com/foundry-rs/forge-std/blob/07263d193d/src/StdCheats.sol#L728
     """
-    old_balance = update_storage_slot(token, "balanceOf", amount, (receiver,))
+    update_balance = lambda _: amount  # noqa: E731
+    old_balance = update_storage_slot(token, "balanceOf", update_balance, (receiver,))
 
     if adjust_supply:
-        new_supply = amount - old_balance
-        update_storage_slot(token, "totalSupply", new_supply, ())
+        delta = amount - old_balance
+        update_supply = lambda supply: supply + delta  # noqa: E731
+        update_storage_slot(token, "totalSupply", update_supply, ())
