@@ -219,7 +219,8 @@ def foo(x: IERC20):
         "input": "0x000000000000000000000000f939e0a03fb07f59a73314e73794be0e57ac1b4e",
         "output": "0x",
         "source": "VyperContract.foo:5",
-        "text": '[E] [5290] VyperContract.foo:5(x = "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E") <0x>'
+        "text": "[E] [5290] VyperContract.foo:5(x = "
+        '"0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E") <0x>',
     }
 
     with TemporaryDirectory() as tmpdir:

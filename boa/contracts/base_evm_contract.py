@@ -113,7 +113,6 @@ class BoaError(Exception):
     # i.e. BoaError ctor only takes what is necessary to construct the
     # stack trace but does not require the actual stack trace itself.
     def __str__(self):
-
         frame = self.stack_trace.last_frame
         if hasattr(frame, "vm_error"):
             err = frame.vm_error
@@ -126,5 +125,5 @@ class BoaError(Exception):
 
         ret = f"{err}\n\n{self.stack_trace}"
         call_tree = str(self.call_trace)
-        ledge = "="*72
+        ledge = "=" * 72
         return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"
