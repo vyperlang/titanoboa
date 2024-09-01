@@ -588,7 +588,7 @@ class VyperContract(_BaseVyperContract):
             self.bytecode = computation.output
 
             if computation.is_error:
-                raise BoaError(self.stack_trace(computation))
+                raise BoaError(computation.call_trace, self.stack_trace(computation))
 
             return address
 

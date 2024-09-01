@@ -43,11 +43,11 @@ class _BaseEVMContract:
 
     def handle_error(self, computation):
         try:
-            raise BoaError(self.stack_trace(computation))
+            raise BoaError(computation.call_trace, self.stack_trace(computation))
         except BoaError as b:
             # modify the error so the traceback starts in userland.
             # inspired by answers in https://stackoverflow.com/q/1603940/
-            raise strip_internal_frames(b) from None
+            raise strip_internal_frames(b) from b
 
     @property
     def address(self) -> Address:
@@ -106,12 +106,15 @@ def _handle_child_trace(computation, env, return_trace):
 
 @dataclass
 class BoaError(Exception):
+    call_trace: TraceFrame
     stack_trace: StackTrace
 
     # perf TODO: don't materialize the stack trace until we need it,
     # i.e. BoaError ctor only takes what is necessary to construct the
     # stack trace but does not require the actual stack trace itself.
     def __str__(self):
+        call_tree = str(self.call_trace)
+
         frame = self.stack_trace.last_frame
         if hasattr(frame, "vm_error"):
             err = frame.vm_error
@@ -121,4 +124,4 @@ class BoaError(Exception):
                 err.args = (frame.pretty_vm_reason, *err.args[1:])
         else:
             err = frame
-        return f"{err}\n\n{self.stack_trace}"
+        return f"{call_tree}\n\n{err}\n\n{self.stack_trace}"

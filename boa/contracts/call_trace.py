@@ -1,27 +1,46 @@
 from dataclasses import dataclass
+from functools import cached_property
 from itertools import chain
 from pathlib import Path
+from typing import Optional
+
+from eth.abc import ComputationAPI
 
 from boa.rpc import json
 from boa.util.abi import Address, abi_decode
 
 
 class TraceSource:
-    def format(self, input: bytes, output: bytes):
-        return f"{self}{self._format_input(input)}{self.format_output(output)}"
+    def format(self, input_: bytes, is_error: bool, output: bytes):
+        in_ = self._format_input(input_)
+        out = self.format_output(is_error, output)
+        if is_error:
+            return f"[E!] {self}{in_} [E!] {out}"
 
-    def _format_input(self, input: bytes):
-        decoded = abi_decode(self.args_abi_type, input)
+        return f"{self}{in_} => {out}"
+
+    def _format_input(self, input_: bytes):
+        decoded = abi_decode(self.args_abi_type, input_)
         args = [
             f"{name} = {_to_str(d)}" for d, name in zip(decoded, self._argument_names)
         ]
         return f"({', '.join(args)})"
 
-    def format_output(self, output: bytes):
+    def format_output(self, is_error: bool, output: bytes):
+        if is_error:
+            # b"\x08\xc3y\xa0" == method_id("Error(string)")
+            if output.startswith(b"\x08\xc3y\xa0"):
+                (ret,) = abi_decode("(string)", output[4:])
+                return ret
+
+            # TODO: handle other error types
+            return "0x" + output.hex()
+
         if output == b"":
-            return " => None"
+            return "0x"
+
         decoded = abi_decode(self.return_abi_type, output)
-        return f" => ({', '.join(_to_str(d) for d in decoded)})"
+        return _to_str(decoded)
 
     @property
     def args_abi_type(self) -> str:  # must be implemented by subclasses
@@ -41,13 +60,31 @@ class TraceSource:
 
 @dataclass
 class TraceFrame:
-    address: Address
+    computation: "ComputationAPI"
+    source: Optional[TraceSource]
     depth: int
-    gas_used: int
-    source: TraceSource | None
-    input: bytes
-    output: bytes
     children: list["TraceFrame"]
+
+    @cached_property
+    def address(self) -> Address:
+        return self.computation.msg.code.address
+
+    @cached_property
+    def gas_used(self) -> int:
+        # TODO: use net_gas_used
+        return self.computation.get_gas_used()
+
+    @cached_property
+    def input_data(self) -> bytes:
+        return self.computation.msg.data[4:]
+
+    @cached_property
+    def selector(self) -> bytes:
+        return self.computation.msg.data[:4]
+
+    @cached_property
+    def output(self) -> bytes:
+        return self.computation.output
 
     def __str__(self):
         text = f"{' ' * self.depth * 4}{self.text}"
@@ -56,11 +93,12 @@ class TraceFrame:
     @property
     def text(self):
         if self.source:
-            text = self.source.format(self.input, self.output)
+            is_error = self.computation.is_error
+            text = self.source.format(self.input_data, is_error, self.output)
         else:
             text = f"Unknown contract {self.address}"
-            if self.input != b"":
-                text += ".0x" + self.input[:4].hex()
+            if self.computation.msg.data != b"":
+                text += ".0x" + self.selector.hex()
 
         return f"[{self.gas_used}] {text}"
 
@@ -70,7 +108,7 @@ class TraceFrame:
             "depth": self.depth,
             "gas_used": self.gas_used,
             "source": str(self.source),
-            "input": "0x" + self.input.hex(),
+            "input": "0x" + self.input_data.hex(),
             "output": "0x" + self.output.hex(),
             "children": [child.to_dict() for child in self.children],
             "text": self.text,
@@ -92,8 +130,10 @@ class TraceFrame:
 def _to_str(d):
     if isinstance(d, bytes):
         return "0x" + d.hex()
-    if isinstance(d, (list, tuple)):
+    if isinstance(d, list):
         return f"[{', '.join(_to_str(x) for x in d)}]"
+    if isinstance(d, tuple):
+        return f"({', '.join(_to_str(x) for x in d)})"
     if isinstance(d, str):
         return f'"{d}"'
     return str(d)

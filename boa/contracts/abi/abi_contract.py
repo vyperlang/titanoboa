@@ -290,7 +290,7 @@ class ABIContract(_BaseEVMContract):
         try:
             return abi_decode(schema, computation.output)
         except ABIError as e:
-            raise BoaError(self.stack_trace(computation)) from e
+            raise BoaError(computation.call_trace, self.stack_trace(computation)) from e
 
     def stack_trace(self, computation: ComputationAPI) -> StackTrace:
         """
