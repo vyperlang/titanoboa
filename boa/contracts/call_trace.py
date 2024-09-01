@@ -68,6 +68,8 @@ class TraceFrame:
 
     @cached_property
     def address(self) -> Address:
+        if self.computation.msg.is_create:
+            return Address(self.computation.msg.storage_address)
         return Address(self.computation.msg.code_address)
 
     @cached_property
