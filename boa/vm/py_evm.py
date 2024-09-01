@@ -348,6 +348,7 @@ class titanoboa_computation:
         else:
             source = contract.trace_source(computation)
 
+        # NOTE: using computation.msg.depth probably works equally well here.
         children = [child._get_call_trace(depth + 1) for child in computation.children]
         return TraceFrame(computation, source, depth, children)
 
