@@ -147,7 +147,7 @@ def foo(x: uint8):
         c.foo(1)
 
     # if we got here, there was no OOM on frame decoding
-    frame = error_context.value.args[0].last_frame
+    frame = error_context.value.args[1].last_frame
     # note it has garbage instead of empty data.
     assert frame.frame_detail["uninitialized"] != empty
     # check the frame is always bounded properly.
@@ -168,7 +168,7 @@ def add():
         c.add()
 
     assert "<storage: counter=1>" in str(context.value)
-    assert str(context.value).startswith("Revert(b'')")
+    assert "Revert(b'')" in str(context.value)
 
     assert 0 == c._storage.counter.get()
     assert 0 == c.counter()

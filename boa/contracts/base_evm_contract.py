@@ -113,7 +113,6 @@ class BoaError(Exception):
     # i.e. BoaError ctor only takes what is necessary to construct the
     # stack trace but does not require the actual stack trace itself.
     def __str__(self):
-        call_tree = str(self.call_trace)
 
         frame = self.stack_trace.last_frame
         if hasattr(frame, "vm_error"):
@@ -124,4 +123,7 @@ class BoaError(Exception):
                 err.args = (frame.pretty_vm_reason, *err.args[1:])
         else:
             err = frame
-        return f"{call_tree}\n\n{err}\n\n{self.stack_trace}"
+
+        ret = f"{err}\n\n{self.stack_trace}"
+        call_tree = str(self.call_trace)
+        return f"{call_tree}\n\n{ret}"

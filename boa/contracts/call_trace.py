@@ -67,7 +67,7 @@ class TraceFrame:
 
     @cached_property
     def address(self) -> Address:
-        return self.computation.msg.code.address
+        return self.computation.msg.code_address
 
     @cached_property
     def gas_used(self) -> int:

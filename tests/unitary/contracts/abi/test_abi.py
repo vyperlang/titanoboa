@@ -170,7 +170,7 @@ def test(n: uint256) -> uint256:
     c, _ = load_via_abi(code, "revert test")
     with pytest.raises(BoaError) as exc_info:
         c.test(0)
-    ((error,),) = exc_info.value.args
+    (_, (error,)) = exc_info.value.args
     assert re.match(r"^ +\(.*\.test\(uint256\) -> \['uint256']\)$", error)
 
     with pytest.raises(Exception) as exc_info:
@@ -199,7 +199,7 @@ def test(n: uint256) -> uint256:
     abi_contract.method_id_map.clear()  # mess up the method IDs
     with pytest.raises(BoaError) as exc_info:
         abi_contract.test(0)
-    ((error,),) = exc_info.value.args
+    (_, (error,)) = exc_info.value.args
     assert re.match(r"^ +\(unknown method id .*\.0x29e99f07\)$", error)
 
 
