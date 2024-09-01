@@ -1122,7 +1122,7 @@ class VyperTraceSource(TraceSource):
 
     @cached_property
     def func_t(self):
-        return getattr(self.contract, self.func_ast.name).func_t
+        return self.func_ast._metadata["func_type"]
 
     @cached_property
     def args_abi_type(self) -> str:  # must be implemented by subclasses
