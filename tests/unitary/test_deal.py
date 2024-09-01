@@ -95,7 +95,7 @@ def test_vvm_contract(receiver):
     assert contract.balanceOf(receiver) == 100
 
 
-def test_deal_failure_non_erc20():
+def test_deal_failure_non_erc20(receiver):
     source = """
     foo: public(uint256)
     """
@@ -105,10 +105,10 @@ def test_deal_failure_non_erc20():
     with pytest.raises(
         ValueError, match=re.escape(f"Function balanceOf not found in {contract}")
     ):
-        boa.deal(contract, boa.env.generate_address(), 100)
+        boa.deal(contract, receiver, 100)
 
 
-def test_deal_failure_non_erc20_totalSupply():
+def test_deal_failure_non_erc20_totalSupply(receiver):
     source = """
     foo: public(uint256)
     balanceOf: public(HashMap[address, uint256])
@@ -119,10 +119,10 @@ def test_deal_failure_non_erc20_totalSupply():
     with pytest.raises(
         ValueError, match=re.escape(f"Function totalSupply not found in {contract}")
     ):
-        boa.deal(contract, boa.env.generate_address(), 100)
+        boa.deal(contract, receiver, 100)
 
 
-def test_deal_failure_exotic_token_balanceOf():
+def test_deal_failure_exotic_token_balanceOf(receiver):
     code = """
     @external
     @view
@@ -139,10 +139,10 @@ def test_deal_failure_exotic_token_balanceOf():
         match="Could not find the target slot for balanceOf, this is expected if"
         " the token packs storage slots or computes the value on the fly",
     ):
-        boa.deal(contract, boa.env.generate_address(), 101)
+        boa.deal(contract, receiver, 101)
 
 
-def test_deal_failure_exotic_token_totalSupply():
+def test_deal_failure_exotic_token_totalSupply(receiver):
     code = """
     balanceOf: public(HashMap[address, uint256])
     @external
@@ -158,4 +158,4 @@ def test_deal_failure_exotic_token_totalSupply():
         match="Could not find the target slot for totalSupply, this is expected if"
         " the token packs storage slots or computes the value on the fly",
     ):
-        boa.deal(contract, boa.env.generate_address(), 101)
+        boa.deal(contract, receiver, 101)
