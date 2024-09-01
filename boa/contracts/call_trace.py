@@ -71,8 +71,7 @@ class TraceFrame:
 
     @cached_property
     def gas_used(self) -> int:
-        # TODO: use net_gas_used
-        return self.computation.get_gas_used()
+        return self.computation.net_gas_used
 
     @cached_property
     def input_data(self) -> bytes:
