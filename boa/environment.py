@@ -322,7 +322,7 @@ class Env:
     # so we need to use this in case the pc trace covers multiple files
     def _trace_computation(self, computation, contract=None):
         # perf: don't trace if contract is None
-        if contract is not None:
+        if contract is not None and hasattr(contract, "source_map"):
             ast_map = contract.source_map["pc_raw_ast_map"]
             seen_pcs = set()
             for pc in computation.code._trace:
