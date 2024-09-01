@@ -791,6 +791,10 @@ class VyperContract(_BaseVyperContract):
         if vyper_typ is None:
             return None
 
+        # selfdestruct
+        if len(computation.beneficiaries) > 0:
+            return None
+
         return_typ = calculate_type_for_external_return(vyper_typ)
         ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
 
