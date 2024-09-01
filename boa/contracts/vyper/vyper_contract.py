@@ -1111,28 +1111,27 @@ class VyperTraceSource(TraceSource):
         self.method_id = method_id
 
     def __str__(self):
-        return f"{self.contract.contract_name}.{self.func_ast.name}:{self.node.lineno}"
+        return f"{self.contract.contract_name}.{self.func_t.name}:{self.node.lineno}"
 
     def __repr__(self):
         return repr(self.node)
 
     @cached_property
-    def func_ast(self) -> vy_ast.FunctionDef:
-        return self.node.get_ancestor(vy_ast.FunctionDef)
-
-    @cached_property
-    def func_t(self):
-        return self.func_ast._metadata["func_type"]
-
-    @cached_property
-    def args_abi_type(self) -> str:  # must be implemented by subclasses
+    def _func_t_helper(self):
         method_id_int = int(self.method_id.hex(), 16)
-        schema = next(
-            schema
-            for schema, id_ in self.func_t.method_ids.items()
-            if id_ == method_id_int
-        )
-        return schema.replace(f"{self.func_ast.name}(", "(")
+        for fn_t in self.contract.compiler_data.global_ctx.exposed_functions:
+            for schema, id_ in fn_t.method_ids.items():
+                if id_ == method_id_int:
+                    return schema, fn_t
+
+    @property
+    def func_t(self):
+        return self._func_t_helper[1]
+
+    @cached_property
+    def args_abi_type(self) -> str:
+        schema, fn_t = self._func_t_helper
+        return schema.replace(f"{fn_t.name}(", "(")
 
     @cached_property
     def _argument_names(self) -> list[str]:
