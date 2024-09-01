@@ -14,8 +14,9 @@ class TraceSource:
     def format(self, input_: bytes, is_error: bool, output: bytes):
         in_ = self._format_input(input_)
         out = self.format_output(is_error, output)
+
         if is_error:
-            return f"[E!] {self}{in_} [E!] {out}"
+            return f"{self}{in_} <{out}>"
 
         return f"{self}{in_} => {out}"
 
@@ -67,7 +68,7 @@ class TraceFrame:
 
     @cached_property
     def address(self) -> Address:
-        return self.computation.msg.code_address
+        return Address(self.computation.msg.code_address)
 
     @cached_property
     def gas_used(self) -> int:
@@ -85,6 +86,10 @@ class TraceFrame:
     def output(self) -> bytes:
         return self.computation.output
 
+    @cached_property
+    def is_error(self) -> bool:
+        return self.computation.is_error
+
     def __str__(self):
         text = f"{' ' * self.depth * 4}{self.text}"
         return "\n".join(chain((text,), (str(child) for child in self.children)))
@@ -92,14 +97,16 @@ class TraceFrame:
     @property
     def text(self):
         if self.source:
-            is_error = self.computation.is_error
-            text = self.source.format(self.input_data, is_error, self.output)
+            text = self.source.format(self.input_data, self.is_error, self.output)
         else:
             text = f"Unknown contract {self.address}"
             if self.computation.msg.data != b"":
                 text += ".0x" + self.selector.hex()
 
-        return f"[{self.gas_used}] {text}"
+        ret = f"[{self.gas_used}] {text}"
+        if self.is_error:
+            ret = f"[E] {ret}"
+        return ret
 
     def to_dict(self) -> dict:
         return {
@@ -110,6 +117,7 @@ class TraceFrame:
             "input": "0x" + self.input_data.hex(),
             "output": "0x" + self.output.hex(),
             "children": [child.to_dict() for child in self.children],
+            "is_error": self.is_error,
             "text": self.text,
         }
 
