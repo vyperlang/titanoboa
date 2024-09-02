@@ -120,8 +120,8 @@ class VVMContract(ABIContract):
     def bytecode_runtime(self):
         return to_bytes(self.compiler_output["bytecode_runtime"])
 
-    # def eval(self, code):
-    #     return VVMEval(code, self)()
+    def eval(self, code, return_type=None):
+        return VVMEval(code, self, return_type)()
 
     @cached_property
     def _storage(self):
@@ -276,22 +276,29 @@ def __boa_private_{self.name}__({args_signature}) -> {self.return_type[0]}:
 """
 
 
-# class VVMEval(_VVMInternal):
-#     def __init__(self, code: str, contract: VVMContract):
-#         typ = detect_expr_type(code, contract)
-#         abi = {
-#             "anonymous": False,
-#             "inputs": [],
-#             "outputs": (
-#                 [{"name": "eval", "type": typ.abi_type.selector_name()}] if typ else []
-#             ),
-#             "name": "__boa_debug__",
-#             "type": "function",
-#         }
-#         super().__init__(abi, contract._name)
-#         self.contract = contract
-#         self.code = code
-#
-#     @cached_property
-#     def source_code(self):
-#         return generate_source_for_arbitrary_stmt(self.code, self.contract)
+class VVMEval(_VVMInternal):
+    def __init__(self, code: str, contract: VVMContract, return_type: str = None):
+        abi = {
+            "anonymous": False,
+            "inputs": [],
+            "outputs": ([{"name": "eval", "type": return_type}] if return_type else []),
+            "name": "__boa_debug__",
+            "type": "function",
+        }
+        super().__init__(abi, contract.contract_name)
+        self.contract = contract
+        self.code = code
+
+    @cached_property
+    def source_code(self):
+        debug_body = self.code
+        return_sig = ""
+        if self.return_type:
+            return_sig = f"-> ({', '.join(self.return_type)})"
+            debug_body = f"return {self.code}"
+        return f"""
+@external
+@payable
+def __boa_debug__() {return_sig}:
+    {debug_body}
+"""

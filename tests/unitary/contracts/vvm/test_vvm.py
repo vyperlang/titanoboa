@@ -50,3 +50,10 @@ def test_vvm_internal():
     address = boa.env.generate_address()
     contract.internal._set_map(address, 69)
     assert contract._storage.map.get(address) == 69
+
+
+def test_vvm_eval():
+    contract = boa.loads(mock_3_10_code, 43)
+    assert contract.eval("self.bar", "uint256") == 43
+    assert contract.eval("self.bar = 44") is None
+    assert contract.bar() == 44
