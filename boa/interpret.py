@@ -241,8 +241,10 @@ def _loads_partial_vvm(
     vvm.install_vyper(version=version)
     # TODO: implement caching
     compiled_src = vvm.compile_source(source_code, vyper_version=version)
-
     compiler_output = compiled_src["<stdin>"]
+
+    if filename is not None:
+        filename = str(filename)
     return VVMDeployer.from_compiler_output(
         compiler_output, source_code, version, filename, name
     )

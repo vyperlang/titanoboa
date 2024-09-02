@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from eth.abc import ComputationAPI
@@ -26,7 +25,7 @@ class _BaseEVMContract:
         self,
         name: str,
         env: Optional[Env] = None,
-        filename: str | Path | None = None,
+        filename: Optional[str] = None,
         address: Optional[Address] = None,
     ):
         self.env = env or Env.get_singleton()

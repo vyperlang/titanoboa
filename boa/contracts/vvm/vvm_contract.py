@@ -18,7 +18,7 @@ from boa.util.abi import Address
 VERSION_RE = re.compile(r"\s*#\s*(pragma\s+version|@version)\s+(\d+\.\d+\.\d+)")
 
 
-# TODO: maybe move this up to VVM?
+# TODO: maybe move this up to vvm?
 def _detect_version(source_code: str):
     res = VERSION_RE.findall(source_code)
     if len(res) < 1:
@@ -28,13 +28,17 @@ def _detect_version(source_code: str):
 
 
 class VVMDeployer(ABIContractFactory):
+    """
+    A factory which can be used to create a new contract deployed with vvm.
+    """
+
     def __init__(
         self,
         name: str,
         compiler_output: dict,
         source_code: str,
         vyper_version: str,
-        filename: str | Path | None = None,
+        filename: str | None = None,
     ):
         super().__init__(name, compiler_output["abi"], filename)
         self.compiler_output = compiler_output
@@ -45,17 +49,13 @@ class VVMDeployer(ABIContractFactory):
     def bytecode(self):
         return to_bytes(self.compiler_output["bytecode"])
 
-    @property
-    def layout(self):
-        return self.compiler_output["layout"]
-
     @classmethod
     def from_compiler_output(
         cls,
         compiler_output: dict,
         source_code: str,
         vyper_version: str,
-        filename: str | Path | None = None,
+        filename: str | None = None,
         name: str | None = None,
     ):
         if name is None:
@@ -106,6 +106,10 @@ class VVMDeployer(ABIContractFactory):
 
 
 class VVMContract(ABIContract):
+    """
+    A deployed contract compiled with vvm, which is called via ABI.
+    """
+
     def __init__(self, compiler_output, source_code, vyper_version, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.compiler_output = compiler_output
@@ -121,10 +125,25 @@ class VVMContract(ABIContract):
         return to_bytes(self.compiler_output["bytecode_runtime"])
 
     def eval(self, code, return_type=None):
+        """
+        Evaluate a vyper statement in the context of this contract.
+        Note that the return_type is necessary to correctly decode the result.
+        WARNING: This is different from the vyper eval() function, which is able
+        to automatically detect the return type.
+        :param code: A vyper statement.
+        :param return_type: The return type of the statement evaluation.
+        :returns: The result of the statement evaluation.
+        """
         return VVMEval(code, self, return_type)()
 
     @cached_property
     def _storage(self):
+        """
+        Allows access to the storage variables of the contract.
+        Note that this is quite slow, as it requires the complete contract to be
+        recompiled.
+        """
+
         def storage():
             return None
 
@@ -134,6 +153,12 @@ class VVMContract(ABIContract):
 
     @cached_property
     def internal(self):
+        """
+        Allows access to internal functions of the contract.
+        Note that this is quite slow, as it requires the complete contract to be
+        recompiled.
+        """
+
         def internal():
             return None
 
@@ -144,16 +169,20 @@ class VVMContract(ABIContract):
                 setattr(internal, function.name, function)
         return internal
 
-    def _compile_metadata_fn_info(self):
-        # todo: move this to vvm
+    def _compile_metadata_fn_info(self) -> dict:
+        """Compiles the metadata for the contract"""
+        # todo: move this to vvm?
         if self.filename is not None:
-            return self._call_vyper(self.filename)
+            return self._get_metadata_from_vyper_executable(self.filename)
         with NamedTemporaryFile(suffix=".vy") as f:
             f.write(self.source_code.encode())
             f.flush()
-            return self._call_vyper(f.name)
+            return self._get_metadata_from_vyper_executable(f.name)
 
-    def _call_vyper(self, filename):
+    def _get_metadata_from_vyper_executable(self, filename: str) -> dict:
+        """
+        Calls the vvm to get the metadata for the contract.
+        """
         stdoutdata, stderrdata, command, proc = vyper_wrapper(
             vyper_binary=get_executable(self.vyper_version),
             f="metadata",
@@ -165,11 +194,14 @@ class VVMContract(ABIContract):
 class _VVMInternal(ABIFunction):
     """
     An ABI function that temporarily changes the bytecode at the contract's address.
+    Subclasses of this class are used to inject code into the contract via the
+    `source_code` property using the vvm, temporarily changing the bytecode
+    at the contract's address.
     """
 
     @cached_property
     def _override_bytecode(self) -> bytes:
-        assert isinstance(self.contract, VVMContract)
+        assert isinstance(self.contract, VVMContract)  # help mypy
         source = "\n".join((self.contract.source_code, self.source_code))
         compiled = vvm.compile_source(source, vyper_version=self.contract.vyper_version)
         return to_bytes(compiled["<stdin>"]["bytecode_runtime"])
@@ -180,7 +212,7 @@ class _VVMInternal(ABIFunction):
 
     def __call__(self, *args, **kwargs):
         env = self.contract.env
-        assert isinstance(self.contract, VVMContract)
+        assert isinstance(self.contract, VVMContract)  # help mypy
         balance_before = env.get_balance(env.eoa)
         env.set_code(self.contract.address, self._override_bytecode)
         env.set_balance(env.eoa, 10**20)
@@ -192,6 +224,11 @@ class _VVMInternal(ABIFunction):
 
 
 class VVMInternalFunction(_VVMInternal):
+    """
+    An internal function that is made available via the `internal` namespace.
+    It will temporarily change the bytecode at the contract's address.
+    """
+
     def __init__(self, meta: dict, contract: VVMContract):
         abi = {
             "anonymous": False,
@@ -238,6 +275,11 @@ def __boa_internal_{self.name}__({fn_sig}){return_sig}:
 
 
 class VVMStorageVariable(_VVMInternal):
+    """
+    A storage variable that is made available via the `storage` namespace.
+    It will temporarily change the bytecode at the contract's address.
+    """
+
     def __init__(self, name, spec, contract):
         abi = {
             "anonymous": False,
@@ -277,6 +319,14 @@ def __boa_private_{self.name}__({args_signature}) -> {self.return_type[0]}:
 
 
 class VVMEval(_VVMInternal):
+    """
+    A Vyper eval statement which can be used to evaluate vyper statements
+    via vvm-compiled contracts. This implementation has some drawbacks:
+    - It is very slow, as it requires the complete contract to be recompiled.
+    - It does not detect the return type, as it is currently not possible.
+    - It will temporarily change the bytecode at the contract's address.
+    """
+
     def __init__(self, code: str, contract: VVMContract, return_type: str = None):
         abi = {
             "anonymous": False,

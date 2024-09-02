@@ -1,6 +1,5 @@
 from collections import defaultdict
 from functools import cached_property
-from pathlib import Path
 from typing import Any, Optional, Union
 from warnings import warn
 
@@ -236,7 +235,7 @@ class ABIContract(_BaseEVMContract):
         abi: list[dict],
         functions: list[ABIFunction],
         address: Address,
-        filename: str | Path | None = None,
+        filename: Optional[str] = None,
         env=None,
     ):
         super().__init__(name, env, filename=filename, address=address)
@@ -342,7 +341,7 @@ class ABIContractFactory:
     do any contract deployment.
     """
 
-    def __init__(self, name: str, abi: list[dict], filename: str | Path | None = None):
+    def __init__(self, name: str, abi: list[dict], filename: Optional[str] = None):
         self._name = name
         self._abi = abi
         self.filename = filename
