@@ -1,8 +1,12 @@
+import json
 import re
 from functools import cached_property
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import vvm
+from vvm.install import get_executable
+from vvm.wrapper import vyper_wrapper
 from vyper.utils import method_id
 
 from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
@@ -30,7 +34,7 @@ class VVMDeployer(ABIContractFactory):
         compiler_output: dict,
         source_code: str,
         vyper_version: str,
-        filename: str,
+        filename: str | Path | None = None,
     ):
         super().__init__(name, compiler_output["abi"], filename)
         self.compiler_output = compiler_output
@@ -51,11 +55,11 @@ class VVMDeployer(ABIContractFactory):
         compiler_output: dict,
         source_code: str,
         vyper_version: str,
-        filename: str,
+        filename: str | Path | None = None,
         name: str | None = None,
     ):
         if name is None:
-            name = Path(filename).stem
+            name = Path(filename).stem if filename is not None else "<VVMContract>"
         return cls(name, compiler_output, source_code, vyper_version, filename)
 
     @cached_property
@@ -88,14 +92,14 @@ class VVMDeployer(ABIContractFactory):
         """
         address = Address(address)
         contract = VVMContract(
-            self.compiler_output,
-            self.source_code,
-            self.vyper_version,
-            self._name,
-            self._abi,
-            self.functions,
-            address,
-            self.filename,
+            compiler_output=self.compiler_output,
+            source_code=self.source_code,
+            vyper_version=self.vyper_version,
+            name=self._name,
+            abi=self._abi,
+            functions=self.functions,
+            address=address,
+            filename=self.filename,
         )
         contract.env.register_contract(address, contract)
         return contract
@@ -133,15 +137,29 @@ class VVMContract(ABIContract):
         def internal():
             return None
 
-        source = self.source_code.replace("@internal", "@external")
-        result = vvm.compile_source(source, vyper_version=self.vyper_version)
-        for abi_item in result["<stdin>"]["abi"]:
-            if abi_item["type"] == "function" and not isinstance(
-                getattr(self, abi_item["name"], None), ABIFunction
-            ):
-                function = VVMInternalFunction(abi_item, self)
+        result = self._compile_metadata_fn_info()
+        for fn_name, meta in result.items():
+            if meta["visibility"] == "internal":
+                function = VVMInternalFunction(meta, self)
                 setattr(internal, function.name, function)
         return internal
+
+    def _compile_metadata_fn_info(self):
+        # todo: move this to vvm
+        if self.filename is not None:
+            return self._call_vyper(self.filename)
+        with NamedTemporaryFile(suffix=".vy") as f:
+            f.write(self.source_code.encode())
+            f.flush()
+            return self._call_vyper(f.name)
+
+    def _call_vyper(self, filename):
+        stdoutdata, stderrdata, command, proc = vyper_wrapper(
+            vyper_binary=get_executable(self.vyper_version),
+            f="metadata",
+            source_files=[filename],
+        )
+        return json.loads(stdoutdata)["function_info"]
 
 
 class _VVMInternal(ABIFunction):
@@ -174,7 +192,22 @@ class _VVMInternal(ABIFunction):
 
 
 class VVMInternalFunction(_VVMInternal):
-    def __init__(self, abi: dict, contract: VVMContract):
+    def __init__(self, meta: dict, contract: VVMContract):
+        abi = {
+            "anonymous": False,
+            "inputs": [
+                {"name": arg_name, "type": arg_type}
+                for arg_name, arg_type in meta["positional_args"].items()
+            ],
+            "outputs": (
+                [{"name": meta["name"], "type": meta["return_type"]}]
+                if meta["return_type"] != "None"
+                else []
+            ),
+            "stateMutability": meta["mutability"],
+            "name": meta["name"],
+            "type": "function",
+        }
         super().__init__(abi, contract.contract_name)
         self.contract = contract
 

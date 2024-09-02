@@ -209,18 +209,17 @@ def loads_partial(
     compiler_args: dict = None,
 ) -> VyperDeployer:
     name = name or "VyperContract"  # TODO handle this upstream in CompilerData
-    filename = filename or "<unknown>"
     if dedent:
         source_code = textwrap.dedent(source_code)
 
     version = _detect_version(source_code)
     if version is not None and version != vyper.__version__:
-        filename = str(filename)  # help mypy
-        return _loads_partial_vvm(source_code, version, name, filename)
+        return _loads_partial_vvm(source_code, version, filename, name)
 
     compiler_args = compiler_args or {}
 
     deployer_class = _get_default_deployer_class()
+    filename = filename or "<unknown>"
     data = compiler_data(source_code, name, filename, deployer_class, **compiler_args)
     return deployer_class(data, filename=filename)
 
@@ -232,7 +231,12 @@ def load_partial(filename: str, compiler_args=None):
         )
 
 
-def _loads_partial_vvm(source_code: str, version: str, filename: str, name: str | None):
+def _loads_partial_vvm(
+    source_code: str,
+    version: str,
+    filename: str | Path | None = None,
+    name: str | None = None,
+):
     # will install the request version if not already installed
     vvm.install_vyper(version=version)
     # TODO: implement caching

@@ -48,5 +48,5 @@ def test_vvm_internal():
     contract = boa.loads(mock_3_10_code, 43)
     assert not hasattr(contract.internal, "set_map")
     address = boa.env.generate_address()
-    assert contract.internal._set_map(address, 69)
+    contract.internal._set_map(address, 69)
     assert contract._storage.map.get(address) == 69
