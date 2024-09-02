@@ -216,7 +216,7 @@ def loads_partial(
     version = _detect_version(source_code)
     if version is not None and version != vyper.__version__:
         filename = str(filename)  # help mypy
-        return _loads_partial_vvm(source_code, version, filename)
+        return _loads_partial_vvm(source_code, version, name, filename)
 
     compiler_args = compiler_args or {}
 
@@ -232,14 +232,16 @@ def load_partial(filename: str, compiler_args=None):
         )
 
 
-def _loads_partial_vvm(source_code: str, version: str, filename: str):
+def _loads_partial_vvm(source_code: str, version: str, filename: str, name: str | None):
     # will install the request version if not already installed
     vvm.install_vyper(version=version)
     # TODO: implement caching
     compiled_src = vvm.compile_source(source_code, vyper_version=version)
 
     compiler_output = compiled_src["<stdin>"]
-    return VVMDeployer.from_compiler_output(compiler_output, filename=filename)
+    return VVMDeployer.from_compiler_output(
+        compiler_output, source_code, version, filename, name
+    )
 
 
 def from_etherscan(
