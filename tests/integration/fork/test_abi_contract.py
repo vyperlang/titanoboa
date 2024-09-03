@@ -41,7 +41,7 @@ def tricrypto(get_filepath):
 
 
 def test_load_fn_sig():
-    fn = boa.loads_fn_sig("def balanceOf(a: address) -> uint256: view")
+    fn = boa.loads_fn_sigs(["def balanceOf(a: address) -> uint256: view"])
     crv = fn.at("0xD533a949740bb3306d119CC777fa900bA034cd52")
     assert (
         crv.balanceOf("0x5f3b5DfEb7B28CDbD7FAba78963EE202a494e2A2")

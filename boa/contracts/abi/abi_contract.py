@@ -356,14 +356,13 @@ class ABIContractFactory:
         return cls(name, abi, filename)
 
     @classmethod
-    def from_fn_sig(
-            cls, fn_sig, name="<anonymous contract function>", filename=None
-    ):
-        ast = parse_to_ast(fn_sig)
-        func_t = ContractFunctionT.from_FunctionDef(
-            ast.body[0], is_interface=True
-        )
-        abi = func_t.to_toplevel_abi_dict()
+    def from_sigs(cls, *fn_sigs, name="<anonymous contract function>", filename=None):
+        abi = [
+            ContractFunctionT.from_FunctionDef(
+                parse_to_ast(fn_sig).body[0], is_interface=True
+            ).to_toplevel_abi_dict()
+            for fn_sig in fn_sigs
+        ]
         return cls(name, abi, filename)
 
     def at(self, address: Address | str) -> ABIContract:

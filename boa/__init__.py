@@ -12,8 +12,8 @@ from boa.interpret import (
     load_partial,
     loads,
     loads_abi,
+    loads_fn_sigs,
     loads_partial,
-    loads_fn_sig,
 )
 from boa.network import NetworkEnv
 from boa.precompile import precompile
