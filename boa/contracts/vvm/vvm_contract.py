@@ -162,33 +162,31 @@ class VVMContract(ABIContract):
         def internal():
             return None
 
-        result = self._compile_metadata_fn_info()
+        result = self._compile_function_metadata()
         for fn_name, meta in result.items():
             if meta["visibility"] == "internal":
                 function = VVMInternalFunction(meta, self)
                 setattr(internal, function.name, function)
         return internal
 
-    def _compile_metadata_fn_info(self) -> dict:
-        """Compiles the metadata for the contract"""
+    def _compile_function_metadata(self) -> dict:
+        """Compiles the contract and returns the function metadata"""
+
         # todo: move this to vvm?
+        def run_vyper(filename: str) -> dict:
+            stdoutdata, stderrdata, command, proc = vyper_wrapper(
+                vyper_binary=get_executable(self.vyper_version),
+                f="metadata",
+                source_files=[filename],
+            )
+            return json.loads(stdoutdata)["function_info"]
+
         if self.filename is not None:
-            return self._get_metadata_from_vyper_executable(self.filename)
+            return run_vyper(self.filename)
         with NamedTemporaryFile(suffix=".vy") as f:
             f.write(self.source_code.encode())
             f.flush()
-            return self._get_metadata_from_vyper_executable(f.name)
-
-    def _get_metadata_from_vyper_executable(self, filename: str) -> dict:
-        """
-        Calls the vvm to get the metadata for the contract.
-        """
-        stdoutdata, stderrdata, command, proc = vyper_wrapper(
-            vyper_binary=get_executable(self.vyper_version),
-            f="metadata",
-            source_files=[filename],
-        )
-        return json.loads(stdoutdata)["function_info"]
+            return run_vyper(f.name)
 
 
 class _VVMInternal(ABIFunction):
