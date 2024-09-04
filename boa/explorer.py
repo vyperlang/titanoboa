@@ -1,7 +1,7 @@
-import time
 from typing import Optional
 
 from boa.rpc import json
+from boa.util.retry import Retry, retry
 
 try:
     from requests_cache import CachedSession
@@ -21,9 +21,8 @@ except ImportError:
     SESSION = Session()
 
 
-def _fetch_etherscan(
-    uri: str, api_key: Optional[str] = None, num_retries=10, backoff_ms=400, **params
-) -> dict:
+@retry()
+def _fetch_etherscan(uri: str, api_key: Optional[str] = None, **params) -> dict:
     """
     Fetch data from Etherscan API.
     Offers a simple caching mechanism to avoid redundant queries.
@@ -38,14 +37,11 @@ def _fetch_etherscan(
     if api_key is not None:
         params["apikey"] = api_key
 
-    for i in range(num_retries):
-        res = SESSION.get(uri, params=params)
-        res.raise_for_status()
-        data = res.json()
-        if not _is_rate_limited(data):
-            break
-        backoff_factor = 1.1**i  # 1.1**10 ~= 2.59
-        time.sleep(backoff_factor * backoff_ms / 1000)
+    res = SESSION.get(uri, params=params)
+    res.raise_for_status()
+    data = res.json()
+    if "rate limit" in data.get("result", "") and data.get("status") == "0":
+        raise Retry()
 
     if not _is_success_response(data):
         raise ValueError(f"Failed to retrieve data from API: {data}")

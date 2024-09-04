@@ -49,12 +49,6 @@ jobs:
           pip install -r dev-requirements.txt
           pip install .[forking-recommended]
 
-      - name: Run Fork Mode Tests
-        run: pytest -n auto tests/integration/fork/
-        env:
-          MAINNET_ENDPOINT: ${{ secrets.ALCHEMY_MAINNET_ENDPOINT }}
-          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
-
       - name: Run Sepolia Tests
         # disable xdist, otherwise they can contend for tx nonce
         run: pytest -n 0 tests/integration/network/sepolia/

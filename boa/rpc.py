@@ -4,6 +4,10 @@ from urllib.parse import urlparse
 
 import requests
 
+from boa.util.retry import Retry, retry
+
+_RETRY_CODES = (408, 429)  # 408=Request Timeout, 429=Too Many Requests
+
 try:
     import ujson as json
 except ImportError:  # pragma: no cover
@@ -116,6 +120,7 @@ class EthereumRPC(RPC):
             return f"{partial_ret} (URL partially masked for privacy)"
         return self._rpc_url
 
+    @retry()
     def fetch(self, method, params):
         # the obvious thing to do here is dispatch into fetch_multi.
         # but some providers (alchemy) can't handle batched requests
@@ -123,6 +128,8 @@ class EthereumRPC(RPC):
         req = {"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
         # print(req)
         res = self._session.post(self._rpc_url, json=req, timeout=TIMEOUT)
+        if res.status_code in _RETRY_CODES:
+            raise Retry()
         res.raise_for_status()
         res = json.loads(res.text)
         # print(res)
@@ -130,6 +137,7 @@ class EthereumRPC(RPC):
             raise RPCError.from_json(res["error"])
         return res["result"]
 
+    @retry()
     def fetch_multi(self, payloads):
         request = [
             {"jsonrpc": "2.0", "method": method, "params": params, "id": i}
@@ -141,6 +149,8 @@ class EthereumRPC(RPC):
         results = {}  # keep results in a dict to preserve order
         for item in json.loads(response.text):
             if "error" in item:
+                if item["error"]["code"] == 27:  # rate limit
+                    raise Retry()
                 raise RPCError.from_json(item["error"])
             results[item["id"]] = item["result"]
 

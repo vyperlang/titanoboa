@@ -7,7 +7,7 @@ import boa
 
 @pytest.fixture(scope="module")
 def rpc_url():
-    return os.environ.get("MAINNET_ENDPOINT") or "http://localhost:8545"
+    return os.getenv("MAINNET_ENDPOINT", "https://eth.drpc.org")
 
 
 # run all tests with this forked environment
