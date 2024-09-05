@@ -11,13 +11,14 @@ from boa.util.abi import Address, abi_decode
 
 
 class TraceSource:
-    def format(self, input_: bytes, is_error: bool, output: bytes):
+    def format(self, input_: bytes, output: bytes, is_error: bool):
         in_ = self._format_input(input_)
-        out = self.format_output(is_error, output)
 
         if is_error:
+            out = self._format_error(output)
             return f"{self}{in_} <{out}>"
 
+        out = self._format_output(output)
         return f"{self}{in_} => {out}"
 
     def _format_input(self, input_: bytes):
@@ -27,16 +28,16 @@ class TraceSource:
         ]
         return f"({', '.join(args)})"
 
-    def format_output(self, is_error: bool, output: bytes):
-        if is_error:
-            # b"\x08\xc3y\xa0" == method_id("Error(string)")
-            if output.startswith(b"\x08\xc3y\xa0"):
-                (ret,) = abi_decode("(string)", output[4:])
-                return ret
+    def _format_error(self, error_bytes: bytes):
+        # b"\x08\xc3y\xa0" == method_id("Error(string)")
+        if error_bytes.startswith(b"\x08\xc3y\xa0"):
+            (ret,) = abi_decode("(string)", error_bytes[4:])
+            return ret
 
-            # TODO: handle other error types
-            return "0x" + output.hex()
+        # TODO: handle other error types
+        return "0x" + error_bytes.hex()
 
+    def _format_output(self, output: bytes):
         if output == b"":
             return "0x"
 
@@ -99,7 +100,7 @@ class TraceFrame:
     @property
     def text(self):
         if self.source:
-            text = self.source.format(self.input_data, self.is_error, self.output)
+            text = self.source.format(self.input_data, self.output, self.is_error)
         else:
             text = f"Unknown contract {self.address}"
             if self.computation.msg.data != b"":
