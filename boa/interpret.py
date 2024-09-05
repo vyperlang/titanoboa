@@ -235,22 +235,22 @@ def load_partial(filename: str, compiler_args=None):
 def _loads_partial_vvm(source_code: str, version: str, filename: str):
     global _disk_cache
 
-    # Ensure the cache is initialized
-    if _disk_cache is None:
-        raise RuntimeError("DiskCache is not initialized")
+    # install the requested version if not already installed
+    vvm.install_vyper(version=version)
 
-    # Generate a unique cache key
-    cache_key = f"{source_code}:{version}:{filename}"
-
-    def compile_source():
-        # will install the requested version if not already installed
-        vvm.install_vyper(version=version)
+    def _compile():
         compiled_src = vvm.compile_source(source_code, vyper_version=version)
         compiler_output = compiled_src["<stdin>"]
         return VVMDeployer.from_compiler_output(compiler_output, filename=filename)
 
+    # Ensure the cache is initialized
+    if _disk_cache is None:
+        return _compile()
+
+    # Generate a unique cache key
+    cache_key = f"{source_code}:{version}:{filename}"
     # Check the cache and return the result if available
-    return _disk_cache.caching_lookup(cache_key, compile_source)
+    return _disk_cache.caching_lookup(cache_key, _compile)
 
 
 def from_etherscan(
