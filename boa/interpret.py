@@ -248,7 +248,7 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
         return _compile()
 
     # Generate a unique cache key
-    cache_key = f"{source_code}:{version}:{filename}"
+    cache_key = f"{source_code}:{version}"
     # Check the cache and return the result if available
     return _disk_cache.caching_lookup(cache_key, _compile)
 
