@@ -32,7 +32,7 @@ jobs:
         pip install setuptools wheel twine
 
     - name: Build
-      run: python setup.py sdist bdist_wheel
+      run: python -m build
 
     - name: Publish
       uses: pypa/gh-action-pypi-publish@release/v1
