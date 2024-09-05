@@ -193,8 +193,8 @@ def foo(x: IERC20):
 
     tree = c.call_trace()
     assert str(tree).splitlines() == [
-        f'[5290] VyperContract.foo:5(x = "{crvusd.address}") => None',
-        f'    [2502] crvusd_abi.transfer(_to = "{c.address}", _value = 100) => None',
+        f'[E] [5290] VyperContract.foo:5(x = "{crvusd.address}") <0x>',
+        f'    [E] [2502] crvusd_abi.transfer(_to = "{c.address}", _value = 100) <0x>',
     ]
     assert tree.to_dict() == {
         "address": "0xC6Acb7D16D51f72eAA659668F30A40d87E2E0551",
@@ -204,21 +204,23 @@ def foo(x: IERC20):
                 "children": [],
                 "depth": 1,
                 "gas_used": 2502,
+                "is_error": True,
                 "input": "0x000000000000000000000000c6acb7d16d51f72eaa659668f30a40d87e2e0551000000"
                 "0000000000000000000000000000000000000000000000000000000064",
                 "output": "0x",
                 "source": "crvusd_abi.transfer",
-                "text": '[2502] crvusd_abi.transfer(_to = "'
-                '0xC6Acb7D16D51f72eAA659668F30A40d87E2E0551", _value = 100) => None',
+                "text": '[E] [2502] crvusd_abi.transfer(_to = "'
+                '0xC6Acb7D16D51f72eAA659668F30A40d87E2E0551", _value = 100) <0x>',
             }
         ],
         "depth": 0,
         "gas_used": 5290,
+        "is_error": True,
         "input": "0x000000000000000000000000f939e0a03fb07f59a73314e73794be0e57ac1b4e",
         "output": "0x",
         "source": "VyperContract.foo:5",
-        "text": '[5290] VyperContract.foo:5(x = "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E") =>'
-        " None",
+        "text": "[E] [5290] VyperContract.foo:5(x = "
+        '"0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E") <0x>',
     }
 
     with TemporaryDirectory() as tmpdir:

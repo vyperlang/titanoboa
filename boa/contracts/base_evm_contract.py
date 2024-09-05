@@ -10,6 +10,7 @@ from boa.util.exceptions import strip_internal_frames
 
 if TYPE_CHECKING:
     from boa.contracts.vyper.vyper_contract import DevReason
+    from boa.vm.py_evm import titanoboa_computation
 
 
 class _BaseEVMContract:
@@ -43,11 +44,11 @@ class _BaseEVMContract:
 
     def handle_error(self, computation):
         try:
-            raise BoaError(self.stack_trace(computation))
+            raise BoaError.create(computation, self)
         except BoaError as b:
             # modify the error so the traceback starts in userland.
             # inspired by answers in https://stackoverflow.com/q/1603940/
-            raise strip_internal_frames(b) from None
+            raise strip_internal_frames(b) from b
 
     @property
     def address(self) -> Address:
@@ -106,7 +107,12 @@ def _handle_child_trace(computation, env, return_trace):
 
 @dataclass
 class BoaError(Exception):
+    call_trace: TraceFrame
     stack_trace: StackTrace
+
+    @classmethod
+    def create(cls, computation: "titanoboa_computation", contract: _BaseEVMContract):
+        return cls(computation.call_trace, contract.stack_trace(computation))
 
     # perf TODO: don't materialize the stack trace until we need it,
     # i.e. BoaError ctor only takes what is necessary to construct the
@@ -121,4 +127,8 @@ class BoaError(Exception):
                 err.args = (frame.pretty_vm_reason, *err.args[1:])
         else:
             err = frame
-        return f"{err}\n\n{self.stack_trace}"
+
+        ret = f"{err}\n\n{self.stack_trace}"
+        call_tree = str(self.call_trace)
+        ledge = "=" * 72
+        return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"

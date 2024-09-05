@@ -337,29 +337,20 @@ class titanoboa_computation:
 
     @cached_property
     def call_trace(self) -> TraceFrame:
-        return self._compute_call_trace()
+        return self._get_call_trace()
 
-    def _compute_call_trace(self, depth=0) -> TraceFrame:
-        computation: ComputationAPI = self
+    def _get_call_trace(self, depth=0) -> TraceFrame:
+        computation: ComputationAPI = self  # help mypy
         address = computation.msg.code_address
-        env = self.env  # type: ignore
-        contract = env._lookup_contract_fast(address)
+        contract = computation.env._lookup_contract_fast(address)
         if contract is None:  # TODO: Retrieve from etherscan?
             source = None
         else:
             source = contract.trace_source(computation)
 
-        return TraceFrame(
-            address=Address(address),
-            depth=depth,
-            gas_used=computation.get_gas_used(),
-            source=source,
-            input=computation.msg.data_as_bytes[4:],
-            output=computation.output,
-            children=[
-                child._compute_call_trace(depth + 1) for child in computation.children
-            ],
-        )
+        # NOTE: using computation.msg.depth probably works equally well here.
+        children = [child._get_call_trace(depth + 1) for child in computation.children]
+        return TraceFrame(computation, source, depth, children)
 
 
 # Message object with extra attrs we can use to thread things through
