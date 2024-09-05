@@ -61,3 +61,14 @@ def __init__():
     self.point = [1, 2]
 """
     assert boa.loads(code)._storage.point.get() == [1, 2]
+
+
+def test_self_destruct():
+    code = """
+@external
+def foo() -> bool:
+    selfdestruct(msg.sender)
+    """
+    c = boa.loads(code)
+
+    c.foo()
