@@ -1,7 +1,4 @@
 import boa
-import os
-import pytest
-from unittest.mock import patch, MagicMock
 
 def test_decode_struct():
     code = """

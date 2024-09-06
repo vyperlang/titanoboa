@@ -171,7 +171,7 @@ def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
     if "name" in kwargs:
         name = kwargs.pop("name")
     with open(filename) as f:
-        return loads(f.read(), *args, name=name, verify=verify, explorer=explorer, **kwargs, filename=filename)
+        return loads(f.read(), *args, name=name, explorer=explorer, **kwargs, filename=filename)
 
 
 def loads(
@@ -180,8 +180,7 @@ def loads(
     as_blueprint=False,
     name=None,
     filename=None,
-    compiler_args=None,
-    verify: bool = False,
+    compiler_args=None,    
     explorer: Optional[str] = None,
     **kwargs,
 ):
