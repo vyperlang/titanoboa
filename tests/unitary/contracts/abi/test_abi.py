@@ -238,6 +238,7 @@ def test_abi_invalid_components():
 
     assert "Components found in non-tuple type uint256" == str(exc_info.value)
 
+
 def test_abi_factory_multi_deploy():
     code = """
 foo: public(uint256)
@@ -255,4 +256,3 @@ def __init__(x: uint256):
 
     assert wrapper.foo() == 5
     assert wrapper2.foo() == 6
-

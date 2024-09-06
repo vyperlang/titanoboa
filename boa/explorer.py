@@ -28,7 +28,7 @@ def _fetch_etherscan(
         res = SESSION.get(uri, params=params)
         res.raise_for_status()
         data = res.json()
-        if data.get("result") != "Max rate limit reached":
+        if "rate limit" not in data.get("result", "") or data.get("status") != "0":
             break
         sleep(backoff_ms / 1000)
 
