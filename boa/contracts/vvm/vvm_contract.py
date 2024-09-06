@@ -1,30 +1,13 @@
-import json
-import re
 from functools import cached_property
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import vvm
-from vvm.install import get_executable
-from vvm.wrapper import vyper_wrapper
 from vyper.utils import method_id
 
 from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.environment import Env
 from boa.rpc import to_bytes
 from boa.util.abi import Address
-
-# TODO: maybe this doesn't detect release candidates
-VERSION_RE = re.compile(r"\s*#\s*(pragma\s+version|@version)\s+(\d+\.\d+\.\d+)")
-
-
-# TODO: maybe move this up to vvm?
-def _detect_version(source_code: str):
-    res = VERSION_RE.findall(source_code)
-    if len(res) < 1:
-        return None
-    # TODO: handle len(res) > 1
-    return res[0][1]
 
 
 class VVMDeployer(ABIContractFactory):
@@ -162,31 +145,14 @@ class VVMContract(ABIContract):
         def internal():
             return None
 
-        result = self._compile_function_metadata()
+        result = vvm.compile_source(
+            self.source_code, vyper_version=self.vyper_version, output_format="metadata"
+        )["function_info"]
         for fn_name, meta in result.items():
             if meta["visibility"] == "internal":
                 function = VVMInternalFunction(meta, self)
                 setattr(internal, function.name, function)
         return internal
-
-    def _compile_function_metadata(self) -> dict:
-        """Compiles the contract and returns the function metadata"""
-
-        # todo: move this to vvm?
-        def run_vyper(filename: str) -> dict:
-            stdoutdata, stderrdata, command, proc = vyper_wrapper(
-                vyper_binary=get_executable(self.vyper_version),
-                f="metadata",
-                source_files=[filename],
-            )
-            return json.loads(stdoutdata)["function_info"]
-
-        if self.filename is not None:
-            return run_vyper(self.filename)
-        with NamedTemporaryFile(suffix=".vy") as f:
-            f.write(self.source_code.encode())
-            f.flush()
-            return run_vyper(f.name)
 
 
 class _VVMInternal(ABIFunction):

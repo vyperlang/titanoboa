@@ -21,7 +21,7 @@ from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
-from boa.contracts.vvm.vvm_contract import VVMDeployer, _detect_version
+from boa.contracts.vvm.vvm_contract import VVMDeployer
 from boa.contracts.vyper.vyper_contract import (
     VyperBlueprint,
     VyperContract,
@@ -212,7 +212,7 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
-    version = _detect_version(source_code)
+    version = vvm.detect_vyper_version_from_source(source_code)
     if version is not None and version != vyper.__version__:
         return _loads_partial_vvm(source_code, version, filename, name)
 
