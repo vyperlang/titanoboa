@@ -11,12 +11,14 @@ High-Level Functionality
 
     The global environment object.
 
-.. function:: load(fp: str, *args: Any, **kwargs: Any) -> VyperContract | VyperBlueprint
+.. function:: load(fp: str, *args: Any, verify: bool = False, explorer: str | None = None, **kwargs: Any) -> VyperContract | VyperBlueprint
 
-    Compile source from disk and return a deployed instance of the contract.
+    Compile source from disk, deploy the contract, and optionally verify it on a block explorer.
 
     :param fp: The contract source code file path.
     :param args: Contract constructor arguments.
+    :param verify: Whether to verify the contract on a block explorer after deployment.
+    :param explorer: The block explorer to use for verification ("blockscout" or "etherscan").
     :param kwargs: Keyword arguments to pass to the :py:func:`loads` function.
 
     .. rubric:: Example
@@ -38,18 +40,22 @@ High-Level Functionality
 
         >>> import boa
         >>> from vyper.compiler.settings import OptimizationLevel, Settings
-        >>> boa.load("Foo.vy", compiler_args={"settings": Settings(optimize=OptimizationLevel.CODESIZE)})
+        >>> contract = boa.load("Foo.vy", compiler_args={"settings": Settings(optimize=OptimizationLevel.CODESIZE)}, verify=True, explorer="blockscout")
+        >>> contract
         <tmp/Foo.vy at 0xf2Db9344e9B01CB353fe7a2d076ae34A9A442513, compiled with ...>
+        Contract verified successfully on blockscout
 
-.. function:: loads(source: str, *args: Any, as_blueprint: bool = False, name: str | None = None, compiler_args: dict | None = None, **kwargs) -> VyperContract | VyperBlueprint
+.. function:: loads(source: str, *args: Any, as_blueprint: bool = False, name: str | None = None, compiler_args: dict | None = None, verify: bool = False, explorer: str | None = None, **kwargs) -> VyperContract | VyperBlueprint
 
-    Compile source code and return a deployed instance of the contract.
+     Compile source code, deploy the contract, and optionally verify it on a block explorer.
 
     :param source: The source code to compile and deploy.
     :param args: Contract constructor arguments.
     :param as_blueprint: Whether to deploy an :eip:`5202` blueprint of the compiled contract.
     :param name: The name of the contract.
     :param compiler_args: Argument to be passed to the Vyper compiler.
+     :param verify: Whether to verify the contract on a block explorer after deployment.
+    :param explorer: The block explorer to use for verification ("blockscout" or "etherscan").
     :param kwargs: Keyword arguments to pass to the :py:class:`VyperContract` or :py:class:`VyperBlueprint` ``__init__`` method.
 
     .. rubric:: Example
@@ -63,8 +69,10 @@ High-Level Functionality
         ... def __init__(_initial_value: uint256):
         ...     self.value = _initial_value
         ... """
-        >>> boa.loads(src, 69)
+        >>> contract = boa.loads(src, 69, verify=True, explorer="etherscan")
+        >>> contract
         <VyperContract at 0x0000000000000000000000000000000000000066, compiled with ...>
+        Contract verified successfully on etherscan
 
 .. function:: load_partial(fp: str, compiler_args: dict | None = None) -> VyperDeployer
 
@@ -689,6 +697,57 @@ Low-Level Functionality
 
     .. property:: deployer
         :type: VyperDeployer
+.. class:: ContractVerifier
+
+    A utility class for verifying deployed contracts on block explorers.
+
+    .. method:: __init__(address: str, bytecode: str, source_code: str, compiler_version: str)
+
+        Initialize a ContractVerifier instance.
+
+        :param address: The address of the deployed contract.
+        :param bytecode: The bytecode of the deployed contract.
+        :param source_code: The source code of the contract.
+        :param compiler_version: The version of the Vyper compiler used.
+
+    .. method:: verify(explorer: str) -> bool
+
+        Verify the contract on the specified block explorer.
+
+        :param explorer: The block explorer to use for verification ("blockscout" or "etherscan").
+        :returns: True if verification was successful, False otherwise.
+
+    .. rubric:: Example
+
+    .. code-block:: python
+
+        >>> import boa
+        >>> src = """
+        ... @external
+        ... def main():
+        ...     pass
+        ... """
+        >>> contract = boa.loads(src)
+        >>> verifier = boa.ContractVerifier(
+        ...     contract.address,
+        ...     contract.bytecode,
+        ...     src,
+        ...     f"v{boa.vyper.__version__}"
+        ... )
+        >>> verification_result = verifier.verify("blockscout")
+        >>> print(verification_result)
+        True
+
+.. note::
+
+    To use the contract verification functionality, you need to set the following environment variables:
+
+    - `BLOCKSCOUT_API_KEY`: Your API key for Blockscout
+    - `ETHERSCAN_API_KEY`: Your API key for Etherscan
+    - `BLOCKSCOUT_API_URL` (optional): Custom API URL for Blockscout
+    - `ETHERSCAN_API_URL` (optional): Custom API URL for Etherscan
+
+    Make sure these environment variables are set before using the verification features.
 
 .. class:: VyperBlueprint
 

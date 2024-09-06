@@ -171,7 +171,7 @@ def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
     if "name" in kwargs:
         name = kwargs.pop("name")
     with open(filename) as f:
-        return loads(f.read(), *args, name=name, **kwargs, filename=filename)
+        return loads(f.read(), *args, name=name, verify=verify, explorer=explorer, **kwargs, filename=filename)
 
 
 def loads(
@@ -181,6 +181,8 @@ def loads(
     name=None,
     filename=None,
     compiler_args=None,
+    verify: bool = False,
+    explorer: Optional[str] = None,
     **kwargs,
 ):
     d = loads_partial(source_code, name, filename=filename, compiler_args=compiler_args)
@@ -188,6 +190,22 @@ def loads(
         return d.deploy_as_blueprint(**kwargs)
     else:
         return d.deploy(*args, **kwargs)
+        if verify:
+            if not explorer:
+                raise ValueError("Explorer is required for verification")
+            verifier = ContractVerifier(
+                contract.address,
+                contract.bytecode,
+                source_code,
+                f"v{vyper.__version__}"
+            )
+            verification_result = verifier.verify(explorer)
+            if verification_result:
+                print(f"Contract verified successfully on {explorer}")
+            else:
+                print(f"Contract verification failed on {explorer}")
+        return contract
+
 
 
 def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
@@ -195,7 +213,7 @@ def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFac
         name = Path(filename).stem
     with open(filename) as fp:
         return loads_abi(fp.read(), *args, name=name, **kwargs)
-
+        
 
 def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
