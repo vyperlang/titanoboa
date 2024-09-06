@@ -1,7 +1,7 @@
 # the main "entry point" of vyper-related functionality like
 # AST handling, traceback construction and ABI (marshaling
 # and unmarshaling vyper objects)
-
+import os
 import contextlib
 import copy
 import warnings
@@ -59,6 +59,7 @@ from boa.util.abi import Address, abi_decode, abi_encode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
+import requests
 
 # error messages for external calls
 EXTERNAL_CALL_ERRORS = ("external call failed", "returndatasize too small")
@@ -67,98 +68,6 @@ CREATE_ERRORS = ("create failed", "create2 failed")
 
 # error detail where user possibly provided dev revert reason
 DEV_REASON_ALLOWED = ("user raise", "user assert")
-
-class ContractVerifier:
-    def __init__(self, address: str, bytecode: str, source_code: str, compiler_version: str):
-        self.address = address
-        self.bytecode = bytecode
-        self.source_code = source_code
-        self.compiler_version = compiler_version
-
-    def verify(self, explorer: str) -> bool:
-        if explorer.lower() == "blockscout":
-            return self._verify_blockscout()
-        elif explorer.lower() == "etherscan":
-            return self._verify_etherscan()
-        else:
-            raise ValueError(f"Unsupported explorer: {explorer}")
-
-    def _verify_blockscout(self) -> bool:
-        api_key = os.getenv('BLOCKSCOUT_API_KEY')
-        if not api_key:
-            raise ValueError("BLOCKSCOUT_API_KEY not set in environment variables")
-
-        url = os.getenv('BLOCKSCOUT_API_URL', 'https://blockscout.com/poa/core/api')
-        
-        standard_json_input = {
-            "language": "Vyper",
-            "sources": {
-                "contract.vy": {
-                    "content": self.source_code
-                }
-            },
-            "settings": {
-                "optimizer": {
-                    "enabled": True
-                },
-                "outputSelection": {
-                    "*": ["evm.bytecode", "evm.deployedBytecode", "abi"]
-                }
-            }
-        }
-
-        params = {
-            "module": "contract",
-            "action": "verifysourcecode",
-            "addressHash": self.address,
-            "contractSourceCode": json.dumps(standard_json_input),
-            "name": "VerifiedContract",
-            "compilerVersion": self.compiler_version,
-            "optimization": "true",
-            "apikey": api_key
-        }
-        response = requests.post(url, params=params)
-        result = response.json()
-        return result.get("status") == "1"
-
-    def _verify_etherscan(self) -> bool:
-        api_key = os.getenv('ETHERSCAN_API_KEY')
-        if not api_key:
-            raise ValueError("ETHERSCAN_API_KEY not set in environment variables")
-
-        url = os.getenv('ETHERSCAN_API_URL', 'https://api.etherscan.io/api')
-        
-        standard_json_input = {
-            "language": "Vyper",
-            "sources": {
-                "contract.vy": {
-                    "content": self.source_code
-                }
-            },
-            "settings": {
-                "optimizer": {
-                    "enabled": True
-                },
-                "outputSelection": {
-                    "*": ["evm.bytecode", "evm.deployedBytecode", "abi"]
-                }
-            }
-        }
-
-        params = {
-            "module": "contract",
-            "action": "verifysourcecode",
-            "contractaddress": self.address,
-            "sourceCode": json.dumps(standard_json_input),
-            "codeformat": "solidity-standard-json-input",
-            "contractname": "contract.vy:VerifiedContract",
-            "compilerversion": self.compiler_version,
-            "optimizationUsed": "1",
-            "apikey": api_key
-        }
-        response = requests.post(url, params=params)
-        result = response.json()
-        return result.get("status") == "1"
     
 class VyperDeployer:
     create_compiler_data = CompilerData  # this may be a different class in plugins
@@ -175,29 +84,128 @@ class VyperDeployer:
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
+ 
+    @staticmethod
+    def _post_verification_request(url: str, json_data: dict, headers: dict) -> dict:
+        try:
+            response = requests.post(url, json=json_data, headers=headers)
+            if response.status_code != 200:
+                print(f"Request failed with status code: {response.status_code}")
+                return {"status": "0", "message": "Request failed"}
+            return response.json()
+        except Exception as e:
+            print(f"Error during contract verification: {e}")
+            return {"status": "0", "message": str(e)}
 
-    def deploy(self, *args, verify: bool = False, explorer: Optional[str] = None, **kwargs):
-        return VyperContract(
+    @staticmethod
+    def validate_blockscout(address: str, bytecode: str, source_code: str, compiler_version: str) -> bool:
+        api_key = os.getenv('BLOCKSCOUT_API_KEY')        
+        if not api_key:
+            raise ValueError("BLOCKSCOUT_API_KEY not set in environment variables")
+
+        url = f"https://blockscout.com/api/v2/smart-contracts/{address}/verification/via/standard-input"
+        
+        standard_json_input = {
+            "language": "Vyper",
+            "sources": {
+                "contract.vy": {
+                    "content": source_code
+                }
+            },
+            "settings": {
+                "optimizer": {"enabled": True},
+                "outputSelection": {"*": ["evm.bytecode", "evm.deployedBytecode", "abi"]}
+            }
+        }
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}'
+        }
+
+        result = VyperDeployer._post_verification_request(url, standard_json_input, headers)
+        if result.get("status") == "1":
+            print("Contract verified successfully on Blockscout")
+            return True
+        else:
+            print(f"Contract verification failed: {result.get('message')}")
+            return False
+
+    @staticmethod
+    def validate_etherscan(address: str, bytecode: str, source_code: str, compiler_version: str) -> bool:
+        api_key = os.getenv('ETHERSCAN_API_KEY')
+        if not api_key:
+            raise ValueError("ETHERSCAN_API_KEY not set in environment variables")
+
+        url = os.getenv('ETHERSCAN_API_URL', 'https://api.etherscan.io/api')
+        
+        standard_json_input = {
+            "language": "Vyper",
+            "sources": {
+                "contract.vy": {
+                    "content": source_code
+                }
+            },
+            "settings": {
+                "optimizer": {"enabled": True},
+                "outputSelection": {"*": ["evm.bytecode", "evm.deployedBytecode", "abi"]}
+            }
+        }
+
+        params = {
+            "module": "contract",
+            "action": "verifysourcecode",
+            "contractaddress": address,
+            "sourceCode": json.dumps(standard_json_input),
+            "codeformat": "solidity-standard-json-input",
+            "contractname": "contract.vy:VerifiedContract",
+            "compilerversion": compiler_version,
+            "optimizationUsed": "1",
+            "apikey": api_key
+        }
+
+        headers = {'Content-Type': 'application/json'}
+        result = VyperDeployer._post_verification_request(url, params, headers)
+        if result.get("status") == "1":
+            print("Contract verified successfully on Etherscan")
+            return True
+        else:
+            print(f"Contract verification failed: {result.get('message')}")
+            return False
+
+    contract_verifiers = {
+        "blockscout": validate_blockscout,
+        "etherscan": validate_etherscan
+    }
+
+    def verify_contract(self, address: str, bytecode: str, source_code: str, compiler_version: str, explorer: str) -> bool:
+        try:
+            verifier = self.contract_verifiers[explorer]
+        except KeyError:
+            raise ValueError(f"Unsupported explorer: {explorer}")
+        
+        return verifier(address, bytecode, source_code, compiler_version)
+
+    def deploy(self, *args, explorer: Optional[str] = None, **kwargs):
+        contract = VyperContract(
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
-        
-        if verify:
-            if not explorer:
-                raise ValueError("Explorer is required for verification")
-            verifier = ContractVerifier(
-                contract.address,
-                contract.bytecode,
-                self.compiler_data.source_code,
-                f"v{vyper.__version__}"
+
+        if explorer:
+            verification_result = self.verify_contract(
+                address=contract.address,
+                bytecode=contract.bytecode,
+                source_code=self.compiler_data.source_code,
+                compiler_version=f"v{vyper.__version__}",
+                explorer=explorer
             )
-            verification_result = verifier.verify(explorer)
             if verification_result:
                 print(f"Contract verified successfully on {explorer}")
             else:
                 print(f"Contract verification failed on {explorer}")
 
         return contract
-
+    
     def deploy_as_blueprint(self, *args, **kwargs):
         return VyperBlueprint(
             self.compiler_data, *args, filename=self.filename, **kwargs
@@ -239,7 +247,7 @@ class VyperDeployer:
         # Make constants available at compile time. Useful for testing. See #196
         return ConstantsModel(self.compiler_data)
 
-
+    
 # a few lines of shared code between VyperBlueprint and VyperContract
 class _BaseVyperContract(_BaseEVMContract):
     def __init__(

@@ -189,22 +189,7 @@ def loads(
     if as_blueprint:
         return d.deploy_as_blueprint(**kwargs)
     else:
-        return d.deploy(*args, **kwargs)
-        if verify:
-            if not explorer:
-                raise ValueError("Explorer is required for verification")
-            verifier = ContractVerifier(
-                contract.address,
-                contract.bytecode,
-                source_code,
-                f"v{vyper.__version__}"
-            )
-            verification_result = verifier.verify(explorer)
-            if verification_result:
-                print(f"Contract verified successfully on {explorer}")
-            else:
-                print(f"Contract verification failed on {explorer}")
-        return contract
+        return d.deploy(*args, **kwargs)        
 
 
 
