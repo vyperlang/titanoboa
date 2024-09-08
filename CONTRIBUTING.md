@@ -53,7 +53,7 @@ source venv/bin/activate
 # Install dev requirements
 pip install -r dev-requirements.txt
 # Install prod requirements (in the pyproject.tom)
-pip install . 
+pip install .
 ```
 
 *Note: When you delete your terminal/shell, you will need to reactivate this virtual environment again each time. To exit this python virtual environment, type `deactivate`*
