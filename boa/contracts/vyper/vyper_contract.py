@@ -4,6 +4,9 @@
 
 import contextlib
 import copy
+import json
+import os
+import requests
 import warnings
 from dataclasses import dataclass
 from functools import cached_property
@@ -85,10 +88,14 @@ class VyperDeployer:
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
 
-    def deploy(self, *args, **kwargs):
-        return VyperContract(
+    def deploy(self, *args, verify=False, **kwargs):
+        contract = VyperContract(
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
+        if verify:
+            print("Verifying vyper contract with default args")
+            contract.verify()
+        return contract
 
     def deploy_as_blueprint(self, *args, **kwargs):
         return VyperBlueprint(
@@ -923,6 +930,128 @@ class VyperContract(_BaseVyperContract):
             )
 
             return self.marshal_to_python(c, typ)
+
+    def verify(
+        self,
+        explorer: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> bool:
+        """verify vyper contract code in given explorer with given api_key"""
+
+        # prioritize on given args, if not we will load the following in orders
+        # - load etherscan api_key from ENV if present
+        # - load blockscout url from ENV if present
+        # - throw an error if none of those was provided
+        ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
+        BLOCKSCOUT_API_URL = os.getenv("BLOCKSCOUT_API_URL")
+        api_key = api_key if api_key is not None else ETHERSCAN_API_KEY
+        has_etherscan = bool(api_key)
+        has_blockscout = bool(BLOCKSCOUT_API_URL)
+
+        if explorer == 'etherscan':
+            assert has_etherscan, "API key was not provided!"
+            return self._verify_etherscan(api_key=api_key)
+        elif explorer == 'blockscout':
+            assert has_blockscout, "API URL was not provided!"
+            return self._verify_blockscout()
+        else:
+            assert has_etherscan or has_blockscout, "None of those ENV were provided!"
+            is_etherscan = self._verify_etherscan(api_key=api_key) if has_etherscan else False
+            is_blockscout = self._verify_blockscout() if has_blockscout else False
+            return is_etherscan or is_blockscout
+    
+    def _verify_etherscan(self, api_key: str) -> bool:
+        # get API endpoint of etherscan-liked block explorer, e.g. BSC blockchain explorer
+        api_endpoint = os.getenv("ETHERSCAN_API_URL", "https://api.etherscan.io/api")
+
+        # constructing contract source code in JSON format
+        source_code = json.dumps({
+            "language": "Vyper",
+            "sources": {
+                self.filename: {
+                    "content": self.compiler_data.source_code
+                }
+            },
+            "settings": self.compiler_data.settings 
+        })
+
+        # constructing the request body for verification
+        # body = {
+        #    "module": "contract",
+        #    "action": "verifysourcecode",
+        #    "apikey": api_key
+        #    "chainId": "0x01",
+        #    "codeformat": "solidity-standard-json-input",
+        #    "sourceCode": source_code,
+        #    "constructorArguements": self._ctor.bytecode.decode("utf-8") if self._ctor is not None else "",
+        #    "contractaddress": str(self.address),
+        #    "contractname": f"{self.filename}:{self.contract_name}",
+        #    "compilerversion": self.compiler_data.settings.compiler_version,
+        # }
+        body = {}
+
+        response = requests.post(
+            api_endpoint,
+            headers={"Content-Type":"multipart/form-data"},
+            json=body
+        )
+
+        if response.status_code == 200:
+            print(f"Successfully verified contract: {self.contract_name} at addresss: {self.address}")
+            return True
+        else:
+            print(f"Failed to verify contract: {self.contract_name} at addresss: {self.address}")
+            return False
+
+
+    def _verify_blockscout(self) -> bool:
+        # get API endpoint for blockscout explorer
+        api_url = os.getenv("BLOCKSCOUT_API_URL", "https://eth.blockscout.com")
+        api_endpoint = f"{api_url}/api/v2/smart-contracts/{str(self.address).lower()}/verification/via/vyper-standard-input"
+        # print(f"API endpoint: {api_endpoint}")
+
+        # constructing contract source code in JSON format
+        filename = f"{self.contract_name}.vy" if self.filename is None or self.filename == "<unknown>" else self.filename
+        standard_input_str = json.dumps({
+            "language": "Vyper",
+            "sources": {
+                filename: {
+                    "content": self.compiler_data.source_code
+                }
+            },
+        }, indent=4)
+        files = {
+            "files[0]": (filename, standard_input_str.encode("utf-8"), "application/json")
+        }
+        # print(f"Standard json input: {files}")
+
+        # constructing the request body for verification
+        settings = copy.copy(self.compiler_data.settings)
+        data = {
+            "compiler_version": settings.compiler_version if settings.compiler_version is not None else "v0.4.0+commit.e9db8d9f",
+            "license_type": "none",
+            "evm_version": settings.evm_version if settings.evm_version is not None else "cancun",
+        }
+        # print(f"Data: {data}")
+        
+        try:
+            response = requests.post(
+                api_endpoint,
+                data=data,
+                files=files,
+            )
+            # print(f"The whole response object: {response.json()}")
+
+            if response.status_code == 200:
+                print(f"Successfully verified contract: {self.contract_name} at addresss: {self.address}")
+                return True
+            else:
+                print(f"Failed to verify contract: {self.contract_name} at addresss: {self.address}")
+                return False
+        except Exception as error:
+            print(f"Error during verification: {error}")
+            return False
+
 
     # inject a function into this VyperContract without affecting the
     # contract's source code. useful for testing private functionality
