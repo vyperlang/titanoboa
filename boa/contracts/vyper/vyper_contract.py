@@ -6,6 +6,7 @@ import contextlib
 import copy
 import json
 import os
+import time
 import requests
 import warnings
 from dataclasses import dataclass
@@ -93,7 +94,6 @@ class VyperDeployer:
             self.compiler_data, *args, filename=self.filename, **kwargs
         )
         if verify:
-            print("Verifying vyper contract with default args")
             contract.verify()
         return contract
 
@@ -937,7 +937,13 @@ class VyperContract(_BaseVyperContract):
         api_key: Optional[str] = None,
     ) -> bool:
         """verify vyper contract code in given explorer with given api_key"""
-
+        
+        # TODO: check current block with the contract deployed block, if we can eliminate the timer.
+        # wait for 6 blocks confirmation, 1 block roughly 12 seconds.
+        conf_sec = 6 * 12 
+        print(f"Verifying contract: {self.contract_name}, please waiting blocks confirmation for {conf_sec} seconds")
+        time.sleep(conf_sec)
+            
         # prioritize on given args, if not we will load the following in orders
         # - load etherscan api_key from ENV if present
         # - load blockscout url from ENV if present
@@ -1034,22 +1040,18 @@ class VyperContract(_BaseVyperContract):
         }
         # print(f"Data: {data}")
         
-        try:
-            response = requests.post(
-                api_endpoint,
-                data=data,
-                files=files,
-            )
-            # print(f"The whole response object: {response.json()}")
+        response = requests.post(
+            api_endpoint,
+            data=data,
+            files=files,
+        )
+        # print(f"The whole response object: {response.json()}")
 
-            if response.status_code == 200:
-                print(f"Successfully verified contract: {self.contract_name} at addresss: {self.address}")
-                return True
-            else:
-                print(f"Failed to verify contract: {self.contract_name} at addresss: {self.address}")
-                return False
-        except Exception as error:
-            print(f"Error during verification: {error}")
+        if response.status_code == 200:
+            print(f"Successfully verified contract: {self.contract_name} at addresss: {self.address}")
+            return True
+        else:
+            print(f"Failed to verify contract: {self.contract_name} at addresss: {self.address}")
             return False
 
 

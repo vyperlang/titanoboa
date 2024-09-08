@@ -32,13 +32,13 @@ def simple_contract():
     return boa.loads(code, STARTING_SUPPLY)
 
 
-def test_blockscout_verify(simple_contract):
-    assert simple_contract.verify(explorer='blockscout')
-
-
 def test_env_type():
     # sanity check
     assert isinstance(boa.env, NetworkEnv)
+
+
+def test_blockscout_verify(simple_contract):
+    assert simple_contract.verify(explorer='blockscout')
 
 
 def test_total_supply(simple_contract):
