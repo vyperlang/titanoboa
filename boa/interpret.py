@@ -105,9 +105,9 @@ def compiler_data(
         return ret
 
     with anchor_settings(ret.settings):
-        # note that this actually parses and analyzes all dependencies,
+        # note that this actually parses all dependencies,
         # even if they haven't changed. an optimization would be to
-        # somehow convince vyper (in ModuleAnalyzer) to get the module_t
+        # somehow convince vyper (in ModuleAnalyzer) to get the parsed module
         # from the cache.
         fingerprint = ret.resolved_imports.integrity_sum
 
