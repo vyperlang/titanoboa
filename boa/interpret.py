@@ -214,7 +214,7 @@ def loads_partial(
 
     version = vvm.detect_vyper_version_from_source(source_code)
     if version is not None and version != vyper.__version__:
-        return _loads_partial_vvm(source_code, version, filename, name)
+        return _loads_partial_vvm(source_code, version, filename)
 
     compiler_args = compiler_args or {}
 
@@ -237,17 +237,28 @@ def _loads_partial_vvm(
     filename: str | Path | None = None,
     name: str | None = None,
 ):
-    # will install the request version if not already installed
-    vvm.install_vyper(version=version)
-    # TODO: implement caching
-    compiled_src = vvm.compile_source(source_code, vyper_version=version)
-    compiler_output = compiled_src["<stdin>"]
-
+    global _disk_cache
     if filename is not None:
         filename = str(filename)
-    return VVMDeployer.from_compiler_output(
-        compiler_output, source_code, version, filename, name
-    )
+
+    # install the requested version if not already installed
+    vvm.install_vyper(version=version)
+
+    def _compile():
+        compiled_src = vvm.compile_source(source_code, vyper_version=version)
+        compiler_output = compiled_src["<stdin>"]
+        return VVMDeployer.from_compiler_output(
+            compiler_output, source_code, version, filename, name
+        )
+
+    # Ensure the cache is initialized
+    if _disk_cache is None:
+        return _compile()
+
+    # Generate a unique cache key
+    cache_key = f"{source_code}:{version}"
+    # Check the cache and return the result if available
+    return _disk_cache.caching_lookup(cache_key, _compile)
 
 
 def from_etherscan(

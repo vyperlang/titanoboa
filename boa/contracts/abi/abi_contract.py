@@ -290,7 +290,9 @@ class ABIContract(_BaseEVMContract):
         try:
             return abi_decode(schema, computation.output)
         except ABIError as e:
-            raise BoaError(self.stack_trace(computation)) from e
+            # TODO: the likely error here is that no code exists at the address,
+            # it might be better to just let the raw ABIError float up
+            raise BoaError.create(computation, self) from e
 
     def stack_trace(self, computation: ComputationAPI) -> StackTrace:
         """
@@ -370,6 +372,7 @@ class ABIContractFactory:
         contract = ABIContract(
             self._name, self._abi, self.functions, address, self.filename
         )
+
         contract.env.register_contract(address, contract)
         return contract
 
