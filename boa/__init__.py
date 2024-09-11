@@ -1,11 +1,13 @@
 import contextlib
 import sys
 
+import boa.explorer
 from boa.contracts.base_evm_contract import BoaError
 from boa.contracts.vyper.vyper_contract import check_boa_error_matches
 from boa.dealer import deal
 from boa.debugger import BoaDebug
 from boa.environment import Env
+from boa.explorer import Etherscan, _set_etherscan, get_etherscan
 from boa.interpret import (
     from_etherscan,
     load,
@@ -78,6 +80,11 @@ def set_browser_env(address=None):
 def set_network_env(url):
     """Set the environment to use a custom network URL"""
     return _env_mgr(NetworkEnv.from_url(url))
+
+
+def set_etherscan(*args, **kwargs):
+    explorer = Etherscan(*args, **kwargs)
+    return Open(get_etherscan, _set_etherscan, explorer)
 
 
 def reset_env():
