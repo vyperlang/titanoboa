@@ -134,11 +134,13 @@ def compiler_data(
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
+    if contract_name is None:
+        contract_name = "VyperContract"
+    path = Path(contract_name)
+
     if filename is None:
         filename = "<unknown>"
-    path = Path(filename)
-
-    resolved_path = path.resolve(strict=False)
+    resolved_path = Path(filename).resolve(strict=False)
 
     file_input = FileInput(
         contents=source_code,
