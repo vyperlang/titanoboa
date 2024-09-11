@@ -28,7 +28,7 @@ from boa.contracts.vyper.vyper_contract import (
     VyperDeployer,
 )
 from boa.environment import Env
-from boa.explorer import ExplorerSettings, fetch_abi_from_etherscan
+from boa.explorer import fetch_abi_from_etherscan
 from boa.rpc import json
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
@@ -41,7 +41,6 @@ _Contract = Union[VyperContract, VyperBlueprint]
 
 _disk_cache = None
 _search_path = None
-explorer_settings = ExplorerSettings()
 
 
 def set_search_path(path: list[str]):
@@ -254,12 +253,11 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
     return _disk_cache.caching_lookup(cache_key, _compile)
 
 
-def from_etherscan(address: Any, name=None, uri=None, api_key=None):
+def from_etherscan(
+    address: Any, name: str = None, uri: str = None, api_key: str = None
+):
     addr = Address(address)
-    api_key = api_key or explorer_settings.api_key
-    uri = uri or explorer_settings.uri
-    settings = ExplorerSettings(api_key, uri)
-    abi = fetch_abi_from_etherscan(addr, settings)
+    abi = fetch_abi_from_etherscan(addr, uri, api_key)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 

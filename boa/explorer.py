@@ -24,38 +24,63 @@ except ImportError:
 
 
 @dataclass
-class ExplorerSettings:
+class BlockExplorer:
     api_key: Optional[str] = os.environ.get("ETHERSCAN_API_KEY")
     uri: str = os.environ.get("ETHERSCAN_URI", "https://api.etherscan.io/api")
+    num_retries: int = 10
+    backoff_ms: int = 400
+
+    def fetch(self, **params) -> dict:
+        """
+        Fetch data from Etherscan API.
+        Offers a simple caching mechanism to avoid redundant queries.
+        Retries if rate limit is reached.
+        :param num_retries: Number of retries
+        :param backoff_ms: Backoff in milliseconds
+        :param params: Additional query parameters
+        :return: JSON response
+        """
+        params = {**params, "apiKey": self.api_key}
+        for i in range(self.num_retries):
+            res = SESSION.get(self.uri, params=params)
+            res.raise_for_status()
+            data = res.json()
+            if not _is_rate_limited(data):
+                break
+            backoff_factor = 1.1**i  # 1.1**10 ~= 2.59
+            time.sleep(backoff_factor * self.backoff_ms / 1000)
+
+        if not _is_success_response(data):
+            raise ValueError(f"Failed to retrieve data from API: {data}")
+
+        return data
+
+
+etherscan = BlockExplorer()
 
 
 def _fetch_etherscan(
-    settings: ExplorerSettings, num_retries=10, backoff_ms=400, **params
+    uri: Optional[str],
+    api_key: Optional[str] = None,
+    num_retries=10,
+    backoff_ms=400,
+    **params,
 ) -> dict:
     """
     Fetch data from Etherscan API.
     Offers a simple caching mechanism to avoid redundant queries.
     Retries if rate limit is reached.
-    :param settings: Etherscan settings
+    :param uri: Etherscan API URI
+    :param api_key: Etherscan API key
     :param num_retries: Number of retries
     :param backoff_ms: Backoff in milliseconds
     :param params: Additional query parameters
     :return: JSON response
     """
-    params = {**params, "apiKey": settings.api_key}
-    for i in range(num_retries):
-        res = SESSION.get(settings.uri, params=params)
-        res.raise_for_status()
-        data = res.json()
-        if not _is_rate_limited(data):
-            break
-        backoff_factor = 1.1**i  # 1.1**10 ~= 2.59
-        time.sleep(backoff_factor * backoff_ms / 1000)
-
-    if not _is_success_response(data):
-        raise ValueError(f"Failed to retrieve data from API: {data}")
-
-    return data
+    uri = uri or etherscan.uri
+    api_key = api_key or etherscan.api_key
+    explorer = BlockExplorer(api_key, uri, num_retries, backoff_ms)
+    return explorer.fetch(**params)
 
 
 def _is_success_response(data: dict) -> bool:
@@ -74,24 +99,24 @@ def _is_rate_limited(data: dict) -> bool:
     return "rate limit" in data.get("result", "") and data.get("status") == "0"
 
 
-def fetch_abi_from_etherscan(
-    address: str, settings: ExplorerSettings = ExplorerSettings()
-):
+def fetch_abi_from_etherscan(address: str, uri: str = None, api_key: str = None):
     # resolve implementation address if `address` is a proxy contract
-    address = _resolve_implementation_address(address, settings)
+    address = _resolve_implementation_address(address, uri, api_key)
 
     # fetch ABI of `address`
     params = dict(module="contract", action="getabi", address=address)
-    data = _fetch_etherscan(settings, **params)
+    data = _fetch_etherscan(uri, api_key, **params)
 
     return json.loads(data["result"].strip())
 
 
 # fetch the address of a contract; resolves at most one layer of indirection
 # if the address is a proxy contract.
-def _resolve_implementation_address(address: str, settings: ExplorerSettings):
+def _resolve_implementation_address(
+    address: str, uri: Optional[str], api_key: Optional[str]
+):
     params = dict(module="contract", action="getsourcecode", address=address)
-    data = _fetch_etherscan(settings, **params)
+    data = _fetch_etherscan(uri, api_key, **params)
     source_data = data["result"][0]
 
     # check if the contract is a proxy
