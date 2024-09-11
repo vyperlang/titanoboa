@@ -50,7 +50,7 @@ def set_env(new_env):
 # if simply called, it never calls __exit__, but if used as a context manager,
 # it calls __exit__ at scope exit
 # TODO: move this to boa/utils or its own module
-class _OpenCtxMgr:
+class _Open:
     def __init__(self, get, set_, item):
         self.anchor = get()
         self._set = set_
@@ -66,7 +66,7 @@ class _OpenCtxMgr:
 def _env_mgr(new_env):
     global env
     get_env = lambda: env  # noqa: E731
-    return _OpenCtxMgr(get_env, set_env, new_env)
+    return _Open(get_env, set_env, new_env)
 
 
 def fork(
