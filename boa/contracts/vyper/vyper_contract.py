@@ -26,7 +26,7 @@ from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
-from vyper.compiler.output import build_abi_output
+from vyper.compiler.output import build_abi_output, build_solc_json
 from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
@@ -126,6 +126,26 @@ class VyperDeployer:
 
         return ret
 
+    def verify(self, address: Address, explorer, license=None) -> None:
+        """
+        Verifies the Vyper contract on a block explorer.
+        :param address: The address of the contract.
+        :param explorer: The block explorer to use for verification.
+        :param license: The license to use for the contract. Defaults to "none".
+        """
+        if self.filename == "<unknown>":
+            raise ValueError(
+                "Cannot verify a contract without a filename. "
+                "Please use `boa.load` and save the contract to a file, for now."
+            )
+        explorer.verify(
+            address=address,
+            standard_json=build_solc_json(self.compiler_data),
+            contract_name=self.compiler_data.contract_path.name,
+            evm_version=self.compiler_data.settings.evm_version,
+            license=license,
+        )
+
     @cached_property
     def _constants(self):
         # Make constants available at compile time. Useful for testing. See #196
@@ -156,6 +176,10 @@ class _BaseVyperContract(_BaseEVMContract):
                 raise Exception(msg)
 
     @cached_property
+    def deployer(self):
+        return VyperDeployer(self.compiler_data, filename=self.filename)
+
+    @cached_property
     def abi(self):
         return build_abi_output(self.compiler_data)
 
@@ -163,23 +187,13 @@ class _BaseVyperContract(_BaseEVMContract):
     def _constants(self):
         return ConstantsModel(self.compiler_data)
 
-    def verify(self, explorer, license="none"):
-        if self.filename == "<unknown>":
-            # contracts that aren't on disk can't be verified
-            # the compiler currently panics trying to construct the output bundle
-            raise ValueError(
-                "Cannot verify a contract without a filename. "
-                "Please use `boa.load` and save the contract to a file, for now."
-            )
-
-        data = vyper.compiler.output.build_solc_json(self.compiler_data)
-        explorer.verify(
-            address=self.address,
-            contract_name=self.compiler_data.contract_path.name,
-            standard_json=data,
-            evm_version=self.compiler_data.settings.evm_version,
-            license=license,
-        )
+    def verify(self, explorer, license=None) -> None:
+        """
+        Verifies the Vyper contract on a block explorer.
+        :param explorer: The block explorer to use for verification.
+        :param license: The license to use for the contract. Defaults to None.
+        """
+        self.deployer.verify(self.address, explorer, license)
 
 
 # create a blueprint for use with `create_from_blueprint`.
@@ -221,10 +235,6 @@ class VyperBlueprint(_BaseVyperContract):
         self._address = Address(addr)
 
         self.env.register_blueprint(compiler_data.bytecode, self)
-
-    @cached_property
-    def deployer(self):
-        return VyperDeployer(self.compiler_data, filename=self.filename)
 
 
 class FrameDetail(dict):
@@ -648,11 +658,6 @@ class VyperContract(_BaseVyperContract):
     @cached_property
     def _immutables(self):
         return ImmutablesModel(self)
-
-    @cached_property
-    def deployer(self):
-        # TODO add test
-        return VyperDeployer(self.compiler_data, filename=self.filename)
 
     # is this actually useful?
     def at(self, address):

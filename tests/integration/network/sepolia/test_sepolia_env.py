@@ -43,8 +43,10 @@ def simple_contract():
 
 
 def test_verify(simple_contract):
-    blockscout = Blockscout(os.getenv("", ""), "https://eth-sepolia.blockscout.com")
-    assert simple_contract.verify(blockscout) is None
+    api_key = os.getenv("BLOCKSCOUT_API_KEY", "")
+    blockscout = Blockscout(api_key, "https://eth-sepolia.blockscout.com")
+    simple_contract.verify(blockscout)
+    assert blockscout.is_verified(simple_contract.address) is True
 
 
 def test_env_type():
