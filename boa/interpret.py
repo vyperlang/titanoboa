@@ -28,7 +28,7 @@ from boa.contracts.vyper.vyper_contract import (
     VyperDeployer,
 )
 from boa.environment import Env
-from boa.explorer import fetch_abi_from_etherscan
+from boa.explorer import Etherscan, get_etherscan
 from boa.rpc import json
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
@@ -254,10 +254,24 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
 
 
 def from_etherscan(
-    address: Any, name: str = None, uri: str = None, api_key: str = None
+    address: Any,
+    name: str = None,
+    uri: str = None,
+    api_key: str = None,
+    etherscan: Etherscan = None,
 ):
     addr = Address(address)
-    abi = fetch_abi_from_etherscan(addr, uri, api_key)
+
+    if uri is not None or api_key is not None:
+        if etherscan is not None:
+            raise ValueError("Cannot set both uri and api_key at the same time")
+
+        warnings.warn("use of uri or api_key is deprecated! use etherscan=... instead!")
+        etherscan = Etherscan(uri, api_key)
+    elif etherscan is None:
+        etherscan = get_etherscan()
+
+    abi = etherscan.fetch_abi(addr)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 
