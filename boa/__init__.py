@@ -49,19 +49,24 @@ def set_env(new_env):
 # Simple context manager which functions like the `open()` builtin -
 # if simply called, it never calls __exit__, but if used as a context manager,
 # it calls __exit__ at scope exit
-class _TmpEnvMgr:
-    def __init__(self, new_env):
-        global env
-        self.old_env = env
-
-        set_env(new_env)
+# TODO: move this to boa/utils or its own module
+class _OpenCtxMgr:
+    def __init__(self, get, set_, item):
+        self.anchor = get()
+        self._set = set_
+        self._set(item)
 
     def __enter__(self):
-        # dummy
         pass
 
     def __exit__(self, *args):
-        set_env(self.old_env)
+        self._set(self.anchor)
+
+
+def _env_mgr(new_env):
+    global env
+    get_env = lambda: env  # noqa: E731
+    return _OpenCtxMgr(get_env, set_env, new_env)
 
 
 def fork(
@@ -75,7 +80,7 @@ def fork(
 
     new_env = Env()
     new_env.fork(url=url, block_identifier=block_identifier, deprecated=False, **kwargs)
-    return _TmpEnvMgr(new_env)
+    return _env_mgr(new_env)
 
 
 def set_browser_env(address=None):
@@ -83,12 +88,12 @@ def set_browser_env(address=None):
     # import locally because jupyter is generally not installed
     from boa.integrations.jupyter import BrowserEnv
 
-    return _TmpEnvMgr(BrowserEnv(address))
+    return _env_mgr(BrowserEnv(address))
 
 
 def set_network_env(url):
     """Set the environment to use a custom network URL"""
-    return _TmpEnvMgr(NetworkEnv.from_url(url))
+    return _env_mgr(NetworkEnv.from_url(url))
 
 
 def reset_env():
