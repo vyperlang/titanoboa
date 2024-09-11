@@ -1,16 +1,19 @@
-API Reference
-=============
+# API Reference
 
-High-Level Functionality
-------------------------
+## High-Level Functionality
 
+```{eval-rst}
 .. module:: boa
+```
 
+```{eval-rst}
 .. py:data:: env
     :type: boa.environment.Env
 
     The global environment object.
+```
 
+```{eval-rst}
 .. function:: load(fp: str, *args: Any, **kwargs: Any) -> VyperContract | VyperBlueprint
 
     Compile source from disk and return a deployed instance of the contract.
@@ -40,7 +43,9 @@ High-Level Functionality
         >>> from vyper.compiler.settings import OptimizationLevel, Settings
         >>> boa.load("Foo.vy", compiler_args={"settings": Settings(optimize=OptimizationLevel.CODESIZE)})
         <tmp/Foo.vy at 0xf2Db9344e9B01CB353fe7a2d076ae34A9A442513, compiled with ...>
+```
 
+```{eval-rst}
 .. function:: loads(source: str, *args: Any, as_blueprint: bool = False, name: str | None = None, compiler_args: dict | None = None, **kwargs) -> VyperContract | VyperBlueprint
 
     Compile source code and return a deployed instance of the contract.
@@ -65,7 +70,9 @@ High-Level Functionality
         ... """
         >>> boa.loads(src, 69)
         <VyperContract at 0x0000000000000000000000000000000000000066, compiled with ...>
+```
 
+```{eval-rst}
 .. function:: load_partial(fp: str, compiler_args: dict | None = None) -> VyperDeployer
 
     Compile source from disk and return a :py:class:`VyperDeployer`.
@@ -88,7 +95,9 @@ High-Level Functionality
         >>> import boa
         >>> boa.load_partial("Foo.vy")
         <boa.vyper.contract.VyperDeployer object at ...>
+```
 
+```{eval-rst}
 .. function:: loads_partial(source: str, name: str | None = None, dedent: bool = True, compiler_args: dict | None = None) -> VyperDeployer
 
     Compile source and return a :py:class:`VyperDeployer`.
@@ -112,7 +121,9 @@ High-Level Functionality
         >>> boa.loads_partial(src, "Foo")
         <boa.vyper.contract.VyperDeployer object at ...>
 
+```
 
+```{eval-rst}
 .. function:: load_abi(filename: str, name: str = None) -> ABIContractFactory
 
     Return a :py:class:`ABIContractFactory` from an ABI file (.json)
@@ -130,7 +141,9 @@ High-Level Functionality
         >>> boa.load_abi(src, name="Foo")
         <boa.vyper.contract.ABIContractFactory at 0x7ff0f14a1550>
 
+```
 
+```{eval-rst}
 .. function:: loads_abi(json_str: str, name: str = None) -> ABIContractFactory
 
     Return a :py:class:`ABIContractFactory` from an ABI string
@@ -148,7 +161,9 @@ High-Level Functionality
         >>> boa.loads_abi(src, name="Foo")
         <boa.vyper.contract.ABIContractFactory at 0x7ff0f14a1550>
 
+```
 
+```{eval-rst}
 .. function:: from_etherscan(address: str | bytes | Address, name: str = None, uri: str = "https://api.etherscan.io/api", api_key: str = None) -> ABIContract
 
     Fetch the ABI for an address from etherscan and return an :py:class:`ABIContract`
@@ -169,7 +184,9 @@ High-Level Functionality
         >>> crvusd.totalSupply()
         730773174461124520709282012
 
+```
 
+```{eval-rst}
 .. function:: eval(statement: str) -> Any
 
     Evaluate a Vyper statement in the context of a contract with no state.
@@ -186,7 +203,9 @@ High-Level Functionality
         '3ea2f1d0abf3fc66cf29eebb70cbd4e7fe762ef8a09bcc06c8edf641230afec0'
         >>> boa.eval("empty(uint256[10])")
         (0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+```
 
+```{eval-rst}
 .. function:: reverts(reason: str | None = None, /, **kwargs: str)
 
     A context manager which validates an execution error occurs with optional reason matching.
@@ -282,7 +301,9 @@ High-Level Functionality
 
         with boa.reverts(dev="a is not 0"):
             contract.main(69)
+```
 
+```{eval-rst}
 .. function:: register_precompile(address: str, fn: Callable[[eth.abc.ComputationAPI], None], force: bool = False)
 
     Register a precompile.
@@ -301,7 +322,9 @@ High-Level Functionality
         >>> boa.register_precompile("0x00000000000000000000000000000000000000ff", log)
         >>> boa.eval("raw_call(0x00000000000000000000000000000000000000ff, b'')")
         0x0000000000000000000000000000000000000069
+```
 
+```{eval-rst}
 .. function:: deregister_precompile(address: str, force: bool = True)
 
     Deregister a precompile.
@@ -309,7 +332,9 @@ High-Level Functionality
     :param address: The address of a previously registered precompile.
     :param force: Whether to force removal of the precompile at the specified address.
     :raises ValueError: If a precompile is not registered at the specified address and the force argument is ``False``.
+```
 
+```{eval-rst}
 .. function:: patch_opcode(opcode: int, fn: Callable[[eth.abc.ComputationAPI], None])
 
     Patch an opcode.
@@ -383,12 +408,15 @@ High-Level Functionality
             "0x097dec6ea6b9eb5fc04db59c0d343f0e3b4097a0",
             "0x905794c5566184e642ef14fb0e72cf68ff8c79bf"
         ]
+```
 
-Low-Level Functionality
------------------------
+## Low-Level Functionality
 
+```{eval-rst}
 .. module:: boa.environment
+```
 
+```{eval-rst}
 .. class:: Env
 
     A wrapper class around py-evm which provides a "contract-centric" API.
@@ -566,9 +594,13 @@ Low-Level Functionality
         :param seconds: Change current timestamp by `seconds` seconds.
         :param blocks: Change block number by `blocks` blocks.
         :param block_delta: The time between two blocks. Set to 12 as default.
+```
 
+```{eval-rst}
 .. module:: boa.vyper.contract
+```
 
+```{eval-rst}
 .. class:: VyperDeployer
 
     Vyper contract factory.
@@ -635,7 +667,9 @@ Low-Level Functionality
             >>> ContractFactory = boa.loads_partial(src, "Foo")
             >>> ContractFactory.deploy_as_blueprint()
             <boa.vyper.contract.VyperBlueprint object at ...>
+```
 
+```{eval-rst}
 .. class:: VyperContract
 
     A contract instance.
@@ -689,14 +723,18 @@ Low-Level Functionality
 
     .. property:: deployer
         :type: VyperDeployer
+```
 
+```{eval-rst}
 .. class:: VyperBlueprint
 
     Stub class for :eip:`5202` blueprints.
 
     .. property:: address
         :type: str
+```
 
+```{eval-rst}
 .. class:: VyperFunction
 
     .. .. method:: args_abi_type(nkwargs: int)
@@ -809,7 +847,9 @@ Low-Level Functionality
         :type: vyper.codegen.ir_node.IRnode
 
         The internal representation of the function (a.k.a. VenomIR).
+```
 
+```{eval-rst}
 .. class:: VyperInternalFunction
 
     Internal contract functions are exposed by wrapping it with a dummy external contract function, appending the wrapper's ast at the top of the contract and then generating bytecode to run internal methods (as external methods). Therefore, they share the same API as :py:class:`boa.vyper.contract.VyperFunction`. Internal functions can be accessed using the `internal` namespace of a :py:class:`VyperContract`.
@@ -826,12 +866,16 @@ Low-Level Functionality
         >>> contract.internal.main(68)
         69
 
+```
 
-Exceptions
-----------
+## Exceptions
 
+```{eval-rst}
 .. currentmodule:: boa
+```
 
+```{eval-rst}
 .. exception:: BoaError
 
     Raised when an error occurs during contract execution.
+```
