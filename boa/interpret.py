@@ -131,15 +131,21 @@ def compiler_data(
 ) -> CompilerData:
     global _disk_cache, _search_path
 
-    file_input = FileInput(
-        contents=source_code,
-        source_id=-1,
-        path=Path(contract_name),
-        resolved_path=Path(filename),
-    )
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
+    if filename is None:
+        filename = "<unknown>"
+    path = Path(filename)
+
+    resolved_path = path.resolve(strict=False)
+
+    file_input = FileInput(
+        contents=source_code,
+        source_id=-1,
+        path=path,
+        resolved_path=resolved_path,
+    )
     settings = Settings(**kwargs)
     ret = CompilerData(file_input, input_bundle, settings)
     if _disk_cache is None:
@@ -161,7 +167,7 @@ def compiler_data(
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
-    cache_key = str((contract_name, fingerprint, kwargs, deployer_id))
+    cache_key = str((filename, fingerprint, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
 
@@ -208,14 +214,13 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
-    name = name or "VyperContract"  # TODO handle this upstream in CompilerData
-    filename = filename or "<unknown>"
     if dedent:
         source_code = textwrap.dedent(source_code)
 
     version = _detect_version(source_code)
     if version is not None and version != vyper.__version__:
         filename = str(filename)  # help mypy
+        # TODO: pass name to loads_partial_vvm, not filename
         return _loads_partial_vvm(source_code, version, filename)
 
     compiler_args = compiler_args or {}
