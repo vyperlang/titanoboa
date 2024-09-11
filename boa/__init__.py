@@ -81,8 +81,10 @@ def set_network_env(url):
     """Set the environment to use a custom network URL"""
     return _env_mgr(NetworkEnv.from_url(url))
 
+
 def set_etherscan(*args, **kwargs):
     get = lambda: boa.explorer.etherscan  # noqa: E731
+
     def set_(explorer: Etherscan):
         boa.explorer.etherscan = explorer
 
