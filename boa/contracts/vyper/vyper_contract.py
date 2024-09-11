@@ -133,11 +133,6 @@ class VyperDeployer:
         :param explorer: The block explorer to use for verification.
         :param license: The license to use for the contract. Defaults to "none".
         """
-        if self.filename == "<unknown>":
-            raise ValueError(
-                "Cannot verify a contract without a filename. "
-                "Please use `boa.load` and save the contract to a file, for now."
-            )
         explorer.verify(
             address=address,
             standard_json=build_solc_json(self.compiler_data),

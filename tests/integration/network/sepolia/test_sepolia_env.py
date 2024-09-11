@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import pytest
 
@@ -34,12 +33,7 @@ STARTING_SUPPLY = 100
 
 @pytest.fixture(scope="module")
 def simple_contract():
-    # workaround for compiler panic when trying to export the contract to JSON
-    with NamedTemporaryFile(suffix=".vy", dir=Path(__file__).parent) as f:
-        f.write(code.encode())
-        f.flush()
-        yield boa.load(f.name, STARTING_SUPPLY)
-    # return boa.loads(code, STARTING_SUPPLY)
+    return boa.loads(code, STARTING_SUPPLY)
 
 
 def test_verify(simple_contract):
