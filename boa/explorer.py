@@ -27,7 +27,7 @@ DEFAULT_ETHERSCAN_URI = "https://api.etherscan.io/api"
 
 @dataclass
 class Etherscan:
-    uri: str = DEFAULT_ETHERSCAN_URI
+    uri: Optional[str] = DEFAULT_ETHERSCAN_URI
     api_key: Optional[str] = None
     num_retries: int = 10
     backoff_ms: int | float = 400.0

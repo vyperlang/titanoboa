@@ -1,5 +1,6 @@
 import sys
 import textwrap
+import warnings
 from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
