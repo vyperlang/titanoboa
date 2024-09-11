@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from boa.rpc import json
-from boa.util.open_ctx import Open
 
 try:
     from requests_cache import CachedSession
@@ -98,11 +97,6 @@ def get_etherscan():
 def _set_etherscan(etherscan: Etherscan):
     global _etherscan
     _etherscan = etherscan
-
-
-def set_from_args(*args, **kwargs):
-    explorer = Etherscan(*args, **kwargs)
-    return Open(get_etherscan, _set_etherscan, explorer)
 
 
 def _is_success_response(data: dict) -> bool:
