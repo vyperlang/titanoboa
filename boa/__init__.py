@@ -57,6 +57,7 @@ class _Open:
         self._set(item)
 
     def __enter__(self):
+        # dummy implementation, no-op
         pass
 
     def __exit__(self, *args):
