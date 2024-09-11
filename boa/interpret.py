@@ -1,6 +1,5 @@
 import sys
 import textwrap
-import warnings
 from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
@@ -255,21 +254,13 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
 
 
 def from_etherscan(
-    address: Any,
-    name: str = None,
-    uri: str = None,
-    api_key: str = None,
-    etherscan: Etherscan = None,
+    address: Any, name: str = None, uri: str = None, api_key: str = None
 ):
     addr = Address(address)
 
     if uri is not None or api_key is not None:
-        if etherscan is not None:
-            raise ValueError("Cannot set both uri and api_key at the same time")
-
-        warnings.warn("use of uri or api_key is deprecated! use etherscan=... instead!")
         etherscan = Etherscan(uri, api_key)
-    elif etherscan is None:
+    else:
         etherscan = get_etherscan()
 
     abi = etherscan.fetch_abi(addr)
