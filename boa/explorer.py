@@ -24,7 +24,7 @@ except ImportError:
 
 
 @dataclass
-class BlockExplorer:
+class Etherscan:
     api_key: Optional[str] = os.environ.get("ETHERSCAN_API_KEY")
     uri: str = os.environ.get("ETHERSCAN_URI", "https://api.etherscan.io/api")
     num_retries: int = 10
@@ -56,7 +56,7 @@ class BlockExplorer:
         return data
 
 
-etherscan = BlockExplorer()
+etherscan = Etherscan()
 
 
 def _fetch_etherscan(
@@ -79,7 +79,7 @@ def _fetch_etherscan(
     """
     uri = uri or etherscan.uri
     api_key = api_key or etherscan.api_key
-    explorer = BlockExplorer(api_key, uri, num_retries, backoff_ms)
+    explorer = Etherscan(api_key, uri, num_retries, backoff_ms)
     return explorer.fetch(**params)
 
 

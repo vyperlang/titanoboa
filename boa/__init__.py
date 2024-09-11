@@ -7,7 +7,7 @@ from boa.contracts.vyper.vyper_contract import check_boa_error_matches
 from boa.dealer import deal
 from boa.debugger import BoaDebug
 from boa.environment import Env
-from boa.explorer import BlockExplorer
+from boa.explorer import Etherscan
 from boa.interpret import (
     from_etherscan,
     load,
@@ -95,11 +95,11 @@ def set_network_env(url):
 
 
 def set_etherscan(*args, **kwargs):
-    def set(explorer: BlockExplorer):
+    def set_(explorer: Etherscan):
         boa.explorer.etherscan = explorer
 
-    explorer = BlockExplorer(*args, **kwargs)
-    return _TemporaryContext(boa.explorer.etherscan, explorer, set)
+    explorer = Etherscan(*args, **kwargs)
+    return _TemporaryContext(boa.explorer.etherscan, explorer, set_)
 
 
 def reset_env():
