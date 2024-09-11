@@ -134,19 +134,11 @@ def compiler_data(
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
-    if contract_name is None:
-        contract_name = "VyperContract"
     path = Path(contract_name)
-
-    if filename is None:
-        filename = "<unknown>"
     resolved_path = Path(filename).resolve(strict=False)
 
     file_input = FileInput(
-        contents=source_code,
-        source_id=-1,
-        path=path,
-        resolved_path=resolved_path,
+        contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
     )
     settings = Settings(**kwargs)
     ret = CompilerData(file_input, input_bundle, settings)
@@ -169,7 +161,7 @@ def compiler_data(
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
-    cache_key = str((filename, fingerprint, kwargs, deployer_id))
+    cache_key = str((contract_name, fingerprint, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
 
@@ -216,6 +208,9 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
+    name = name or "VyperContract"
+    filename = filename or "<unknown>"
+
     if dedent:
         source_code = textwrap.dedent(source_code)
 
