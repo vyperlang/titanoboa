@@ -1,6 +1,11 @@
+import os
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
 import pytest
 
 import boa
+from boa.contracts.verify import Blockscout
 from boa.network import NetworkEnv
 
 # boa.env.anchor() does not work in prod environment
@@ -29,7 +34,17 @@ STARTING_SUPPLY = 100
 
 @pytest.fixture(scope="module")
 def simple_contract():
-    return boa.loads(code, STARTING_SUPPLY)
+    # workaround for compiler panic when trying to export the contract to JSON
+    with NamedTemporaryFile(suffix=".vy", dir=Path(__file__).parent) as f:
+        f.write(code.encode())
+        f.flush()
+        yield boa.load(f.name, STARTING_SUPPLY)
+    # return boa.loads(code, STARTING_SUPPLY)
+
+
+def test_verify(simple_contract):
+    blockscout = Blockscout(os.getenv("", ""), "https://eth-sepolia.blockscout.com")
+    assert simple_contract.verify(blockscout) is None
 
 
 def test_env_type():

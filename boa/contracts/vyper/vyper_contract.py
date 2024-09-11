@@ -163,6 +163,24 @@ class _BaseVyperContract(_BaseEVMContract):
     def _constants(self):
         return ConstantsModel(self.compiler_data)
 
+    def verify(self, explorer, license="none"):
+        if self.filename == "<unknown>":
+            # contracts that aren't on disk can't be verified
+            # the compiler currently panics trying to construct the output bundle
+            raise ValueError(
+                "Cannot verify a contract without a filename. "
+                "Please use `boa.load` and save the contract to a file, for now."
+            )
+
+        data = vyper.compiler.output.build_solc_json(self.compiler_data)
+        explorer.verify(
+            address=self.address,
+            contract_name=self.compiler_data.contract_path.name,
+            standard_json=data,
+            evm_version=self.compiler_data.settings.evm_version,
+            license=license,
+        )
+
 
 # create a blueprint for use with `create_from_blueprint`.
 # uses a ERC5202 preamble, when calling `create_from_blueprint` will
