@@ -1,11 +1,13 @@
 import contextlib
 import sys
 
+import boa.explorer
 from boa.contracts.base_evm_contract import BoaError
 from boa.contracts.vyper.vyper_contract import check_boa_error_matches
 from boa.dealer import deal
 from boa.debugger import BoaDebug
 from boa.environment import Env
+from boa.explorer import BlockExplorer
 from boa.interpret import (
     from_etherscan,
     load,
@@ -49,19 +51,18 @@ def set_env(new_env):
 # Simple context manager which functions like the `open()` builtin -
 # if simply called, it never calls __exit__, but if used as a context manager,
 # it calls __exit__ at scope exit
-class _TmpEnvMgr:
-    def __init__(self, new_env):
-        global env
-        self.old_env = env
-
-        set_env(new_env)
+class _TemporaryContext:
+    def __init__(self, old_value, new_value, set_value):
+        self.old_value = old_value
+        self.set_value = set_value
+        set_value(new_value)
 
     def __enter__(self):
         # dummy
         pass
 
     def __exit__(self, *args):
-        set_env(self.old_env)
+        self.set_value(self.old_value)
 
 
 def fork(
@@ -75,20 +76,30 @@ def fork(
 
     new_env = Env()
     new_env.fork(url=url, block_identifier=block_identifier, deprecated=False, **kwargs)
-    return _TmpEnvMgr(new_env)
+    return _TemporaryContext(env, new_env, set_env)
 
 
 def set_browser_env(address=None):
     """Set the environment to use the browser's network in Jupyter/Colab"""
     # import locally because jupyter is generally not installed
+    global env
     from boa.integrations.jupyter import BrowserEnv
 
-    return _TmpEnvMgr(BrowserEnv(address))
+    return _TemporaryContext(env, BrowserEnv(address), set_env)
 
 
 def set_network_env(url):
     """Set the environment to use a custom network URL"""
-    return _TmpEnvMgr(NetworkEnv.from_url(url))
+    global env
+    return _TemporaryContext(env, NetworkEnv.from_url(url), set_env)
+
+
+def set_etherscan(*args, **kwargs):
+    def set(explorer: BlockExplorer):
+        boa.explorer.etherscan = explorer
+
+    explorer = BlockExplorer(*args, **kwargs)
+    return _TemporaryContext(boa.explorer.etherscan, explorer, set)
 
 
 def reset_env():

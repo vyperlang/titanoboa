@@ -16,7 +16,8 @@ voting_agent = "0xE478de485ad2fe566d49342Cbd03E49ed7DB3356"
 
 @pytest.fixture(scope="module", autouse=True)
 def api_key():
-    boa.explorer.etherscan.api_key = os.environ["ETHERSCAN_API_KEY"]
+    with boa.set_etherscan(os.environ["ETHERSCAN_API_KEY"]):
+        yield
 
 
 @pytest.fixture(scope="module")
