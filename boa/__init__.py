@@ -18,6 +18,7 @@ from boa.interpret import (
 from boa.network import NetworkEnv
 from boa.precompile import precompile
 from boa.test.strategies import fuzz
+from boa.util.open_ctx import Open
 from boa.vm.py_evm import enable_pyevm_verbose_logging, patch_opcode
 
 # turn off tracebacks if we are in repl
@@ -46,28 +47,10 @@ def set_env(new_env):
     Env._singleton = new_env
 
 
-# Simple context manager which functions like the `open()` builtin -
-# if simply called, it never calls __exit__, but if used as a context manager,
-# it calls __exit__ at scope exit
-# TODO: move this to boa/utils or its own module
-class _Open:
-    def __init__(self, get, set_, item):
-        self.anchor = get()
-        self._set = set_
-        self._set(item)
-
-    def __enter__(self):
-        # dummy implementation, no-op
-        pass
-
-    def __exit__(self, *args):
-        self._set(self.anchor)
-
-
 def _env_mgr(new_env):
     global env
     get_env = lambda: env  # noqa: E731
-    return _Open(get_env, set_env, new_env)
+    return Open(get_env, set_env, new_env)
 
 
 def fork(
