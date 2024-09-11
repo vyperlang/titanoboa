@@ -28,7 +28,8 @@ class Etherscan:
     api_key: Optional[str] = os.environ.get("ETHERSCAN_API_KEY")
     uri: str = os.environ.get("ETHERSCAN_URI", "https://api.etherscan.io/api")
     num_retries: int = 10
-    backoff_ms: int = 400
+    backoff_ms: int | float = 400.0
+    backoff_factor: float = 1.1  # 1.1**10 ~= 2.59
 
     def fetch(self, **params) -> dict:
         """
@@ -47,8 +48,10 @@ class Etherscan:
             data = res.json()
             if not _is_rate_limited(data):
                 break
-            backoff_factor = 1.1**i  # 1.1**10 ~= 2.59
-            time.sleep(backoff_factor * self.backoff_ms / 1000)
+
+            f = self.backoff_factor**i
+            seconds = self.backoff_ms / 1000
+            time.sleep(f * seconds)
 
         if not _is_success_response(data):
             raise ValueError(f"Failed to retrieve data from API: {data}")
