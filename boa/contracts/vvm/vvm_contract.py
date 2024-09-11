@@ -1,3 +1,4 @@
+import re
 from functools import cached_property
 from pathlib import Path
 
@@ -171,19 +172,20 @@ class _VVMInternal(ABIFunction):
         return to_bytes(compiled["<stdin>"]["bytecode_runtime"])
 
     @property
-    def source_code(self):
-        raise NotImplementedError  # to be implemented in subclasses
+    def source_code(self) -> str:
+        """
+        Returns the source code an internal function.
+        Must be implemented in subclasses.
+        """
+        raise NotImplementedError
 
     def __call__(self, *args, **kwargs):
         env = self.contract.env
         assert isinstance(self.contract, VVMContract)  # help mypy
-        balance_before = env.get_balance(env.eoa)
         env.set_code(self.contract.address, self._override_bytecode)
-        env.set_balance(env.eoa, 10**20)
         try:
             return super().__call__(*args, **kwargs)
         finally:
-            env.set_balance(env.eoa, balance_before)
             env.set_code(self.contract.address, self.contract.bytecode_runtime)
 
 
@@ -245,19 +247,21 @@ class VVMStorageVariable(_VVMInternal):
     """
 
     def __init__(self, name, spec, contract):
+        value_type = spec["type"]
+        inputs = []
+        regex = re.compile(r"^HashMap\[([^[]+), (.+)]$")
+
+        while value_type.startswith("HashMap"):
+            key_type, value_type = regex.match(value_type).groups()
+            inputs.append({"name": f"key{len(inputs)}", "type": key_type})
+
         abi = {
             "anonymous": False,
-            "inputs": [],
-            "outputs": [{"name": name, "type": spec["type"]}],
+            "inputs": inputs,
+            "outputs": [{"name": name, "type": value_type}],
             "name": name,
             "type": "function",
         }
-
-        if spec["type"].startswith("HashMap"):
-            key_type, value_type = spec["type"][8:-1].split(",")
-            abi["inputs"] = [{"name": "key", "type": key_type}]
-            abi["outputs"] = [{"name": "value", "type": value_type.strip()}]
-
         super().__init__(abi, contract.contract_name)
         self.contract = contract
 
