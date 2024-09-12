@@ -2,6 +2,10 @@ import re
 from functools import cached_property
 
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
+from boa.contracts.vyper.compiler_utils import (
+    DEFAULT_BLUEPRINT_PREAMBLE,
+    generate_blueprint_bytecode,
+)
 from boa.environment import Env
 
 # TODO: maybe this doesn't detect release candidates
@@ -41,7 +45,7 @@ class VVMDeployer:
                 return ABIFunction(t, contract_name=self.filename)
         return None
 
-    def deploy(self, *args, env=None):
+    def deploy(self, *args, env=None, **kwargs):
         encoded_args = b""
         if self.constructor is not None:
             encoded_args = self.constructor.prepare_calldata(*args)
@@ -51,9 +55,25 @@ class VVMDeployer:
         if env is None:
             env = Env.get_singleton()
 
-        address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args)
+        address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args, **kwargs)
 
         return self.at(address)
+
+    def deploy_as_blueprint(
+        self, env=None, blueprint_preamble=DEFAULT_BLUEPRINT_PREAMBLE, **kwargs
+    ):
+        """
+        Deploy a new blueprint from this contract.
+        :param blueprint_preamble: The preamble to use for the blueprint.
+        :param env: The environment to deploy the blueprint in.
+        :param kwargs: Keyword arguments to pass to the environment `deploy_code` method.
+        :returns: A contract instance.
+        """
+        return VVMDeployer(
+            abi=[],
+            bytecode=generate_blueprint_bytecode(self.bytecode, blueprint_preamble),
+            filename=self.filename,
+        ).deploy(env=env, **kwargs)
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)

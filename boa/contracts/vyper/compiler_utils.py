@@ -157,3 +157,18 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
     """
     )
     return compile_vyper_function(wrapper_code, contract)
+
+
+DEFAULT_BLUEPRINT_PREAMBLE = b"\xFE\x71\x00"
+
+
+def generate_blueprint_bytecode(contract_bytecode, blueprint_preamble):
+    if blueprint_preamble is None:
+        blueprint_preamble = b""
+    blueprint_bytecode = blueprint_preamble + contract_bytecode
+
+    # the length of the deployed code in bytes
+    len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
+    deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
+
+    return deploy_bytecode + blueprint_bytecode

@@ -43,7 +43,9 @@ from boa.contracts.call_trace import TraceSource
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
+    DEFAULT_BLUEPRINT_PREAMBLE,
     compile_vyper_function,
+    generate_blueprint_bytecode,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
@@ -173,7 +175,7 @@ class VyperBlueprint(_BaseVyperContract):
         compiler_data,
         env=None,
         override_address=None,
-        blueprint_preamble=b"\xFE\x71\x00",
+        blueprint_preamble=DEFAULT_BLUEPRINT_PREAMBLE,
         filename=None,
         gas=None,
     ):
@@ -181,19 +183,12 @@ class VyperBlueprint(_BaseVyperContract):
         # maybe use common base class?
         super().__init__(compiler_data, env, filename)
 
-        if blueprint_preamble is None:
-            blueprint_preamble = b""
-
-        blueprint_bytecode = blueprint_preamble + compiler_data.bytecode
-
-        # the length of the deployed code in bytes
-        len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
-        deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
-
-        deploy_bytecode += blueprint_bytecode
-
         addr, computation = self.env.deploy(
-            bytecode=deploy_bytecode, override_address=override_address, gas=gas
+            bytecode=generate_blueprint_bytecode(
+                blueprint_preamble, compiler_data.bytecode
+            ),
+            override_address=override_address,
+            gas=gas,
         )
         if computation.is_error:
             raise computation.error
