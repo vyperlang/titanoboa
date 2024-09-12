@@ -36,7 +36,6 @@ class Blockscout:
         address: Address,
         contract_name: str,
         standard_json: dict,
-        evm_version: str,
         license_type: str = None,
     ) -> None:
         """
@@ -44,7 +43,6 @@ class Blockscout:
         :param address: The address of the contract.
         :param contract_name: The name of the contract.
         :param standard_json: The standard JSON output of the Vyper compiler.
-        :param evm_version: The EVM version to use for verification.
         :param license_type: The license to use for the contract. Defaults to "none".
         """
         if license_type is None:
@@ -55,7 +53,6 @@ class Blockscout:
             data={
                 "compiler_version": standard_json["compiler_version"],
                 "license_type": license_type,
-                "evm_version": evm_version,
             },
             files={
                 "files[0]": (

@@ -137,7 +137,6 @@ class VyperDeployer:
             address=address,
             standard_json=build_solc_json(self.compiler_data),
             contract_name=self.compiler_data.contract_path.name,
-            evm_version=self.compiler_data.settings.evm_version,
             license_type=license_type,
         )
 
