@@ -6,7 +6,7 @@ from eth.constants import ZERO_ADDRESS
 
 import boa
 from boa import BoaError
-from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction, ABIContract
+from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
 from boa.util.abi import Address
 import warnings
 
