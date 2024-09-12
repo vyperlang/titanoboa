@@ -6,8 +6,9 @@ from eth.constants import ZERO_ADDRESS
 
 import boa
 from boa import BoaError
-from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
+from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction, ABIContract
 from boa.util.abi import Address
+import warnings
 
 
 def load_via_abi(code, name="test contract"):
@@ -158,6 +159,18 @@ def test() -> uint256:
     with pytest.raises(BoaError) as e:
         abi_contract.test()
     assert "no bytecode at this address!" in str(e.value)
+
+
+def test_bad_address_suppressed():
+    code = """
+@external
+def test() -> uint256:
+    return 0
+"""
+    abi_contract, _ = load_via_abi(code)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        abi_contract = abi_contract.deployer.at(ZERO_ADDRESS, suppress_warning=True)
 
 
 def test_abi_reverts():
