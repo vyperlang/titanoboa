@@ -376,7 +376,7 @@ class ABIContractFactory:
             self.functions,
             address,
             self.filename,
-            suppress_warning=suppress_warning
+            suppress_warning=suppress_warning,
         )
 
         contract.env.register_contract(address, contract)
