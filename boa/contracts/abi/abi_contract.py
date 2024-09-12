@@ -365,13 +365,18 @@ class ABIContractFactory:
     def from_abi_dict(cls, abi, name="<anonymous contract>", filename=None):
         return cls(name, abi, filename)
 
-    def at(self, address: Address | str, suppress_warning: bool= False) -> ABIContract:
+    def at(self, address: Address | str, suppress_warning: bool = False) -> ABIContract:
         """
         Create an ABI contract object for a deployed contract at `address`.
         """
         address = Address(address)
         contract = ABIContract(
-            self._name, self._abi, self.functions, address, self.filename, suppress_warning=suppress_warning
+            self._name,
+            self._abi,
+            self.functions,
+            address,
+            self.filename,
+            suppress_warning=suppress_warning
         )
 
         contract.env.register_contract(address, contract)
