@@ -126,19 +126,19 @@ class VyperDeployer:
 
         return ret
 
-    def verify(self, address: Address, explorer, license=None) -> None:
+    def verify(self, address: Address, explorer, license_type: str = None) -> None:
         """
         Verifies the Vyper contract on a block explorer.
         :param address: The address of the contract.
         :param explorer: The block explorer to use for verification.
-        :param license: The license to use for the contract. Defaults to "none".
+        :param license_type: Optional license to use for the contract.
         """
         explorer.verify(
             address=address,
             standard_json=build_solc_json(self.compiler_data),
             contract_name=self.compiler_data.contract_path.name,
             evm_version=self.compiler_data.settings.evm_version,
-            license=license,
+            license_type=license_type,
         )
 
     @cached_property
@@ -182,13 +182,13 @@ class _BaseVyperContract(_BaseEVMContract):
     def _constants(self):
         return ConstantsModel(self.compiler_data)
 
-    def verify(self, explorer, license=None) -> None:
+    def verify(self, explorer, license_type: str = None) -> None:
         """
         Verifies the Vyper contract on a block explorer.
         :param explorer: The block explorer to use for verification.
-        :param license: The license to use for the contract. Defaults to None.
+        :param license_type: Optional license to use for the contract.
         """
-        self.deployer.verify(self.address, explorer, license)
+        self.deployer.verify(self.address, explorer, license_type)
 
 
 # create a blueprint for use with `create_from_blueprint`.

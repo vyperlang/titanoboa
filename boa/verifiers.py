@@ -1,10 +1,15 @@
 import json
+import time
 from datetime import datetime, timedelta
+from http import HTTPStatus
+from typing import Optional
 
 import requests
 from attr import dataclass
 
 from boa.util.abi import Address
+
+DEFAULT_BLOCKSCOUT_URI = "https://eth.blockscout.com"
 
 
 @dataclass
@@ -14,8 +19,17 @@ class Blockscout:
     This is independent of Vyper contracts, and can be used to verify any smart contract.
     """
 
-    api_key: str
-    api_url: str = "https://eth.blockscout.com"
+    uri: str = DEFAULT_BLOCKSCOUT_URI
+    api_key: Optional[str] = None
+    timeout: timedelta = timedelta(minutes=2)
+    backoff: timedelta = timedelta(milliseconds=500)
+    backoff_factor: float = 1.1
+    retry_http_codes: tuple[int, ...] = (
+        HTTPStatus.NOT_FOUND,
+        HTTPStatus.INTERNAL_SERVER_ERROR,
+        HTTPStatus.SERVICE_UNAVAILABLE,
+        HTTPStatus.GATEWAY_TIMEOUT,
+    )
 
     def verify(
         self,
@@ -23,7 +37,7 @@ class Blockscout:
         contract_name: str,
         standard_json: dict,
         evm_version: str,
-        license=None,
+        license_type: str = None,
     ) -> None:
         """
         Verifies the Vyper contract on Blockscout.
@@ -31,14 +45,16 @@ class Blockscout:
         :param contract_name: The name of the contract.
         :param standard_json: The standard JSON output of the Vyper compiler.
         :param evm_version: The EVM version to use for verification.
-        :param license: The license to use for the contract. Defaults to "none".
+        :param license_type: The license to use for the contract. Defaults to "none".
         """
+        if license_type is None:
+            license_type = "none"
         response = requests.post(
-            url=f"{self.api_url}/api/v2/smart-contracts/{address.lower()}/"
-            f"verification/via/vyper-standard-input?apikey={self.api_key}",
+            url=f"{self.uri}/api/v2/smart-contracts/{address.lower()}/"
+            f"verification/via/vyper-standard-input?apikey={self.api_key or ''}",
             data={
                 "compiler_version": standard_json["compiler_version"],
-                "license_type": license or "none",
+                "license_type": license_type,
                 "evm_version": evm_version,
             },
             files={
@@ -50,25 +66,27 @@ class Blockscout:
             },
         )
         response.raise_for_status()
-        message = response.json().get("message")
-        if message != "Smart-contract verification started":
-            raise Exception(f"Unexpected response: {response.text}")
+        print(response.json().get("message"))  # usually verification started
 
-        print(message)
         timeout = datetime.now() + timedelta(minutes=2)
+        wait_time = self.backoff
         while datetime.now() < timeout:
+            time.sleep(wait_time.total_seconds())
             if self.is_verified(address):
                 print(
-                    f"Contract verified! {self.api_url}/address/{address.lower()}?tab=contract_code"
+                    f"Contract verified! {self.uri}/address/{address.lower()}?tab=contract_code"
                 )
                 return
+            wait_time *= self.backoff_factor
 
         raise TimeoutError("Timeout waiting for verification to complete")
 
     def is_verified(self, address: Address) -> bool:
-        url = f"{self.api_url}/api/v2/smart-contracts/{address.lower()}?apikey={self.api_key}"
+        url = (
+            f"{self.uri}/api/v2/smart-contracts/{address.lower()}?apikey={self.api_key}"
+        )
         response = requests.get(url)
-        if response.status_code == 404:
+        if response.status_code in self.retry_http_codes:
             return False
         response.raise_for_status()
         return True

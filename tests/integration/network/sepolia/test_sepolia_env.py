@@ -3,8 +3,8 @@ import os
 import pytest
 
 import boa
-from boa.contracts.verify import Blockscout
 from boa.network import NetworkEnv
+from boa.verifiers import Blockscout
 
 # boa.env.anchor() does not work in prod environment
 pytestmark = pytest.mark.ignore_isolation
@@ -37,7 +37,7 @@ def simple_contract():
 
 def test_verify(simple_contract):
     api_key = os.getenv("BLOCKSCOUT_API_KEY", "")
-    blockscout = Blockscout(api_key, "https://eth-sepolia.blockscout.com")
+    blockscout = Blockscout("https://eth-sepolia.blockscout.com", api_key)
     simple_contract.verify(blockscout)
     assert blockscout.is_verified(simple_contract.address) is True
 
