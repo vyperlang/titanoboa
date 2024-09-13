@@ -22,7 +22,19 @@ def _detect_version(source_code: str):
 
 
 class VVMDeployer:
+    """
+    A deployer that uses the Vyper Version Manager (VVM).
+    This allows deployment of contracts written in older versions of Vyper that
+    can interact with new versions using the ABI definition.
+    """
+
     def __init__(self, abi, bytecode, filename):
+        """
+        Initialize a VVMDeployer instance.
+        :param abi: The contract's ABI.
+        :param bytecode: The contract's bytecode.
+        :param filename: The filename of the contract.
+        """
         self.abi = abi
         self.bytecode = bytecode
         self.filename = filename
@@ -70,7 +82,7 @@ class VVMDeployer:
         :returns: A contract instance.
         """
         return VVMDeployer(
-            abi=[],
+            abi=[],  # the blueprint may not be called directly, no public ABI
             bytecode=generate_blueprint_bytecode(self.bytecode, blueprint_preamble),
             filename=self.filename,
         ).deploy(env=env, **kwargs)
