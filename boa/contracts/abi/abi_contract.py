@@ -4,7 +4,9 @@ from typing import Any, Optional, Union
 from warnings import warn
 
 from eth.abc import ComputationAPI
+from vyper.ast import parse_to_ast
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
+from vyper.semantics.types.function import ContractFunctionT
 from vyper.utils import method_id
 
 from boa.contracts.base_evm_contract import (
@@ -362,6 +364,16 @@ class ABIContractFactory:
 
     @classmethod
     def from_abi_dict(cls, abi, name="<anonymous contract>", filename=None):
+        return cls(name, abi, filename)
+
+    @classmethod
+    def from_sigs(cls, *fn_sigs, name="<anonymous contract function>", filename=None):
+        abi = [
+            ContractFunctionT.from_FunctionDef(
+                parse_to_ast(fn_sig).body[0], is_interface=True
+            ).to_toplevel_abi_dict()
+            for fn_sig in fn_sigs
+        ]
         return cls(name, abi, filename)
 
     def at(self, address: Address | str) -> ABIContract:
