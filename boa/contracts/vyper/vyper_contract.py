@@ -185,7 +185,7 @@ class VyperBlueprint(_BaseVyperContract):
 
         addr, computation = self.env.deploy(
             bytecode=generate_blueprint_bytecode(
-                blueprint_preamble, compiler_data.bytecode
+                compiler_data.bytecode, blueprint_preamble
             ),
             override_address=override_address,
             gas=gas,

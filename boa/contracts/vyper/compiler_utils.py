@@ -162,7 +162,9 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
 DEFAULT_BLUEPRINT_PREAMBLE = b"\xFE\x71\x00"
 
 
-def generate_blueprint_bytecode(contract_bytecode, blueprint_preamble):
+def generate_blueprint_bytecode(
+    contract_bytecode: bytes, blueprint_preamble: bytes = DEFAULT_BLUEPRINT_PREAMBLE
+):
     if blueprint_preamble is None:
         blueprint_preamble = b""
     blueprint_bytecode = blueprint_preamble + contract_bytecode
