@@ -154,7 +154,6 @@ class NetworkEnv(Env):
         nickname: str = None,
         accounts: dict[str, Account] = None,
         fork_try_prefetch_state=True,
-        deployments_db=None,
         **kwargs,
     ):
         super().__init__(fork_try_prefetch_state, **kwargs)
