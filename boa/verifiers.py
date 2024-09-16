@@ -68,7 +68,7 @@ class Blockscout:
         response.raise_for_status()
         print(response.json().get("message"))  # usually verification started
 
-        timeout = datetime.now() + timedelta(minutes=2)
+        timeout = datetime.now() + self.timeout
         wait_time = self.backoff
         while datetime.now() < timeout:
             time.sleep(wait_time.total_seconds())
