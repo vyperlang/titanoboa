@@ -47,9 +47,12 @@ class Blockscout:
         """
         if license_type is None:
             license_type = "none"
+
+        api_key = self.api_key or ""
+
         response = requests.post(
-            url=f"{self.uri}/api/v2/smart-contracts/{address.lower()}/"
-            f"verification/via/vyper-standard-input?apikey={self.api_key or ''}",
+            url=f"{self.uri}/api/v2/smart-contracts/{address}/"
+            f"verification/via/vyper-standard-input?apikey={api_key}",
             data={
                 "compiler_version": standard_json["compiler_version"],
                 "license_type": license_type,
@@ -70,18 +73,18 @@ class Blockscout:
         while datetime.now() < timeout:
             time.sleep(wait_time.total_seconds())
             if self.is_verified(address):
-                print(
-                    f"Contract verified! {self.uri}/address/{address.lower()}?tab=contract_code"
-                )
+                msg = "Contract verified!"
+                msg += f" {self.uri}/address/{address}?tab=contract_code"
+                print(msg)
                 return
             wait_time *= self.backoff_factor
 
         raise TimeoutError("Timeout waiting for verification to complete")
 
     def is_verified(self, address: Address) -> bool:
-        url = (
-            f"{self.uri}/api/v2/smart-contracts/{address.lower()}?apikey={self.api_key}"
-        )
+        api_key = self.api_key or ""
+        url = f"{self.uri}/api/v2/smart-contracts/{address}?apikey={api_key}"
+
         response = requests.get(url)
         if response.status_code in self.retry_http_codes:
             return False
