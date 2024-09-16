@@ -8,6 +8,7 @@ import requests
 from attr import dataclass
 
 from boa.util.abi import Address
+from boa.util.open_ctx import Open
 
 DEFAULT_BLOCKSCOUT_URI = "https://eth.blockscout.com"
 
@@ -90,3 +91,20 @@ class Blockscout:
             return False
         response.raise_for_status()
         return True
+
+
+blockscout = Blockscout()
+
+
+def _set_blockscout(new_blockscout):
+    global blockscout
+    blockscout = new_blockscout
+
+
+def get_blockscout():
+    global blockscout
+    return blockscout
+
+
+def set_blockscout(new_blockscout):
+    return Open(get_blockscout, _set_blockscout, new_blockscout)
