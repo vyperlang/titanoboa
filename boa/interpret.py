@@ -131,15 +131,16 @@ def compiler_data(
 ) -> CompilerData:
     global _disk_cache, _search_path
 
-    search_paths = get_search_paths(_search_path)
-    input_bundle = FilesystemInputBundle(search_paths)
-
     path = Path(contract_name)
     resolved_path = Path(filename).resolve(strict=False)
 
     file_input = FileInput(
         contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
     )
+
+    search_paths = get_search_paths(_search_path)
+    input_bundle = FilesystemInputBundle(search_paths)
+
     settings = Settings(**kwargs)
     ret = CompilerData(file_input, input_bundle, settings)
     if _disk_cache is None:
