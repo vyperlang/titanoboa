@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Union
 
 import vvm
 import vyper
+from vvm.exceptions import UnexpectedVersionError
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
     ABIInput,
@@ -212,9 +213,13 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
-    version = vvm.detect_vyper_version_from_source(source_code)
-    if version is not None and version != vyper.__version__:
-        return _loads_partial_vvm(source_code, version, filename)
+    try:
+        version = vvm.detect_vyper_version_from_source(source_code)
+        if str(version) != vyper.__version__:
+            return _loads_partial_vvm(source_code, version, filename)
+    except UnexpectedVersionError as e:
+        if e.args[0] != "No version detected in source code":
+            raise
 
     compiler_args = compiler_args or {}
 
