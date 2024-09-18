@@ -46,9 +46,10 @@ CREATE TABLE IF NOT EXISTS
 """
 
 class DeploymentsDB:
-    def __init__(self, path="./.boa/deployments.db"):
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, path=":memory:"):
+        if path != ":memory:":
+            path = Path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
 
         # once 3.12 is min version, use autocommit=True
         self.db = sqlite3.connect(path)
