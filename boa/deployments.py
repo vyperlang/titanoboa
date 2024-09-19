@@ -1,10 +1,12 @@
-from dataclasses import dataclass, asdict, fields
-from boa.util.open_ctx import Open
-from pathlib import Path
-from typing import Optional,Any
 import json
 import sqlite3
+from dataclasses import asdict, dataclass, fields
+from pathlib import Path
+from typing import Any, Optional
+
 from boa.util.abi import Address
+from boa.util.open_ctx import Open
+
 
 @dataclass(frozen=True)
 class Deployment:
@@ -41,7 +43,6 @@ class Deployment:
         return cls(**ret)
 
 
-
 _CREATE_CMD = """
 CREATE TABLE IF NOT EXISTS
     deployments(
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS
         source_code text
     );
 """
+
 
 class DeploymentsDB:
     def __init__(self, path=":memory:"):
@@ -86,17 +88,20 @@ class DeploymentsDB:
         ret = [Deployment.from_sql_tuple(item) for item in cur.fetchall()]
         return ret
 
-
     def get_deployments(self) -> list[Deployment]:
         return self.get_deployments_from_sql("SELECT * FROM deployments")
 
+
 _db: Optional[DeploymentsDB] = None
+
 
 def set_deployments_db(db: Optional[DeploymentsDB]):
     def set_(db):
         global _db
         _db = db
+
     return Open(get_deployments_db, set_, db)
+
 
 def get_deployments_db():
     global _db
