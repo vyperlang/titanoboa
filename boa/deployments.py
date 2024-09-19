@@ -83,7 +83,7 @@ class DeploymentsDB:
         self.db.execute(insert_cmd, tuple(values.values()))
         self.db.commit()
 
-    def get_deployments_from_sql(self, sql_query: str, parameters=(), /):
+    def _get_deployments_from_sql(self, sql_query: str, parameters=(), /):
         cur = self.db.execute(sql_query, parameters)
         ret = [Deployment.from_sql_tuple(item) for item in cur.fetchall()]
         return ret
