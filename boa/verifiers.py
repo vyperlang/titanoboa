@@ -93,18 +93,18 @@ class Blockscout:
         return True
 
 
-blockscout = Blockscout()
+_verifier = Blockscout()
 
 
-def _set_blockscout(new_blockscout):
-    global blockscout
-    blockscout = new_blockscout
+def _set_verifier(verifier):
+    global _verifier
+    _verifier = verifier
 
 
-def get_blockscout():
-    global blockscout
-    return blockscout
+def get_verifier():
+    global _verifier
+    return _verifier
 
 
-def set_blockscout(new_blockscout):
-    return Open(get_blockscout, _set_blockscout, new_blockscout)
+def set_verifier(verifier):
+    return Open(get_verifier, _set_verifier, verifier)
