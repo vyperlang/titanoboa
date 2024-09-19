@@ -57,7 +57,6 @@ from boa.environment import Env
 from boa.profiling import cache_gas_used_for_computation
 from boa.util.abi import Address, abi_decode, abi_encode
 from boa.util.lrudict import lrudict
-from boa.verifiers import get_verifier
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
 
@@ -124,25 +123,14 @@ class VyperDeployer:
         ret._set_bytecode(bytecode)
 
         ret.env.register_contract(address, ret)
-
         return ret
 
-    def verify(self, address: Address, verifier=None, license_type: str = None) -> None:
+    @cached_property
+    def standard_json(self):
         """
-        Verifies the Vyper contract on a block explorer.
-        :param address: The address of the contract.
-        :param verifier: The block explorer verifier to use.
-            Defaults to get_verifier().
-        :param license_type: Optional license to use for the contract.
+        Generates a standard JSON representation of the Vyper contract.
         """
-        if verifier is None:
-            verifier = get_verifier()
-        verifier.verify(
-            address=address,
-            standard_json=build_solc_json(self.compiler_data),
-            contract_name=self.compiler_data.contract_path.name,
-            license_type=license_type,
-        )
+        return build_solc_json(self.compiler_data)
 
     @cached_property
     def _constants(self):

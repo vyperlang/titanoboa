@@ -1,11 +1,11 @@
 import json
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from http import HTTPStatus
 from typing import Optional
 
 import requests
-from attr import dataclass
 
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
@@ -38,7 +38,7 @@ class Blockscout:
         contract_name: str,
         standard_json: dict,
         license_type: str = None,
-    ) -> None:
+    ) -> "VerificationResult":
         """
         Verifies the Vyper contract on Blockscout.
         :param address: The address of the contract.
@@ -67,8 +67,14 @@ class Blockscout:
             },
         )
         response.raise_for_status()
-        print(response.json().get("message"))  # usually verification started
+        print(response.json().get("message"))  # usually verification started\
+        return VerificationResult(address, self)
 
+    def wait_for_verification(self, address: Address) -> None:
+        """
+        Waits for the contract to be verified on Blockscout.
+        :param address: The address of the contract.
+        """
         timeout = datetime.now() + self.timeout
         wait_time = self.backoff
         while datetime.now() < timeout:
@@ -94,6 +100,19 @@ class Blockscout:
 
 
 _verifier = Blockscout()
+
+
+@dataclass
+class VerificationResult:
+    address: Address
+    verifier: Blockscout
+
+    def wait_for_verification(self):
+        self.verifier.wait_for_verification(self.address)
+
+    @property
+    def is_verified(self):
+        return self.verifier.is_verified(self.address)
 
 
 def _set_verifier(verifier):
