@@ -38,7 +38,7 @@ class Deployment:
         ret["receipt_dict"] = json.loads(ret["receipt_dict"])
         if ret["source_code"] is not None:
             ret["source_code"] = json.loads(ret["source_code"])
-        return ret
+        return cls(**ret)
 
 
 
@@ -82,7 +82,7 @@ class DeploymentsDB:
         self.db.commit()
 
     def get_deployments_from_sql(self, sql_query: str, parameters=(), /):
-        cur = self.db.execute(sql_query, parameters=parameters)
+        cur = self.db.execute(sql_query, parameters)
         ret = [Deployment.from_sql_tuple(item) for item in cur.fetchall()]
         return ret
 
