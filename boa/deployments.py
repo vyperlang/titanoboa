@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 from boa.util.open_ctx import Open
 from pathlib import Path
 from typing import Optional,Any
@@ -22,12 +22,24 @@ class Deployment:
         ret = asdict(self)
         ret["contract_address"] = str(ret["contract_address"])
         ret["from_"] = str(ret["from_"])
-        ret["tx_hash"] = ret["tx_hash"]
         ret["tx_dict"] = json.dumps(ret["tx_dict"])
         ret["receipt_dict"] = json.dumps(ret["receipt_dict"])
         if ret["source_code"] is not None:
             ret["source_code"] = json.dumps(ret["source_code"])
         return ret
+
+    @classmethod
+    def from_sql_tuple(cls, values):
+        assert len(values) == len(fields(cls))
+        ret = dict(zip([field.name for field in fields(cls)], values))
+        ret["contract_address"] = Address(ret["contract_address"])
+        ret["from_"] = Address(ret["from_"])
+        ret["tx_dict"] = json.loads(ret["tx_dict"])
+        ret["receipt_dict"] = json.loads(ret["receipt_dict"])
+        if ret["source_code"] is not None:
+            ret["source_code"] = json.loads(ret["source_code"])
+        return ret
+
 
 
 _CREATE_CMD = """
@@ -64,10 +76,19 @@ class DeploymentsDB:
 
         values_placeholder = ",".join(["?"] * len(values))
 
-        insert_cmd = f"INSERT INTO deployments VALUES({values_placeholder});"
+        insert_cmd = f"INSERT INTO deployments VALUES({values_placeholder})"
 
         self.db.execute(insert_cmd, tuple(values.values()))
         self.db.commit()
+
+    def get_deployments_from_sql(self, sql_query: str, parameters=(), /):
+        cur = self.db.execute(sql_query, parameters=parameters)
+        ret = [Deployment.from_sql_tuple(item) for item in cur.fetchall()]
+        return ret
+
+
+    def get_deployments(self) -> list[Deployment]:
+        return self.get_deployments_from_sql("SELECT * FROM deployments")
 
 _db: Optional[DeploymentsDB] = None
 
