@@ -110,7 +110,6 @@ class VerificationResult:
     def wait_for_verification(self):
         self.verifier.wait_for_verification(self.address)
 
-    @property
     def is_verified(self):
         return self.verifier.is_verified(self.address)
 
