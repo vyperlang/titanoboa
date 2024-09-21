@@ -132,5 +132,31 @@ def get_verifier():
     return _verifier
 
 
+# TODO: maybe allow like `set_verifier("blockscout", *args, **kwargs)`
 def set_verifier(verifier):
     return Open(get_verifier, _set_verifier, verifier)
+
+
+def verify(contract, verifier=None, license_type: str = None) -> VerificationResult:
+    """
+    Verifies the contract on a block explorer.
+    :param contract: The contract to verify.
+    :param verifier: The block explorer verifier to use.
+                     Defaults to get_verifier().
+    :param license_type: Optional license to use for the contract.
+    """
+    if verifier is None:
+        verifier = get_verifier()
+
+    if not hasattr(contract, "deployer") or not hasattr(
+        contract.deployer, "standard_json"
+    ):
+        raise ValueError(f"Not a contract! {contract}")
+
+    address = contract.address
+    return verifier.verify(
+        address=address,
+        standard_json=contract.deployer.standard_json,
+        contract_name=contract.contract_name,
+        license_type=license_type,
+    )

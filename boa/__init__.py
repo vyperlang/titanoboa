@@ -21,7 +21,7 @@ from boa.network import NetworkEnv
 from boa.precompile import precompile
 from boa.test.strategies import fuzz
 from boa.util.open_ctx import Open
-from boa.verifiers import VerificationResult, get_verifier
+from boa.verifiers import get_verifier, set_verifier, verify
 from boa.vm.py_evm import enable_pyevm_verbose_logging, patch_opcode
 
 # turn off tracebacks if we are in repl
@@ -119,24 +119,3 @@ def _jupyter_server_extension_points() -> list[dict]:
     where to find the `_load_jupyter_server_extension` function.
     """
     return [{"module": "boa.integrations.jupyter"}]
-
-
-def verify(contract, verifier=None, license_type: str = None) -> VerificationResult:
-    """
-    Verifies the contract on a block explorer.
-    :param contract: The contract to verify.
-    :param verifier: The block explorer verifier to use.
-        Defaults to get_verifier().
-    :param license_type: Optional license to use for the contract.
-    """
-
-    if verifier is None:
-        verifier = get_verifier()
-
-    address = contract.address
-    return verifier.verify(
-        address=address,
-        standard_json=contract.deployer.standard_json,
-        contract_name=contract.contract_name,
-        license_type=license_type,
-    )
