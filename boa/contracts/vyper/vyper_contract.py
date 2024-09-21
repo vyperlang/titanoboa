@@ -173,14 +173,6 @@ class _BaseVyperContract(_BaseEVMContract):
     def _constants(self):
         return ConstantsModel(self.compiler_data)
 
-    def verify(self, verifier=None, license_type: str = None) -> None:
-        """
-        Verifies the Vyper contract on a block explorer.
-        :param verifier: The block explorer to use for verification.
-        :param license_type: Optional license to use for the contract.
-        """
-        self.deployer.verify(self.address, verifier, license_type)
-
 
 # create a blueprint for use with `create_from_blueprint`.
 # uses a ERC5202 preamble, when calling `create_from_blueprint` will
