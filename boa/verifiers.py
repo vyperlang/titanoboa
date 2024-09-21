@@ -78,12 +78,12 @@ class Blockscout:
         timeout = datetime.now() + self.timeout
         wait_time = self.backoff
         while datetime.now() < timeout:
-            time.sleep(wait_time.total_seconds())
             if self.is_verified(address):
                 msg = "Contract verified!"
                 msg += f" {self.uri}/address/{address}?tab=contract_code"
                 print(msg)
                 return
+            time.sleep(wait_time.total_seconds())
             wait_time *= self.backoff_factor
 
         raise TimeoutError("Timeout waiting for verification to complete")
