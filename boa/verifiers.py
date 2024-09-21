@@ -38,37 +38,45 @@ class Blockscout:
         contract_name: str,
         standard_json: dict,
         license_type: str = None,
-    ) -> "VerificationResult":
+        wait: bool = False,
+    ) -> Optional["VerificationResult"]:
         """
-        Verifies the Vyper contract on Blockscout.
+        Verify the Vyper contract on Blockscout.
         :param address: The address of the contract.
         :param contract_name: The name of the contract.
         :param standard_json: The standard JSON output of the Vyper compiler.
         :param license_type: The license to use for the contract. Defaults to "none".
+        :param wait: Whether to return a VerificationResult immediately
+                     or wait for verification to complete. Defaults to False
         """
         if license_type is None:
             license_type = "none"
 
         api_key = self.api_key or ""
 
-        response = requests.post(
-            url=f"{self.uri}/api/v2/smart-contracts/{address}/"
-            f"verification/via/vyper-standard-input?apikey={api_key}",
-            data={
-                "compiler_version": standard_json["compiler_version"],
-                "license_type": license_type,
-            },
-            files={
-                "files[0]": (
-                    contract_name,
-                    json.dumps(standard_json).encode("utf-8"),
-                    "application/json",
-                )
-            },
-        )
+        url = f"{self.uri}/api/v2/smart-contracts/{address}/"
+        url += f"verification/via/vyper-standard-input?apikey={api_key}"
+        data = {
+            "compiler_version": standard_json["compiler_version"],
+            "license_type": license_type,
+        }
+        files = {
+            "files[0]": (
+                contract_name,
+                json.dumps(standard_json).encode("utf-8"),
+                "application/json",
+            )
+        }
+
+        response = requests.post(url, data=data, files=files)
         response.raise_for_status()
-        print(response.json().get("message"))  # usually verification started\
-        return VerificationResult(address, self)
+        print(response.json().get("message"))  # usually verification started
+
+        if not wait:
+            return VerificationResult(address, self)
+
+        self.wait_for_verification(address)
+        return None
 
     def wait_for_verification(self, address: Address) -> None:
         """
