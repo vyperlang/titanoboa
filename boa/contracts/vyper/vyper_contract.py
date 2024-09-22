@@ -26,7 +26,7 @@ from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
-from vyper.compiler.output import build_abi_output
+from vyper.compiler.output import build_abi_output, build_solc_json
 from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
@@ -123,8 +123,14 @@ class VyperDeployer:
         ret._set_bytecode(bytecode)
 
         ret.env.register_contract(address, ret)
-
         return ret
+
+    @cached_property
+    def standard_json(self):
+        """
+        Generates a standard JSON representation of the Vyper contract.
+        """
+        return build_solc_json(self.compiler_data)
 
     @cached_property
     def _constants(self):
@@ -154,6 +160,10 @@ class _BaseVyperContract(_BaseEVMContract):
                 msg += f"{compiler_evm_version} but network only has "
                 msg += f"{capabilities.describe_capabilities()}"
                 raise Exception(msg)
+
+    @cached_property
+    def deployer(self):
+        return VyperDeployer(self.compiler_data, filename=self.filename)
 
     @cached_property
     def abi(self):
@@ -203,10 +213,6 @@ class VyperBlueprint(_BaseVyperContract):
         self._address = Address(addr)
 
         self.env.register_blueprint(compiler_data.bytecode, self)
-
-    @cached_property
-    def deployer(self):
-        return VyperDeployer(self.compiler_data, filename=self.filename)
 
 
 class FrameDetail(dict):
@@ -630,11 +636,6 @@ class VyperContract(_BaseVyperContract):
     @cached_property
     def _immutables(self):
         return ImmutablesModel(self)
-
-    @cached_property
-    def deployer(self):
-        # TODO add test
-        return VyperDeployer(self.compiler_data, filename=self.filename)
 
     # is this actually useful?
     def at(self, address):
