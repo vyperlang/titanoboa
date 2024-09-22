@@ -36,7 +36,7 @@ class Blockscout:
         self,
         address: Address,
         contract_name: str,
-        standard_json: dict,
+        solc_json: dict,
         license_type: str = None,
         wait: bool = False,
     ) -> Optional["VerificationResult"]:
@@ -44,7 +44,7 @@ class Blockscout:
         Verify the Vyper contract on Blockscout.
         :param address: The address of the contract.
         :param contract_name: The name of the contract.
-        :param standard_json: The standard JSON output of the Vyper compiler.
+        :param solc_json: The solc_json output of the Vyper compiler.
         :param license_type: The license to use for the contract. Defaults to "none".
         :param wait: Whether to return a VerificationResult immediately
                      or wait for verification to complete. Defaults to False
@@ -57,13 +57,13 @@ class Blockscout:
         url = f"{self.uri}/api/v2/smart-contracts/{address}/"
         url += f"verification/via/vyper-standard-input?apikey={api_key}"
         data = {
-            "compiler_version": standard_json["compiler_version"],
+            "compiler_version": solc_json["compiler_version"],
             "license_type": license_type,
         }
         files = {
             "files[0]": (
                 contract_name,
-                json.dumps(standard_json).encode("utf-8"),
+                json.dumps(solc_json).encode("utf-8"),
                 "application/json",
             )
         }
@@ -148,15 +148,13 @@ def verify(contract, verifier=None, license_type: str = None) -> VerificationRes
     if verifier is None:
         verifier = get_verifier()
 
-    if not hasattr(contract, "deployer") or not hasattr(
-        contract.deployer, "standard_json"
-    ):
+    if not hasattr(contract, "deployer") or not hasattr(contract.deployer, "solc_json"):
         raise ValueError(f"Not a contract! {contract}")
 
     address = contract.address
     return verifier.verify(
         address=address,
-        standard_json=contract.deployer.standard_json,
+        solc_json=contract.deployer.solc_json,
         contract_name=contract.contract_name,
         license_type=license_type,
     )
