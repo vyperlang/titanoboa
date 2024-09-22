@@ -38,9 +38,10 @@ def simple_contract():
 def test_verify(simple_contract):
     api_key = os.getenv("BLOCKSCOUT_API_KEY")
     blockscout = Blockscout("https://eth-sepolia.blockscout.com", api_key)
-    result = boa.verify(simple_contract, blockscout)
-    result.wait_for_verification()
-    assert result.is_verified is True
+    with boa.set_verifier(blockscout):
+        result = boa.verify(simple_contract, blockscout)
+        result.wait_for_verification()
+        assert result.is_verified()
 
 
 def test_env_type():
