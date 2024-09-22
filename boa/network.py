@@ -403,6 +403,7 @@ class NetworkEnv(Env):
 
         if (deployments_db := get_deployments_db()) is not None:
             contract_name = getattr(contract, "contract_name", None)
+            source_bundle = getattr(contract, "solc_json", None)
             deployment_data = Deployment(
                 create_address,
                 contract_name,
@@ -412,7 +413,7 @@ class NetworkEnv(Env):
                 broadcast_ts,
                 txdata,
                 receipt,
-                None,
+                source_bundle,
             )
             deployments_db.insert_deployment(deployment_data)
 
