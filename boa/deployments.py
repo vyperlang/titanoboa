@@ -30,6 +30,11 @@ class Deployment:
             ret["source_code"] = json.dumps(ret["source_code"])
         return ret
 
+    def to_json(self):
+        ret = self.sql_values()
+        ret["from"] = ret.pop("from_")
+        return ret
+
     @classmethod
     def from_sql_tuple(cls, values):
         assert len(values) == len(fields(cls))
