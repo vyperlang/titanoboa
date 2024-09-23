@@ -132,12 +132,13 @@ def compiler_data(
 ) -> CompilerData:
     global _disk_cache, _search_path
 
+    path = Path(contract_name)
+    resolved_path = Path(filename).resolve(strict=False)
+
     file_input = FileInput(
-        contents=source_code,
-        source_id=-1,
-        path=Path(contract_name),
-        resolved_path=Path(filename),
+        contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
     )
+
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
@@ -216,6 +217,7 @@ def loads_partial(
     try:
         version = vvm.detect_vyper_version_from_source(source_code)
         if str(version) != vyper.__version__:
+            # TODO: pass name to loads_partial_vvm, not filename
             return _loads_partial_vvm(source_code, version, filename)
     except UnexpectedVersionError as e:
         if e.args[0] != "No version detected in source code":
