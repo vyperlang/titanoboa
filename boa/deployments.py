@@ -10,10 +10,10 @@ from boa.util.open_ctx import Open
 
 @dataclass(frozen=True)
 class Deployment:
-    contract_address: Address
-    name: str
+    contract_address: Address  # receipt_dict["createAddress"]
+    name: str  # contract_name
     rpc: str
-    deployer: Address
+    deployer: Address  # ostensibly equal to tx_dict["from"]
     tx_hash: str
     broadcast_ts: float
     tx_dict: dict  # raw tx fields
