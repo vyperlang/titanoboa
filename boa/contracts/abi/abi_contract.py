@@ -105,6 +105,15 @@ class ABIFunction:
             return encoded_args
         return self.method_id + encoded_args
 
+    def decode_calldata(self, calldata: bytes) -> tuple:
+        """Decode the calldata for the function call."""
+        if calldata[:4] != self.method_id:
+            raise ValueError(
+                f"The calldata 0x{calldata[:4].hex()} does not match "
+                f"the method_id 0x{self.method_id.hex()}"
+            )
+        return abi_decode(self.signature, calldata[4:])
+
     def _merge_kwargs(self, *args, **kwargs) -> list:
         """Merge positional and keyword arguments into a single list."""
         if len(kwargs) + len(args) != self.argument_count:
@@ -178,6 +187,16 @@ class ABIOverload:
             *args, disambiguate_signature=disambiguate_signature, **kwargs
         )
         return function.prepare_calldata(*args, **kwargs)
+
+    def decode_calldata(self, calldata: bytes) -> tuple:
+        """Decode the calldata for the function that matches the given arguments."""
+        method_id_ = calldata[:4]
+        functions = [f for f in self.functions if f.method_id == method_id_]
+        if len(functions) != 1:
+            raise ValueError(
+                f"Cannot find function with method_id 0x{method_id_.hex()}"
+            )
+        return functions[0].decode_calldata(calldata)
 
     def __call__(
         self,
