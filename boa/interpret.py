@@ -131,12 +131,13 @@ def compiler_data(
 ) -> CompilerData:
     global _disk_cache, _search_path
 
+    path = Path(contract_name)
+    resolved_path = Path(filename).resolve(strict=False)
+
     file_input = FileInput(
-        contents=source_code,
-        source_id=-1,
-        path=Path(contract_name),
-        resolved_path=Path(filename),
+        contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
     )
+
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
@@ -208,14 +209,16 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
-    name = name or "VyperContract"  # TODO handle this upstream in CompilerData
+    name = name or "VyperContract"
     filename = filename or "<unknown>"
+
     if dedent:
         source_code = textwrap.dedent(source_code)
 
     version = _detect_version(source_code)
     if version is not None and version != vyper.__version__:
         filename = str(filename)  # help mypy
+        # TODO: pass name to loads_partial_vvm, not filename
         return _loads_partial_vvm(source_code, version, filename)
 
     compiler_args = compiler_args or {}
