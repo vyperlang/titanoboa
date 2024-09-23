@@ -21,6 +21,7 @@ from boa.network import NetworkEnv
 from boa.precompile import precompile
 from boa.test.strategies import fuzz
 from boa.util.open_ctx import Open
+from boa.verifiers import get_verifier, set_verifier, verify
 from boa.vm.py_evm import enable_pyevm_verbose_logging, patch_opcode
 
 # turn off tracebacks if we are in repl
