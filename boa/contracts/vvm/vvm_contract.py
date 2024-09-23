@@ -246,13 +246,14 @@ class VVMStorageVariable(_VVMInternal):
     It will temporarily change the bytecode at the contract's address.
     """
 
+    _hashmap_regex = re.compile(r"^HashMap\[([^[]+), (.+)]$")
+
     def __init__(self, name, spec, contract):
         value_type = spec["type"]
         inputs = []
-        regex = re.compile(r"^HashMap\[([^[]+), (.+)]$")
 
         while value_type.startswith("HashMap"):
-            key_type, value_type = regex.match(value_type).groups()
+            key_type, value_type = self._hashmap_regex.match(value_type).groups()
             inputs.append({"name": f"key{len(inputs)}", "type": key_type})
 
         abi = {
