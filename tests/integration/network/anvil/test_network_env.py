@@ -81,7 +81,7 @@ def test_deployment_db():
         contract = boa.loads(code, arg)
 
         # test get_deployments()
-        deployment = db.get_deployments()[0]
+        deployment = db.get_deployments()[-1]
 
         initcode = contract.compiler_data.bytecode + arg.to_bytes(32, "big")
 
@@ -89,7 +89,7 @@ def test_deployment_db():
         assert deployment.contract_address == contract.address
         assert deployment.name == contract.contract_name
         assert deployment.deployer == boa.env.eoa
-        assert deployment.rpc == boa.env._rpc.identifier
+        assert deployment.rpc == boa.env._rpc.name
         assert deployment.source_code == contract.deployer.solc_json
 
         # some sanity checks on tx_dict and rx_dict fields
