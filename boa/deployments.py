@@ -13,7 +13,7 @@ class Deployment:
     contract_address: Address
     name: str
     rpc: str
-    from_: Address
+    deployer: Address
     tx_hash: str
     broadcast_ts: float
     tx_dict: dict  # raw tx fields
@@ -22,25 +22,33 @@ class Deployment:
 
     def sql_values(self):
         ret = asdict(self)
-        ret["contract_address"] = str(ret["contract_address"])
-        ret["from_"] = str(ret["from_"])
+        # sqlite doesn't have json, just dump to string
         ret["tx_dict"] = json.dumps(ret["tx_dict"])
         ret["receipt_dict"] = json.dumps(ret["receipt_dict"])
         if ret["source_code"] is not None:
             ret["source_code"] = json.dumps(ret["source_code"])
         return ret
 
-    def to_json(self):
-        ret = self.sql_values()
-        ret["from"] = ret.pop("from_")
-        return ret
+    def to_dict(self):
+        """
+        Convert Deployment object to a dict, which is prepared to be
+        dumped to json.
+        """
+        return asdict(self)
+
+    def to_json(self, *args, **kwargs):
+        """
+        Convert a Deployment object to a json object. *args and **kwargs
+        are forwarded to the `json.dumps()` call.
+        """
+        return json.dumps(self.to_dict(), *args, **kwargs)
 
     @classmethod
     def from_sql_tuple(cls, values):
         assert len(values) == len(fields(cls))
         ret = dict(zip([field.name for field in fields(cls)], values))
         ret["contract_address"] = Address(ret["contract_address"])
-        ret["from_"] = Address(ret["from_"])
+        ret["deployer"] = Address(ret["deployer"])
         ret["tx_dict"] = json.loads(ret["tx_dict"])
         ret["receipt_dict"] = json.loads(ret["receipt_dict"])
         if ret["source_code"] is not None:
@@ -54,10 +62,10 @@ CREATE TABLE IF NOT EXISTS
         contract_address text,
         name text,
         rpc text,
+        deployer text,
         tx_hash text,
-        from_ text,
-        tx_dict text,
         broadcast_ts real,
+        tx_dict text,
         receipt_dict text,
         source_code text
     );
@@ -82,8 +90,9 @@ class DeploymentsDB:
         values = deployment.sql_values()
 
         values_placeholder = ",".join(["?"] * len(values))
+        colnames = ",".join(values.keys())
 
-        insert_cmd = f"INSERT INTO deployments VALUES({values_placeholder})"
+        insert_cmd = f"INSERT INTO deployments({colnames}) VALUES({values_placeholder})"
 
         self.db.execute(insert_cmd, tuple(values.values()))
         self.db.commit()
@@ -94,7 +103,8 @@ class DeploymentsDB:
         return ret
 
     def get_deployments(self) -> list[Deployment]:
-        return self.get_deployments_from_sql("SELECT * FROM deployments")
+        fieldnames = ",".join(field.name for field in fields(Deployment))
+        return self._get_deployments_from_sql(f"SELECT {fieldnames} FROM deployments")
 
 
 _db: Optional[DeploymentsDB] = None

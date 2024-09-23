@@ -22,6 +22,7 @@ from boa.rpc import (
     trim_dict,
 )
 from boa.util.abi import Address
+from boa.verifiers import get_verification_bundle
 
 
 class TraceObject:
@@ -398,16 +399,15 @@ class NetworkEnv(Env):
         if local_address != create_address:
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
 
-        # TODO get contract info in here
         print(f"contract deployed at {create_address}")
 
         if (deployments_db := get_deployments_db()) is not None:
             contract_name = getattr(contract, "contract_name", None)
-            source_bundle = getattr(contract, "solc_json", None)
+            source_bundle = get_verification_bundle(contract)
             deployment_data = Deployment(
                 create_address,
                 contract_name,
-                self._rpc.identifier,
+                self._rpc.name,
                 sender,
                 receipt["transactionHash"],
                 broadcast_ts,

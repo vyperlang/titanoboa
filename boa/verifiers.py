@@ -137,7 +137,18 @@ def set_verifier(verifier):
     return Open(get_verifier, _set_verifier, verifier)
 
 
-def verify(contract, verifier=None, license_type: str = None) -> VerificationResult:
+def get_verification_bundle(contract_like):
+    if not hasattr(contract_like, "deployer"):
+        return None
+    if not hasattr(contract_like.deployer, "solc_json"):
+        return None
+    return contract_like.deployer.solc_json
+
+
+# should we also add a `verify_deployment` function?
+def verify(
+    contract, verifier=None, license_type: str = None, wait=False
+) -> VerificationResult:
     """
     Verifies the contract on a block explorer.
     :param contract: The contract to verify.
@@ -148,13 +159,13 @@ def verify(contract, verifier=None, license_type: str = None) -> VerificationRes
     if verifier is None:
         verifier = get_verifier()
 
-    if not hasattr(contract, "deployer") or not hasattr(contract.deployer, "solc_json"):
+    if (bundle := get_verification_bundle(contract)) is None:
         raise ValueError(f"Not a contract! {contract}")
 
-    address = contract.address
     return verifier.verify(
-        address=address,
-        solc_json=contract.deployer.solc_json,
+        address=contract.address,
+        solc_json=bundle,
         contract_name=contract.contract_name,
         license_type=license_type,
+        wait=wait,
     )
