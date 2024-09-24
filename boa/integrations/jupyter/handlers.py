@@ -70,7 +70,6 @@ def setup_handlers(server_app: ServerApp) -> None:
     Register the handlers in the Jupyter server.
     :param server_app: The Jupyter server application.
     """
-    logging.warning(f"Registering {PLUGIN_NAME} server extension")
     web_app = server_app.web_app
     base_url = url_path_join(web_app.settings["base_url"], PLUGIN_NAME)
     web_app.add_handlers(

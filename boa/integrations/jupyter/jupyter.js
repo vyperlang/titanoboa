@@ -3,40 +3,16 @@
  * BrowserSigner to the frontend.
  */
 (() => {
-    let isInitialized = false;
-    /** Get the Ethereum plugin, initializing it if it hasn't been done yet */
-    function getEthereum() {
-        const eth = window.ethereum
-        const message = 'No Ethereum plugin found. Please authorize the site on your browser wallet.';
-        if (!eth) throw new Error(message);
-        return eth;
-    }
-
     const rpc = async (method, params) => {
-        const eth = getEthereum();
-        const result = await eth.request({method, params});
-        if (method === "eth_requestAccounts" && !isInitialized) {
-            // install callbacks for when the wallet changes
-            const isTokenOK = await checkServerToken(config.callbackToken);
-            config.debug && console.log(`Boa: Installing callbacks ${config.callbackToken}`, isTokenOK, eth)
-            if (!isTokenOK) throw new Error(`Cannot verify the callback token`);
-            isInitialized = true;
-            const sendClientChanges = changes =>
-                callbackAPI(config.callbackToken, stringify(changes))
-                    .then(() => config.debug && console.log(`Boa: Client c1hanges sent: ${JSON.stringify(changes)}`))
-                    .catch(err => console.error(`Boa: Client changes failed`, changes, err));
-            eth.on('accountsChanged', accounts => sendClientChanges({accounts}));
-            eth.on('chainChanged', chainId => sendClientChanges({chainId}));
-            eth.on('networkChanged', networkId => sendClientChanges({networkId}));
-        }
-        return result;
+        const {ethereum} = window;
+        console.assert(ethereum, 'No Ethereum plugin found. Please authorize the site on your browser wallet.');
+        return ethereum.request({method, params});
     };
 
     // the following vars get replaced by the backend
     const config = {
         base: `$$JUPYTERHUB_SERVICE_PREFIX`,  // in lab view, base path is deeper
         debug: $$BOA_DEBUG_MODE,
-        callbackToken: '$$CALLBACK_TOKEN'
     };
 
     /** Stringify data, converting big ints to strings */
@@ -66,6 +42,14 @@
         return response.text();
     }
 
+    const loadSigner = async (address) => {
+        const accounts = await rpc('eth_requestAccounts');
+        return accounts.includes(address) ? address : accounts[0];
+    };
+
+    /** Sign a transaction via ethers */
+    const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
+
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
         while (true) {
@@ -87,54 +71,45 @@
         }
     };
 
-    /** Call multiple RPC methods in sequence */
+    /** Call multiple RPCs in sequence */
     const multiRpc = (payloads) => payloads.reduce(
         async (previousPromise, [method, params]) => [...await previousPromise, await rpc(method, params)],
         [],
     );
 
-    const checkServerToken = async (token) => {
-        if (colab) return true;
-
-        // Check backend is online and whether cell was executed before.
-        // In Colab this is not needed, eval_js() doesn't replay.
-        const response = await fetch(`${config.base}/titanoboa_jupyterlab/callback/${token}`);
-        if (response.ok) return true;
-        if (response.status === 404 && response.headers.get('Content-Type') === 'application/json') {
-            return false; // the cell has already been executed
-        }
-
-        const error = 'Could not connect to the titanoboa backend. Please make sure the Jupyter extension is installed by running the following command:';
-        const command = 'jupyter lab extension enable boa';
-        if (element) {
-            element.style.display = "block";  // show the output element in JupyterLab
-            element.innerHTML = `<h3 style="color: red">${error}</h3><pre>${command}</pre>`;
-        } else {
-            prompt(error, command);
-        }
-        return false;
-    }
-
     /** Call the backend when the given function is called, handling errors */
     const handleCallback = func => async (token, ...args) => {
-        if (!await checkServerToken(token)) return;
-        const callStr = `${func.name}(${args.map(a => JSON.stringify(a)).join(',')}`;
-        const timeout = new Promise(resolve => setTimeout(() => resolve({error: `Timeout waiting for ${callStr}`}), 10000));
-        const data = await Promise.race([parsePromise(func(...args)), timeout]);
-        const body = stringify(data);
-        config.debug && console.log(`Boa: ${callStr}) = ${body};`);
+        if (!colab) {
+            // Check backend and whether cell was executed. In Colab, eval_js() doesn't replay.
+            const response = await fetch(`${base}/titanoboa_jupyterlab/callback/${token}`);
+            if (response.status === 404 && response.headers.get('Content-Type') === 'application/json') {
+                return; // the cell has already been executed
+            }
+            if (!response.ok) {
+                const error = 'Could not connect to the titanoboa backend. Please make sure the Jupyter extension is installed by running the following command:';
+                const command = 'jupyter lab extension enable boa';
+                if (element) {
+                    element.style.display = "block";  // show the output element in JupyterLab
+                    element.innerHTML = `<h3 style="color: red">${error}</h3><pre>${command}</pre>`;
+                } else {
+                    prompt(error, command);
+                }
+                return;
+            }
+        }
+
+        const body = stringify(await parsePromise(func(...args)));
+        config.debug && console.log(`Boa: ${func.name}(${args.map(a => JSON.stringify(a)).join(',')}) = ${body};`);
         if (colab) {
             return body;
         }
         await callbackAPI(token, body);
     };
 
-    // if (window._titanoboa && window.ethereum) {
-    //     window.ethereum.removeAllListeners(); // cleanup previous browser env
-    // }
-
     // expose functions to window, so they can be called from the BrowserSigner
     window._titanoboa = {
+        loadSigner: handleCallback(loadSigner),
+        sendTransaction: handleCallback(sendTransaction),
         waitForTransactionReceipt: handleCallback(waitForTransactionReceipt),
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),
