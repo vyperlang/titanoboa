@@ -153,8 +153,31 @@ class BrowserEnv(NetworkEnv):
 
     def __init__(self, address=None, **kwargs):
         super().__init__(self._rpc, **kwargs)
-        self.signer = BrowserSigner(address, self._rpc)
-        self.set_eoa(self.signer)
+        self._given_address = address
+
+    @property
+    def signer(self):
+        """
+        Create a BrowserSigner instance. This needs to be recreated for every
+        call as the wallet address may change.
+        """
+        return BrowserSigner(self._given_address, self._rpc)
+
+    @property
+    def eoa(self):
+        """
+        Retrieves the current eoa to sign transactions. This needs to be recreated
+        for every call as the wallet address may change.
+        """
+        signer = self.signer
+        self._accounts[signer.address] = signer
+        return signer.address
+
+    @eoa.setter
+    def eoa(self, address):
+        err = "Setting an eoa is not supported for BrowserEnv, "
+        # but, it's called from the env constructors, so check the expected values
+        assert address is None or self._aliases[address.canonical_address] == "eoa", err
 
     def set_chain_id(self, chain_id: int | str):
         self._rpc.fetch(
