@@ -4,6 +4,7 @@ from typing import Any, Optional, Union
 from warnings import warn
 
 from eth.abc import ComputationAPI
+from sortedcontainers import SortedDict
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
 from vyper.utils import method_id
 
@@ -107,9 +108,10 @@ class ABIFunction:
 
     def decode_calldata(self, calldata: bytes) -> tuple:
         """Decode the calldata for the function call."""
-        if calldata[:4] != self.method_id:
+        calldata_method_id = calldata[:4]
+        if calldata_method_id != self.method_id:
             raise ValueError(
-                f"The calldata 0x{calldata[:4].hex()} does not match "
+                f"The calldata 0x{calldata_method_id.hex()} does not match "
                 f"the method_id 0x{self.method_id.hex()}"
             )
         return abi_decode(self.signature, calldata[4:])
@@ -175,11 +177,15 @@ class ABIOverload:
         return ABIOverload(functions)
 
     def __init__(self, functions: list[ABIFunction]):
-        self.functions = functions
+        self.functions = SortedDict([(f.method_id, f) for f in functions])
 
     @cached_property
     def name(self) -> str | None:
-        return self.functions[0].name
+        """
+        Gets the name of the overloaded function.
+        Note that all overloads have the same name by definition.
+        """
+        return next(iter(self.functions.values())).name
 
     def prepare_calldata(self, *args, disambiguate_signature=None, **kwargs) -> bytes:
         """Prepare the calldata for the function that matches the given arguments."""
@@ -190,13 +196,9 @@ class ABIOverload:
 
     def decode_calldata(self, calldata: bytes) -> tuple:
         """Decode the calldata for the function that matches the given arguments."""
-        method_id_ = calldata[:4]
-        functions = [f for f in self.functions if f.method_id == method_id_]
-        if len(functions) != 1:
-            raise ValueError(
-                f"Cannot find function with method_id 0x{method_id_.hex()}"
-            )
-        return functions[0].decode_calldata(calldata)
+        calldata_method_id = calldata[:4]
+        function = self.functions[calldata_method_id]
+        return function.decode_calldata(calldata)
 
     def __call__(
         self,
@@ -220,12 +222,12 @@ class ABIOverload:
         self, *args, disambiguate_signature=None, **kwargs
     ) -> ABIFunction:
         """Pick the function that matches the given arguments."""
+        fns = self.functions.values()
+
         if disambiguate_signature is None:
-            matches = [f for f in self.functions if f.is_encodable(*args, **kwargs)]
+            matches = [f for f in fns if f.is_encodable(*args, **kwargs)]
         else:
-            matches = [
-                f for f in self.functions if disambiguate_signature == f.full_signature
-            ]
+            matches = [f for f in fns if disambiguate_signature == f.full_signature]
             assert len(matches) <= 1, "ABI signature must be unique"
 
         assert self.name, "Constructor does not have a name."
