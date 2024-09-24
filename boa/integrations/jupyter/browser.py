@@ -10,6 +10,7 @@ from itertools import chain
 from multiprocessing.shared_memory import SharedMemory
 from os import urandom
 from os.path import dirname, join, realpath
+from threading import Thread
 from typing import Any
 
 import nest_asyncio
@@ -37,8 +38,12 @@ except ImportError:
 nest_asyncio.apply()
 
 
-def _install_javascript_triggers():
-    """Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser."""
+def _install_javascript_triggers(callback_token: str):
+    """
+    Run the ethers and titanoboa_jupyterlab Javascript snippets in the browser.
+    :param callback_token: A token that may be used for the browser to call back
+    to the server when the browser wallet changes.
+    """
     cur_dir = dirname(realpath(__file__))
     with open(join(cur_dir, "jupyter.js")) as f:
         js = f.read()
@@ -46,6 +51,7 @@ def _install_javascript_triggers():
     prefix = os.getenv("JUPYTERHUB_SERVICE_PREFIX", "..")
     js = js.replace("$$JUPYTERHUB_SERVICE_PREFIX", prefix)
     js = js.replace("$$BOA_DEBUG_MODE", json.dumps(BrowserRPC._debug_mode))
+    js = js.replace("$$CALLBACK_TOKEN", callback_token)
 
     display(Javascript(js))
 
@@ -57,11 +63,18 @@ class BrowserRPC(RPC):
 
     _debug_mode = False
 
-    def __init__(self):
+    def __init__(self, env: "BrowserEnv"):
+        self._env = env
+        self._callback_token = _generate_token()
         if not colab_eval_js:
             # colab creates a new iframe for every call, we need to re-inject it every time
             # for jupyterlab we only need to do it once
-            _install_javascript_triggers()
+            _install_javascript_triggers(self._callback_token)
+
+        self._callback_thread = Thread(
+            target=_callback_thread, args=(self._callback_token,), daemon=True
+        )
+        self._callback_thread.start()
 
     @property
     def identifier(self) -> str:
@@ -74,12 +87,23 @@ class BrowserRPC(RPC):
     def fetch(
         self, method: str, params: Any, timeout_message=RPC_TIMEOUT_MESSAGE
     ) -> Any:
-        return _javascript_call("rpc", method, params, timeout_message=timeout_message)
+        return _javascript_call(
+            "rpc",
+            method,
+            params,
+            timeout_message=timeout_message,
+            callback_token=self._callback_token,
+        )
 
     def fetch_multi(
         self, payloads: list[tuple[str, Any]], timeout_message=RPC_TIMEOUT_MESSAGE
     ) -> list[Any]:
-        return _javascript_call("multiRpc", payloads, timeout_message=timeout_message)
+        return _javascript_call(
+            "multiRpc",
+            payloads,
+            timeout_message=timeout_message,
+            callback_token=self._callback_token,
+        )
 
     def wait_for_tx_receipt(self, tx_hash, timeout: float, poll_latency=1):
         # we do the polling in the browser to avoid too many callbacks
@@ -91,6 +115,7 @@ class BrowserRPC(RPC):
             timeout_ms,
             pool_latency_ms,
             timeout_message=RPC_TIMEOUT_MESSAGE,
+            callback_token=self._callback_token,
         )
 
 
@@ -99,13 +124,11 @@ class BrowserSigner:
     A BrowserSigner is a class that can be used to sign transactions in IPython/JupyterLab.
     """
 
-    def __init__(self, address=None, rpc=None):
+    def __init__(self, rpc: BrowserRPC, address=None):
         """
         Create a BrowserSigner instance.
         :param address: The account address. If not provided, it will be requested from the browser.
         """
-        if rpc is None:
-            rpc = BrowserRPC()  # note: the browser window is global anyway
         self._rpc = rpc
         address = getattr(address, "address", address)
         accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
@@ -149,11 +172,10 @@ class BrowserEnv(NetworkEnv):
     A NetworkEnv object that uses the BrowserSigner and BrowserRPC classes.
     """
 
-    _rpc = BrowserRPC()  # Browser is always global anyway, we can make it static
-
     def __init__(self, address=None, **kwargs):
+        self._rpc = BrowserRPC(self)
         super().__init__(self._rpc, **kwargs)
-        self.signer = BrowserSigner(address, self._rpc)
+        self.signer = BrowserSigner(self._rpc, address)
         self.set_eoa(self.signer)
 
     def set_chain_id(self, chain_id: int | str):
@@ -164,15 +186,20 @@ class BrowserEnv(NetworkEnv):
         self._reset_fork()
 
 
-def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
+def _javascript_call(
+    js_func: str, *args, timeout_message: str, callback_token: str
+) -> Any:
     """
     This function attempts to call a Javascript function in the browser and then
     wait for the result to be sent back to the API.
     - Inside Google Colab, it uses the eval_js function to call the Javascript function.
     - Outside, it uses a SharedMemory object and polls until the frontend called our API.
     A custom timeout message is useful for user feedback.
-    :param snippet: A function that given a token and some kwargs, returns a Javascript snippet.
-    :param kwargs: The arguments to pass to the Javascript snippet.
+    :param js_func: The name of the JavaScript function to call.
+    :param args: The arguments to pass to the Javascript snippet.
+    :param timeout_message: The error message to display if we don't receive anything back.
+    :param callback_token: The unique token generated for the current browser env.
+    Note: This is only necessary for Colab as the application loses state for every call.
     :return: The result of the Javascript snippet sent to the API.
     """
     token = _generate_token()
@@ -182,7 +209,7 @@ def _javascript_call(js_func: str, *args, timeout_message: str) -> Any:
         logging.warning(f"Calling {js_func} with {args_str}")
 
     if colab_eval_js:
-        _install_javascript_triggers()
+        _install_javascript_triggers(callback_token)
         result = colab_eval_js(js_code)
         return _parse_js_result(json.loads(result))
 
@@ -225,6 +252,29 @@ def _wait_buffer_set(buffer: memoryview, timeout_message: str) -> bytes:
     task = loop.create_task(future)
     loop.run_until_complete(task)
     return task.result()
+
+
+def _callback_thread(token):
+    """
+    The wallet needs to be able to call back to the server when its data
+    changes. With the current communication infrastructure, we need to do a
+    blocking wait. Therefore, we start a thread that does that.
+    :param token: The unique token generated for the current browser env.
+    """
+    while True:
+        memory = SharedMemory(name=token, create=True, size=SHARED_MEMORY_LENGTH)
+        logging.warning(f"Waiting for callback {token} in thread")
+        try:
+            memory.buf[:1] = NUL
+            message_bytes = _wait_buffer_set(
+                memory.buf, timeout_message="No callback received"
+            )
+            callback = _parse_js_result(json.loads(message_bytes.decode()))
+            logging.warning(f"Received callback {token} in thread: {callback}")
+        except TimeoutError:
+            pass
+        finally:
+            memory.unlink()  # get rid of the SharedMemory object after it's been used
 
 
 def _parse_js_result(result: dict) -> Any:
