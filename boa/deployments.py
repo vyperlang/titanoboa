@@ -1,24 +1,36 @@
 import json
 import sqlite3
-from dataclasses import asdict, dataclass, fields
+import uuid
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Optional
 
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
 
+_session_id: str = None  # type: ignore
+
+
+def get_session_id():
+    global _session_id
+    if _session_id is None:
+        _session_id = str(uuid.uuid4())
+    return _session_id
+
 
 @dataclass(frozen=True)
 class Deployment:
     contract_address: Address  # receipt_dict["createAddress"]
-    name: str  # contract_name
+    contract_name: str
     rpc: str
     deployer: Address  # ostensibly equal to tx_dict["from"]
     tx_hash: str
-    broadcast_ts: float
+    broadcast_ts: float  # time the tx was broadcast
     tx_dict: dict  # raw tx fields
     receipt_dict: dict  # raw receipt fields
     source_code: Optional[Any]  # optional source code or bundle
+    session_id: str = field(default_factory=get_session_id)
+    deployment_id: Optional[int] = None
 
     def sql_values(self):
         ret = asdict(self)
@@ -59,8 +71,10 @@ class Deployment:
 _CREATE_CMD = """
 CREATE TABLE IF NOT EXISTS
     deployments(
+        deployment_id integer primary key autoincrement,
+        session_id text,
         contract_address text,
-        name text,
+        contract_name text,
         rpc text,
         deployer text,
         tx_hash text,
@@ -74,7 +88,7 @@ CREATE TABLE IF NOT EXISTS
 
 class DeploymentsDB:
     def __init__(self, path=":memory:"):
-        if path != ":memory:":
+        if path != ":memory:":  # sqlite magic path
             path = Path(path)
             path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -102,8 +116,11 @@ class DeploymentsDB:
         ret = [Deployment.from_sql_tuple(item) for item in cur.fetchall()]
         return ret
 
+    def _get_fieldnames_str(self) -> str:
+        return ",".join(field.name for field in fields(Deployment))
+
     def get_deployments(self) -> list[Deployment]:
-        fieldnames = ",".join(field.name for field in fields(Deployment))
+        fieldnames = self._get_fieldnames_str()
         return self._get_deployments_from_sql(f"SELECT {fieldnames} FROM deployments")
 
 
