@@ -1,6 +1,7 @@
 import re
 from functools import cached_property
 from pathlib import Path
+from typing import Optional
 
 import vvm
 from vyper.utils import method_id
@@ -22,7 +23,7 @@ class VVMDeployer(ABIContractFactory):
         compiler_output: dict,
         source_code: str,
         vyper_version: str,
-        filename: str | None = None,
+        filename: Optional[str] = None,
     ):
         super().__init__(name, compiler_output["abi"], filename)
         self.compiler_output = compiler_output
@@ -39,8 +40,8 @@ class VVMDeployer(ABIContractFactory):
         compiler_output: dict,
         source_code: str,
         vyper_version: str,
-        filename: str | None = None,
-        name: str | None = None,
+        filename: Optional[str] = None,
+        name: Optional[str] = None,
     ):
         if name is None:
             name = Path(filename).stem if filename is not None else "<VVMContract>"

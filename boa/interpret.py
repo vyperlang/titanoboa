@@ -4,7 +4,7 @@ from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import vvm
 import vyper
@@ -237,8 +237,8 @@ def load_partial(filename: str, compiler_args=None):
 def _loads_partial_vvm(
     source_code: str,
     version: str,
-    filename: str | Path | None = None,
-    name: str | None = None,
+    filename: Optional[str | Path] = None,
+    name: Optional[str] = None,
 ):
     global _disk_cache
     if filename is not None:

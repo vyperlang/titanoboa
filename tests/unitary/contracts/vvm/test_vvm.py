@@ -38,10 +38,10 @@ def test_loads_vvm():
 def test_vvm_storage():
     contract = boa.loads(mock_3_10_code, 43)
     assert contract._storage.is_empty.get()
-    assert contract._storage.map.get(boa.env.eoa, 0) == 0
+    assert contract._storage.hash_map.get(boa.env.eoa, 0) == 0
     contract.set_map(69)
     assert not contract._storage.is_empty.get()
-    assert contract._storage.map.get(boa.env.eoa, 0) == 69
+    assert contract._storage.hash_map.get(boa.env.eoa, 0) == 69
 
 
 def test_vvm_internal():
@@ -49,7 +49,7 @@ def test_vvm_internal():
     assert not hasattr(contract.internal, "set_map")
     address = boa.env.generate_address()
     contract.internal._set_map(address, 69)
-    assert contract._storage.map.get(address, 0) == 69
+    assert contract._storage.hash_map.get(address, 0) == 69
 
 
 def test_vvm_eval():
