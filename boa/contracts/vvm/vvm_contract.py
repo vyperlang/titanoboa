@@ -2,7 +2,7 @@ import re
 from functools import cached_property
 
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
-from boa.contracts.vyper.compiler_utils import (
+from boa.contracts.base_evm_contract import (
     DEFAULT_BLUEPRINT_PREAMBLE,
     generate_blueprint_bytecode,
 )

@@ -35,17 +35,17 @@ from vyper.utils import method_id
 
 from boa import BoaError
 from boa.contracts.base_evm_contract import (
+    DEFAULT_BLUEPRINT_PREAMBLE,
     StackTrace,
     _BaseEVMContract,
     _handle_child_trace,
+    generate_blueprint_bytecode,
 )
 from boa.contracts.call_trace import TraceSource
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
-    DEFAULT_BLUEPRINT_PREAMBLE,
     compile_vyper_function,
-    generate_blueprint_bytecode,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
 )
