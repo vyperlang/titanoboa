@@ -107,16 +107,8 @@ class BrowserSigner:
         if rpc is None:
             rpc = BrowserRPC()  # note: the browser window is global anyway
         self._rpc = rpc
-        address = getattr(address, "address", address)
-        accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
-
-        if address is None and len(accounts) > 0:
-            address = accounts[0]
-
-        if address not in accounts:
-            raise ValueError(f"Address {address} is not available in the browser")
-
-        self.address = Address(address)
+        self._given_address = address
+        self.address = address
 
     def send_transaction(self, tx_data: dict) -> dict:
         """
@@ -143,6 +135,19 @@ class BrowserSigner:
             TRANSACTION_TIMEOUT_MESSAGE,
         )
 
+    def update(self):
+        address = getattr(self._given_address, "address", self._given_address)
+        accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
+
+        if address is None and len(accounts) > 0:
+            address = accounts[0]
+
+        if address not in accounts:
+            raise ValueError(f"Address {address} is not available in the browser")
+
+        self.address = Address(address)
+        return self.address
+
 
 class BrowserEnv(NetworkEnv):
     """
@@ -154,19 +159,19 @@ class BrowserEnv(NetworkEnv):
     def __init__(self, address=None, **kwargs):
         super().__init__(self._rpc, **kwargs)
         self.signer = BrowserSigner(address, self._rpc)
+        self._update_signer()
 
-    def _get_sender(self, sender=None) -> Address:
-        accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
+    def _update_signer(self):
+        self.signer.update()
+        self.add_account(self.signer, force_eoa=True)
 
-        if sender is None and len(accounts) > 0:
-            sender = accounts[0]
+    def execute_code(self, *args, **kwargs):
+        self._update_signer()
+        return super().execute_code(*args, **kwargs)
 
-        if sender not in accounts:
-            raise ValueError(f"Address {sender} is not available in the browser")
-
-        self.signer.address = Address(sender)
-        self._accounts[sender] = self.signer
-        return self.signer.address
+    def deploy(self, *args, **kwargs):
+        self._update_signer()
+        return super().deploy(*args, **kwargs)
 
     def set_chain_id(self, chain_id: int | str):
         self._rpc.fetch(
