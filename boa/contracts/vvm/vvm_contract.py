@@ -57,17 +57,16 @@ class VVMDeployer:
                 return ABIFunction(t, contract_name=self.filename)
         return None
 
-    def deploy(self, *args, env=None, **kwargs):
+    def deploy(self, *args, env=None, override_bytecode=None, **kwargs):
         encoded_args = b""
-        if self.constructor is not None:
+        if len(args) > 0:
             encoded_args = self.constructor.prepare_calldata(*args)
-        elif len(args) > 0:
-            raise ValueError(f"No constructor, but args were provided: {args}")
 
         if env is None:
             env = Env.get_singleton()
 
-        address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args, **kwargs)
+        bytecode = self.bytecode if override_bytecode is None else override_bytecode
+        address, _ = env.deploy_code(bytecode=bytecode + encoded_args, **kwargs)
 
         return self.at(address)
 
@@ -81,11 +80,8 @@ class VVMDeployer:
         :param kwargs: Keyword arguments to pass to the environment `deploy_code` method.
         :returns: A contract instance.
         """
-        return VVMDeployer(
-            abi=[],  # the blueprint may not be called directly, no public ABI
-            bytecode=generate_blueprint_bytecode(self.bytecode, blueprint_preamble),
-            filename=self.filename,
-        ).deploy(env=env, **kwargs)
+        bytecode = generate_blueprint_bytecode(self.bytecode, blueprint_preamble)
+        return self.deploy(env=env, override_bytecode=bytecode, **kwargs)
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
