@@ -170,8 +170,8 @@ def test_browser_signer_colab(colab_eval_mock, mocked_token, display_mock):
 def test_browser_load_signer(token, display_mock, mock_callback, account, mock_fork):
     mock_callback("eth_requestAccounts", [account.address])
     boa.set_browser_env()
-    assert boa.env.eoa == account.address
-    assert type(boa.env._accounts[boa.env.eoa]).__name__ == BrowserSigner.__name__
+    assert boa.env._get_sender() == account.address
+    assert type(boa.env._accounts[account.address]).__name__ == BrowserSigner.__name__
 
 
 def test_browser_timeout():

@@ -154,7 +154,19 @@ class BrowserEnv(NetworkEnv):
     def __init__(self, address=None, **kwargs):
         super().__init__(self._rpc, **kwargs)
         self.signer = BrowserSigner(address, self._rpc)
-        self.set_eoa(self.signer)
+
+    def _get_sender(self, sender=None) -> Address:
+        accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
+
+        if sender is None and len(accounts) > 0:
+            sender = accounts[0]
+
+        if sender not in accounts:
+            raise ValueError(f"Address {sender} is not available in the browser")
+
+        self.signer.address = Address(sender)
+        self._accounts[sender] = self.signer
+        return self.signer.address
 
     def set_chain_id(self, chain_id: int | str):
         self._rpc.fetch(
