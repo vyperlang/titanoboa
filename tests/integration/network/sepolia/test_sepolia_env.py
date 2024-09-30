@@ -86,7 +86,7 @@ def test_deployment_db():
 
         # sanity check all the fields
         assert deployment.contract_address == contract.address
-        assert deployment.name == contract.contract_name
+        assert deployment.contract_name == contract.contract_name
         assert deployment.deployer == boa.env.eoa
         assert deployment.rpc == boa.env._rpc.name
         assert deployment.source_code == contract.deployer.solc_json
