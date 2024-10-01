@@ -126,9 +126,9 @@ class VyperDeployer:
         return ret
 
     @cached_property
-    def standard_json(self):
+    def solc_json(self):
         """
-        Generates a standard JSON representation of the Vyper contract.
+        Generates a solc "standard json" representation of the Vyper contract.
         """
         return build_solc_json(self.compiler_data)
 

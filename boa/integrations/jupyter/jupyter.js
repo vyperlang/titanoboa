@@ -42,14 +42,6 @@
         return response.text();
     }
 
-    const loadSigner = async (address) => {
-        const accounts = await rpc('eth_requestAccounts');
-        return accounts.includes(address) ? address : accounts[0];
-    };
-
-    /** Sign a transaction via ethers */
-    const sendTransaction = async transaction => ({"hash": await rpc('eth_sendTransaction', [transaction])});
-
     /** Wait until the transaction is mined */
     const waitForTransactionReceipt = async (tx_hash, timeout, poll_latency) => {
         while (true) {
@@ -81,7 +73,7 @@
     const handleCallback = func => async (token, ...args) => {
         if (!colab) {
             // Check backend and whether cell was executed. In Colab, eval_js() doesn't replay.
-            const response = await fetch(`${base}/titanoboa_jupyterlab/callback/${token}`);
+            const response = await fetch(`${config.base}/titanoboa_jupyterlab/callback/${token}`);
             if (response.status === 404 && response.headers.get('Content-Type') === 'application/json') {
                 return; // the cell has already been executed
             }
@@ -108,8 +100,6 @@
 
     // expose functions to window, so they can be called from the BrowserSigner
     window._titanoboa = {
-        loadSigner: handleCallback(loadSigner),
-        sendTransaction: handleCallback(sendTransaction),
         waitForTransactionReceipt: handleCallback(waitForTransactionReceipt),
         rpc: handleCallback(rpc),
         multiRpc: handleCallback(multiRpc),

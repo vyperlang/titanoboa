@@ -6,10 +6,10 @@ class Open:
         self.anchor = get()
         self._set = set_
         self._set(item)
+        self._item = item
 
     def __enter__(self):
-        # dummy implementation, no-op
-        pass
+        return self._item
 
     def __exit__(self, *args):
         self._set(self.anchor)
