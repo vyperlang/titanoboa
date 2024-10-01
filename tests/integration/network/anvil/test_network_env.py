@@ -3,7 +3,10 @@ from hypothesis import given, settings
 
 import boa
 import boa.test.strategies as vy
+from boa.deployments import DeploymentsDB, set_deployments_db
 from boa.network import NetworkEnv
+from boa.rpc import to_bytes
+from boa.util.abi import Address
 
 code = """
 totalSupply: public(uint256)
@@ -68,3 +71,28 @@ def test_failed_transaction():
 
 
 # XXX: probably want to test deployment revert behavior
+
+
+def test_deployment_db():
+    with set_deployments_db(DeploymentsDB(":memory:")) as db:
+        arg = 5
+
+        # contract is written to deployments db
+        contract = boa.loads(code, arg)
+
+        # test get_deployments()
+        deployment = db.get_deployments()[-1]
+
+        initcode = contract.compiler_data.bytecode + arg.to_bytes(32, "big")
+
+        # sanity check all the fields
+        assert deployment.contract_address == contract.address
+        assert deployment.contract_name == contract.contract_name
+        assert deployment.deployer == boa.env.eoa
+        assert deployment.rpc == boa.env._rpc.name
+        assert deployment.source_code == contract.deployer.solc_json
+
+        # some sanity checks on tx_dict and rx_dict fields
+        assert to_bytes(deployment.tx_dict["data"]) == initcode
+        assert deployment.tx_dict["chainId"] == hex(boa.env.get_chain_id())
+        assert Address(deployment.receipt_dict["contractAddress"]) == contract.address
