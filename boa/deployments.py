@@ -8,6 +8,13 @@ from typing import Any, Optional
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
 
+"""
+Module to handle deployment objects. When a contract is deployed, we enter
+it into the deployments database so that it can be queried/verified later.
+"""
+# maybe this shouldn't be handled in boa proper, but more like as a plugin,
+# or leave the functionality to higher level frameworks?
+
 _session_id: str = None  # type: ignore
 
 
