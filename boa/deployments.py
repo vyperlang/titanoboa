@@ -9,15 +9,18 @@ from boa.util.abi import Address
 from boa.util.open_ctx import Open
 
 """
-Module to handle deployment objects. When a contract is deployed, we enter
-it into the deployments database so that it can be queried/verified later.
+Module to handle deployment objects. When a contract is deployed in network
+mode, we enter it into the deployments database so that it can be
+queried/verified later.
+
+This module could potentially be handled as plugin functionality / or left
+as functionality for higher-level frameworks.
 """
-# maybe this shouldn't be handled in boa proper, but more like as a plugin,
-# or leave the functionality to higher level frameworks?
 
 _session_id: str = None  # type: ignore
 
 
+# generate a unique session id, so that deployments can be queried by session
 def get_session_id():
     global _session_id
     if _session_id is None:
@@ -37,7 +40,7 @@ class Deployment:
     receipt_dict: dict  # raw receipt fields
     source_code: Optional[Any]  # optional source code or bundle
     session_id: str = field(default_factory=get_session_id)
-    deployment_id: Optional[int] = None
+    deployment_id: Optional[int] = None  # the db-assigned id - primary key
 
     def sql_values(self):
         ret = asdict(self)
