@@ -104,7 +104,7 @@ class Blockscout:
         if response.status_code in self.retry_http_codes:
             return False
         response.raise_for_status()
-        return True
+        return response.json().get("is_verified", False)
 
 
 _verifier = Blockscout()
