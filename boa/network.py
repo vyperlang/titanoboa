@@ -403,7 +403,18 @@ class NetworkEnv(Env):
 
         if (deployments_db := get_deployments_db()) is not None:
             contract_name = getattr(contract, "contract_name", None)
-            source_bundle = get_verification_bundle(contract)
+            try:
+                source_bundle = get_verification_bundle(contract)
+            except Exception as e:
+                # there was a problem constructing the verification bundle.
+                # assume the user cares more about continuing, than getting
+                # the bundle into the db
+                msg = "While saving deployment data, couldn't construct"
+                msg += f" verification bundle for {contract_name}! Full stack"
+                msg += f" trace:\n```\n{e}\n```\nContinuing.\n"
+                warnings.warn(msg, stacklevel=2)
+                source_bundle = None
+
             deployment_data = Deployment(
                 create_address,
                 contract_name,
