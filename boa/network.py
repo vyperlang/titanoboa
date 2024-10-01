@@ -1,5 +1,6 @@
 # an Environment which interacts with a real (prod or test) chain
 import contextlib
+import time
 import warnings
 from dataclasses import dataclass
 from functools import cached_property
@@ -8,6 +9,7 @@ from math import ceil
 from eth_account import Account
 from requests.exceptions import HTTPError
 
+from boa.deployments import Deployment, get_deployments_db
 from boa.environment import Env, _AddressType
 from boa.rpc import (
     RPC,
@@ -20,6 +22,7 @@ from boa.rpc import (
     trim_dict,
 )
 from boa.util.abi import Address
+from boa.verifiers import get_verification_bundle
 
 
 class TraceObject:
@@ -300,7 +303,7 @@ class NetworkEnv(Env):
 
         if is_modifying:
             try:
-                receipt, trace = self._send_txn(
+                txdata, receipt, trace = self._send_txn(
                     from_=sender, to=to_address, value=value, gas=gas, data=hexdata
                 )
             except _EstimateGasFailed:
@@ -375,7 +378,9 @@ class NetworkEnv(Env):
         bytecode = to_hex(bytecode)
         sender = self._check_sender(self._get_sender(sender))
 
-        receipt, trace = self._send_txn(
+        broadcast_ts = time.time()
+
+        txdata, receipt, trace = self._send_txn(
             from_=sender, value=value, gas=gas, data=bytecode
         )
 
@@ -394,8 +399,34 @@ class NetworkEnv(Env):
         if local_address != create_address:
             raise RuntimeError(f"uh oh! {local_address} != {create_address}")
 
-        # TODO get contract info in here
         print(f"contract deployed at {create_address}")
+
+        if (deployments_db := get_deployments_db()) is not None:
+            contract_name = getattr(contract, "contract_name", None)
+            try:
+                source_bundle = get_verification_bundle(contract)
+            except Exception as e:
+                # there was a problem constructing the verification bundle.
+                # assume the user cares more about continuing, than getting
+                # the bundle into the db
+                msg = "While saving deployment data, couldn't construct"
+                msg += f" verification bundle for {contract_name}! Full stack"
+                msg += f" trace:\n```\n{e}\n```\nContinuing.\n"
+                warnings.warn(msg, stacklevel=2)
+                source_bundle = None
+
+            deployment_data = Deployment(
+                create_address,
+                contract_name,
+                self._rpc.name,
+                sender,
+                receipt["transactionHash"],
+                broadcast_ts,
+                txdata,
+                receipt,
+                source_bundle,
+            )
+            deployments_db.insert_deployment(deployment_data)
 
         return create_address, computation
 
@@ -538,7 +569,7 @@ class NetworkEnv(Env):
         self._reset_fork(block_identifier=receipt["blockNumber"])
 
         t_obj = TraceObject(trace) if trace is not None else None
-        return receipt, t_obj
+        return tx_data, receipt, t_obj
 
     def get_chain_id(self) -> int:
         """Get the current chain ID of the network as an integer."""

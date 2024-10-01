@@ -9,6 +9,7 @@ import requests
 from eth_account import Account
 
 import boa
+from boa.deployments import DeploymentsDB, set_deployments_db
 from boa.network import NetworkEnv
 
 ANVIL_FORK_PKEYS = [
@@ -76,7 +77,7 @@ def anvil_env(free_port):
 # max coverage across VM implementations?
 @pytest.fixture(scope="module", autouse=True)
 def networked_env(accounts, anvil_env):
-    with boa.swap_env(anvil_env):
+    with boa.swap_env(anvil_env), set_deployments_db(DeploymentsDB(":memory:")):
         for account in accounts:
             boa.env.add_account(account)
         yield
