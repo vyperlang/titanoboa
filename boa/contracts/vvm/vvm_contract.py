@@ -3,6 +3,7 @@ from functools import cached_property
 
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
 from boa.environment import Env
+from boa.util.eip5202 import generate_blueprint_bytecode
 
 # TODO: maybe this doesn't detect release candidates
 VERSION_RE = re.compile(r"\s*#\s*(pragma\s+version|@version)\s+(\d+\.\d+\.\d+)")
@@ -18,7 +19,19 @@ def _detect_version(source_code: str):
 
 
 class VVMDeployer:
+    """
+    A deployer that uses the Vyper Version Manager (VVM).
+    This allows deployment of contracts written in older versions of Vyper that
+    can interact with new versions using the ABI definition.
+    """
+
     def __init__(self, abi, bytecode, filename):
+        """
+        Initialize a VVMDeployer instance.
+        :param abi: The contract's ABI.
+        :param bytecode: The contract's bytecode.
+        :param filename: The filename of the contract.
+        """
         self.abi = abi
         self.bytecode = bytecode
         self.filename = filename
@@ -54,6 +67,32 @@ class VVMDeployer:
         address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args)
 
         return self.at(address)
+
+    @cached_property
+    def _blueprint_bytecode(self):
+        return generate_blueprint_bytecode(self.bytecode)
+
+    @cached_property
+    def _blueprint_deployer(self):
+        # TODO: add filename
+        return ABIContractFactory.from_abi_dict([])
+
+    def deploy_as_blueprint(self, env=None, blueprint_preamble=None, **kwargs):
+        """
+        Deploy a new blueprint from this contract.
+        :param blueprint_preamble: The preamble to use for the blueprint.
+        :param env: The environment to deploy the blueprint in.
+        :param kwargs: Keyword arguments to pass to the environment `deploy_code` method.
+        :returns: A contract instance.
+        """
+        if env is None:
+            env = Env.get_singleton()
+
+        address, _ = env.deploy_code(bytecode=self._blueprint_bytecode)
+
+        ret = self._blueprint_deployer.at(address)
+        env.register_blueprint(self.bytecode, ret)
+        return ret
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
