@@ -35,11 +35,9 @@ from vyper.utils import method_id
 
 from boa import BoaError
 from boa.contracts.base_evm_contract import (
-    DEFAULT_BLUEPRINT_PREAMBLE,
     StackTrace,
     _BaseEVMContract,
     _handle_child_trace,
-    generate_blueprint_bytecode,
 )
 from boa.contracts.call_trace import TraceSource
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
@@ -58,6 +56,7 @@ from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
 from boa.profiling import cache_gas_used_for_computation
 from boa.util.abi import Address, abi_decode, abi_encode
+from boa.util.eip5202 import generate_blueprint_bytecode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -185,7 +184,7 @@ class VyperBlueprint(_BaseVyperContract):
         compiler_data,
         env=None,
         override_address=None,
-        blueprint_preamble=DEFAULT_BLUEPRINT_PREAMBLE,
+        blueprint_preamble=None,
         filename=None,
         gas=None,
     ):
@@ -193,12 +192,12 @@ class VyperBlueprint(_BaseVyperContract):
         # maybe use common base class?
         super().__init__(compiler_data, env, filename)
 
+        blueprint_bytecode = generate_blueprint_bytecode(
+            compiler_data.bytecode, blueprint_preamble
+        )
+
         addr, computation = self.env.deploy(
-            bytecode=generate_blueprint_bytecode(
-                compiler_data.bytecode, blueprint_preamble
-            ),
-            override_address=override_address,
-            gas=gas,
+            bytecode=blueprint_bytecode, override_address=override_address, gas=gas
         )
         if computation.is_error:
             raise computation.error

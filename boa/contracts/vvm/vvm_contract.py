@@ -2,11 +2,8 @@ import re
 from functools import cached_property
 
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
-from boa.contracts.base_evm_contract import (
-    DEFAULT_BLUEPRINT_PREAMBLE,
-    generate_blueprint_bytecode,
-)
 from boa.environment import Env
+from boa.util.eip5202 import generate_blueprint_bytecode
 
 # TODO: maybe this doesn't detect release candidates
 VERSION_RE = re.compile(r"\s*#\s*(pragma\s+version|@version)\s+(\d+\.\d+\.\d+)")
@@ -80,9 +77,7 @@ class VVMDeployer:
         # TODO: add filename
         return ABIContractFactory.from_abi_dict([])
 
-    def deploy_as_blueprint(
-        self, env=None, blueprint_preamble=DEFAULT_BLUEPRINT_PREAMBLE, **kwargs
-    ):
+    def deploy_as_blueprint(self, env=None, blueprint_preamble=None, **kwargs):
         """
         Deploy a new blueprint from this contract.
         :param blueprint_preamble: The preamble to use for the blueprint.
