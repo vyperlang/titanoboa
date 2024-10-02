@@ -192,12 +192,12 @@ class VyperBlueprint(_BaseVyperContract):
         # maybe use common base class?
         super().__init__(compiler_data, env, filename)
 
-        blueprint_bytecode = generate_blueprint_bytecode(
+        deploy_bytecode = generate_blueprint_bytecode(
             compiler_data.bytecode, blueprint_preamble
         )
 
         addr, computation = self.env.deploy(
-            bytecode=blueprint_bytecode, override_address=override_address, gas=gas
+            bytecode=deploy_bytecode, override_address=override_address, gas=gas
         )
         if computation.is_error:
             raise computation.error
