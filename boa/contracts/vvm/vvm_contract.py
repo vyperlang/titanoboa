@@ -71,6 +71,15 @@ class VVMDeployer:
 
         return self.at(address)
 
+    @cached_property
+    def _blueprint_bytecode(self):
+        return generate_blueprint_bytecode(self.bytecode)
+
+    @cached_property
+    def _blueprint_deployer(self):
+        # TODO: add filename
+        return ABIContractFactory.from_abi_dict([])
+
     def deploy_as_blueprint(
         self, env=None, blueprint_preamble=DEFAULT_BLUEPRINT_PREAMBLE, **kwargs
     ):
@@ -83,9 +92,9 @@ class VVMDeployer:
         """
         if env is None:
             env = Env.get_singleton()
-        bytecode = generate_blueprint_bytecode(self.bytecode)
-        address, _ = env.deploy_code(bytecode=bytecode)
-        return ABIContractFactory.from_abi_dict([]).at(address)
+
+        address, _ = env.deploy_code(bytecode=self._blueprint_bytecode)
+        return self._blueprint_deployer.at(address)
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
