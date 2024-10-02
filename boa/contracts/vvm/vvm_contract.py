@@ -88,9 +88,7 @@ class VVMDeployer:
         if env is None:
             env = Env.get_singleton()
 
-        address, computation = env.deploy_code(bytecode=self._blueprint_bytecode)
-        if computation.is_error:
-            raise computation.error
+        address, _ = env.deploy_code(bytecode=self._blueprint_bytecode)
 
         ret = self._blueprint_deployer.at(address)
         env.register_blueprint(self.bytecode, ret)
