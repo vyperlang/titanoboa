@@ -132,5 +132,3 @@ class BoaError(Exception):
         call_tree = str(self.call_trace)
         ledge = "=" * 72
         return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"
-
-

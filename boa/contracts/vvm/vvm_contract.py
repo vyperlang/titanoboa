@@ -93,8 +93,13 @@ class VVMDeployer:
         if env is None:
             env = Env.get_singleton()
 
-        address, _ = env.deploy_code(bytecode=self._blueprint_bytecode)
-        return self._blueprint_deployer.at(address)
+        address, computation = env.deploy_code(bytecode=self._blueprint_bytecode)
+        if computation.is_error:
+            raise computation.error
+
+        ret = self._blueprint_deployer.at(address)
+        env.register_blueprint(self.bytecode, ret)
+        return ret
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
