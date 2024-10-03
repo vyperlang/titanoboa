@@ -10,11 +10,14 @@ from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIF
 from boa.environment import Env
 from boa.rpc import to_bytes
 from boa.util.abi import Address
+from boa.util.eip5202 import generate_blueprint_bytecode
 
 
 class VVMDeployer(ABIContractFactory):
     """
-    A factory which can be used to create a new contract deployed with vvm.
+    A deployer that uses the Vyper Version Manager (VVM).
+    This allows deployment of contracts written in older versions of Vyper that
+    can interact with new versions using the ABI definition.
     """
 
     def __init__(
@@ -25,6 +28,14 @@ class VVMDeployer(ABIContractFactory):
         vyper_version: str,
         filename: Optional[str] = None,
     ):
+        """
+        Initialize a VVMDeployer instance.
+        :param name: The name of the contract.
+        :param compiler_output: The compiler output of the contract.
+        :param source_code: The source code of the contract.
+        :param vyper_version: The Vyper version used to compile the contract.
+        :param filename: The filename of the contract.
+        """
         super().__init__(name, compiler_output["abi"], filename)
         self.compiler_output = compiler_output
         self.source_code = source_code
@@ -67,6 +78,32 @@ class VVMDeployer(ABIContractFactory):
         address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args)
 
         return self.at(address)
+
+    @cached_property
+    def _blueprint_bytecode(self):
+        return generate_blueprint_bytecode(self.bytecode)
+
+    @cached_property
+    def _blueprint_deployer(self):
+        # TODO: add filename
+        return ABIContractFactory.from_abi_dict([])
+
+    def deploy_as_blueprint(self, env=None, blueprint_preamble=None, **kwargs):
+        """
+        Deploy a new blueprint from this contract.
+        :param blueprint_preamble: The preamble to use for the blueprint.
+        :param env: The environment to deploy the blueprint in.
+        :param kwargs: Keyword arguments to pass to the environment `deploy_code` method.
+        :returns: A contract instance.
+        """
+        if env is None:
+            env = Env.get_singleton()
+
+        address, _ = env.deploy_code(bytecode=self._blueprint_bytecode)
+
+        ret = self._blueprint_deployer.at(address)
+        env.register_blueprint(self.bytecode, ret)
+        return ret
 
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
