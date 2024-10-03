@@ -39,6 +39,7 @@ class Deployment:
     tx_dict: dict  # raw tx fields
     receipt_dict: dict  # raw receipt fields
     source_code: Optional[Any]  # optional source code or bundle
+    abi: Optional[Any]
     session_id: str = field(default_factory=get_session_id)
     deployment_id: Optional[int] = None  # the db-assigned id - primary key
 
@@ -49,6 +50,8 @@ class Deployment:
         ret["receipt_dict"] = json.dumps(ret["receipt_dict"])
         if ret["source_code"] is not None:
             ret["source_code"] = json.dumps(ret["source_code"])
+        if ret["abi"] is not None:
+            ret["abi"] = json.dumps(ret["abi"])
         return ret
 
     def to_dict(self):
@@ -75,6 +78,8 @@ class Deployment:
         ret["receipt_dict"] = json.loads(ret["receipt_dict"])
         if ret["source_code"] is not None:
             ret["source_code"] = json.loads(ret["source_code"])
+        if ret["abi"] is not None:
+            ret["abi"] = json.loads(ret["abi"])
         return cls(**ret)
 
 
@@ -91,7 +96,8 @@ CREATE TABLE IF NOT EXISTS
         broadcast_ts real,
         tx_dict text,
         receipt_dict text,
-        source_code text
+        source_code text,
+        abi text
     );
 """
 
