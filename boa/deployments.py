@@ -3,7 +3,7 @@ import sqlite3
 import uuid
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Generator, Optional
 
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
@@ -129,15 +129,19 @@ class DeploymentsDB:
 
     def _get_deployments_from_sql(self, sql_query: str, parameters=(), /):
         cur = self.db.execute(sql_query, parameters)
-        ret = [Deployment.from_sql_tuple(item) for item in cur.fetchall()]
-        return ret
+        return (Deployment.from_sql_tuple(item) for item in cur)
 
     def _get_fieldnames_str(self) -> str:
         return ",".join(field.name for field in fields(Deployment))
 
-    def get_deployments(self) -> list[Deployment]:
+    def get_deployments_iter(self) -> Generator[Deployment]:
         fieldnames = self._get_fieldnames_str()
-        return self._get_deployments_from_sql(f"SELECT {fieldnames} FROM deployments")
+        return self._get_deployments_from_sql(
+            f"SELECT {fieldnames} FROM deployments order by deployment_id desc"
+        )
+
+    def get_deployments(self) -> list[Deployment]:
+        return list(self.get_deployments_iter())
 
 
 _db: Optional[DeploymentsDB] = None
