@@ -73,7 +73,7 @@ class VVMDeployer:
         # TODO: add filename
         return ABIContractFactory.from_abi_dict([])
 
-    def deploy_as_blueprint(self, env=None, blueprint_preamble=None):
+    def deploy_as_blueprint(self, env=None, blueprint_preamble=None, **kwargs):
         """
         Deploy a new blueprint from this contract.
         :param blueprint_preamble: The preamble to use for the blueprint.
@@ -87,7 +87,7 @@ class VVMDeployer:
         blueprint_bytecode = generate_blueprint_bytecode(
             self.bytecode, blueprint_preamble
         )
-        address, _ = env.deploy_code(bytecode=blueprint_bytecode)
+        address, _ = env.deploy_code(bytecode=blueprint_bytecode, **kwargs)
 
         ret = self._blueprint_deployer.at(address)
 
