@@ -134,7 +134,7 @@ class DeploymentsDB:
     def _get_fieldnames_str(self) -> str:
         return ",".join(field.name for field in fields(Deployment))
 
-    def get_deployments_iter(self) -> Generator[Deployment]:
+    def get_deployments_iter(self) -> Generator[Deployment, None, None]:
         fieldnames = self._get_fieldnames_str()
         return self._get_deployments_from_sql(
             f"SELECT {fieldnames} FROM deployments order by deployment_id desc"
