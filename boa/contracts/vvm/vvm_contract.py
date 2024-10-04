@@ -284,20 +284,12 @@ class VVMStorageVariable(_VVMInternal):
     It will temporarily change the bytecode at the contract's address.
     """
 
-    _hashmap_regex = re.compile(r"^HashMap\[([^[]+), (.+)]$")
-
     def __init__(self, name, spec, contract):
-        value_type = spec["type"]
-        inputs = []
-
-        while value_type.startswith("HashMap"):
-            key_type, value_type = self._hashmap_regex.match(value_type).groups()
-            inputs.append({"name": f"key{len(inputs)}", "type": key_type})
-
+        inputs, output_type = _get_storage_variable_types(spec)
         abi = {
             "anonymous": False,
             "inputs": inputs,
-            "outputs": [{"name": name, "type": value_type}],
+            "outputs": [{"name": name, "type": output_type}],
             "name": name,
             "type": "function",
         }
@@ -359,3 +351,20 @@ class VVMEval(_VVMInternal):
 def __boa_debug__() {return_sig}:
     {debug_body}
 """
+
+
+def _get_storage_variable_types(spec: dict) -> tuple[list[dict], str]:
+    """
+    Get the types of a storage variable
+    :param spec: The storage variable specification.
+    :return: The types of the storage variable:
+    1. A list of dictionaries containing the input types.
+    2. The output type name.
+    """
+    hashmap_regex = re.compile(r"^HashMap\[([^[]+), (.+)]$")
+    output_type = spec["type"]
+    inputs: list[dict] = []
+    while output_type.startswith("HashMap"):
+        key_type, output_type = hashmap_regex.match(output_type).groups()  # type: ignore
+        inputs.append({"name": f"key{len(inputs)}", "type": key_type})
+    return inputs, output_type
