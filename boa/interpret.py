@@ -31,38 +31,14 @@ from boa.contracts.vyper.vyper_contract import (
 from boa.environment import Env
 from boa.explorer import Etherscan, get_etherscan
 from boa.rpc import json
+from boa.util import cached_vvm
 from boa.util.abi import Address
-from boa.util.disk_cache import DiskCache
+from boa.util.disk_cache import get_disk_cache, get_search_path
 
 if TYPE_CHECKING:
     from vyper.semantics.analysis.base import ImportInfo
 
 _Contract = Union[VyperContract, VyperBlueprint]
-
-
-_disk_cache = None
-_search_path = None
-
-
-def set_search_path(path: list[str]):
-    global _search_path
-    _search_path = path
-
-
-def set_cache_dir(cache_dir="~/.cache/titanoboa"):
-    global _disk_cache
-    if cache_dir is None:
-        _disk_cache = None
-        return
-    compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
-    _disk_cache = DiskCache(cache_dir, compiler_version)
-
-
-def disable_cache():
-    set_cache_dir(None)
-
-
-set_cache_dir()  # enable caching, by default!
 
 
 class BoaImporter(MetaPathFinder):
@@ -130,8 +106,6 @@ def get_module_fingerprint(
 def compiler_data(
     source_code: str, contract_name: str, filename: str | Path, deployer=None, **kwargs
 ) -> CompilerData:
-    global _disk_cache, _search_path
-
     path = Path(contract_name)
     resolved_path = Path(filename).resolve(strict=False)
 
@@ -139,12 +113,14 @@ def compiler_data(
         contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
     )
 
-    search_paths = get_search_paths(_search_path)
+    search_paths = get_search_paths(get_search_path())
     input_bundle = FilesystemInputBundle(search_paths)
 
     settings = Settings(**kwargs)
     ret = CompilerData(file_input, input_bundle, settings)
-    if _disk_cache is None:
+
+    disk_cache = get_disk_cache()
+    if disk_cache is None:
         return ret
 
     with anchor_settings(ret.settings):
@@ -164,7 +140,7 @@ def compiler_data(
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
     cache_key = str((contract_name, fingerprint, kwargs, deployer_id))
-    return _disk_cache.caching_lookup(cache_key, get_compiler_data)
+    return disk_cache.caching_lookup(cache_key, get_compiler_data)
 
 
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
@@ -240,28 +216,17 @@ def _loads_partial_vvm(
     filename: Optional[str | Path] = None,
     name: Optional[str] = None,
 ):
-    global _disk_cache
     if filename is not None:
         filename = str(filename)
 
     # install the requested version if not already installed
     vvm.install_vyper(version=version)
 
-    def _compile():
-        compiled_src = vvm.compile_source(source_code, vyper_version=version)
-        compiler_output = compiled_src["<stdin>"]
-        return VVMDeployer.from_compiler_output(
-            compiler_output, source_code, version, filename, name
-        )
-
-    # Ensure the cache is initialized
-    if _disk_cache is None:
-        return _compile()
-
-    # Generate a unique cache key
-    cache_key = f"{source_code}:{version}"
-    # Check the cache and return the result if available
-    return _disk_cache.caching_lookup(cache_key, _compile)
+    compiled_src = cached_vvm.compile_source(source_code, vyper_version=version)
+    compiler_output = compiled_src["<stdin>"]
+    return VVMDeployer.from_compiler_output(
+        compiler_output, source_code, version, filename, name
+    )
 
 
 def from_etherscan(

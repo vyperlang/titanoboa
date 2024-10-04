@@ -3,12 +3,12 @@ from functools import cached_property
 from pathlib import Path
 from typing import Optional
 
-import vvm
 from vyper.utils import method_id
 
 from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.environment import Env
 from boa.rpc import to_bytes
+from boa.util import cached_vvm
 from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
 
@@ -184,7 +184,7 @@ class VVMContract(ABIContract):
         def internal():
             return None
 
-        result = vvm.compile_source(
+        result = cached_vvm.compile_source(
             self.source_code, vyper_version=self.vyper_version, output_format="metadata"
         )["function_info"]
         for fn_name, meta in result.items():
@@ -206,7 +206,9 @@ class _VVMInternal(ABIFunction):
     def _override_bytecode(self) -> bytes:
         assert isinstance(self.contract, VVMContract)  # help mypy
         source = "\n".join((self.contract.source_code, self.source_code))
-        compiled = vvm.compile_source(source, vyper_version=self.contract.vyper_version)
+        compiled = cached_vvm.compile_source(
+            source, vyper_version=self.contract.vyper_version
+        )
         return to_bytes(compiled["<stdin>"]["bytecode_runtime"])
 
     @property
