@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Union
 
 import vvm
 import vyper
+from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
     ABIInput,
@@ -17,6 +18,7 @@ from vyper.compiler.input_bundle import (
 )
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings
+from vyper.semantics.analysis.module import analyze_module
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
@@ -194,12 +196,40 @@ def loads(
 def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     if name is None:
         name = Path(filename).stem
+    # TODO: pass filename to ABIContractFactory
     with open(filename) as fp:
         return loads_abi(fp.read(), *args, name=name, **kwargs)
 
 
 def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
+
+
+# load from .vyi file.
+# NOTE: substantially same interface as load_abi and loads_abi, consider
+# fusing them into load_interface?
+def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
+    if name is None:
+        name = Path(filename).stem
+    with open(filename) as fp:
+        return loads_vyi(fp.read(), name=name, filename=filename)
+
+
+# load interface from .vyi file string contents.
+def loads_vyi(source_code: str, name: str = None, filename: str = None):
+    global _search_path
+
+    ast = parse_to_ast(source_code)
+
+    if name is None:
+        name = "VyperContract.vyi"
+
+    search_paths = get_search_paths(_search_path)
+    input_bundle = FilesystemInputBundle(search_paths)
+
+    module_t = analyze_module(ast, input_bundle, is_interface=True)
+    abi = module_t.interface.to_toplevel_abi_dict()
+    return ABIContractFactory(name, abi, filename=filename)
 
 
 def loads_partial(
