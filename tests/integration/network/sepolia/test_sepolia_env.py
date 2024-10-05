@@ -80,7 +80,7 @@ def test_deployment_db():
         contract = boa.loads(code, arg)
 
         # test get_deployments()
-        deployment = db.get_deployments()[-1]
+        deployment = next(db.get_deployments())
 
         initcode = contract.compiler_data.bytecode + arg.to_bytes(32, "big")
 
