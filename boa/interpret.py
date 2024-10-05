@@ -204,6 +204,33 @@ def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFa
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
 
 
+# load from .vyi file.
+# NOTE: substantially same interface as load_abi and loads_abi, consider
+# fusing them into load_interface?
+def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
+    if name is None:
+        name = Path(filename).stem
+    with open(filename) as fp:
+        return loads_vyi(fp.read(), name=name, filename=filename)
+
+
+# load interface from .vyi file string contents.
+def loads_vyi(source_code: str, name: str = None, filename: str = None):
+    global _search_path
+
+    ast = parse_to_ast(source_code)
+
+    if name is None:
+        name = "VyperContract.vyi"
+
+    search_paths = get_search_paths(_search_path)
+    input_bundle = FilesystemInputBundle(search_paths)
+
+    module_t = analyze_module(ast, input_bundle, is_interface=True)
+    abi = module_t.interface.to_toplevel_abi_dict()
+    return ABIContractFactory(name, abi, filename=filename)
+
+
 def loads_partial(
     source_code: str,
     name: str = None,
@@ -254,29 +281,6 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
     cache_key = f"{source_code}:{version}"
     # Check the cache and return the result if available
     return _disk_cache.caching_lookup(cache_key, _compile)
-
-
-def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
-    if name is None:
-        name = Path(filename).stem
-    with open(filename) as fp:
-        return loads_vyi(fp.read(), name=name, filename=filename)
-
-
-def loads_vyi(source_code: str, name: str = None, filename: str = None):
-    global _search_path
-
-    ast = parse_to_ast(source_code)
-
-    if name is None:
-        name = "VyperContract.vyi"
-
-    search_paths = get_search_paths(_search_path)
-    input_bundle = FilesystemInputBundle(search_paths)
-
-    module_t = analyze_module(ast, input_bundle, is_interface=True)
-    abi = module_t.interface.to_toplevel_abi_dict()
-    return ABIContractFactory(name, abi, filename=filename)
 
 
 def from_etherscan(
