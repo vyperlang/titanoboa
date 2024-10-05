@@ -134,14 +134,18 @@ class DeploymentsDB:
     def _get_fieldnames_str(self) -> str:
         return ",".join(field.name for field in fields(Deployment))
 
-    def get_deployments_iter(self) -> Generator[Deployment, None, None]:
+    def get_deployments(self) -> Generator[Deployment, None, None]:
+        """
+        Return all the deployments from the database. Returns an iterator
+        which can be converted to a list with `list(db.get_deployments())`.
+
+        Returns the deployments ordered by most recent first, i.e. using
+        an `ORDER BY deployment_id DESC` clause.
+        """
         fieldnames = self._get_fieldnames_str()
         return self._get_deployments_from_sql(
             f"SELECT {fieldnames} FROM deployments order by deployment_id desc"
         )
-
-    def get_deployments(self) -> list[Deployment]:
-        return list(self.get_deployments_iter())
 
 
 _db: Optional[DeploymentsDB] = None
