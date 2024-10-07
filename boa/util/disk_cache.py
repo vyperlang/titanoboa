@@ -83,16 +83,6 @@ class DiskCache:
 
 
 _disk_cache = None
-_search_path = None
-
-
-def get_search_path() -> Optional[list[str]]:
-    return _search_path
-
-
-def set_search_path(path: list[str]):
-    global _search_path
-    _search_path = path
 
 
 def get_disk_cache() -> Optional[DiskCache]:

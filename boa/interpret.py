@@ -33,12 +33,19 @@ from boa.explorer import Etherscan, get_etherscan
 from boa.rpc import json
 from boa.util import cached_vvm
 from boa.util.abi import Address
-from boa.util.disk_cache import get_disk_cache, get_search_path
+from boa.util.disk_cache import get_disk_cache
 
 if TYPE_CHECKING:
     from vyper.semantics.analysis.base import ImportInfo
 
 _Contract = Union[VyperContract, VyperBlueprint]
+
+_search_path = None
+
+
+def set_search_path(path: list[str]):
+    global _search_path
+    _search_path = path
 
 
 class BoaImporter(MetaPathFinder):
@@ -106,6 +113,8 @@ def get_module_fingerprint(
 def compiler_data(
     source_code: str, contract_name: str, filename: str | Path, deployer=None, **kwargs
 ) -> CompilerData:
+    global _search_path
+
     path = Path(contract_name)
     resolved_path = Path(filename).resolve(strict=False)
 
@@ -113,7 +122,7 @@ def compiler_data(
         contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
     )
 
-    search_paths = get_search_paths(get_search_path())
+    search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
     settings = Settings(**kwargs)
