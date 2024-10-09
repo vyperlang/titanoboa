@@ -165,6 +165,10 @@ def compiler_data(
         with anchor_settings(ret.settings):
             # force compilation to happen so DiskCache will cache the compiled artifact:
             _ = ret.bytecode, ret.bytecode_runtime
+
+        if isinstance(ret.input_bundle, ZipInputBundle):
+            # workaround for `cannot pickle '_thread.RLock' object`
+            ret.input_bundle.archive._lock = None
         return ret
 
     assert isinstance(deployer, type) or deployer is None
