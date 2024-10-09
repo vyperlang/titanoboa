@@ -176,11 +176,13 @@ def compiler_data(
 def _get_compiler_input(
     path: Path, resolved_path: Path, source_code: str | bytes, settings: Settings
 ) -> dict:
+    try:
+        return _get_compiler_zip_input(source_code, settings)
+    except NotZipInput:
+        pass
+
     if isinstance(source_code, bytes):
-        try:
-            return _get_compiler_zip_input(source_code, settings)
-        except NotZipInput:
-            source_code = source_code.decode()
+        source_code = source_code.decode()
 
     global _search_path
     search_paths = get_search_paths(_search_path)
@@ -200,13 +202,13 @@ def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
         name = kwargs.pop("name")
     with open(filename, "rb") as f:
         source_code = f.read()
-        try:
-            source_code = source_code.decode()  # type: ignore
-        except UnicodeDecodeError:
-            pass
-        return loads(
-            source_code, *args, name=name, dedent=False, **kwargs, filename=filename
-        )
+    try:
+        source_code = source_code.decode()  # type: ignore
+    except UnicodeDecodeError:
+        pass  # source might be an archive file. Try to compile it.
+    return loads(
+        source_code, *args, name=name, dedent=False, **kwargs, filename=filename
+    )
 
 
 def loads(
@@ -321,15 +323,15 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
     return _disk_cache.caching_lookup(cache_key, _compile)
 
 
-def _get_compiler_zip_input(zip_contents: bytes, settings: Settings):
+def _get_compiler_zip_input(zip_contents: str | bytes, settings: Settings):
+    if isinstance(zip_contents, str):
+        zip_contents = zip_contents.encode()
     try:
         buf = BytesIO(zip_contents)
         archive = ZipFile(buf, mode="r")
     except BadZipFile as e1:
         try:
-            # `validate=False` - tools like base64 can generate newlines
-            # for readability. validate=False does the "correct" thing and
-            # simply ignores these
+            # don't validate base64 to allow for newlines
             zip_contents = b64decode(zip_contents, validate=False)
             buf = BytesIO(zip_contents)
             archive = ZipFile(buf, mode="r")

@@ -7,7 +7,7 @@ import boa
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-@pytest.fixture(params=["vyz", "vy"])
+@pytest.fixture(params=["vyz", "vy", "b64"])
 def module_contract(request):
     return boa.load(FIXTURES / f"module_contract.{request.param}")
 
