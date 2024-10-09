@@ -245,7 +245,7 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
-    version = _detect_version(source_code)
+    version = _detect_version(source_code, vyper_version=vyper.__version__)
     if version is not None and version != vyper.__version__:
         filename = str(filename)  # help mypy
         # TODO: pass name to loads_partial_vvm, not filename
