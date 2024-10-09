@@ -41,16 +41,16 @@ def swap_env(new_env):
         yield
 
 
+def _set_env(new):
+    global env
+    env = new
+    Env._singleton = new
+
+
 def set_env(new_env):
     global env
     get_env = lambda: env  # noqa: E731
-
-    def setter(new):
-        global env
-        env = new
-        Env._singleton = new
-
-    return Open(get_env, setter, new_env)
+    return Open(get_env, _set_env, new_env)
 
 
 def fork(
