@@ -5,6 +5,9 @@ import pickle
 import threading
 import time
 from pathlib import Path
+from typing import Optional
+
+import vyper
 
 _ONE_WEEK = 7 * 24 * 3600
 
@@ -77,3 +80,26 @@ class DiskCache:
         # because worst case we will just rebuild the item
         tmp_p.rename(p)
         return res
+
+
+_disk_cache = None
+
+
+def get_disk_cache() -> Optional[DiskCache]:
+    return _disk_cache
+
+
+def set_cache_dir(cache_dir: Optional[str] = "~/.cache/titanoboa"):
+    global _disk_cache
+    if cache_dir is None:
+        _disk_cache = None
+        return
+    compiler_version = f"{vyper.__version__}.{vyper.__commit__}"
+    _disk_cache = DiskCache(cache_dir, compiler_version)
+
+
+def disable_cache():
+    set_cache_dir(None)
+
+
+set_cache_dir()  # enable caching, by default!
