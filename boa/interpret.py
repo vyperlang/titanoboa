@@ -1,23 +1,30 @@
+import binascii
 import sys
 import textwrap
+from base64 import b64decode
 from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
-from pathlib import Path
+from io import BytesIO
+from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, Union
+from zipfile import BadZipFile, ZipFile
 
 import vvm
 import vyper
 from vyper.ast.parse import parse_to_ast
+from vyper.cli.compile_archive import NotZipInput
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
     ABIInput,
     CompilerInput,
     FileInput,
     FilesystemInputBundle,
+    ZipInputBundle,
 )
 from vyper.compiler.phases import CompilerData
-from vyper.compiler.settings import Settings, anchor_settings
+from vyper.compiler.settings import Settings, anchor_settings, merge_settings
+from vyper.exceptions import BadArchive
 from vyper.semantics.analysis.module import analyze_module
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
@@ -129,22 +136,20 @@ def get_module_fingerprint(
 
 
 def compiler_data(
-    source_code: str, contract_name: str, filename: str | Path, deployer=None, **kwargs
+    source_code: str | bytes,
+    contract_name: str,
+    filename: str | Path,
+    deployer=None,
+    **kwargs,
 ) -> CompilerData:
-    global _disk_cache, _search_path
+    global _disk_cache
 
     path = Path(contract_name)
     resolved_path = Path(filename).resolve(strict=False)
 
-    file_input = FileInput(
-        contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
-    )
-
-    search_paths = get_search_paths(_search_path)
-    input_bundle = FilesystemInputBundle(search_paths)
-
     settings = Settings(**kwargs)
-    ret = CompilerData(file_input, input_bundle, settings)
+    compiler_input = _get_compiler_input(path, resolved_path, source_code, settings)
+    ret = CompilerData(**compiler_input)
     if _disk_cache is None:
         return ret
 
@@ -168,25 +173,55 @@ def compiler_data(
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
 
+def _get_compiler_input(
+    path: Path, resolved_path: Path, source_code: str | bytes, settings: Settings
+) -> dict:
+    if isinstance(source_code, bytes):
+        try:
+            return _get_compiler_zip_input(source_code, settings)
+        except NotZipInput:
+            source_code = source_code.decode()
+
+    global _search_path
+    search_paths = get_search_paths(_search_path)
+    return {
+        "file_input": FileInput(
+            contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
+        ),
+        "input_bundle": FilesystemInputBundle(search_paths),
+        "settings": settings,
+    }
+
+
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
     name = Path(filename).stem
     # TODO: investigate if we can just put name in the signature
     if "name" in kwargs:
         name = kwargs.pop("name")
-    with open(filename) as f:
-        return loads(f.read(), *args, name=name, **kwargs, filename=filename)
+    with open(filename, "rb") as f:
+        source_code = f.read()
+        try:
+            source_code = source_code.decode()  # type: ignore
+        except UnicodeDecodeError:
+            pass
+        return loads(
+            source_code, *args, name=name, dedent=False, **kwargs, filename=filename
+        )
 
 
 def loads(
-    source_code,
+    source_code: bytes | str,
     *args,
     as_blueprint=False,
     name=None,
     filename=None,
     compiler_args=None,
+    dedent=True,
     **kwargs,
 ):
-    d = loads_partial(source_code, name, filename=filename, compiler_args=compiler_args)
+    d = loads_partial(
+        source_code, name, filename=filename, dedent=dedent, compiler_args=compiler_args
+    )
     if as_blueprint:
         return d.deploy_as_blueprint(**kwargs)
     else:
@@ -233,7 +268,7 @@ def loads_vyi(source_code: str, name: str = None, filename: str = None):
 
 
 def loads_partial(
-    source_code: str,
+    source_code: str | bytes,
     name: str = None,
     filename: str | Path | None = None,
     dedent: bool = True,
@@ -242,17 +277,17 @@ def loads_partial(
     name = name or "VyperContract"
     filename = filename or "<unknown>"
 
-    if dedent:
-        source_code = textwrap.dedent(source_code)
+    if isinstance(source_code, str):
+        if dedent:
+            source_code = textwrap.dedent(source_code)
 
-    version = _detect_version(source_code)
-    if version is not None and version != vyper.__version__:
-        filename = str(filename)  # help mypy
-        # TODO: pass name to loads_partial_vvm, not filename
-        return _loads_partial_vvm(source_code, version, filename)
+        version = _detect_version(source_code)
+        if version is not None and version != vyper.__version__:
+            filename = str(filename)  # help mypy
+            # TODO: pass name to loads_partial_vvm, not filename
+            return _loads_partial_vvm(source_code, version, filename)
 
     compiler_args = compiler_args or {}
-
     deployer_class = _get_default_deployer_class()
     data = compiler_data(source_code, name, filename, deployer_class, **compiler_args)
     return deployer_class(data, filename=filename)
@@ -284,6 +319,42 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
     cache_key = f"{source_code}:{version}"
     # Check the cache and return the result if available
     return _disk_cache.caching_lookup(cache_key, _compile)
+
+
+def _get_compiler_zip_input(zip_contents: bytes, settings: Settings):
+    try:
+        buf = BytesIO(zip_contents)
+        archive = ZipFile(buf, mode="r")
+    except BadZipFile as e1:
+        try:
+            # `validate=False` - tools like base64 can generate newlines
+            # for readability. validate=False does the "correct" thing and
+            # simply ignores these
+            zip_contents = b64decode(zip_contents, validate=False)
+            buf = BytesIO(zip_contents)
+            archive = ZipFile(buf, mode="r")
+        except (BadZipFile, binascii.Error):
+            raise NotZipInput() from e1
+
+    targets = archive.read("MANIFEST/compilation_targets").decode().splitlines()
+    if len(targets) != 1:
+        raise BadArchive("Multiple compilation targets not supported!")
+
+    input_bundle = ZipInputBundle(archive)
+    main_path = PurePath(targets[0])
+    archive_settings_txt = archive.read("MANIFEST/settings.json").decode()
+    archive_settings = Settings.from_dict(json.loads(archive_settings_txt))
+    return {
+        "file_input": input_bundle.load_file(main_path),
+        "input_bundle": input_bundle,
+        "settings": merge_settings(
+            settings,
+            archive_settings,
+            lhs_source="command line",
+            rhs_source="archive settings",
+        ),
+        "integrity_sum": archive.read("MANIFEST/integrity").decode().strip(),
+    }
 
 
 def from_etherscan(
