@@ -148,8 +148,7 @@ def compiler_data(
     resolved_path = Path(filename).resolve(strict=False)
 
     settings = Settings(**kwargs)
-    compiler_input = _get_compiler_input(path, resolved_path, source_code, settings)
-    ret = CompilerData(**compiler_input)
+    ret = _create_compiler_data(path, resolved_path, source_code, settings)
     if _disk_cache is None:
         return ret
 
@@ -177,28 +176,6 @@ def compiler_data(
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
 
-def _get_compiler_input(
-    path: Path, resolved_path: Path, source_code: str | bytes, settings: Settings
-) -> dict:
-    try:
-        return _get_compiler_zip_input(source_code, settings)
-    except NotZipInput:
-        pass
-
-    if isinstance(source_code, bytes):
-        source_code = source_code.decode()
-
-    global _search_path
-    search_paths = get_search_paths(_search_path)
-    return {
-        "file_input": FileInput(
-            contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
-        ),
-        "input_bundle": FilesystemInputBundle(search_paths),
-        "settings": settings,
-    }
-
-
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
     name = Path(filename).stem
     # TODO: investigate if we can just put name in the signature
@@ -216,7 +193,7 @@ def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
 
 
 def loads(
-    source_code: bytes | str,
+    source_code: str | bytes,
     *args,
     as_blueprint=False,
     name=None,
@@ -327,7 +304,28 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
     return _disk_cache.caching_lookup(cache_key, _compile)
 
 
-def _get_compiler_zip_input(zip_contents: str | bytes, settings: Settings):
+def _create_compiler_data(
+    path: Path, resolved_path: Path, source_code: str | bytes, settings: Settings
+) -> CompilerData:
+    try:
+        return _create_archive_compiler_data(source_code, settings)
+    except NotZipInput:
+        pass
+
+    if isinstance(source_code, bytes):
+        source_code = source_code.decode()
+
+    global _search_path
+    file_input = FileInput(
+        contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
+    )
+    input_bundle = FilesystemInputBundle(get_search_paths(_search_path))
+    return CompilerData(file_input, input_bundle, settings)
+
+
+def _create_archive_compiler_data(
+    zip_contents: str | bytes, settings: Settings
+) -> CompilerData:
     if isinstance(zip_contents, str):
         zip_contents = zip_contents.encode()
     try:
@@ -349,18 +347,16 @@ def _get_compiler_zip_input(zip_contents: str | bytes, settings: Settings):
     input_bundle = ZipInputBundle(archive)
     main_path = PurePath(targets[0])
     archive_settings_txt = archive.read("MANIFEST/settings.json").decode()
-    archive_settings = Settings.from_dict(json.loads(archive_settings_txt))
-    return {
-        "file_input": input_bundle.load_file(main_path),
-        "input_bundle": input_bundle,
-        "settings": merge_settings(
-            settings,
-            archive_settings,
-            lhs_source="command line",
-            rhs_source="archive settings",
-        ),
-        "integrity_sum": archive.read("MANIFEST/integrity").decode().strip(),
-    }
+    file = input_bundle.load_file(main_path)
+    assert isinstance(file, FileInput)  # help mypy
+    settings = merge_settings(
+        settings,
+        Settings.from_dict(json.loads(archive_settings_txt)),
+        lhs_source="command line",
+        rhs_source="archive settings",
+    )
+    integrity_sum = archive.read("MANIFEST/integrity").decode().strip()
+    return CompilerData(file, input_bundle, settings, integrity_sum)
 
 
 def from_etherscan(
