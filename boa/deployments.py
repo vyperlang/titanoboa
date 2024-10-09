@@ -3,7 +3,7 @@ import sqlite3
 import uuid
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Generator, Optional
 
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
@@ -39,6 +39,7 @@ class Deployment:
     tx_dict: dict  # raw tx fields
     receipt_dict: dict  # raw receipt fields
     source_code: Optional[Any]  # optional source code or bundle
+    abi: Optional[Any]
     session_id: str = field(default_factory=get_session_id)
     deployment_id: Optional[int] = None  # the db-assigned id - primary key
 
@@ -49,6 +50,8 @@ class Deployment:
         ret["receipt_dict"] = json.dumps(ret["receipt_dict"])
         if ret["source_code"] is not None:
             ret["source_code"] = json.dumps(ret["source_code"])
+        if ret["abi"] is not None:
+            ret["abi"] = json.dumps(ret["abi"])
         return ret
 
     def to_dict(self):
@@ -75,6 +78,8 @@ class Deployment:
         ret["receipt_dict"] = json.loads(ret["receipt_dict"])
         if ret["source_code"] is not None:
             ret["source_code"] = json.loads(ret["source_code"])
+        if ret["abi"] is not None:
+            ret["abi"] = json.loads(ret["abi"])
         return cls(**ret)
 
 
@@ -91,7 +96,8 @@ CREATE TABLE IF NOT EXISTS
         broadcast_ts real,
         tx_dict text,
         receipt_dict text,
-        source_code text
+        source_code text,
+        abi text
     );
 """
 
@@ -123,15 +129,23 @@ class DeploymentsDB:
 
     def _get_deployments_from_sql(self, sql_query: str, parameters=(), /):
         cur = self.db.execute(sql_query, parameters)
-        ret = [Deployment.from_sql_tuple(item) for item in cur.fetchall()]
-        return ret
+        return (Deployment.from_sql_tuple(item) for item in cur)
 
     def _get_fieldnames_str(self) -> str:
         return ",".join(field.name for field in fields(Deployment))
 
-    def get_deployments(self) -> list[Deployment]:
+    def get_deployments(self) -> Generator[Deployment, None, None]:
+        """
+        Return all the deployments from the database. Returns an iterator
+        which can be converted to a list with `list(db.get_deployments())`.
+
+        Returns the deployments ordered by most recent first, i.e. using
+        an `ORDER BY deployment_id DESC` clause.
+        """
         fieldnames = self._get_fieldnames_str()
-        return self._get_deployments_from_sql(f"SELECT {fieldnames} FROM deployments")
+        return self._get_deployments_from_sql(
+            f"SELECT {fieldnames} FROM deployments order by deployment_id desc"
+        )
 
 
 _db: Optional[DeploymentsDB] = None

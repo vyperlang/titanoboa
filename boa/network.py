@@ -414,6 +414,7 @@ class NetworkEnv(Env):
                 msg += f" trace:\n```\n{e}\n```\nContinuing.\n"
                 warnings.warn(msg, stacklevel=2)
                 source_bundle = None
+            abi = getattr(contract, "abi", None)
 
             deployment_data = Deployment(
                 create_address,
@@ -425,6 +426,7 @@ class NetworkEnv(Env):
                 txdata,
                 receipt,
                 source_bundle,
+                abi,
             )
             deployments_db.insert_deployment(deployment_data)
 
