@@ -570,11 +570,11 @@ class VyperContract(_BaseVyperContract):
         self.env.register_contract(self._address, self)
 
     def _run_init(self, *args, value=0, override_address=None, gas=None):
-        encoded_args = b""
+        self.constructor_calldata = b""
         if self._ctor:
-            encoded_args = self._ctor.prepare_calldata(*args)
+            self.constructor_calldata = self._ctor.prepare_calldata(*args)
 
-        initcode = self.compiler_data.bytecode + encoded_args
+        initcode = self.compiler_data.bytecode + self.constructor_calldata
         with self._anchor_source_map(self._deployment_source_map):
             address, computation = self.env.deploy(
                 bytecode=initcode,
