@@ -70,8 +70,7 @@ class Etherscan(ContractVerifier[str]):
             "constructorArguments": constructor_calldata.hex(),
             "contractaddress": address,
             "contractname": contract_name,
-            "compilerversion": "v0.4.0",
-            # todo: "compilerversion": solc_json["compiler_version"],
+            "compilerversion": solc_json["compiler_version"],
             "licenseType": license_type,
             "optimizationUsed": "1",
         }

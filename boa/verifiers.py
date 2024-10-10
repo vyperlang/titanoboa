@@ -185,7 +185,7 @@ def verify(
         address=contract.address,
         solc_json=bundle,
         contract_name=contract.contract_name,
-        constructor_calldata=contract.constructor_calldata,
+        constructor_calldata=contract.ctor_calldata,
         wait=wait,
         **kwargs,
     )
