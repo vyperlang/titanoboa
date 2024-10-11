@@ -3,6 +3,23 @@ from typing import Any, Optional
 from eth_utils import to_canonical_address, to_checksum_address
 from vyper.utils import keccak256
 
+DEFAULT_BLUEPRINT_PREAMBLE = b"\xFE\x71\x00"
+
+
+def generate_blueprint_bytecode(
+    contract_bytecode: bytes, blueprint_preamble: bytes = None
+):
+    if blueprint_preamble is None:
+        blueprint_preamble = DEFAULT_BLUEPRINT_PREAMBLE
+
+    blueprint_bytecode = blueprint_preamble + contract_bytecode
+
+    # the length of the deployed code in bytes
+    len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
+    deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
+
+    return deploy_bytecode + blueprint_bytecode
+
 
 # TODO replace return type with upcoming AddressType wrapper
 def get_create2_address(

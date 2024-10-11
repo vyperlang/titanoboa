@@ -26,7 +26,7 @@ from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
-from vyper.compiler.output import build_abi_output
+from vyper.compiler.output import build_abi_output, build_solc_json
 from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
@@ -56,6 +56,7 @@ from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
 from boa.profiling import cache_gas_used_for_computation
 from boa.util.abi import Address, abi_decode, abi_encode
+from boa.util.eip5202 import generate_blueprint_bytecode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -123,8 +124,14 @@ class VyperDeployer:
         ret._set_bytecode(bytecode)
 
         ret.env.register_contract(address, ret)
-
         return ret
+
+    @cached_property
+    def solc_json(self):
+        """
+        Generates a solc "standard json" representation of the Vyper contract.
+        """
+        return build_solc_json(self.compiler_data)
 
     @cached_property
     def _constants(self):
@@ -156,6 +163,10 @@ class _BaseVyperContract(_BaseEVMContract):
                 raise Exception(msg)
 
     @cached_property
+    def deployer(self):
+        return VyperDeployer(self.compiler_data, filename=self.filename)
+
+    @cached_property
     def abi(self):
         return build_abi_output(self.compiler_data)
 
@@ -173,7 +184,7 @@ class VyperBlueprint(_BaseVyperContract):
         compiler_data,
         env=None,
         override_address=None,
-        blueprint_preamble=b"\xFE\x71\x00",
+        blueprint_preamble=None,
         filename=None,
         gas=None,
     ):
@@ -181,16 +192,9 @@ class VyperBlueprint(_BaseVyperContract):
         # maybe use common base class?
         super().__init__(compiler_data, env, filename)
 
-        if blueprint_preamble is None:
-            blueprint_preamble = b""
-
-        blueprint_bytecode = blueprint_preamble + compiler_data.bytecode
-
-        # the length of the deployed code in bytes
-        len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
-        deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
-
-        deploy_bytecode += blueprint_bytecode
+        deploy_bytecode = generate_blueprint_bytecode(
+            compiler_data.bytecode, blueprint_preamble
+        )
 
         addr, computation = self.env.deploy(
             bytecode=deploy_bytecode, override_address=override_address, gas=gas
@@ -203,10 +207,6 @@ class VyperBlueprint(_BaseVyperContract):
         self._address = Address(addr)
 
         self.env.register_blueprint(compiler_data.bytecode, self)
-
-    @cached_property
-    def deployer(self):
-        return VyperDeployer(self.compiler_data, filename=self.filename)
 
 
 class FrameDetail(dict):
@@ -630,11 +630,6 @@ class VyperContract(_BaseVyperContract):
     @cached_property
     def _immutables(self):
         return ImmutablesModel(self)
-
-    @cached_property
-    def deployer(self):
-        # TODO add test
-        return VyperDeployer(self.compiler_data, filename=self.filename)
 
     # is this actually useful?
     def at(self, address):

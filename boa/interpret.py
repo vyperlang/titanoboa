@@ -8,10 +8,12 @@ from typing import Any, Union
 
 import vvm
 import vyper
+from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import FileInput, FilesystemInputBundle
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings
+from vyper.semantics.analysis.module import analyze_module
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
 from boa.contracts.vvm.vvm_contract import VVMDeployer, _detect_version
@@ -21,7 +23,7 @@ from boa.contracts.vyper.vyper_contract import (
     VyperDeployer,
 )
 from boa.environment import Env
-from boa.explorer import fetch_abi_from_etherscan
+from boa.explorer import Etherscan, get_etherscan
 from boa.rpc import json
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
@@ -90,12 +92,13 @@ def compiler_data(
 ) -> CompilerData:
     global _disk_cache, _search_path
 
+    path = Path(contract_name)
+    resolved_path = Path(filename).resolve(strict=False)
+
     file_input = FileInput(
-        contents=source_code,
-        source_id=-1,
-        path=Path(contract_name),
-        resolved_path=Path(filename),
+        contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
     )
+
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
@@ -151,12 +154,40 @@ def loads(
 def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     if name is None:
         name = Path(filename).stem
+    # TODO: pass filename to ABIContractFactory
     with open(filename) as fp:
         return loads_abi(fp.read(), *args, name=name, **kwargs)
 
 
 def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
+
+
+# load from .vyi file.
+# NOTE: substantially same interface as load_abi and loads_abi, consider
+# fusing them into load_interface?
+def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
+    if name is None:
+        name = Path(filename).stem
+    with open(filename) as fp:
+        return loads_vyi(fp.read(), name=name, filename=filename)
+
+
+# load interface from .vyi file string contents.
+def loads_vyi(source_code: str, name: str = None, filename: str = None):
+    global _search_path
+
+    ast = parse_to_ast(source_code)
+
+    if name is None:
+        name = "VyperContract.vyi"
+
+    search_paths = get_search_paths(_search_path)
+    input_bundle = FilesystemInputBundle(search_paths)
+
+    module_t = analyze_module(ast, input_bundle, is_interface=True)
+    abi = module_t.interface.to_toplevel_abi_dict()
+    return ABIContractFactory(name, abi, filename=filename)
 
 
 def loads_partial(
@@ -166,14 +197,16 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
-    name = name or "VyperContract"  # TODO handle this upstream in CompilerData
+    name = name or "VyperContract"
     filename = filename or "<unknown>"
+
     if dedent:
         source_code = textwrap.dedent(source_code)
 
     version = _detect_version(source_code)
     if version is not None and version != vyper.__version__:
         filename = str(filename)  # help mypy
+        # TODO: pass name to loads_partial_vvm, not filename
         return _loads_partial_vvm(source_code, version, filename)
 
     compiler_args = compiler_args or {}
@@ -212,10 +245,16 @@ def _loads_partial_vvm(source_code: str, version: str, filename: str):
 
 
 def from_etherscan(
-    address: Any, name=None, uri="https://api.etherscan.io/api", api_key=None
+    address: Any, name: str = None, uri: str = None, api_key: str = None
 ):
     addr = Address(address)
-    abi = fetch_abi_from_etherscan(addr, uri, api_key)
+
+    if uri is not None or api_key is not None:
+        etherscan = Etherscan(uri, api_key)
+    else:
+        etherscan = get_etherscan()
+
+    abi = etherscan.fetch_abi(addr)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 
