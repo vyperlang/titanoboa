@@ -4,23 +4,16 @@ from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Union
 
 import vvm
 import vyper
 from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
-from vyper.compiler.input_bundle import (
-    ABIInput,
-    CompilerInput,
-    FileInput,
-    FilesystemInputBundle,
-)
+from vyper.compiler.input_bundle import FileInput, FilesystemInputBundle
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings
 from vyper.semantics.analysis.module import analyze_module
-from vyper.semantics.types.module import ModuleT
-from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
 from boa.contracts.vvm.vvm_contract import VVMDeployer, _detect_version
@@ -34,9 +27,6 @@ from boa.explorer import Etherscan, get_etherscan
 from boa.rpc import json
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
-
-if TYPE_CHECKING:
-    from vyper.semantics.analysis.base import ImportInfo
 
 _Contract = Union[VyperContract, VyperBlueprint]
 
@@ -97,37 +87,6 @@ class BoaLoader(SourceFileLoader):
 sys.meta_path.append(BoaImporter())
 
 
-def hash_input(compiler_input: CompilerInput) -> str:
-    if isinstance(compiler_input, FileInput):
-        return compiler_input.sha256sum
-    if isinstance(compiler_input, ABIInput):
-        return sha256sum(str(compiler_input.abi))
-    raise RuntimeError(f"bad compiler input {compiler_input}")
-
-
-# compute a fingerprint for a module which changes if any of its
-# dependencies change
-# TODO consider putting this in its own module
-def get_module_fingerprint(
-    module_t: ModuleT, seen: dict["ImportInfo", str] = None
-) -> str:
-    seen = seen or {}
-    fingerprints = []
-    for stmt in module_t.import_stmts:
-        import_info = stmt._metadata["import_info"]
-        if id(import_info) not in seen:
-            if isinstance(import_info.typ, ModuleT):
-                fingerprint = get_module_fingerprint(import_info.typ, seen)
-            else:
-                fingerprint = hash_input(import_info.compiler_input)
-            seen[id(import_info)] = fingerprint
-        fingerprint = seen[id(import_info)]
-        fingerprints.append(fingerprint)
-    fingerprints.append(module_t._module.source_sha256sum)
-
-    return sha256sum("".join(fingerprints))
-
-
 def compiler_data(
     source_code: str, contract_name: str, filename: str | Path, deployer=None, **kwargs
 ) -> CompilerData:
@@ -149,12 +108,11 @@ def compiler_data(
         return ret
 
     with anchor_settings(ret.settings):
-        # note that this actually parses and analyzes all dependencies,
+        # note that this actually parses all dependencies,
         # even if they haven't changed. an optimization would be to
-        # somehow convince vyper (in ModuleAnalyzer) to get the module_t
+        # somehow convince vyper (in ModuleAnalyzer) to get the parsed module
         # from the cache.
-        module_t = ret.annotated_vyper_module._metadata["type"]
-    fingerprint = get_module_fingerprint(module_t)
+        fingerprint = ret.resolved_imports.integrity_sum
 
     def get_compiler_data():
         with anchor_settings(ret.settings):
