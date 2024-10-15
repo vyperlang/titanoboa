@@ -6,6 +6,7 @@ from http import HTTPStatus
 from typing import Optional
 
 import requests
+from cached_property import cached_property
 
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
@@ -56,27 +57,43 @@ class Blockscout:
 
         url = f"{self.uri}/api/v2/smart-contracts/{address}/"
         url += f"verification/via/vyper-standard-input?apikey={api_key}"
-        data = {
-            "compiler_version": solc_json["compiler_version"],
-            "license_type": license_type,
-        }
-        files = {
-            "files[0]": (
-                contract_name,
-                json.dumps(solc_json).encode("utf-8"),
-                "application/json",
-            )
-        }
 
-        response = requests.post(url, data=data, files=files)
+        version = self._get_compiler_version(solc_json["compiler_version"])
+        solc_json = {**solc_json, "compiler_version": version}
+        data = {"compiler_version": version, "license_type": license_type}
+        file = (contract_name, json.dumps(solc_json), "application/json")
+
+        response = requests.post(url, data=data, files={"files[0]": file})
         response.raise_for_status()
         print(response.json().get("message"))  # usually verification started
+        # print(f"Sent {data} to {url} with {file}")
 
         if not wait:
             return VerificationResult(address, self)
 
         self.wait_for_verification(address)
         return None
+
+    def _get_compiler_version(self, compiler_version) -> str:
+        """
+        Runs a partial match based on the compiler version.
+        Blockscout only accepts exact matches, but vyper can have a different
+        commit hash length depending on the version and installation method.
+
+        Raises a ValueError if no match is found or if multiple matches are found.
+        """
+        supported = self.supported_versions
+        match [v for v in supported if compiler_version in v]:
+            case [version]:
+                return version
+            case []:
+                err = "Could not find a matching compiler version on Blockscout. "
+                err += f"Given: {compiler_version}, supported: {supported}."
+                raise Exception(err)
+            case multiple:
+                err = "Ambiguous compiler version for Blockscout verification. "
+                err += f"Given: {compiler_version}, found: {multiple}."
+                raise Exception(err)
 
     def wait_for_verification(self, address: Address) -> None:
         """
@@ -94,7 +111,7 @@ class Blockscout:
             time.sleep(wait_time.total_seconds())
             wait_time *= self.backoff_factor
 
-        raise TimeoutError("Timeout waiting for verification to complete")
+        raise TimeoutError(f"Timeout waiting for verification of {address}")
 
     def is_verified(self, address: Address) -> bool:
         api_key = self.api_key or ""
@@ -105,6 +122,14 @@ class Blockscout:
             return False
         response.raise_for_status()
         return response.json().get("is_verified", False)
+
+    @cached_property
+    def supported_versions(self) -> list[str]:
+        response = requests.get(
+            "https://http.sc-verifier.services.blockscout.com/api/v2/verifier/vyper/versions"
+        )
+        response.raise_for_status()
+        return response.json()["compilerVersions"]
 
 
 _verifier = Blockscout()

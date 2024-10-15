@@ -1,4 +1,6 @@
 import os
+from random import randint, sample
+from string import ascii_lowercase
 
 import pytest
 
@@ -38,13 +40,23 @@ def simple_contract():
     return boa.loads(code, STARTING_SUPPLY)
 
 
-def test_verify(simple_contract):
+def test_verify():
+    # generate a random contract so the verification will actually be done again
+    name = "".join(sample(ascii_lowercase, 10))
+    contract = boa.loads(
+        f"""
+@external
+def {name}() -> uint256:
+    return {randint(0, 2**256 - 1)}
+    """,
+        name=name,
+    )
+
     api_key = os.getenv("BLOCKSCOUT_API_KEY")
     blockscout = Blockscout("https://eth-sepolia.blockscout.com", api_key)
-    with boa.set_verifier(blockscout):
-        result = boa.verify(simple_contract)
-        result.wait_for_verification()
-        assert result.is_verified()
+    result = boa.verify(contract, blockscout)
+    result.wait_for_verification()
+    assert result.is_verified()
 
 
 def test_env_type():
