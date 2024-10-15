@@ -43,18 +43,15 @@ def simple_contract():
 def verifier(request):
     if request.param == Blockscout:
         api_key = os.getenv("BLOCKSCOUT_API_KEY")
-        verifier = Blockscout("https://eth-sepolia.blockscout.com", api_key)
+        return Blockscout("https://eth-sepolia.blockscout.com", api_key)
     elif request.param == Etherscan:
         api_key = os.environ["ETHERSCAN_API_KEY"]
-        verifier = Etherscan("https://api-sepolia.etherscan.io/api", api_key)
-    else:
-        raise ValueError(f"Unknown verifier: {request.param}")
-    with boa.set_verifier(verifier):
-        yield verifier
+        return Etherscan("https://api-sepolia.etherscan.io/api", api_key)
+    raise ValueError(f"Unknown verifier: {request.param}")
 
 
 def test_verify(simple_contract, verifier):
-    result = boa.verify(simple_contract)
+    result = boa.verify(simple_contract, verifier)
     result.wait_for_verification()
     assert result.is_verified()
 

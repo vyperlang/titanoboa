@@ -37,3 +37,16 @@ def test_loads_vvm():
 
     assert contract.foo() == 42
     assert contract.bar() == 43
+
+
+def test_forward_args_on_deploy():
+    with open(mock_3_10_path) as f:
+        code = f.read()
+
+    contract_vvm_deployer = boa.loads_partial(code)
+
+    random_addy = boa.env.generate_address()
+
+    contract = contract_vvm_deployer.deploy(43, override_address=random_addy)
+
+    assert random_addy == contract.address
