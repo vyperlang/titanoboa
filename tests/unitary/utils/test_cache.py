@@ -4,12 +4,13 @@ import pytest
 from vyper.compiler import CompilerData
 
 from boa.contracts.vyper.vyper_contract import VyperDeployer
-from boa.interpret import _disk_cache, _loads_partial_vvm, compiler_data, set_cache_dir
+from boa.interpret import _loads_partial_vvm, compiler_data, get_disk_cache
+from boa.util.disk_cache import set_cache_dir
 
 
 @pytest.fixture(autouse=True)
 def cache_dir(tmp_path):
-    tmp = _disk_cache.cache_dir
+    tmp = get_disk_cache().cache_dir
     try:
         set_cache_dir(tmp_path)
         yield
@@ -21,7 +22,7 @@ def test_cache_contract_name():
     code = """
 x: constant(int128) = 1000
 """
-    assert _disk_cache is not None
+    assert get_disk_cache() is not None
     test1 = compiler_data(code, "test1", __file__, VyperDeployer)
     test2 = compiler_data(code, "test2", __file__, VyperDeployer)
     test3 = compiler_data(code, "test1", __file__, VyperDeployer)
@@ -36,7 +37,7 @@ x: constant(int128) = 1000
 """
     version = "0.2.8"
     version2 = "0.3.1"
-    assert _disk_cache is not None
+    assert get_disk_cache() is not None
 
     # Mock vvm.compile_source
     with patch("vvm.compile_source") as mock_compile:
