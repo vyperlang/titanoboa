@@ -203,7 +203,7 @@ def test(n: uint256) -> uint256:
     assert re.match(r"^ +\(unknown method id .*\.0x29e99f07\)$", error)
 
 
-def test_prepare_calldata():
+def test_calldata():
     code = """
 @external
 def overloaded(n: uint256 = 0) -> uint256:
@@ -215,9 +215,10 @@ def argumented(n: uint256) -> uint256:
 """
     abi_contract, _ = load_via_abi(code)
     assert abi_contract.overloaded.prepare_calldata() == b"\x07\x8e\xec\xb4"
-    assert (
-        abi_contract.argumented.prepare_calldata(0) == b"\xedu\x96\x8d" + b"\x00" * 32
-    )
+    assert abi_contract.overloaded.decode_calldata(b"\x07\x8e\xec\xb4") == ()
+    argumented_calldata = b"\xedu\x96\x8d" + b"\x00" * 32
+    assert abi_contract.argumented.prepare_calldata(0) == argumented_calldata
+    assert abi_contract.argumented.decode_calldata(argumented_calldata) == (0,)
     assert len(abi_contract.abi) == 3
     assert abi_contract.deployer.abi == abi_contract.abi
 
