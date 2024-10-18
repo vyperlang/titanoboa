@@ -1,3 +1,5 @@
+import pytest
+
 import boa
 
 mock_3_10_path = "tests/unitary/contracts/vvm/mock_3_10.vy"
@@ -52,11 +54,33 @@ def test_vvm_internal():
     assert contract._storage.hash_map.get(address, 0) == 69
 
 
-def test_vvm_eval():
+def test_vvm_inject_fn():
     contract = boa.loads(mock_3_10_code, 43)
-    assert contract.eval("self.bar", "uint256") == 43
-    assert contract.eval("self.bar = 44") is None
+    contract.inject_function(
+        """
+@external
+def set_bar(bar: uint256):
+    self.bar = bar
+"""
+    )
+    assert contract.bar() == 43
+    assert contract.set_bar(44) is None
     assert contract.bar() == 44
+
+
+def test_vvm_inject_fn_exists():
+    contract = boa.loads(mock_3_10_code, 43)
+    code = """
+@external
+def bytecode():
+    assert False, "Function injected"
+"""
+    with pytest.raises(ValueError) as e:
+        contract.inject_function(code)
+    assert "Function bytecode already exists" in str(e.value)
+    contract.inject_function(code, force=True)
+    with boa.reverts("Function injected"):
+        contract.bytecode()
 
 
 def test_forward_args_on_deploy():
