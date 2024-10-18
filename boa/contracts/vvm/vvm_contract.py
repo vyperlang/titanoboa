@@ -1,51 +1,62 @@
 import re
 from functools import cached_property
+from pathlib import Path
+from typing import Optional
 
-from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
+from vyper.utils import method_id
+
+from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.environment import Env
+from boa.rpc import to_bytes
+from boa.util import cached_vvm
+from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
 
-# TODO: maybe this doesn't detect release candidates
-VERSION_RE = re.compile(r"\s*#\s*(pragma\s+version|@version)\s+(\d+\.\d+\.\d+)")
 
-
-# TODO: maybe move this up to vvm?
-def _detect_version(source_code: str):
-    res = VERSION_RE.findall(source_code)
-    if len(res) < 1:
-        return None
-    # TODO: handle len(res) > 1
-    return res[0][1]
-
-
-class VVMDeployer:
+class VVMDeployer(ABIContractFactory):
     """
     A deployer that uses the Vyper Version Manager (VVM).
     This allows deployment of contracts written in older versions of Vyper that
     can interact with new versions using the ABI definition.
     """
 
-    def __init__(self, abi, bytecode, filename):
+    def __init__(
+        self,
+        name: str,
+        compiler_output: dict,
+        source_code: str,
+        vyper_version: str,
+        filename: Optional[str] = None,
+    ):
         """
         Initialize a VVMDeployer instance.
-        :param abi: The contract's ABI.
-        :param bytecode: The contract's bytecode.
+        :param name: The name of the contract.
+        :param compiler_output: The compiler output of the contract.
+        :param source_code: The source code of the contract.
+        :param vyper_version: The Vyper version used to compile the contract.
         :param filename: The filename of the contract.
         """
-        self.abi = abi
-        self.bytecode = bytecode
-        self.filename = filename
-
-    @classmethod
-    def from_compiler_output(cls, compiler_output, filename):
-        abi = compiler_output["abi"]
-        bytecode_nibbles = compiler_output["bytecode"]
-        bytecode = bytes.fromhex(bytecode_nibbles.removeprefix("0x"))
-        return cls(abi, bytecode, filename)
+        super().__init__(name, compiler_output["abi"], filename)
+        self.compiler_output = compiler_output
+        self.source_code = source_code
+        self.vyper_version = vyper_version
 
     @cached_property
-    def factory(self):
-        return ABIContractFactory.from_abi_dict(self.abi)
+    def bytecode(self):
+        return to_bytes(self.compiler_output["bytecode"])
+
+    @classmethod
+    def from_compiler_output(
+        cls,
+        compiler_output: dict,
+        source_code: str,
+        vyper_version: str,
+        filename: Optional[str] = None,
+        name: Optional[str] = None,
+    ):
+        if name is None:
+            name = Path(filename).stem if filename is not None else "<VVMContract>"
+        return cls(name, compiler_output, source_code, vyper_version, filename)
 
     @cached_property
     def constructor(self):
@@ -97,5 +108,257 @@ class VVMDeployer:
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
 
-    def at(self, address):
-        return self.factory.at(address)
+    def at(self, address: Address | str) -> "VVMContract":
+        """
+        Create an ABI contract object for a deployed contract at `address`.
+        """
+        address = Address(address)
+        contract = VVMContract(
+            compiler_output=self.compiler_output,
+            source_code=self.source_code,
+            vyper_version=self.vyper_version,
+            name=self._name,
+            abi=self._abi,
+            functions=self.functions,
+            address=address,
+            filename=self.filename,
+        )
+        contract.env.register_contract(address, contract)
+        return contract
+
+
+class VVMContract(ABIContract):
+    """
+    A deployed contract compiled with vvm, which is called via ABI.
+    """
+
+    def __init__(self, compiler_output, source_code, vyper_version, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.compiler_output = compiler_output
+        self.source_code = source_code
+        self.vyper_version = vyper_version
+
+    @cached_property
+    def bytecode(self):
+        return to_bytes(self.compiler_output["bytecode"])
+
+    @cached_property
+    def bytecode_runtime(self):
+        return to_bytes(self.compiler_output["bytecode_runtime"])
+
+    def inject_function(self, fn_source_code, force=False):
+        """
+        Inject a function into this VVM Contract without affecting the
+        contract's source code. useful for testing private functionality.
+        :param fn_source_code: The source code of the function to inject.
+        :param force: If True, the function will be injected even if it already exists.
+        :returns: The result of the statement evaluation.
+        """
+        fn = VVMInjectedFunction(fn_source_code, self)
+        if hasattr(self, fn.name) and not force:
+            raise ValueError(f"Function {fn.name} already exists on contract.")
+        setattr(self, fn.name, fn)
+        fn.contract = self
+
+    @cached_property
+    def _storage(self):
+        """
+        Allows access to the storage variables of the contract.
+        Note that this is quite slow, as it requires the complete contract to be
+        recompiled.
+        """
+
+        def storage():
+            return None
+
+        for name, spec in self.compiler_output["layout"]["storage_layout"].items():
+            setattr(storage, name, VVMStorageVariable(name, spec, self))
+        return storage
+
+    @cached_property
+    def internal(self):
+        """
+        Allows access to internal functions of the contract.
+        Note that this is quite slow, as it requires the complete contract to be
+        recompiled.
+        """
+
+        def internal():
+            return None
+
+        result = cached_vvm.compile_source(
+            self.source_code, vyper_version=self.vyper_version, output_format="metadata"
+        )["function_info"]
+        for fn_name, meta in result.items():
+            if meta["visibility"] == "internal":
+                function = VVMInternalFunction(meta, self)
+                setattr(internal, function.name, function)
+        return internal
+
+
+class _VVMInternal(ABIFunction):
+    """
+    An ABI function that temporarily changes the bytecode at the contract's address.
+    Subclasses of this class are used to inject code into the contract via the
+    `source_code` property using the vvm, temporarily changing the bytecode
+    at the contract's address.
+    """
+
+    @cached_property
+    def _override_bytecode(self) -> bytes:
+        return to_bytes(self._compiler_output["bytecode_runtime"])
+
+    @cached_property
+    def _compiler_output(self):
+        assert isinstance(self.contract, VVMContract)  # help mypy
+        source = "\n".join((self.contract.source_code, self.source_code))
+        compiled = cached_vvm.compile_source(
+            source, vyper_version=self.contract.vyper_version
+        )
+        return compiled["<stdin>"]
+
+    @property
+    def source_code(self) -> str:
+        """
+        Returns the source code an internal function.
+        Must be implemented in subclasses.
+        """
+        raise NotImplementedError
+
+    def __call__(self, *args, **kwargs):
+        env = self.contract.env
+        assert isinstance(self.contract, VVMContract)  # help mypy
+        env.set_code(self.contract.address, self._override_bytecode)
+        try:
+            return super().__call__(*args, **kwargs)
+        finally:
+            env.set_code(self.contract.address, self.contract.bytecode_runtime)
+
+
+class VVMInternalFunction(_VVMInternal):
+    """
+    An internal function that is made available via the `internal` namespace.
+    It will temporarily change the bytecode at the contract's address.
+    """
+
+    def __init__(self, meta: dict, contract: VVMContract):
+        abi = {
+            "anonymous": False,
+            "inputs": [
+                {"name": arg_name, "type": arg_type}
+                for arg_name, arg_type in meta["positional_args"].items()
+            ],
+            "outputs": (
+                [{"name": meta["name"], "type": meta["return_type"]}]
+                if meta["return_type"] != "None"
+                else []
+            ),
+            "stateMutability": meta["mutability"],
+            "name": meta["name"],
+            "type": "function",
+        }
+        super().__init__(abi, contract.contract_name)
+        self.contract = contract
+
+    @cached_property
+    def method_id(self) -> bytes:
+        return method_id(f"__boa_internal_{self.name}__" + self.signature)
+
+    @cached_property
+    def source_code(self):
+        fn_args = ", ".join([arg["name"] for arg in self._abi["inputs"]])
+
+        return_sig = ""
+        fn_call = ""
+        if self.return_type:
+            return_sig = f" -> {self.return_type}"
+            fn_call = "return "
+
+        fn_call += f"self.{self.name}({fn_args})"
+        fn_sig = ", ".join(
+            f"{arg['name']}: {arg['type']}" for arg in self._abi["inputs"]
+        )
+        return f"""
+@external
+@payable
+def __boa_internal_{self.name}__({fn_sig}){return_sig}:
+    {fn_call}
+"""
+
+
+class VVMStorageVariable(_VVMInternal):
+    """
+    A storage variable that is made available via the `storage` namespace.
+    It will temporarily change the bytecode at the contract's address.
+    """
+
+    def __init__(self, name, spec, contract):
+        inputs, output_type = _get_storage_variable_types(spec)
+        abi = {
+            "anonymous": False,
+            "inputs": inputs,
+            "outputs": [{"name": name, "type": output_type}],
+            "name": name,
+            "type": "function",
+        }
+        super().__init__(abi, contract.contract_name)
+        self.contract = contract
+
+    def get(self, *args):
+        return self.__call__(*args)
+
+    @cached_property
+    def method_id(self) -> bytes:
+        return method_id(f"__boa_private_{self.name}__" + self.signature)
+
+    @cached_property
+    def source_code(self):
+        getter_call = "".join(f"[{i['name']}]" for i in self._abi["inputs"])
+        args_signature = ", ".join(
+            f"{i['name']}: {i['type']}" for i in self._abi["inputs"]
+        )
+        return f"""
+@external
+@payable
+def __boa_private_{self.name}__({args_signature}) -> {self.return_type[0]}:
+    return self.{self.name}{getter_call}
+"""
+
+
+class VVMInjectedFunction(_VVMInternal):
+    """
+    A Vyper function that is injected into a VVM contract.
+    It will temporarily change the bytecode at the contract's address.
+    """
+
+    def __init__(self, code: str, contract: VVMContract):
+        self.contract = contract
+        self.code = code
+        abi = [i for i in self._compiler_output["abi"] if i not in contract.abi]
+        if len(abi) != 1:
+            err = "Expected exactly one new ABI entry after injecting function. "
+            err += f"Found {abi}."
+            raise ValueError(err)
+
+        super().__init__(abi[0], contract.contract_name)
+
+    @cached_property
+    def source_code(self):
+        return self.code
+
+
+def _get_storage_variable_types(spec: dict) -> tuple[list[dict], str]:
+    """
+    Get the types of a storage variable
+    :param spec: The storage variable specification.
+    :return: The types of the storage variable:
+    1. A list of dictionaries containing the input types.
+    2. The output type name.
+    """
+    hashmap_regex = re.compile(r"^HashMap\[([^[]+), (.+)]$")
+    output_type = spec["type"]
+    inputs: list[dict] = []
+    while output_type.startswith("HashMap"):
+        key_type, output_type = hashmap_regex.match(output_type).groups()  # type: ignore
+        inputs.append({"name": f"key{len(inputs)}", "type": key_type})
+    return inputs, output_type
