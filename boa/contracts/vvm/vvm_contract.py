@@ -244,15 +244,6 @@ class _VVMInternal(ABIFunction):
         """
         raise NotImplementedError
 
-    def __call__(self, *args, **kwargs):
-        env = self.contract.env
-        assert isinstance(self.contract, VVMContract)  # help mypy
-        env.set_code(self.contract.address, self._override_bytecode)
-        try:
-            return super().__call__(*args, **kwargs)
-        finally:
-            env.set_code(self.contract.address, self.contract.bytecode_runtime)
-
 
 class VVMInternalFunction(_VVMInternal):
     """
@@ -324,6 +315,8 @@ class VVMStorageVariable(_VVMInternal):
         self.contract = contract
 
     def get(self, *args):
+        # get the value of the storage variable. note that this is
+        # different from the behavior of VyperContract storage variables!
         return self.__call__(*args)
 
     @cached_property
