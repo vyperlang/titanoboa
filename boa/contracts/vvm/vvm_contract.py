@@ -1,16 +1,34 @@
 import re
 from functools import cached_property
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+import vvm
 from vyper.utils import method_id
 
 from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.environment import Env
 from boa.rpc import to_bytes
-from boa.util import cached_vvm
 from boa.util.abi import Address
+from boa.util.disk_cache import get_disk_cache
 from boa.util.eip5202 import generate_blueprint_bytecode
+
+
+def _compile_source(*args, **kwargs) -> Any:
+    """
+    Compile Vyper source code via the VVM.
+    When a disk cache is available, the result of the compilation is cached.
+    """
+    disk_cache = get_disk_cache()
+
+    def _compile():
+        return vvm.compile_source(*args, **kwargs)
+
+    if disk_cache is None:
+        return _compile()
+
+    cache_key = f"{args}{kwargs}"
+    return disk_cache.caching_lookup(cache_key, _compile)
 
 
 class VVMDeployer(ABIContractFactory):
@@ -46,9 +64,8 @@ class VVMDeployer(ABIContractFactory):
         return to_bytes(self.compiler_output["bytecode"])
 
     @classmethod
-    def from_compiler_output(
+    def from_source_code(
         cls,
-        compiler_output: dict,
         source_code: str,
         vyper_version: str,
         filename: Optional[str] = None,
@@ -56,6 +73,9 @@ class VVMDeployer(ABIContractFactory):
     ):
         if name is None:
             name = Path(filename).stem if filename is not None else "<VVMContract>"
+        compiled_src = _compile_source(source_code, vyper_version=vyper_version)
+        compiler_output = compiled_src["<stdin>"]
+
         return cls(name, compiler_output, source_code, vyper_version, filename)
 
     @cached_property
@@ -183,17 +203,18 @@ class VVMContract(ABIContract):
         recompiled.
         """
 
-        def internal():
+        # an object with working setattr
+        def _obj():
             return None
 
-        result = cached_vvm.compile_source(
+        result = _compile_source(
             self.source_code, vyper_version=self.vyper_version, output_format="metadata"
         )["function_info"]
         for fn_name, meta in result.items():
             if meta["visibility"] == "internal":
                 function = VVMInternalFunction(meta, self)
-                setattr(internal, function.name, function)
-        return internal
+                setattr(_obj, function.name, function)
+        return _obj
 
 
 class _VVMInternal(ABIFunction):
@@ -212,9 +233,7 @@ class _VVMInternal(ABIFunction):
     def _compiler_output(self):
         assert isinstance(self.contract, VVMContract)  # help mypy
         source = "\n".join((self.contract.source_code, self.source_code))
-        compiled = cached_vvm.compile_source(
-            source, vyper_version=self.contract.vyper_version
-        )
+        compiled = _compile_source(source, vyper_version=self.contract.vyper_version)
         return compiled["<stdin>"]
 
     @property
@@ -331,9 +350,9 @@ class VVMInjectedFunction(_VVMInternal):
     It will temporarily change the bytecode at the contract's address.
     """
 
-    def __init__(self, code: str, contract: VVMContract):
+    def __init__(self, source_code: str, contract: VVMContract):
         self.contract = contract
-        self.code = code
+        self._source_code = source_code
         abi = [i for i in self._compiler_output["abi"] if i not in contract.abi]
         if len(abi) != 1:
             err = "Expected exactly one new ABI entry after injecting function. "

@@ -33,7 +33,6 @@ from boa.contracts.vyper.vyper_contract import (
 from boa.environment import Env
 from boa.explorer import Etherscan, get_etherscan
 from boa.rpc import json
-from boa.util import cached_vvm
 from boa.util.abi import Address
 from boa.util.disk_cache import get_disk_cache
 
@@ -231,8 +230,7 @@ def loads_partial(
 
     version = vvm.detect_vyper_version_from_source(source_code)
     if version is not None and version != Version(vyper.__version__):
-        # TODO: pass name to loads_partial_vvm, not filename
-        return _loads_partial_vvm(source_code, str(version), filename)
+        return _loads_partial_vvm(source_code, str(version), filename, name)
 
     compiler_args = compiler_args or {}
 
@@ -261,11 +259,7 @@ def _loads_partial_vvm(
     # install the requested version if not already installed
     vvm.install_vyper(version=version)
 
-    compiled_src = cached_vvm.compile_source(source_code, vyper_version=version)
-    compiler_output = compiled_src["<stdin>"]
-    return VVMDeployer.from_compiler_output(
-        compiler_output, source_code, version, filename, name
-    )
+    return VVMDeployer.from_source_code(source_code, version, filename, name)
 
 
 def from_etherscan(
