@@ -356,7 +356,7 @@ class VVMInjectedFunction(_VVMInternal):
 
     @cached_property
     def source_code(self):
-        return self.code
+        return self._source_code
 
 
 def _get_storage_variable_types(spec: dict) -> tuple[list[dict], str]:
