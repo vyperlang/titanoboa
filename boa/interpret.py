@@ -34,6 +34,7 @@ from boa.environment import Env
 from boa.explorer import Etherscan, get_etherscan
 from boa.rpc import json
 from boa.util.abi import Address
+
 # export set_cache_dir, NOTE: consider moving to boa/__init__.py
 from boa.util.disk_cache import get_disk_cache, set_cache_dir  # noqa: F401
 
