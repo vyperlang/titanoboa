@@ -76,9 +76,10 @@ def test_failed_transaction():
 def test_deployment_db():
     with set_deployments_db(DeploymentsDB(":memory:")) as db:
         arg = 5
+        nickname = "test_deployment"
 
         # contract is written to deployments db
-        contract = boa.loads(code, arg)
+        contract = boa.loads(code, arg, nickname=nickname)
 
         # test get_deployments()
         deployment = next(db.get_deployments())
@@ -92,6 +93,7 @@ def test_deployment_db():
         assert deployment.rpc == boa.env._rpc.name
         assert deployment.source_code == contract.deployer.solc_json
         assert deployment.abi == contract.abi
+        assert deployment.nickname == nickname
 
         # some sanity checks on tx_dict and rx_dict fields
         assert to_bytes(deployment.tx_dict["data"]) == initcode

@@ -12,6 +12,7 @@ pytest
 pytest-xdist
 pytest-cov
 sphinx-rtd-theme
+requests-cache
 
 # jupyter
 jupyter_server

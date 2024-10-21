@@ -361,7 +361,14 @@ class NetworkEnv(Env):
 
     # OVERRIDES
     def deploy(
-        self, sender=None, gas=None, value=0, bytecode=b"", contract=None, **kwargs
+        self,
+        sender=None,
+        gas=None,
+        value=0,
+        bytecode=b"",
+        contract=None,
+        nickname=None,
+        **kwargs,
     ):
         # reset to latest block for simulation
         self._reset_fork()
@@ -426,6 +433,7 @@ class NetworkEnv(Env):
                 txdata,
                 receipt,
                 source_bundle,
+                nickname,
                 abi,
             )
             deployments_db.insert_deployment(deployment_data)
