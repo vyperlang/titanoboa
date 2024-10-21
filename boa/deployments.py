@@ -91,7 +91,6 @@ CREATE TABLE IF NOT EXISTS
         session_id text,
         contract_address text,
         contract_name text,
-        nickname text,
         rpc text,
         deployer text,
         tx_hash text,
@@ -99,6 +98,7 @@ CREATE TABLE IF NOT EXISTS
         tx_dict text,
         receipt_dict text,
         source_code text,
+        nickname text,
         abi text
     );
 """

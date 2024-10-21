@@ -432,8 +432,8 @@ class NetworkEnv(Env):
                 broadcast_ts,
                 txdata,
                 receipt,
-                nickname,
                 source_bundle,
+                nickname,
                 abi,
             )
             deployments_db.insert_deployment(deployment_data)
