@@ -518,12 +518,14 @@ class VyperContract(_BaseVyperContract):
         created_from: Address = None,
         filename: str = None,
         gas=None,
+        nickname=None,
     ):
         super().__init__(compiler_data, env, filename)
 
         self.created_from = created_from
         self._computation = None
         self._source_map = None
+        self.nickname = nickname
 
         # add all exposed functions from the interface to the contract
         exposed_fns = {
@@ -544,7 +546,11 @@ class VyperContract(_BaseVyperContract):
             addr = Address(override_address)
         else:
             addr = self._run_init(
-                *args, value=value, override_address=override_address, gas=gas
+                *args,
+                value=value,
+                override_address=override_address,
+                gas=gas,
+                nickname=nickname,
             )
         self._address = addr
 
@@ -569,7 +575,7 @@ class VyperContract(_BaseVyperContract):
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, value=0, override_address=None, gas=None):
+    def _run_init(self, *args, value=0, override_address=None, gas=None, nickname=None):
         encoded_args = b""
         if self._ctor:
             encoded_args = self._ctor.prepare_calldata(*args)
@@ -582,6 +588,7 @@ class VyperContract(_BaseVyperContract):
                 override_address=override_address,
                 gas=gas,
                 contract=self,
+                nickname=nickname,
             )
 
             self._computation = computation
