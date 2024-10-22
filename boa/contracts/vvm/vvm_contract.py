@@ -54,7 +54,7 @@ class VVMDeployer:
                 return ABIFunction(t, contract_name=self.filename)
         return None
 
-    def deploy(self, *args, env=None):
+    def deploy(self, *args, env=None, **kwargs):
         encoded_args = b""
         if self.constructor is not None:
             encoded_args = self.constructor.prepare_calldata(*args)
@@ -64,7 +64,7 @@ class VVMDeployer:
         if env is None:
             env = Env.get_singleton()
 
-        address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args)
+        address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args, **kwargs)
 
         return self.at(address)
 
