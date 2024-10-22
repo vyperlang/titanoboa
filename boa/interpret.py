@@ -20,7 +20,7 @@ from vyper.compiler.input_bundle import (
     CompilerInput,
     FileInput,
     FilesystemInputBundle,
-    ZipInputBundle,
+    JSONInputBundle,
 )
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings, merge_settings
@@ -165,9 +165,6 @@ def compiler_data(
             # force compilation to happen so DiskCache will cache the compiled artifact:
             _ = ret.bytecode, ret.bytecode_runtime
 
-        if isinstance(ret.input_bundle, ZipInputBundle):
-            # workaround for `cannot pickle '_thread.RLock' object`
-            ret.input_bundle.archive._lock = None
         return ret
 
     assert isinstance(deployer, type) or deployer is None
@@ -326,37 +323,49 @@ def _create_compiler_data(
 def _create_archive_compiler_data(
     zip_contents: str | bytes, settings: Settings
 ) -> CompilerData:
+    with _open_zip(zip_contents) as archive:
+        # read the whole zip into memory so it can be serialized to the cache
+        files = {name: archive.read(name).decode() for name in archive.namelist()}
+
+    targets = files["MANIFEST/compilation_targets"].splitlines()
+    if len(targets) != 1:
+        raise BadArchive("Multiple compilation targets not supported!")
+
+    input_bundle = JSONInputBundle(
+        input_json={
+            PurePath(name): {"content": content} for name, content in files.items()
+        },
+        search_paths=[PurePath(p) for p in files["MANIFEST/searchpaths"].splitlines()],
+    )
+
+    main_path = PurePath(targets[0])
+    file = input_bundle.load_file(main_path)
+    assert isinstance(file, FileInput)  # help mypy
+    settings_json = json.loads(files["MANIFEST/settings.json"])
+    settings = merge_settings(
+        settings,
+        Settings.from_dict(settings_json),
+        lhs_source="command line",
+        rhs_source="archive settings",
+    )
+    integrity_sum = files["MANIFEST/integrity"].strip()
+    return CompilerData(file, input_bundle, settings, integrity_sum)
+
+
+def _open_zip(zip_contents):
     if isinstance(zip_contents, str):
         zip_contents = zip_contents.encode()
     try:
         buf = BytesIO(zip_contents)
-        archive = ZipFile(buf, mode="r")
+        return ZipFile(buf, mode="r")
     except BadZipFile as e1:
         try:
             # don't validate base64 to allow for newlines
             zip_contents = b64decode(zip_contents, validate=False)
             buf = BytesIO(zip_contents)
-            archive = ZipFile(buf, mode="r")
+            return ZipFile(buf, mode="r")
         except (BadZipFile, binascii.Error):
             raise NotZipInput() from e1
-
-    targets = archive.read("MANIFEST/compilation_targets").decode().splitlines()
-    if len(targets) != 1:
-        raise BadArchive("Multiple compilation targets not supported!")
-
-    input_bundle = ZipInputBundle(archive)
-    main_path = PurePath(targets[0])
-    archive_settings_txt = archive.read("MANIFEST/settings.json").decode()
-    file = input_bundle.load_file(main_path)
-    assert isinstance(file, FileInput)  # help mypy
-    settings = merge_settings(
-        settings,
-        Settings.from_dict(json.loads(archive_settings_txt)),
-        lhs_source="command line",
-        rhs_source="archive settings",
-    )
-    integrity_sum = archive.read("MANIFEST/integrity").decode().strip()
-    return CompilerData(file, input_bundle, settings, integrity_sum)
 
 
 def from_etherscan(

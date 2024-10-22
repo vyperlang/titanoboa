@@ -1,4 +1,8 @@
 import textwrap
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
 
 import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
