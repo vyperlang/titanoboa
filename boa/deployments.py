@@ -39,7 +39,6 @@ class Deployment:
     tx_dict: dict  # raw tx fields
     receipt_dict: dict  # raw receipt fields
     source_code: Optional[Any]  # optional source code or bundle
-    nickname: Optional[str]  # An optional nickname for the contract
     abi: Optional[Any]
     session_id: str = field(default_factory=get_session_id)
     deployment_id: Optional[int] = None  # the db-assigned id - primary key
@@ -98,7 +97,6 @@ CREATE TABLE IF NOT EXISTS
         tx_dict text,
         receipt_dict text,
         source_code text,
-        nickname text,
         abi text
     );
 """

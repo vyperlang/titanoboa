@@ -367,7 +367,7 @@ class NetworkEnv(Env):
         value=0,
         bytecode=b"",
         contract=None,
-        nickname=None,
+        contract_name=None,
         **kwargs,
     ):
         # reset to latest block for simulation
@@ -409,7 +409,11 @@ class NetworkEnv(Env):
         print(f"contract deployed at {create_address}")
 
         if (deployments_db := get_deployments_db()) is not None:
-            contract_name = getattr(contract, "contract_name", None)
+            contract_name = (
+                contract_name
+                if contract_name
+                else getattr(contract, "contract_name", None)
+            )
             try:
                 source_bundle = get_verification_bundle(contract)
             except Exception as e:
@@ -433,7 +437,6 @@ class NetworkEnv(Env):
                 txdata,
                 receipt,
                 source_bundle,
-                nickname,
                 abi,
             )
             deployments_db.insert_deployment(deployment_data)

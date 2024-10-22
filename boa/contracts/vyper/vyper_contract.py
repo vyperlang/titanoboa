@@ -146,8 +146,11 @@ class _BaseVyperContract(_BaseEVMContract):
         compiler_data: CompilerData,
         env: Optional[Env] = None,
         filename: Optional[str] = None,
+        contract_name: Optional[str] = None,
     ):
-        contract_name = Path(compiler_data.contract_path).stem
+        contract_name = (
+            contract_name if contract_name else Path(compiler_data.contract_path).stem
+        )
         super().__init__(contract_name, env, filename)
         self.compiler_data = compiler_data
 
@@ -518,14 +521,13 @@ class VyperContract(_BaseVyperContract):
         created_from: Address = None,
         filename: str = None,
         gas=None,
-        nickname=None,
+        contract_name=None,
     ):
-        super().__init__(compiler_data, env, filename)
+        super().__init__(compiler_data, env, filename, contract_name)
 
         self.created_from = created_from
         self._computation = None
         self._source_map = None
-        self.nickname = nickname
 
         # add all exposed functions from the interface to the contract
         exposed_fns = {
@@ -550,7 +552,7 @@ class VyperContract(_BaseVyperContract):
                 value=value,
                 override_address=override_address,
                 gas=gas,
-                nickname=nickname,
+                contract_name=contract_name,
             )
         self._address = addr
 
@@ -575,7 +577,9 @@ class VyperContract(_BaseVyperContract):
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, value=0, override_address=None, gas=None, nickname=None):
+    def _run_init(
+        self, *args, value=0, override_address=None, gas=None, contract_name=None
+    ):
         encoded_args = b""
         if self._ctor:
             encoded_args = self._ctor.prepare_calldata(*args)
@@ -588,7 +592,7 @@ class VyperContract(_BaseVyperContract):
                 override_address=override_address,
                 gas=gas,
                 contract=self,
-                nickname=nickname,
+                contract_name=contract_name,
             )
 
             self._computation = computation
