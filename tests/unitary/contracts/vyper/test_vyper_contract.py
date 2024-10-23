@@ -72,3 +72,20 @@ def foo() -> bool:
     c = boa.loads(code)
 
     c.foo()
+
+
+def test_contract_name():
+    code = """
+@external
+def foo() -> bool:
+    return True
+    """
+    c = boa.loads(code, name="return_one", filename="return_one.vy")
+
+    assert c.contract_name == "return_one"
+    assert c.filename == "return_one.vy"
+
+    c = boa.loads(code, filename="a/b/return_one.vy")
+
+    assert c.contract_name == "VyperContract"
+    assert c.filename == "a/b/return_one.vy"
