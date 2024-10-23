@@ -212,7 +212,6 @@ class Env:
         override_address: Optional[_AddressType] = None,
         # the calling vyper contract
         contract: Any = None,
-        contract_name: Optional[str] = None,  # TODO: This isn't used
     ):
         sender = self._get_sender(sender)
 

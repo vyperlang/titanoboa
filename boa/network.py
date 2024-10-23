@@ -361,14 +361,7 @@ class NetworkEnv(Env):
 
     # OVERRIDES
     def deploy(
-        self,
-        sender=None,
-        gas=None,
-        value=0,
-        bytecode=b"",
-        contract=None,
-        contract_name=None,
-        **kwargs,
+        self, sender=None, gas=None, value=0, bytecode=b"", contract=None, **kwargs
     ):
         # reset to latest block for simulation
         self._reset_fork()
@@ -409,11 +402,7 @@ class NetworkEnv(Env):
         print(f"contract deployed at {create_address}")
 
         if (deployments_db := get_deployments_db()) is not None:
-            contract_name = (
-                contract_name
-                if contract_name
-                else getattr(contract, "contract_name", None)
-            )
+            contract_name = getattr(contract, "contract_name", None)
             try:
                 source_bundle = get_verification_bundle(contract)
             except Exception as e:
