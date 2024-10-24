@@ -239,8 +239,16 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
-    name = name or "VyperContract"
-    filename = filename or "<unknown>"
+    if filename is None:
+        filename = "<unknown>"
+
+    if name is None:
+        if isinstance(filename, Path) or (
+            isinstance(filename, str) and filename != "<unknown>"
+        ):
+            name = Path(filename).stem
+        else:
+            name = "VyperContract"
 
     if dedent:
         source_code = textwrap.dedent(source_code)
