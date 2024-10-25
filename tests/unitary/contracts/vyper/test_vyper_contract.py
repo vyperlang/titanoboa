@@ -74,6 +74,33 @@ def foo() -> bool:
     c.foo()
 
 
+def test_contract_name():
+    code = """
+@external
+def foo() -> bool:
+    return True
+    """
+    c = boa.loads(code, name="return_one", filename="return_one.vy")
+
+    assert c.contract_name == "return_one"
+    assert c.filename == "return_one.vy"
+
+    c = boa.loads(code, filename="a/b/return_one.vy")
+
+    assert c.contract_name == "return_one"
+    assert c.filename == "a/b/return_one.vy"
+
+    c = boa.loads(code, filename=None, name="dummy_name")
+
+    assert c.contract_name == "dummy_name"
+    assert c.filename == "<unknown>"
+
+    c = boa.loads(code, filename=None, name=None)
+
+    assert c.contract_name == "<unknown>"
+    assert c.filename == "<unknown>"
+
+
 def test_stomp():
     code1 = """
 VAR: immutable(uint256)

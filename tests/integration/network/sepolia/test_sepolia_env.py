@@ -75,9 +75,10 @@ def test_raise_exception(simple_contract, amount):
 def test_deployment_db():
     with set_deployments_db(DeploymentsDB(":memory:")) as db:
         arg = 5
+        contract_name = "test_deployment"
 
         # contract is written to deployments db
-        contract = boa.loads(code, arg)
+        contract = boa.loads(code, arg, contract_name=contract_name)
 
         # test get_deployments()
         deployment = next(db.get_deployments())
@@ -87,6 +88,7 @@ def test_deployment_db():
         # sanity check all the fields
         assert deployment.contract_address == contract.address
         assert deployment.contract_name == contract.contract_name
+        assert deployment.contract_name == contract_name
         assert deployment.deployer == boa.env.eoa
         assert deployment.rpc == boa.env._rpc.name
         assert deployment.source_code == contract.deployer.solc_json

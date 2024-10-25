@@ -144,10 +144,13 @@ class _BaseVyperContract(_BaseEVMContract):
     def __init__(
         self,
         compiler_data: CompilerData,
+        contract_name: Optional[str] = None,
         env: Optional[Env] = None,
         filename: Optional[str] = None,
     ):
-        contract_name = Path(compiler_data.contract_path).stem
+        if contract_name is None:
+            contract_name = Path(compiler_data.contract_path).stem
+
         super().__init__(contract_name, env, filename)
         self.compiler_data = compiler_data
 
@@ -185,12 +188,11 @@ class VyperBlueprint(_BaseVyperContract):
         env=None,
         override_address=None,
         blueprint_preamble=None,
+        contract_name=None,
         filename=None,
         gas=None,
     ):
-        # note slight code duplication with VyperContract ctor,
-        # maybe use common base class?
-        super().__init__(compiler_data, env, filename)
+        super().__init__(compiler_data, contract_name, env, filename)
 
         deploy_bytecode = generate_blueprint_bytecode(
             compiler_data.bytecode, blueprint_preamble
@@ -516,10 +518,11 @@ class VyperContract(_BaseVyperContract):
         # whether to skip constructor
         skip_initcode=False,
         created_from: Address = None,
+        contract_name=None,
         filename: str = None,
         gas=None,
     ):
-        super().__init__(compiler_data, env, filename)
+        super().__init__(compiler_data, contract_name, env, filename)
 
         self.created_from = created_from
         self._computation = None
