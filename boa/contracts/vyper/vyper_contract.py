@@ -100,8 +100,8 @@ class VyperDeployer:
         address = Address(address)
 
         ret = self.deploy(override_address=address, skip_initcode=True)
-        vm = ret.env.vm
-        old_bytecode = vm.state.get_code(address.canonical_address)
+        vm = ret.env.evm
+        old_bytecode = vm.get_code(address)
         new_bytecode = self.compiler_data.bytecode_runtime
 
         immutables_size = self.compiler_data.global_ctx.immutable_section_bytes
@@ -109,7 +109,7 @@ class VyperDeployer:
             data_section = old_bytecode[-immutables_size:]
             new_bytecode += data_section
 
-        vm.state.set_code(address.canonical_address, new_bytecode)
+        vm.set_code(address, new_bytecode)
         ret.env.register_contract(address, ret)
         ret._set_bytecode(new_bytecode)
         return ret
