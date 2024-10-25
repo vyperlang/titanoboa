@@ -54,7 +54,7 @@ class VVMDeployer:
                 return ABIFunction(t, contract_name=self.filename)
         return None
 
-    def deploy(self, *args, env=None, **kwargs):
+    def deploy(self, *args, contract_name=None, env=None, **kwargs):
         encoded_args = b""
         if self.constructor is not None:
             encoded_args = self.constructor.prepare_calldata(*args)
@@ -66,6 +66,7 @@ class VVMDeployer:
 
         address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args, **kwargs)
 
+        # TODO: pass thru contract_name
         return self.at(address)
 
     @cached_property

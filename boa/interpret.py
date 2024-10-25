@@ -129,11 +129,15 @@ def get_module_fingerprint(
 
 
 def compiler_data(
-    source_code: str, contract_name: str, filename: str | Path, deployer=None, **kwargs
+    source_code: str,
+    contract_name: str | None,
+    filename: str | Path,
+    deployer=None,
+    **kwargs,
 ) -> CompilerData:
     global _disk_cache, _search_path
 
-    path = Path(contract_name)
+    path = Path(filename)
     resolved_path = Path(filename).resolve(strict=False)
 
     file_input = FileInput(
@@ -164,7 +168,7 @@ def compiler_data(
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
-    cache_key = str((contract_name, fingerprint, kwargs, deployer_id))
+    cache_key = str((contract_name, filename, fingerprint, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
 
@@ -188,9 +192,9 @@ def loads(
 ):
     d = loads_partial(source_code, name, filename=filename, compiler_args=compiler_args)
     if as_blueprint:
-        return d.deploy_as_blueprint(**kwargs)
+        return d.deploy_as_blueprint(contract_name=name, **kwargs)
     else:
-        return d.deploy(*args, **kwargs)
+        return d.deploy(*args, contract_name=name, **kwargs)
 
 
 def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
@@ -241,14 +245,6 @@ def loads_partial(
 ) -> VyperDeployer:
     if filename is None:
         filename = "<unknown>"
-
-    if name is None:
-        if isinstance(filename, Path) or (
-            isinstance(filename, str) and filename != "<unknown>"
-        ):
-            name = Path(filename).stem
-        else:
-            name = "VyperContract"
 
     if dedent:
         source_code = textwrap.dedent(source_code)

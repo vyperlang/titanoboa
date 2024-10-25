@@ -97,5 +97,5 @@ def foo() -> bool:
 
     c = boa.loads(code, filename=None, name=None)
 
-    assert c.contract_name == "VyperContract"
+    assert c.contract_name == "<unknown>"
     assert c.filename == "<unknown>"
