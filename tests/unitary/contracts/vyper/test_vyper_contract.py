@@ -100,6 +100,7 @@ def foo() -> bool:
     assert c.contract_name == "<unknown>"
     assert c.filename == "<unknown>"
 
+
 def test_stomp():
     code1 = """
 VAR: immutable(uint256)
