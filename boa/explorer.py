@@ -60,6 +60,8 @@ class Etherscan(ContractVerifier[str]):
                      or wait for verification to complete. Defaults to False
         """
         api_key = self.api_key or ""
+        output_selection = solc_json["settings"]["outputSelection"]
+        contract_file = next(k for k, v in output_selection.items() if "*" in v)
         data = {
             "module": "contract",
             "action": "verifysourcecode",
@@ -69,8 +71,8 @@ class Etherscan(ContractVerifier[str]):
             "sourceCode": json.dumps(solc_json),
             "constructorArguments": constructor_calldata.hex(),
             "contractaddress": address,
-            "contractname": contract_name,
-            "compilerversion": solc_json["compiler_version"],
+            "contractname": f"{contract_file}:{contract_name}",
+            "compilerversion": f"vyper:{solc_json['compiler_version'][1:]}",
             "licenseType": license_type,
             "optimizationUsed": "1",
         }

@@ -1,4 +1,6 @@
 import os
+from random import randint, sample
+from string import ascii_lowercase
 
 import pytest
 
@@ -50,8 +52,27 @@ def verifier(request):
     raise ValueError(f"Unknown verifier: {request.param}")
 
 
-def test_verify(simple_contract, verifier):
-    result = boa.verify(simple_contract, verifier)
+def test_verify(verifier):
+    # generate a random contract so the verification will actually be done again
+    name = "".join(sample(ascii_lowercase, 10))
+    value = randint(0, 2**256 - 1)
+    contract = boa.loads(
+        f"""
+    import module_lib
+
+    @deploy
+    def __init__(t: uint256):
+        if t == 0:
+            module_lib.throw()
+
+    @external
+    def {name}() -> uint256:
+        return {value}
+        """,
+        value,
+        name=name,
+    )
+    result = boa.verify(contract, verifier)
     result.wait_for_verification()
     assert result.is_verified()
 
