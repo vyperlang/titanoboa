@@ -72,3 +72,81 @@ def foo() -> bool:
     c = boa.loads(code)
 
     c.foo()
+
+
+def test_contract_name():
+    code = """
+@external
+def foo() -> bool:
+    return True
+    """
+    c = boa.loads(code, name="return_one", filename="return_one.vy")
+
+    assert c.contract_name == "return_one"
+    assert c.filename == "return_one.vy"
+
+    c = boa.loads(code, filename="a/b/return_one.vy")
+
+    assert c.contract_name == "return_one"
+    assert c.filename == "a/b/return_one.vy"
+
+    c = boa.loads(code, filename=None, name="dummy_name")
+
+    assert c.contract_name == "dummy_name"
+    assert c.filename == "<unknown>"
+
+    c = boa.loads(code, filename=None, name=None)
+
+    assert c.contract_name == "<unknown>"
+    assert c.filename == "<unknown>"
+
+
+def test_stomp():
+    code1 = """
+VAR: immutable(uint256)
+
+@deploy
+def __init__():
+    VAR = 12345
+
+@external
+def foo() -> uint256:
+    return VAR
+
+@external
+def bar() -> bool:
+    return True
+    """
+    code2 = """
+VAR: immutable(uint256)
+
+@deploy
+def __init__():
+    VAR = 12345
+
+@external
+def foo() -> uint256:
+    return VAR
+
+@external
+def bar() -> bool:
+    return False
+    """
+
+    deployer = boa.loads_partial(code1)
+
+    c = deployer.deploy()
+
+    assert c.foo() == 12345
+    assert c.bar() is True
+
+    deployer2 = boa.loads_partial(code2)
+
+    c2 = deployer2.stomp(c.address)
+
+    assert c2.foo() == 12345
+    assert c2.bar() is False
+
+    # the bytecode at the original contract has been stomped :scream:
+    assert c.foo() == 12345
+    assert c.bar() is False

@@ -22,12 +22,12 @@ def test_cache_contract_name():
 x: constant(int128) = 1000
 """
     assert _disk_cache is not None
-    test1 = compiler_data(code, "test1", __file__, VyperDeployer)
-    test2 = compiler_data(code, "test2", __file__, VyperDeployer)
-    test3 = compiler_data(code, "test1", __file__, VyperDeployer)
+    test1 = compiler_data(code, "test1", "test1.vy", VyperDeployer)
+    test2 = compiler_data(code, "test2", "test2.vy", VyperDeployer)
+    test3 = compiler_data(code, "test1", "test1.vy", VyperDeployer)
     assert _to_dict(test1) == _to_dict(test3), "Should hit the cache"
     assert _to_dict(test1) != _to_dict(test2), "Should be different objects"
-    assert str(test2.contract_path) == "test2"
+    assert str(test2.contract_path) == "test2.vy"
 
 
 def test_cache_vvm():

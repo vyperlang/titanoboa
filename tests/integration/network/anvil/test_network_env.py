@@ -73,9 +73,38 @@ def test_failed_transaction():
 # XXX: probably want to test deployment revert behavior
 
 
-def test_deployment_db():
+def test_deployment_db_overriden_contract_name():
     with set_deployments_db(DeploymentsDB(":memory:")) as db:
         arg = 5
+        contract_name = "test_deployment"
+
+        # contract is written to deployments db
+        contract = boa.loads(code, arg, contract_name=contract_name)
+
+        # test get_deployments()
+        deployment = next(db.get_deployments())
+
+        initcode = contract.compiler_data.bytecode + arg.to_bytes(32, "big")
+
+        # sanity check all the fields
+        assert deployment.contract_address == contract.address
+        assert deployment.contract_name == contract.contract_name
+        assert deployment.contract_name == contract_name
+        assert deployment.deployer == boa.env.eoa
+        assert deployment.rpc == boa.env._rpc.name
+        assert deployment.source_code == contract.deployer.solc_json
+        assert deployment.abi == contract.abi
+
+        # some sanity checks on tx_dict and rx_dict fields
+        assert to_bytes(deployment.tx_dict["data"]) == initcode
+        assert deployment.tx_dict["chainId"] == hex(boa.env.get_chain_id())
+        assert Address(deployment.receipt_dict["contractAddress"]) == contract.address
+
+
+def test_deployment_db_no_overriden_name():
+    with set_deployments_db(DeploymentsDB(":memory:")) as db:
+        arg = 5
+        non_contract_name = "test_deployment"
 
         # contract is written to deployments db
         contract = boa.loads(code, arg)
@@ -88,6 +117,7 @@ def test_deployment_db():
         # sanity check all the fields
         assert deployment.contract_address == contract.address
         assert deployment.contract_name == contract.contract_name
+        assert deployment.contract_name != non_contract_name
         assert deployment.deployer == boa.env.eoa
         assert deployment.rpc == boa.env._rpc.name
         assert deployment.source_code == contract.deployer.solc_json
