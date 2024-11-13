@@ -1,3 +1,4 @@
+import re
 import time
 from dataclasses import dataclass
 from datetime import timedelta
@@ -29,6 +30,7 @@ except ImportError:
     SESSION = Session()
 
 DEFAULT_ETHERSCAN_URI = "https://api.etherscan.io/api"
+VERSION_RE = re.compile(r"v(\d+\.\d+\.\d+)(\+commit.*)?")
 
 
 @dataclass
@@ -62,6 +64,11 @@ class Etherscan(ContractVerifier[str]):
         api_key = self.api_key or ""
         output_selection = solc_json["settings"]["outputSelection"]
         contract_file = next(k for k, v in output_selection.items() if "*" in v)
+        compiler_version = solc_json["compiler_version"]
+        version_match = re.match(VERSION_RE, compiler_version)
+        if not version_match:
+            raise ValueError(f"Failed to extract Vyper version from {compiler_version}")
+
         data = {
             "module": "contract",
             "action": "verifysourcecode",
@@ -72,7 +79,7 @@ class Etherscan(ContractVerifier[str]):
             "constructorArguments": constructor_calldata.hex(),
             "contractaddress": address,
             "contractname": f"{contract_file}:{contract_name}",
-            "compilerversion": f"vyper:{solc_json['compiler_version'][1:]}",
+            "compilerversion": f"vyper:{version_match.group(1)}",
             "licenseType": license_type,
             "optimizationUsed": "1",
         }
@@ -95,7 +102,7 @@ class Etherscan(ContractVerifier[str]):
             return None
 
         identifier = _wait_until(
-            verification_created, timedelta(seconds=30), timedelta(seconds=5), 1.1
+            verification_created, timedelta(minutes=2), timedelta(seconds=5), 1.1
         )
         print(f"Verification started with identifier {identifier}")
         if not wait:
