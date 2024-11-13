@@ -185,7 +185,8 @@ from ethereum.ercs import IERC20
 @external
 def foo(x: IERC20):
     extcall x.transfer(self, 100)
-    """
+    """,
+        name="VyperContract",
     )
     boa.env.set_balance(boa.env.eoa, 1000)
     with boa.reverts():
