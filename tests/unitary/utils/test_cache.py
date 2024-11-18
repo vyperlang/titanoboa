@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 import pytest
-from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 from vyper.compiler import CompilerData
 
 from boa.contracts.vyper.vyper_contract import VyperDeployer
@@ -35,8 +35,8 @@ def test_cache_vvm():
     code = """
 x: constant(int128) = 1000
 """
-    version = SpecifierSet("==0.2.8")
-    version2 = SpecifierSet("==0.3.1")
+    version = Version("0.2.8")
+    version2 = Version("0.3.1")
     assert _disk_cache is not None
 
     # Mock vvm.compile_source

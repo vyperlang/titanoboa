@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, Any, Union
 
 import vvm
 import vyper
-from packaging.specifiers import SpecifierSet
+from packaging.version import Version
+from vvm.utils.versioning import detect_vyper_version_from_source
 from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
@@ -35,7 +36,6 @@ from boa.explorer import Etherscan, get_etherscan
 from boa.rpc import json
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
-from boa.util.version import detect_version
 
 if TYPE_CHECKING:
     from vyper.semantics.analysis.base import ImportInfo
@@ -251,11 +251,13 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
-    version_set = detect_version(source_code)
-    if version_set is not None and not version_set.contains(vyper.__version__):
+    # TODO: let vvm know our preferred version (vyper.__version__)
+    version = detect_vyper_version_from_source(source_code)
+    if version is not None and version != Version(vyper.__version__):
         filename = str(filename)  # help mypy
         # TODO: pass name to loads_partial_vvm, not filename
-        return _loads_partial_vvm(source_code, version_set, filename)
+        return _loads_partial_vvm(source_code, version, filename)
+
     compiler_args = compiler_args or {}
 
     deployer_class = _get_default_deployer_class()
@@ -270,15 +272,8 @@ def load_partial(filename: str, compiler_args=None):
         )
 
 
-def _loads_partial_vvm(source_code: str, version_set: SpecifierSet, filename: str):
+def _loads_partial_vvm(source_code: str, version: Version, filename: str):
     global _disk_cache
-
-    available = vvm.get_installable_vyper_versions()
-    # get the most recent version compatible with the set
-    version = next(version_set.filter(available), None)
-
-    if version is None:
-        raise ValueError(f"no matching version found for {version_set}")
 
     # install the requested version if not already installed
     vvm.install_vyper(version=version)
