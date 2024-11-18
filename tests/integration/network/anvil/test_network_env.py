@@ -79,7 +79,7 @@ def test_deployment_db_overriden_contract_name():
         contract_name = "test_deployment"
 
         # contract is written to deployments db
-        contract = boa.loads(code, arg, contract_name=contract_name)
+        contract = boa.loads(code, arg, name=contract_name)
 
         # test get_deployments()
         deployment = next(db.get_deployments())
