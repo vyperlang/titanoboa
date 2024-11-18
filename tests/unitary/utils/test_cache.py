@@ -35,8 +35,8 @@ def test_cache_vvm():
     code = """
 x: constant(int128) = 1000
 """
-    version = SpecifierSet("0.2.8")
-    version2 = SpecifierSet("0.3.1")
+    version = SpecifierSet("==0.2.8")
+    version2 = SpecifierSet("==0.3.1")
     assert _disk_cache is not None
 
     # Mock vvm.compile_source
