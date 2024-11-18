@@ -29,6 +29,20 @@ def test_load_vvm():
     assert contract.bar() == 43
 
 
+def test_load_complex_version_vvm():
+    contracts = [
+        "# @version ^0.3.1",
+        "# @version ^0.3.7",
+        "# @version ==0.3.10",
+        "# pragma version >=0.3.8, <0.4.0, !=0.3.10",
+        # "# pragma version ==0.4.0rc3",
+        # TODO: uncomment when vvm is fixed (https://github.com/vyperlang/vvm/pull/29)
+    ]
+    for contract in contracts:
+        contract = boa.loads(contract + "\nfoo: public(uint256)")
+        assert contract.foo() == 0
+
+
 def test_loads_vvm():
     with open(mock_3_10_path) as f:
         code = f.read()
