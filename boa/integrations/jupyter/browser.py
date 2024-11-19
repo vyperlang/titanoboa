@@ -107,16 +107,10 @@ class BrowserSigner:
         if rpc is None:
             rpc = BrowserRPC()  # note: the browser window is global anyway
         self._rpc = rpc
-        address = getattr(address, "address", address)
-        accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
+        self._given_address = address
+        self.address = address
 
-        if address is None and len(accounts) > 0:
-            address = accounts[0]
-
-        if address not in accounts:
-            raise ValueError(f"Address {address} is not available in the browser")
-
-        self.address = Address(address)
+        self.update_address()
 
     def send_transaction(self, tx_data: dict) -> dict:
         """
@@ -143,6 +137,18 @@ class BrowserSigner:
             TRANSACTION_TIMEOUT_MESSAGE,
         )
 
+    def update_address(self):
+        address = getattr(self._given_address, "address", self._given_address)
+        accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
+
+        if address is None and len(accounts) > 0:
+            address = accounts[0]
+
+        if address not in accounts:
+            raise ValueError(f"Address {address} is not available in the browser")
+
+        self.address = Address(address)
+
 
 class BrowserEnv(NetworkEnv):
     """
@@ -154,7 +160,19 @@ class BrowserEnv(NetworkEnv):
     def __init__(self, address=None, **kwargs):
         super().__init__(self._rpc, **kwargs)
         self.signer = BrowserSigner(address, self._rpc)
-        self.set_eoa(self.signer)
+        self._update_signer()
+
+    def _update_signer(self):
+        self.signer.update_address()
+        self.add_account(self.signer, force_eoa=True)
+
+    def execute_code(self, *args, **kwargs):
+        self._update_signer()
+        return super().execute_code(*args, **kwargs)
+
+    def deploy(self, *args, **kwargs):
+        self._update_signer()
+        return super().deploy(*args, **kwargs)
 
     def set_chain_id(self, chain_id: int | str):
         self._rpc.fetch(
