@@ -110,6 +110,8 @@ class BrowserSigner:
         self._given_address = address
         self.address = address
 
+        self.update_address()
+
     def send_transaction(self, tx_data: dict) -> dict:
         """
         Implements the Account class' send_transaction method.
@@ -135,7 +137,7 @@ class BrowserSigner:
             TRANSACTION_TIMEOUT_MESSAGE,
         )
 
-    def update(self):
+    def update_address(self):
         address = getattr(self._given_address, "address", self._given_address)
         accounts = self._rpc.fetch("eth_requestAccounts", [], ADDRESS_TIMEOUT_MESSAGE)
 
@@ -146,7 +148,6 @@ class BrowserSigner:
             raise ValueError(f"Address {address} is not available in the browser")
 
         self.address = Address(address)
-        return self.address
 
 
 class BrowserEnv(NetworkEnv):
@@ -162,7 +163,7 @@ class BrowserEnv(NetworkEnv):
         self._update_signer()
 
     def _update_signer(self):
-        self.signer.update()
+        self.signer.update_address()
         self.add_account(self.signer, force_eoa=True)
 
     def execute_code(self, *args, **kwargs):

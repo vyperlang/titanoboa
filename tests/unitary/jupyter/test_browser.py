@@ -160,7 +160,6 @@ def test_browser_signer_colab(colab_eval_mock, mocked_token, display_mock):
     address = boa.env.generate_address()
     colab_eval_mock.return_value = json.dumps({"data": [address]})
     signer = BrowserSigner()
-    signer.update()
     assert signer.address == address
     colab_eval_mock.assert_called_once()
     (js,), _ = colab_eval_mock.call_args
@@ -315,5 +314,5 @@ def test_browser_js_error(token, display_mock, mock_callback, account, mock_fork
         "eth_requestAccounts", error={"message": "custom message", "stack": ""}
     )
     with pytest.raises(RPCError) as exc_info:
-        BrowserSigner().update()
+        BrowserSigner()
     assert str(exc_info.value) == "-1: custom message"
