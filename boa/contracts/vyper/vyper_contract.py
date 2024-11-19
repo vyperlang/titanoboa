@@ -56,6 +56,7 @@ from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
 from boa.profiling import cache_gas_used_for_computation
 from boa.util.abi import Address, abi_decode, abi_encode
+from boa.util.eip5202 import generate_blueprint_bytecode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -99,8 +100,8 @@ class VyperDeployer:
         address = Address(address)
 
         ret = self.deploy(override_address=address, skip_initcode=True)
-        vm = ret.env.vm
-        old_bytecode = vm.state.get_code(address.canonical_address)
+        vm = ret.env.evm
+        old_bytecode = vm.get_code(address)
         new_bytecode = self.compiler_data.bytecode_runtime
 
         immutables_size = self.compiler_data.global_ctx.immutable_section_bytes
@@ -108,7 +109,7 @@ class VyperDeployer:
             data_section = old_bytecode[-immutables_size:]
             new_bytecode += data_section
 
-        vm.state.set_code(address.canonical_address, new_bytecode)
+        vm.set_code(address, new_bytecode)
         ret.env.register_contract(address, ret)
         ret._set_bytecode(new_bytecode)
         return ret
@@ -143,10 +144,13 @@ class _BaseVyperContract(_BaseEVMContract):
     def __init__(
         self,
         compiler_data: CompilerData,
+        contract_name: Optional[str] = None,
         env: Optional[Env] = None,
         filename: Optional[str] = None,
     ):
-        contract_name = Path(compiler_data.contract_path).stem
+        if contract_name is None:
+            contract_name = Path(compiler_data.contract_path).stem
+
         super().__init__(contract_name, env, filename)
         self.compiler_data = compiler_data
 
@@ -183,24 +187,16 @@ class VyperBlueprint(_BaseVyperContract):
         compiler_data,
         env=None,
         override_address=None,
-        blueprint_preamble=b"\xFE\x71\x00",
+        blueprint_preamble=None,
+        contract_name=None,
         filename=None,
         gas=None,
     ):
-        # note slight code duplication with VyperContract ctor,
-        # maybe use common base class?
-        super().__init__(compiler_data, env, filename)
+        super().__init__(compiler_data, contract_name, env, filename)
 
-        if blueprint_preamble is None:
-            blueprint_preamble = b""
-
-        blueprint_bytecode = blueprint_preamble + compiler_data.bytecode
-
-        # the length of the deployed code in bytes
-        len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
-        deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
-
-        deploy_bytecode += blueprint_bytecode
+        deploy_bytecode = generate_blueprint_bytecode(
+            compiler_data.bytecode, blueprint_preamble
+        )
 
         addr, computation = self.env.deploy(
             bytecode=deploy_bytecode, override_address=override_address, gas=gas
@@ -522,10 +518,11 @@ class VyperContract(_BaseVyperContract):
         # whether to skip constructor
         skip_initcode=False,
         created_from: Address = None,
+        contract_name=None,
         filename: str = None,
         gas=None,
     ):
-        super().__init__(compiler_data, env, filename)
+        super().__init__(compiler_data, contract_name, env, filename)
 
         self.created_from = created_from
         self._computation = None

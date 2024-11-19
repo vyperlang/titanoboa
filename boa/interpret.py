@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Union
 
 import vvm
 import vyper
+from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
     ABIInput,
@@ -17,6 +18,7 @@ from vyper.compiler.input_bundle import (
 )
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings
+from vyper.semantics.analysis.module import analyze_module
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
@@ -127,11 +129,15 @@ def get_module_fingerprint(
 
 
 def compiler_data(
-    source_code: str, contract_name: str, filename: str | Path, deployer=None, **kwargs
+    source_code: str,
+    contract_name: str | None,
+    filename: str | Path,
+    deployer=None,
+    **kwargs,
 ) -> CompilerData:
     global _disk_cache, _search_path
 
-    path = Path(contract_name)
+    path = Path(filename)
     resolved_path = Path(filename).resolve(strict=False)
 
     file_input = FileInput(
@@ -162,7 +168,7 @@ def compiler_data(
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
-    cache_key = str((contract_name, fingerprint, kwargs, deployer_id))
+    cache_key = str((contract_name, filename, fingerprint, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
 
@@ -186,20 +192,48 @@ def loads(
 ):
     d = loads_partial(source_code, name, filename=filename, compiler_args=compiler_args)
     if as_blueprint:
-        return d.deploy_as_blueprint(**kwargs)
+        return d.deploy_as_blueprint(contract_name=name, **kwargs)
     else:
-        return d.deploy(*args, **kwargs)
+        return d.deploy(*args, contract_name=name, **kwargs)
 
 
 def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     if name is None:
         name = Path(filename).stem
+    # TODO: pass filename to ABIContractFactory
     with open(filename) as fp:
         return loads_abi(fp.read(), *args, name=name, **kwargs)
 
 
 def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
+
+
+# load from .vyi file.
+# NOTE: substantially same interface as load_abi and loads_abi, consider
+# fusing them into load_interface?
+def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
+    if name is None:
+        name = Path(filename).stem
+    with open(filename) as fp:
+        return loads_vyi(fp.read(), name=name, filename=filename)
+
+
+# load interface from .vyi file string contents.
+def loads_vyi(source_code: str, name: str = None, filename: str = None):
+    global _search_path
+
+    ast = parse_to_ast(source_code)
+
+    if name is None:
+        name = "VyperContract.vyi"
+
+    search_paths = get_search_paths(_search_path)
+    input_bundle = FilesystemInputBundle(search_paths)
+
+    module_t = analyze_module(ast, input_bundle, is_interface=True)
+    abi = module_t.interface.to_toplevel_abi_dict()
+    return ABIContractFactory(name, abi, filename=filename)
 
 
 def loads_partial(
@@ -209,8 +243,8 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
-    name = name or "VyperContract"
-    filename = filename or "<unknown>"
+    if filename is None:
+        filename = "<unknown>"
 
     if dedent:
         source_code = textwrap.dedent(source_code)
