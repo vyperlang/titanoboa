@@ -25,7 +25,7 @@ dependencies = [
     "pytest-cov",
 
     # required to compile older versions of vyper
-    "vvm",
+    "vvm>=0.3.2",
 
     # eth-rlp requirement, not installed by default with 3.12
     "typing-extensions",

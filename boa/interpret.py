@@ -9,7 +9,10 @@ from typing import TYPE_CHECKING, Any, Union
 import vvm
 import vyper
 from packaging.version import Version
-from vvm.utils.versioning import detect_vyper_version_from_source
+from vvm.utils.versioning import (
+    detect_version_specifier_set,
+    detect_vyper_version_from_source,
+)
 from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
@@ -251,9 +254,10 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
-    # TODO: let vvm know our preferred version (vyper.__version__)
-    version = detect_vyper_version_from_source(source_code)
-    if version is not None and version != Version(vyper.__version__):
+    specifier_set = detect_version_specifier_set(source_code)
+    # Use VVM only if the installed version is not in the specifier set
+    if specifier_set is not None and not specifier_set.contains(vyper.__version__):
+        version = detect_vyper_version_from_source(source_code)
         filename = str(filename)  # help mypy
         # TODO: pass name to loads_partial_vvm, not filename
         return _loads_partial_vvm(source_code, version, filename)

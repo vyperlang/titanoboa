@@ -39,10 +39,8 @@ def test_load_vvm():
         "# @version ==0.3.10",
         "# @version ~=0.3.10",
         "# @version 0.3.10",
-        # "# pragma version >=0.3.8, <0.4.0, !=0.3.10",
-        # TODO: uncomment when vvm accept Specifier sets
-        # "# pragma version ==0.4.0rc3",
-        # TODO: uncomment when vvm is fixed (https://github.com/vyperlang/vvm/pull/29)
+        "# pragma version >=0.3.8, <0.4.0, !=0.3.10",
+        "# pragma version ==0.4.0rc3",
     ],
 )
 def test_load_complex_version_vvm(version_pragma):
