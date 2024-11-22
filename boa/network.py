@@ -403,7 +403,9 @@ class NetworkEnv(Env):
 
         if (deployments_db := get_deployments_db()) is not None:
             contract_name = getattr(contract, "contract_name", None)
-            filename = getattr(contract, "filename", None)
+            if (filename := getattr(contract, "filename", None)) is not None:
+                filename = str(filename)
+
             try:
                 source_bundle = get_verification_bundle(contract)
             except Exception as e:
