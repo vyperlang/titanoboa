@@ -72,6 +72,12 @@ git commit -m 'your commit message'
 git push <your_forked_github>
 ```
 
+4. Run the linter
+
+```bash
+make lint
+```
+
 ## Running Tests
 
 Once you have your environment setup, you can run the tests to make sure everything is working as expected. You'll need to have your virtual environment activated to run the tests.
