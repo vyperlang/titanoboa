@@ -153,5 +153,8 @@ def test_deployments_db_migration(temp_legacy_db_path):
     columns = [col[1] for col in cursor.fetchall()]
     assert "filename" not in columns
 
+    # This next line is what does the migration (added the filename column)
     db = DeploymentsDB(temp_legacy_db_path)
-    assert db._filename_is_in_db() is True
+    cursor = db.db.execute("PRAGMA table_info(deployments);")
+    columns = [col[1] for col in cursor.fetchall()]
+    assert "filename" in columns

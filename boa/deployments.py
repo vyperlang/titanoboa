@@ -115,9 +115,7 @@ class DeploymentsDB:
         self.db.execute(_CREATE_CMD)
 
         # Migration for legacy DB without filename column
-        if not self._filename_is_in_db():
-            self.db.execute("ALTER TABLE deployments ADD COLUMN filename text;")
-            self.db.commit()
+        self._apply_filename_migration()
 
     def __del__(self):
         self.db.close()
@@ -133,12 +131,14 @@ class DeploymentsDB:
         self.db.execute(insert_cmd, tuple(values.values()))
         self.db.commit()
 
-    def _filename_is_in_db(self) -> bool:
+    def _apply_filename_migration(self) -> None:
         cursor = self.db.execute("PRAGMA table_info(deployments);")
         columns = [col[1] for col in cursor.fetchall()]
-        if "filename" in columns:
-            return True
-        return False
+        is_in_db = "filename" in columns
+        if is_in_db:
+            return
+        self.db.execute("ALTER TABLE deployments ADD COLUMN filename text;")
+        self.db.commit()
 
     def _get_deployments_from_sql(self, sql_query: str, parameters=(), /):
         cur = self.db.execute(sql_query, parameters)
