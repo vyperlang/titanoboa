@@ -67,8 +67,7 @@ git checkout -b <branch_name>
 And start making your changes! Once you're done, you can commit your changes and push them to your forked repo.
 
 ```bash
-git add .
-git commit -m 'your commit message'
+git commit -a
 git push <your_forked_github>
 ```
 
