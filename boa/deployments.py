@@ -32,6 +32,7 @@ def get_session_id():
 class Deployment:
     contract_address: Address  # receipt_dict["createAddress"]
     contract_name: str
+    filename: str
     rpc: str
     deployer: Address  # ostensibly equal to tx_dict["from"]
     tx_hash: str
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS
         session_id text,
         contract_address text,
         contract_name text,
+        filename text,
         rpc text,
         deployer text,
         tx_hash text,
@@ -112,14 +114,14 @@ class DeploymentsDB:
         self.db = sqlite3.connect(path)
         self.db.execute(_CREATE_CMD)
 
-        # Migration for legacy DB without ABI column
-        if not self._abi_is_in_db():
+        # Migration for legacy DB without filename column
+        if not self._filename_is_in_db():
             try:
-                self.db.execute("ALTER TABLE deployments ADD COLUMN abi text;")
+                self.db.execute("ALTER TABLE deployments ADD COLUMN filename text;")
                 self.db.commit()
             except sqlite3.Error as e:
                 self.db.rollback()
-                raise Exception(f"Failed to add 'abi' column: {e}")
+                raise Exception(f"Failed to add 'filename' column: {e}")
 
     def __del__(self):
         self.db.close()
@@ -135,10 +137,10 @@ class DeploymentsDB:
         self.db.execute(insert_cmd, tuple(values.values()))
         self.db.commit()
 
-    def _abi_is_in_db(self) -> bool:
+    def _filename_is_in_db(self) -> bool:
         cursor = self.db.execute("PRAGMA table_info(deployments);")
         columns = [col[1] for col in cursor.fetchall()]
-        if "abi" in columns:
+        if "filename" in columns:
             return True
         return False
 
