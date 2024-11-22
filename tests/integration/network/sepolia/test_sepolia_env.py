@@ -1,8 +1,11 @@
 import os
+from random import randint, sample
+from string import ascii_lowercase
 
 import pytest
 
 import boa
+from boa import Etherscan
 from boa.deployments import DeploymentsDB, set_deployments_db
 from boa.network import NetworkEnv
 from boa.rpc import to_bytes
@@ -38,13 +41,40 @@ def simple_contract():
     return boa.loads(code, STARTING_SUPPLY)
 
 
-def test_verify(simple_contract):
-    api_key = os.getenv("BLOCKSCOUT_API_KEY")
-    blockscout = Blockscout("https://eth-sepolia.blockscout.com", api_key)
-    with boa.set_verifier(blockscout):
-        result = boa.verify(simple_contract)
-        result.wait_for_verification()
-        assert result.is_verified()
+@pytest.fixture(scope="module", params=[Etherscan, Blockscout])
+def verifier(request):
+    if request.param == Blockscout:
+        api_key = os.getenv("BLOCKSCOUT_API_KEY")
+        return Blockscout("https://eth-sepolia.blockscout.com", api_key)
+    elif request.param == Etherscan:
+        api_key = os.environ["ETHERSCAN_API_KEY"]
+        return Etherscan("https://api-sepolia.etherscan.io/api", api_key)
+    raise ValueError(f"Unknown verifier: {request.param}")
+
+
+def test_verify(verifier):
+    # generate a random contract so the verification will actually be done again
+    name = "".join(sample(ascii_lowercase, 10))
+    value = randint(0, 2**256 - 1)
+    contract = boa.loads(
+        f"""
+    import module_lib
+
+    @deploy
+    def __init__(t: uint256):
+        if t == 0:
+            module_lib.throw()
+
+    @external
+    def {name}() -> uint256:
+        return {value}
+        """,
+        value,
+        name=name,
+    )
+    result = boa.verify(contract, verifier)
+    result.wait_for_verification()
+    assert result.is_verified()
 
 
 def test_env_type():
