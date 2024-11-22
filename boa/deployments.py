@@ -110,8 +110,16 @@ class DeploymentsDB:
 
         # once 3.12 is min version, use autocommit=True
         self.db = sqlite3.connect(path)
-
         self.db.execute(_CREATE_CMD)
+
+        # Migration for legacy DB without ABI column
+        if not self._abi_is_in_db():
+            try:
+                self.db.execute("ALTER TABLE deployments ADD COLUMN abi text;")
+                self.db.commit()
+            except sqlite3.Error as e:
+                self.db.rollback()
+                raise Exception(f"Failed to add 'abi' column: {e}")
 
     def __del__(self):
         self.db.close()
@@ -126,6 +134,13 @@ class DeploymentsDB:
 
         self.db.execute(insert_cmd, tuple(values.values()))
         self.db.commit()
+
+    def _abi_is_in_db(self) -> bool:
+        cursor = self.db.execute("PRAGMA table_info(deployments);")
+        columns = [col[1] for col in cursor.fetchall()]
+        if "abi" in columns:
+            return True
+        return False
 
     def _get_deployments_from_sql(self, sql_query: str, parameters=(), /):
         cur = self.db.execute(sql_query, parameters)
