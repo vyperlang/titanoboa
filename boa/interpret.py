@@ -11,7 +11,7 @@ import vyper
 from packaging.version import Version
 from vvm.utils.versioning import (
     detect_version_specifier_set,
-    detect_vyper_version_from_source,
+    _pick_vyper_version,
 )
 from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
@@ -257,7 +257,7 @@ def loads_partial(
     specifier_set = detect_version_specifier_set(source_code)
     # Use VVM only if the installed version is not in the specifier set
     if specifier_set is not None and not specifier_set.contains(vyper.__version__):
-        version = detect_vyper_version_from_source(source_code)
+        version = _pick_vyper_version(specifier_set)
         filename = str(filename)  # help mypy
         # TODO: pass name to loads_partial_vvm, not filename
         return _loads_partial_vvm(source_code, version, filename)
