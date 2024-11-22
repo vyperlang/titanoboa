@@ -1,16 +1,16 @@
+import sqlite3
+import tempfile
+from pathlib import Path
+
 import pytest
 from hypothesis import given, settings
 
 import boa
 import boa.test.strategies as vy
-from boa.deployments import DeploymentsDB, set_deployments_db
+from boa.deployments import _CREATE_CMD, DeploymentsDB, set_deployments_db
 from boa.network import NetworkEnv
 from boa.rpc import to_bytes
 from boa.util.abi import Address
-import tempfile
-from pathlib import Path
-import sqlite3
-from boa.deployments import _CREATE_CMD
 
 code = """
 totalSupply: public(uint256)
