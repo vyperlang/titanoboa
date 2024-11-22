@@ -9,10 +9,7 @@ from typing import TYPE_CHECKING, Any, Union
 import vvm
 import vyper
 from packaging.version import Version
-from vvm.utils.versioning import (
-    detect_version_specifier_set,
-    _pick_vyper_version,
-)
+from vvm.utils.versioning import _pick_vyper_version, detect_version_specifier_set
 from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
