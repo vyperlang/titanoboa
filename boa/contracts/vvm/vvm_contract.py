@@ -1,21 +1,8 @@
-import re
 from functools import cached_property
 
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
 from boa.environment import Env
 from boa.util.eip5202 import generate_blueprint_bytecode
-
-# TODO: maybe this doesn't detect release candidates
-VERSION_RE = re.compile(r"\s*#\s*(pragma\s+version|@version)\s+(\d+\.\d+\.\d+)")
-
-
-# TODO: maybe move this up to vvm?
-def _detect_version(source_code: str):
-    res = VERSION_RE.findall(source_code)
-    if len(res) < 1:
-        return None
-    # TODO: handle len(res) > 1
-    return res[0][1]
 
 
 class VVMDeployer:

@@ -1,3 +1,5 @@
+import pytest
+
 import boa
 
 mock_3_10_path = "tests/unitary/contracts/vvm/mock_3_10.vy"
@@ -27,6 +29,23 @@ def test_load_vvm():
 
     assert contract.foo() == 42
     assert contract.bar() == 43
+
+
+@pytest.mark.parametrize(
+    "version_pragma",
+    [
+        "# @version ^0.3.1",
+        "# @version ^0.3.7",
+        "# @version ==0.3.10",
+        "# @version ~=0.3.10",
+        "# @version 0.3.10",
+        "# pragma version >=0.3.8, <0.4.0, !=0.3.10",
+        "# pragma version ==0.4.0rc3",
+    ],
+)
+def test_load_complex_version_vvm(version_pragma):
+    contract = boa.loads(version_pragma + "\nfoo: public(uint256)")
+    assert contract.foo() == 0
 
 
 def test_loads_vvm():
