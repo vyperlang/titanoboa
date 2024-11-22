@@ -115,6 +115,7 @@ class DeploymentsDB:
         self.db.execute(_CREATE_CMD)
 
         # Migration for legacy DB without filename column
+        # We can/should remove this after some time (all 4 users migrate)
         self._apply_filename_migration()
 
     def __del__(self):
@@ -138,7 +139,6 @@ class DeploymentsDB:
         if is_in_db:
             return
         self.db.execute("ALTER TABLE deployments ADD COLUMN filename text;")
-        self.db.commit()
 
     def _get_deployments_from_sql(self, sql_query: str, parameters=(), /):
         cur = self.db.execute(sql_query, parameters)
