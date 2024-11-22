@@ -116,12 +116,8 @@ class DeploymentsDB:
 
         # Migration for legacy DB without filename column
         if not self._filename_is_in_db():
-            try:
-                self.db.execute("ALTER TABLE deployments ADD COLUMN filename text;")
-                self.db.commit()
-            except sqlite3.Error as e:
-                self.db.rollback()
-                raise Exception(f"Failed to add 'filename' column: {e}")
+            self.db.execute("ALTER TABLE deployments ADD COLUMN filename text;")
+            self.db.commit()
 
     def __del__(self):
         self.db.close()
