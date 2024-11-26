@@ -38,6 +38,7 @@ dependencies = [
 
     # required for networked accounts
     "eth-account>=0.13.0",
+    "mkdocs-material==9.5.41 ",
 ]
 
 [project.optional-dependencies]

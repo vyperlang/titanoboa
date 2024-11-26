@@ -1,0 +1,123 @@
+site_name: Titanoboa Documentation
+repo_name: titanoboa
+repo_url: https://github.com/vyperlang/titanoboa
+strict: true
+
+theme:
+  name: material
+  logo: assets/images/titanoboa-symbol-col.svg
+  icon:
+    repo: simple/github
+  palette:
+    scheme: default
+    primary: "#9F4CF2"
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - navigation.sections
+
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+
+nav:
+  - Overview: index.md
+  - Getting Started:
+    - Installing titanoboa: tutorials/install.md
+    - Writing unit tests with pytest: tutorials/pytest.md
+    - Debugging contracts: tutorials/debug.md
+  - Guides:
+    - Scripting:
+      - Interactive Vyper Notebooks: guides/scripting/ipython_vyper_cells.md
+      - Native Import Syntax: guides/scripting/native_import_syntax.md
+    - Testing:
+      - Accessing Private Members: guides/testing/private_members.md
+      - Computing Test Coverage: guides/testing/coverage.md
+      - Stateful Testing with Hypothesis: guides/testing/fuzzing_strategies.md
+      - Gas profiling: guides/testing/gas_profiling.md
+    - Forge Analogues: guides/forge.md
+  - API Reference:
+    - boa:
+      - Loading Contracts: api/load_contracts.md
+      - Testing and Forking: api/testing.md
+      - Verify Deployed Contracts:
+        - get_verifier: api/verify/get_verifier.md
+        - set_verifier: api/verify/set_verifier.md
+        - verify: api/verify/verify.md
+        - Overview: api/verify/overview.md
+      - EVM and Precompiles:
+        - register_precompile: api/pyevm/register_precompile.md
+        - deregister_precomile: api/pyevm/deregister_precompile.md
+        - patch_opcode: api/pyevm/patch_opcode.md
+      - Exceptions:
+        - BoaError: api/exceptions/boa_error.md
+      - Cache: api/cache.md
+    - Environment:
+      - Pick your environment: api/env/singleton.md
+      - Env: api/env/env.md
+      - NetworkEnv: api/env/network_env.md
+      - BrowserEnv: api/env/browser_env.md
+    - VyperContract:
+      - Overview: api/vyper_contract/overview.md
+      - eval: api/vyper_contract/eval.md
+      - deployer: api/vyper_contract/deployer.md
+      - at: api/vyper_contract/at.md
+      - marshal_to_python: api/vyper_contract/marshal_to_python.md
+      - stack_trace: api/vyper_contract/stack_trace.md
+      - trace_source: api/vyper_contract/trace_source.md
+      - get_logs: api/vyper_contract/get_logs.md
+      - decode_log: api/vyper_contract/decode_log.md
+      - inject_function: api/vyper_contract/inject_function.md
+    - VyperDeployer:
+      - Overview: api/vyper_deployer/overview.md
+      - deploy: api/vyper_deployer/deploy.md
+      - deploy_as_blueprint: api/vyper_deployer/deploy_as_blueprint.md
+      - stomp: api/vyper_deployer/stomp.md
+      - at: api/vyper_deployer/at.md
+      - standard_json: api/vyper_deployer/standard_json.md
+      - _constants: api/vyper_deployer/_constants.md
+      - __call__: api/vyper_deployer/__call__.md
+    - VyperBlueprint: api/vyper_blueprint/overview.md
+    - _BaseEVMContract:
+      - Overview: api/common_classes/_BaseEVMContract.md
+      - stack_trace: api/common_classes/stack_trace.md
+      - call_trace: api/common_classes/call_trace.md
+      - handle_error: api/common_classes/handle_error.md
+      - address: api/common_classes/address.md
+    - _BaseVyperContract:
+      - Overview: api/common_classes/_BaseVyperContract.md
+      - deployer: api/common_classes/deployer.md
+      - abi: api/common_classes/abi.md
+      - _constants: api/common_classes/_constants.md
+    - VyperInternalFunction: api/vyper_internal_function/overview.md
+    - ABIContract: api/abi_contract/overview.md
+    - VVMDeployer:
+      - Overview: api/vvm_deployer/overview.md
+      - __init__: api/vvm_deployer/__init__.md
+      - from_compiler_output: api/vvm_deployer/from_compiler_output.md
+      - factory: api/vvm_deployer/factory.md
+      - constructor: api/vvm_deployer/constructor.md
+      - deploy: api/vvm_deployer/deploy.md
+      - __call__: api/vvm_deployer/__call__.md
+      - at: api/vvm_deployer/at.md
+  - Explanations:
+    - Transaction context: explain/tx_context.md
+    - Revert reasons: explain/revert_reasons.md
+    - Singleton Env: explain/singleton_env.md
+    - Legacy Vyper Contracts: explain/vvm_contracts.md
+    - Caching: explain/caching.md
+
+extra_css:
+  - assets/stylesheets/extra.css
+  - https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;500;600;700;800;900&display=swap
+
+extra_javascript:
+  - assets/javascript/extra.js
