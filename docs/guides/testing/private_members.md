@@ -54,11 +54,11 @@ import foo
 my_contract = foo(1234)
 
 my_contract._immutables.y # returns 1234
-``` 
+```
 
 ## Accessing internal module variables
 
-Since vyper 0.4.0 it is possible to modularize contracts. 
+Since vyper 0.4.0 it is possible to modularize contracts.
 
 Boa doesn't yet support accessing private module variables. However this can easily be done using [`eval`]() TODO.
 
@@ -86,4 +86,3 @@ foo = boa.load("foo.vy")
 
 foo.eval("bar.x") # returns the value of bar.x
 ```
-

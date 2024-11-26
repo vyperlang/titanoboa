@@ -11,6 +11,3 @@ However this comes with a performance overhead and some limitations, here's a no
 - The correct version of the compiler has to be downloaded on the fly, which can be slow on the first run.
 - Functionalities that are specific to [`VyperContract`](../api/vyper_contract/overview.md) might not be available (i.e. pretty error traces).
 - Using a legacy Vyper contract is not recommended as older versions contain known bugs and security issues.
-
-
-

@@ -19,21 +19,21 @@ It includes methods for handling contract deployment, execution, and interaction
 ### Examples
 
 !!!python
-    
+
     ```python
     deployer = boa.loads_partial("""
     # pragma version 0.3.10
-    
+
     foo: public(uint256)
     bar: public(uint256)
-    
+
     @external
     def __init__(bar: uint256):
         self.foo = 42
         self.bar = bar
     """)
     contract = deployer.deploy()
-    
+
     >>> type(deployer)
     <class 'boa.contracts.vvm.vvm_contract.VVMDeployer'>
 

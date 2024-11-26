@@ -26,4 +26,3 @@ Finally, `coverage.py` saves coverage data to a file named `.coverage` in the di
 
 !!! note
     Coverage is experimental and there may be odd corner cases! If so, please report them on github or in the `#titanoboa-interpreter` channel of the [Vyper discord](https://discord.gg/6tw7PTM7C2).
-

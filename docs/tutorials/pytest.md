@@ -12,10 +12,10 @@ Let's start with a simple example contract `Example.vy`:
 
     ```vyper
     foo: public(uint256)
-    
+
     @external
     def set_foo(foo: uint256):
-        self.foo = foo 
+        self.foo = foo
     ```
 
 We want to test that the `set_foo` function works correctly. That is, given an input, it should set the `foo` variable to the input value.
@@ -28,7 +28,7 @@ We first create a [pytest fixture](https://docs.pytest.org/en/8.3.x/how-to/fixtu
     ```python
     import pytest
     import boa
-    
+
     @pytest.fixture
     def example():
         return boa.load("Example.vy")
@@ -53,9 +53,9 @@ We can run the test by calling `pytest`:
     ============================= test session starts ==============================
     ...
     collected 1 item
-    
+
     test_example.py::test_set_foo PASSED
-    
+
     ============================== 1 passed in 0.01s ===============================
     ```
 

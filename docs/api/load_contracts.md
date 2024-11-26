@@ -12,7 +12,7 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Description**
 
-    The `load` function is designed to compile a Vyper contract from a file located on disk. It provides a straightforward way to deploy contracts by reading the source code from the specified file path. 
+    The `load` function is designed to compile a Vyper contract from a file located on disk. It provides a straightforward way to deploy contracts by reading the source code from the specified file path.
 
     ---
 
@@ -34,8 +34,8 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Returns**
 
-    A [`VyperContract`](vyper_contract/overview.md), [`VyperBlueprint`](vyper_blueprint/overview.md), or [`ABIContract`](abi_contract/overview.md) instance. 
-    
+    A [`VyperContract`](vyper_contract/overview.md), [`VyperBlueprint`](vyper_blueprint/overview.md), or [`ABIContract`](abi_contract/overview.md) instance.
+
     If a legacy Vyper version is detected, an `ABIContract` may be returned due to VVM usage. See [Legacy Vyper Contracts](../explain/vvm_contracts.md) for more details.
 
     ---
@@ -52,7 +52,7 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Description**
 
-    The `load_abi` function allows you to load a contract's ABI from a JSON file. 
+    The `load_abi` function allows you to load a contract's ABI from a JSON file.
 
     ---
 
@@ -82,7 +82,7 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Description**
 
-    The `load_partial` function is used to compile a Vyper contract from a file and return a deployer instance. 
+    The `load_partial` function is used to compile a Vyper contract from a file and return a deployer instance.
 
     ---
 
@@ -96,8 +96,8 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Returns**
 
-    A [`VyperDeployer`](vyper_deployer/overview.md) or [`VVMDeployer`](vvm_deployer/overview.md) instance. 
-    
+    A [`VyperDeployer`](vyper_deployer/overview.md) or [`VVMDeployer`](vvm_deployer/overview.md) instance.
+
     If a legacy Vyper version is detected, a `VVMDeployer` may be returned due to VVM usage. See [Legacy Vyper Contracts](../explain/vvm_contracts.md) for more details.
 
     ---
@@ -114,7 +114,7 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Description**
 
-    The `load_vyi` function is designed to load a Vyper interface from a `.vyi` file. 
+    The `load_vyi` function is designed to load a Vyper interface from a `.vyi` file.
 
     ---
 
@@ -167,8 +167,8 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Returns**
 
-    A [`VyperContract`](vyper_contract/overview.md), [`VyperBlueprint`](vyper_blueprint/overview.md), or [`ABIContract`](abi_contract/overview.md) instance. 
-    
+    A [`VyperContract`](vyper_contract/overview.md), [`VyperBlueprint`](vyper_blueprint/overview.md), or [`ABIContract`](abi_contract/overview.md) instance.
+
     If a legacy Vyper version is detected, an `ABIContract` may be returned due to VVM usage. See [Legacy Vyper Contracts](../explain/vvm_contracts.md) for more details.
 
     ---
@@ -185,7 +185,7 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Description**
 
-    The `loads_abi` function creates an `ABIContract` from a JSON string representing the contract's ABI. 
+    The `loads_abi` function creates an `ABIContract` from a JSON string representing the contract's ABI.
 
     ---
 
@@ -228,8 +228,8 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Returns**
 
-    A [`VyperDeployer`](vyper_deployer/overview.md) or [`VVMDeployer`](vvm_deployer/overview.md) instance. 
-    
+    A [`VyperDeployer`](vyper_deployer/overview.md) or [`VVMDeployer`](vvm_deployer/overview.md) instance.
+
     If a legacy Vyper version is detected, a `VVMDeployer` may be returned due to VVM usage. See [Legacy Vyper Contracts](../explain/vvm_contracts.md) for more details.
 
     ---

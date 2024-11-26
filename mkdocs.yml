@@ -3,7 +3,7 @@ repo_name: titanoboa
 repo_url: https://github.com/vyperlang/titanoboa
 strict: true
 
-theme: 
+theme:
   name: material
   logo: assets/images/titanoboa-symbol-col.svg
   icon:
@@ -21,7 +21,7 @@ theme:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences 
+  - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.highlight:
@@ -34,8 +34,8 @@ nav:
     - Installing titanoboa: tutorials/install.md
     - Writing unit tests with pytest: tutorials/pytest.md
     - Debugging contracts: tutorials/debug.md
-  - Guides: 
-    - Scripting: 
+  - Guides:
+    - Scripting:
       - Interactive Vyper Notebooks: guides/scripting/ipython_vyper_cells.md
       - Native Import Syntax: guides/scripting/native_import_syntax.md
     - Testing:

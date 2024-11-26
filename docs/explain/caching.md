@@ -38,6 +38,6 @@ Alternatively, call [`disable_cache`](../api/cache.md#disable_cache) to disable 
 The utility [`from_etherscan`](../api/load_contracts.md#from_etherscan) fetches the ABI for a contract at a given address from Etherscan and returns an `ABIContract` instance.
 
 Given Etherscan is rate-limited, it is recommended to cache the results.
-In order to enable this, Titanoboa uses the [requests_cache](https://pypi.org/project/requests-cache/) package. 
+In order to enable this, Titanoboa uses the [requests_cache](https://pypi.org/project/requests-cache/) package.
 
 If the package is available in the environment, all requests to Etherscan will be cached.
