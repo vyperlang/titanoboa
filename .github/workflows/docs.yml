@@ -1,0 +1,35 @@
+name: ci 
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PUBLISH: ${{ contains(fromJSON('["master", "main"]'), github.ref_name) && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+          cache: 'pip'
+      - uses: actions/cache@v4
+        with:
+          key: ${{ github.ref }}  # cache by branch
+          path: .cache
+      - run: pip install -r requirements.txt
+
+      - run: mkdocs build
+        if: env.PUBLISH == 'false'
+
+      - uses: actions/upload-artifact@v4
+        if: env.PUBLISH == 'false'
+        with:
+          name: site
+          path: site
+
+      - run: mkdocs gh-deploy --force
+        if: env.PUBLISH == 'true'
