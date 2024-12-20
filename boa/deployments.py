@@ -32,6 +32,7 @@ def get_session_id():
 class Deployment:
     contract_address: Address  # receipt_dict["createAddress"]
     contract_name: str
+    filename: str
     rpc: str
     deployer: Address  # ostensibly equal to tx_dict["from"]
     tx_hash: str
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS
         session_id text,
         contract_address text,
         contract_name text,
+        filename text,
         rpc text,
         deployer text,
         tx_hash text,
@@ -110,8 +112,11 @@ class DeploymentsDB:
 
         # once 3.12 is min version, use autocommit=True
         self.db = sqlite3.connect(path)
-
         self.db.execute(_CREATE_CMD)
+
+        # Migration for legacy DB without filename column
+        # We can/should remove this after some time (all 4 users migrate)
+        self._apply_filename_migration()
 
     def __del__(self):
         self.db.close()
@@ -126,6 +131,14 @@ class DeploymentsDB:
 
         self.db.execute(insert_cmd, tuple(values.values()))
         self.db.commit()
+
+    def _apply_filename_migration(self) -> None:
+        cursor = self.db.execute("PRAGMA table_info(deployments);")
+        columns = [col[1] for col in cursor.fetchall()]
+        is_in_db = "filename" in columns
+        if is_in_db:
+            return
+        self.db.execute("ALTER TABLE deployments ADD COLUMN filename text;")
 
     def _get_deployments_from_sql(self, sql_query: str, parameters=(), /):
         cur = self.db.execute(sql_query, parameters)

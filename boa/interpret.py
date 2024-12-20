@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Union
 
 import vvm
 import vyper
+from packaging.version import Version
+from vvm.utils.versioning import _pick_vyper_version, detect_version_specifier_set
 from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
@@ -23,7 +25,7 @@ from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
-from boa.contracts.vvm.vvm_contract import VVMDeployer, _detect_version
+from boa.contracts.vvm.vvm_contract import VVMDeployer
 from boa.contracts.vyper.vyper_contract import (
     VyperBlueprint,
     VyperContract,
@@ -249,8 +251,10 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
-    version = _detect_version(source_code)
-    if version is not None and version != vyper.__version__:
+    specifier_set = detect_version_specifier_set(source_code)
+    # Use VVM only if the installed version is not in the specifier set
+    if specifier_set is not None and not specifier_set.contains(vyper.__version__):
+        version = _pick_vyper_version(specifier_set)
         filename = str(filename)  # help mypy
         # TODO: pass name to loads_partial_vvm, not filename
         return _loads_partial_vvm(source_code, version, filename)
@@ -269,7 +273,7 @@ def load_partial(filename: str, compiler_args=None):
         )
 
 
-def _loads_partial_vvm(source_code: str, version: str, filename: str):
+def _loads_partial_vvm(source_code: str, version: Version, filename: str):
     global _disk_cache
 
     # install the requested version if not already installed

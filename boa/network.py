@@ -403,6 +403,7 @@ class NetworkEnv(Env):
 
         if (deployments_db := get_deployments_db()) is not None:
             contract_name = getattr(contract, "contract_name", None)
+            filename = getattr(contract, "filename", None)
             try:
                 source_bundle = get_verification_bundle(contract)
             except Exception as e:
@@ -419,6 +420,7 @@ class NetworkEnv(Env):
             deployment_data = Deployment(
                 create_address,
                 contract_name,
+                filename,
                 self._rpc.name,
                 sender,
                 receipt["transactionHash"],
