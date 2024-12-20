@@ -7,11 +7,13 @@ from typing import Callable, Generic, Optional, TypeVar
 
 import requests
 
+from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
 
 DEFAULT_BLOCKSCOUT_URI = "https://eth.blockscout.com"
 T = TypeVar("T")
+P = TypeVar("P")
 
 
 class ContractVerifier(Generic[T]):
@@ -21,6 +23,7 @@ class ContractVerifier(Generic[T]):
         contract_name: str,
         solc_json: dict,
         constructor_calldata: bytes,
+        chain_id: int,
         license_type: str = "1",
         wait: bool = False,
     ) -> Optional["VerificationResult[T]"]:
@@ -31,6 +34,23 @@ class ContractVerifier(Generic[T]):
 
     def is_verified(self, identifier: T) -> bool:
         raise NotImplementedError
+
+    @staticmethod
+    def _wait_until(
+        predicate: Callable[[], P],
+        wait_for: timedelta,
+        backoff: timedelta,
+        backoff_factor: float,
+    ) -> P:
+        timeout = datetime.now() + wait_for
+        wait_time = backoff
+        while datetime.now() < timeout:
+            if result := predicate():
+                return result
+            time.sleep(wait_time.total_seconds())
+            wait_time *= backoff_factor
+
+        raise TimeoutError("Timeout waiting for verification to complete")
 
 
 @dataclass
@@ -58,6 +78,7 @@ class Blockscout(ContractVerifier[Address]):
         contract_name: str,
         solc_json: dict,
         constructor_calldata: bytes,
+        chain_id: int,
         license_type: str = "1",
         wait: bool = False,
     ) -> Optional["VerificationResult[Address]"]:
@@ -67,6 +88,7 @@ class Blockscout(ContractVerifier[Address]):
         :param contract_name: The name of the contract.
         :param solc_json: The solc_json output of the Vyper compiler.
         :param constructor_calldata: The calldata for the constructor.
+        :param chain_id: The ID of the chain where the contract is deployed.
         :param license_type: The license to use for the contract. Defaults to "none".
         :param wait: Whether to return a VerificationResult immediately
                      or wait for verification to complete. Defaults to False
@@ -105,7 +127,7 @@ class Blockscout(ContractVerifier[Address]):
         Waits for the contract to be verified on Blockscout.
         :param address: The address of the contract.
         """
-        _wait_until(
+        self._wait_until(
             lambda: self.is_verified(address),
             self.timeout,
             self.backoff,
@@ -187,22 +209,6 @@ def verify(
         contract_name=contract.contract_name,
         constructor_calldata=contract.ctor_calldata,
         wait=wait,
+        chain_id=Env.get_singleton().get_chain_id(),
         **kwargs,
     )
-
-
-def _wait_until(
-    predicate: Callable[[], T],
-    wait_for: timedelta,
-    backoff: timedelta,
-    backoff_factor: float,
-) -> T:
-    timeout = datetime.now() + wait_for
-    wait_time = backoff
-    while datetime.now() < timeout:
-        if result := predicate():
-            return result
-        time.sleep(wait_time.total_seconds())
-        wait_time *= backoff_factor
-
-    raise TimeoutError("Timeout waiting for verification to complete")
