@@ -51,10 +51,14 @@ class VVMDeployer:
         if env is None:
             env = Env.get_singleton()
 
-        address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args, **kwargs)
-
+        address, computation = env.deploy(bytecode=self.bytecode + encoded_args, **kwargs)
         # TODO: pass thru contract_name
-        return self.at(address)
+        ret = self.at(address)
+
+        if computation.is_error:
+            ret.handle_error(computation)
+
+        return ret
 
     @cached_property
     def _blueprint_deployer(self):
@@ -75,9 +79,12 @@ class VVMDeployer:
         blueprint_bytecode = generate_blueprint_bytecode(
             self.bytecode, blueprint_preamble
         )
-        address, _ = env.deploy_code(bytecode=blueprint_bytecode, **kwargs)
+        address, computation = env.deploy(bytecode=blueprint_bytecode, **kwargs)
 
         ret = self._blueprint_deployer.at(address)
+
+        if computation.is_error:
+            ret.handle_error(computation)
 
         env.register_blueprint(self.bytecode, ret)
         return ret
