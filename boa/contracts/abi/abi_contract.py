@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from functools import cached_property
 from typing import Any, Optional, Union
 from warnings import warn
@@ -138,9 +138,9 @@ class ABIFunction:
             case ():
                 return None
             case (single,):
-                return single
+                return _parse_complex(self._abi["outputs"][0], single, name=self.name)
             case multiple:
-                return tuple(multiple)
+                return _parse_complex(self._abi["outputs"], multiple, name=self.name)
 
 
 class ABIOverload:
@@ -414,6 +414,27 @@ def _abi_from_json(abi: dict) -> str:
         raise ValueError("Components found in non-tuple type " + abi["type"])
 
     return abi["type"]
+
+def _parse_complex(abi: dict, value: Any, name=None) -> str:
+    """
+    Parses an ABI type into its schema string.
+    :param abi: The ABI type to parse.
+    :return: The schema string for the given abi type.
+    """
+    #[{"stateMutability": "view", "type": "function", "name": "foo", "inputs": [], "outputs": [{"name": "", "type": "tuple", "components": [{"name": "x", "type": "uint256"}]}]}]
+
+    # simple case
+    if "components" not in abi:
+        return value
+
+    # complex case
+    components = abi["components"]
+    component_names = [item["name"] for item in components]
+    # construct a namedtuple type on the fly
+    typname = name or abi["name"] or "user_struct"
+    typ = namedtuple(typname, component_names)
+    components_parsed = [_parse_complex(item_abi, item) for (item_abi, item) in zip(components, value)]
+    return typ(*components_parsed)
 
 
 def _format_abi_type(types: list) -> str:
