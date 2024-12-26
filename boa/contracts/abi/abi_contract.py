@@ -407,6 +407,12 @@ def _abi_from_json(abi: dict) -> str:
     :param abi: The ABI type to parse.
     :return: The schema string for the given abi type.
     """
+    #[{"stateMutability": "view", "type": "function", "name": "foo",
+    # "inputs": [],
+    # "outputs": [{"name": "", "type": "tuple",
+    #    "components": [{"name": "x", "type": "uint256"}]}]
+    # }]
+
     if "components" in abi:
         components = ",".join([_abi_from_json(item) for item in abi["components"]])
         if abi["type"].startswith("tuple"):
@@ -415,25 +421,26 @@ def _abi_from_json(abi: dict) -> str:
 
     return abi["type"]
 
+
 def _parse_complex(abi: dict, value: Any, name=None) -> str:
     """
     Parses an ABI type into its schema string.
     :param abi: The ABI type to parse.
     :return: The schema string for the given abi type.
     """
-    #[{"stateMutability": "view", "type": "function", "name": "foo", "inputs": [], "outputs": [{"name": "", "type": "tuple", "components": [{"name": "x", "type": "uint256"}]}]}]
-
     # simple case
     if "components" not in abi:
         return value
 
     # complex case
-    components = abi["components"]
-    component_names = [item["name"] for item in components]
     # construct a namedtuple type on the fly
+    components = abi["components"]
     typname = name or abi["name"] or "user_struct"
+    component_names = [item["name"] for item in components]
     typ = namedtuple(typname, component_names)
-    components_parsed = [_parse_complex(item_abi, item) for (item_abi, item) in zip(components, value)]
+    components_parsed = [
+        _parse_complex(item_abi, item) for (item_abi, item) in zip(components, value)
+    ]
     return typ(*components_parsed)
 
 

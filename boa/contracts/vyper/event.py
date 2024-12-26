@@ -30,6 +30,3 @@ class Event:
         return f"{self.event_type.name}({args})"
 
 
-@dataclass
-class RawEvent:
-    event_data: Any

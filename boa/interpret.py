@@ -273,7 +273,9 @@ def load_partial(filename: str, compiler_args=None):
         )
 
 
-def _loads_partial_vvm(source_code: str, version: Version, filename: str, base_path=None):
+def _loads_partial_vvm(
+    source_code: str, version: Version, filename: str, base_path=None
+):
     global _disk_cache
 
     if base_path is None:
@@ -283,7 +285,9 @@ def _loads_partial_vvm(source_code: str, version: Version, filename: str, base_p
     vvm.install_vyper(version=version)
 
     def _compile():
-        compiled_src = vvm.compile_source(source_code, vyper_version=version, base_path=base_path)
+        compiled_src = vvm.compile_source(
+            source_code, vyper_version=version, base_path=base_path
+        )
         compiler_output = compiled_src["<stdin>"]
         return VVMDeployer.from_compiler_output(compiler_output, filename=filename)
 
