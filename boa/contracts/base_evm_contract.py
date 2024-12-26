@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from eth.abc import ComputationAPI
 
@@ -11,6 +11,7 @@ from boa.util.exceptions import strip_internal_frames
 if TYPE_CHECKING:
     from boa.contracts.vyper.vyper_contract import DevReason
     from boa.vm.py_evm import titanoboa_computation
+
 
 @dataclass
 class RawEvent:

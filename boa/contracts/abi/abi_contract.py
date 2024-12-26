@@ -5,7 +5,7 @@ from warnings import warn
 
 from eth.abc import ComputationAPI
 from vyper.semantics.analysis.base import FunctionVisibility, StateMutability
-from vyper.utils import method_id
+from vyper.utils import keccak256, method_id
 
 from boa.contracts.base_evm_contract import (
     BoaError,
@@ -47,7 +47,7 @@ class ABIFunction:
 
     @property
     def signature(self) -> str:
-        return f"({_format_abi_type(self.argument_types)})"
+        return _format_abi_type(self.argument_types)
 
     @cached_property
     def return_type(self) -> list:
@@ -234,6 +234,7 @@ class ABIContract(_BaseEVMContract):
         name: str,
         abi: list[dict],
         functions: list[ABIFunction],
+        events: list[dict],
         address: Address,
         filename: Optional[str] = None,
         env=None,
@@ -241,6 +242,7 @@ class ABIContract(_BaseEVMContract):
         super().__init__(name, env, filename=filename, address=address)
         self._abi = abi
         self._functions = functions
+        self._events = events
 
         self._bytecode = self.env.get_code(address)
         if not self._bytecode:
@@ -276,6 +278,76 @@ class ABIContract(_BaseEVMContract):
             if not function.is_constructor
         }
 
+    @cached_property
+    def event_for(self):
+        # [{"name": "Bar", "inputs":
+        #   [{"name": "x", "type": "uint256", "indexed": false},
+        #   {"name": "y", "type": "tuple", "components": [{"name": "x", "type": "uint256"}], "indexed": false}],
+        # "anonymous": false, "type": "event"},
+        # }]
+        ret = {}
+        for event_abi in self._events:
+            event_signature = ",".join(
+                _abi_from_json(item) for item in event_abi["inputs"]
+            )
+            event_name = event_abi["name"]
+            event_signature = f"{event_name}({event_signature})"
+            event_id = int(keccak256(event_signature.encode()).hex(), 16)
+            ret[event_id] = event_abi
+        return ret
+
+    def decode_log(self, log_entry):
+        # low level log id
+        _log_id, address, topics, data = log_entry
+        assert self._address.canonical_address == address
+        event_hash = topics[0]
+        event_abi = self.event_for[event_hash]
+
+        topic_abis = []
+        arg_abis = []
+        tuple_names = []
+        for item_abi in event_abi["inputs"]:
+            is_topic = item_abi["indexed"]
+            assert isinstance(is_topic, bool)
+            if not is_topic:
+                arg_abis.append(item_abi)
+            else:
+                topic_abis.append(item_abi)
+
+            tuple_names.append(item_abi["name"])
+
+        tuple_typ = namedtuple(event_abi["name"], tuple_names)
+
+        decoded_topics = []
+        for topic_abi, t in zip(topic_abis, topics[1:]):
+            # convert to bytes for abi decoder
+            encoded_topic = t.to_bytes(32, "big")
+            decoded_topics.append(abi_decode(_abi_from_json(topic_abi), encoded_topic))
+
+        args_selector = _format_abi_type(
+            [_abi_from_json(arg_abi) for arg_abi in arg_abis]
+        )
+
+        decoded_args = abi_decode(args_selector, data)
+
+        t_i = 0
+        a_i = 0
+        xs = []
+        # re-align the evm topic + args lists with the way they appear in the abi
+        # ex. Transfer(indexed address, address, indexed address)
+        for item_abi in event_abi["inputs"]:
+            is_topic = item_abi["indexed"]
+            if is_topic:
+                # topic abi is currently never complex, but use _parse_complex as
+                # future-proofing mechanism
+                xs.append(_parse_complex(topic_abis[t_i], decoded_topics[t_i]))
+                t_i += 1
+            else:
+                xs.append(_parse_complex(arg_abis[a_i], decoded_args[a_i]))
+                a_i += 1
+
+        return tuple_typ(*xs)
+
     def marshal_to_python(self, computation, abi_type: list[str]) -> tuple[Any, ...]:
         """
         Convert the output of a contract call to a Python object.
@@ -286,7 +358,7 @@ class ABIContract(_BaseEVMContract):
         if computation.is_error:
             return self.handle_error(computation)
 
-        schema = f"({_format_abi_type(abi_type)})"
+        schema = _format_abi_type(abi_type)
         try:
             return abi_decode(schema, computation.output)
         except ABIError as e:
@@ -360,6 +432,10 @@ class ABIContractFactory:
             if item.get("type") == "function"
         ]
 
+    @property
+    def events(self):
+        return [item for item in self.abi if item.get("type") == "event"]
+
     @classmethod
     def from_abi_dict(cls, abi, name="<anonymous contract>", filename=None):
         return cls(name, abi, filename)
@@ -370,7 +446,7 @@ class ABIContractFactory:
         """
         address = Address(address)
         contract = ABIContract(
-            self._name, self._abi, self.functions, address, self.filename
+            self._name, self._abi, self.functions, self.events, address, self.filename
         )
 
         contract.env.register_contract(address, contract)
@@ -390,7 +466,7 @@ class ABITraceSource(TraceSource):
 
     @cached_property
     def args_abi_type(self):
-        return f"({_format_abi_type(self.function.argument_types)})"
+        return _format_abi_type(self.function.argument_types)
 
     @cached_property
     def _argument_names(self) -> list[str]:
@@ -398,7 +474,7 @@ class ABITraceSource(TraceSource):
 
     @cached_property
     def return_abi_type(self):
-        return f"({_format_abi_type(self.function.return_type)})"
+        return _format_abi_type(self.function.return_type)
 
 
 def _abi_from_json(abi: dict) -> str:
@@ -407,11 +483,11 @@ def _abi_from_json(abi: dict) -> str:
     :param abi: The ABI type to parse.
     :return: The schema string for the given abi type.
     """
-    #[{"stateMutability": "view", "type": "function", "name": "foo",
+    # {"stateMutability": "view", "type": "function", "name": "foo",
     # "inputs": [],
     # "outputs": [{"name": "", "type": "tuple",
     #    "components": [{"name": "x", "type": "uint256"}]}]
-    # }]
+    # }
 
     if "components" in abi:
         components = ",".join([_abi_from_json(item) for item in abi["components"]])
@@ -448,7 +524,7 @@ def _format_abi_type(types: list) -> str:
     """
     Converts a list of ABI types into a comma-separated string.
     """
-    return ",".join(
-        item if isinstance(item, str) else f"({_format_abi_type(item)})"
-        for item in types
+    ret = ",".join(
+        item if isinstance(item, str) else _format_abi_type(item) for item in types
     )
+    return f"({ret})"

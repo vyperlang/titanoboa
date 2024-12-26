@@ -28,5 +28,3 @@ class Event:
 
         args = ", ".join(f"{k}={v}" for k, v in b)
         return f"{self.event_type.name}({args})"
-
-
