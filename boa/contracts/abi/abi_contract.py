@@ -330,21 +330,25 @@ class ABIContract(_BaseEVMContract):
 
         decoded_args = abi_decode(args_selector, data)
 
-        t_i = 0
-        a_i = 0
+        topics_ix = 0
+        args_ix = 0
         xs = []
         # re-align the evm topic + args lists with the way they appear in the abi
         # ex. Transfer(indexed address, address, indexed address)
         for item_abi in event_abi["inputs"]:
             is_topic = item_abi["indexed"]
             if is_topic:
-                # topic abi is currently never complex, but use _parse_complex as
-                # future-proofing mechanism
-                xs.append(_parse_complex(topic_abis[t_i], decoded_topics[t_i]))
-                t_i += 1
+                abi = topic_abis[topics_ix]
+                topic = decoded_topics[topics_ix]
+                # topic abi is currently never complex, but use _parse_complex
+                # as future-proofing mechanism
+                xs.append(_parse_complex(abi, topic))
+                topics_ix += 1
             else:
-                xs.append(_parse_complex(arg_abis[a_i], decoded_args[a_i]))
-                a_i += 1
+                abi = arg_abis[args_ix]
+                arg = decoded_args[args_ix]
+                xs.append(_parse_complex(abi, arg))
+                args_ix += 1
 
         return tuple_typ(*xs)
 
