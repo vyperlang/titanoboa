@@ -51,7 +51,9 @@ class VVMDeployer:
         if env is None:
             env = Env.get_singleton()
 
-        address, computation = env.deploy(bytecode=self.bytecode + encoded_args, **kwargs)
+        address, computation = env.deploy(
+            bytecode=self.bytecode + encoded_args, **kwargs
+        )
         # TODO: pass thru contract_name
         ret = self.at(address)
 
