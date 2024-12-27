@@ -54,7 +54,10 @@ class VVMDeployer:
         address, computation = env.deploy(
             bytecode=self.bytecode + encoded_args, **kwargs
         )
+
         # TODO: pass thru contract_name
+        # NOTE: if computation.is_error, `self.at()` will raise a warning
+        # in the future we should refactor so that the warning is silenced
         ret = self.at(address)
 
         if computation.is_error:
