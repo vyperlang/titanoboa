@@ -134,13 +134,22 @@ class ABIFunction:
             contract=self.contract,
         )
 
-        match self.contract.marshal_to_python(computation, self.return_type):
+        val = self.contract.marshal_to_python(computation, self.return_type)
+
+        # this property should be guaranteed by abi_decode inside marshal_to_python,
+        # assert it again just for clarity
+        # note that val should be a tuple.
+        assert len(self._abi["outputs"]) == len(val)
+
+        match val:
             case ():
                 return None
             case (single,):
                 return _parse_complex(self._abi["outputs"][0], single, name=self.name)
             case multiple:
-                return _parse_complex(self._abi["outputs"], multiple, name=self.name)
+                item_abis = self._abi["outputs"]
+                cls = type(multiple)  # should be tuple
+                return cls(_parse_complex(abi, item, name=self.name) for (abi,item) in zip(item_abis, multiple))
 
 
 class ABIOverload:
