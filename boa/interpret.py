@@ -4,7 +4,7 @@ from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import vvm
 import vyper
@@ -256,8 +256,7 @@ def loads_partial(
     if specifier_set is not None and not specifier_set.contains(vyper.__version__):
         version = _pick_vyper_version(specifier_set)
         filename = str(filename)  # help mypy
-        # TODO: pass name to loads_partial_vvm, not filename
-        return _loads_partial_vvm(source_code, version, filename)
+        return _loads_partial_vvm(source_code, version, name, filename)
 
     compiler_args = compiler_args or {}
 
@@ -274,7 +273,7 @@ def load_partial(filename: str, compiler_args=None):
 
 
 def _loads_partial_vvm(
-    source_code: str, version: Version, filename: str, base_path=None
+    source_code: str, version: Version, name: Optional[str], filename: str, base_path=None
 ):
     global _disk_cache
 
@@ -289,7 +288,9 @@ def _loads_partial_vvm(
             source_code, vyper_version=version, base_path=base_path
         )
         compiler_output = compiled_src["<stdin>"]
-        return VVMDeployer.from_compiler_output(compiler_output, filename=filename)
+        return VVMDeployer.from_compiler_output(
+            compiler_output, name=name, filename=filename
+        )
 
     # Ensure the cache is initialized
     if _disk_cache is None:
