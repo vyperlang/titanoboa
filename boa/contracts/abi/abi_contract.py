@@ -149,7 +149,10 @@ class ABIFunction:
             case multiple:
                 item_abis = self._abi["outputs"]
                 cls = type(multiple)  # should be tuple
-                return cls(_parse_complex(abi, item, name=self.name) for (abi,item) in zip(item_abis, multiple))
+                return cls(
+                    _parse_complex(abi, item, name=self.name)
+                    for (abi, item) in zip(item_abis, multiple)
+                )
 
 
 class ABIOverload:
@@ -521,16 +524,33 @@ def _parse_complex(abi: dict, value: Any, name=None) -> str:
     if "components" not in abi:
         return value
 
+    # https://docs.soliditylang.org/en/latest/abi-spec.html#handling-tuple-types
+    type_ = abi["type"]
+    assert type_.startswith("tuple")
+    # number of nested arrays (we don't care if dynamic or static)
+    depth = type_.count("[")
+
     # complex case
     # construct a namedtuple type on the fly
     components = abi["components"]
     typname = name or abi["name"] or "user_struct"
     component_names = [item["name"] for item in components]
     typ = namedtuple(typname, component_names)
-    components_parsed = [
-        _parse_complex(item_abi, item) for (item_abi, item) in zip(components, value)
-    ]
-    return typ(*components_parsed)
+
+    def _leaf(tuple_vals):
+        components_parsed = [
+            _parse_complex(item_abi, item)
+            for (item_abi, item) in zip(components, tuple_vals)
+        ]
+
+        return typ(*components_parsed)
+
+    def _go(val, depth):
+        if depth == 0:
+            return _leaf(val)
+        return [_go(val, depth - 1) for val in val]
+
+    return _go(value, depth)
 
 
 def _format_abi_type(types: list) -> str:
