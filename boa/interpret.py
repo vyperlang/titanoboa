@@ -273,7 +273,11 @@ def load_partial(filename: str, compiler_args=None):
 
 
 def _loads_partial_vvm(
-    source_code: str, version: Version, name: Optional[str], filename: str, base_path=None
+    source_code: str,
+    version: Version,
+    name: Optional[str],
+    filename: str,
+    base_path=None,
 ):
     global _disk_cache
 
