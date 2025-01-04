@@ -313,6 +313,13 @@ class ABIContract(_BaseEVMContract):
         _log_id, address, topics, data = log_entry
         assert self._address.canonical_address == address
         event_hash = topics[0]
+
+        if event_hash not in self.event_for:
+            # our abi is wrong, we can't decode it. fail loudly.
+            msg = f"can't find event with hash {hex(event_hash)} in abi"
+            msg += f" (possible events: {self.event_for})"
+            raise ValueError(msg)
+
         event_abi = self.event_for[event_hash]
 
         topic_abis = []
@@ -333,6 +340,7 @@ class ABIContract(_BaseEVMContract):
             # so fall back to regular tuple.
             def tuple_typ(*args):
                 return tuple(args)
+
         else:
             tuple_typ = namedtuple(event_abi["name"], tuple_names)
 
