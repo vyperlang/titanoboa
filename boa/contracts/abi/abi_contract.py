@@ -335,14 +335,7 @@ class ABIContract(_BaseEVMContract):
 
             tuple_names.append(item_abi["name"])
 
-        if "from" in tuple_names:
-            # we can't create a namedtuple if one of the fieldnames is `from`,
-            # so fall back to regular tuple.
-            def tuple_typ(*args):
-                return tuple(args)
-
-        else:
-            tuple_typ = namedtuple(event_abi["name"], tuple_names)
+        tuple_typ = namedtuple(event_abi["name"], tuple_names, rename=True)
 
         decoded_topics = []
         for topic_abi, t in zip(topic_abis, topics[1:]):
