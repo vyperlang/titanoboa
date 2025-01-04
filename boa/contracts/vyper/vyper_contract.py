@@ -51,7 +51,7 @@ from boa.contracts.vyper.decoder_utils import (
     ByteAddressableStorage,
     decode_vyper_object,
 )
-from boa.contracts.vyper.event import Event, RawEvent
+from boa.contracts.vyper.event import Event
 from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
 from boa.profiling import cache_gas_used_for_computation
@@ -710,37 +710,6 @@ class VyperContract(_BaseVyperContract):
         if (node := self.find_source_of(computation)) is None:
             return None
         return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
-
-    # ## handling events
-    def _get_logs(self, computation, include_child_logs):
-        if computation is None:
-            return []
-
-        if include_child_logs:
-            return list(computation.get_raw_log_entries())
-
-        return computation._log_entries
-
-    def get_logs(self, computation=None, include_child_logs=True):
-        if computation is None:
-            computation = self._computation
-
-        entries = self._get_logs(computation, include_child_logs)
-
-        # py-evm log format is (log_id, topics, data)
-        # sort on log_id
-        entries = sorted(entries)
-
-        ret = []
-        for e in entries:
-            logger_address = e[1]
-            c = self.env.lookup_contract(logger_address)
-            if c is not None:
-                ret.append(c.decode_log(e))
-            else:
-                ret.append(RawEvent(e))
-
-        return ret
 
     @cached_property
     def event_for(self):
