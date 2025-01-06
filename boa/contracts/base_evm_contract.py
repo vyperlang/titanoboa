@@ -72,7 +72,7 @@ class _BaseEVMContract:
 
         return computation._log_entries
 
-    def get_logs(self, computation=None, include_child_logs=True):
+    def get_logs(self, computation=None, include_child_logs=True, strict=True):
         if computation is None:
             computation = self._computation
 
@@ -87,9 +87,16 @@ class _BaseEVMContract:
             logger_address = e[1]
             c = self.env.lookup_contract(logger_address)
             if c is not None:
-                ret.append(c.decode_log(e))
+                try:
+                    decoded_log = c.decode_log(e)
+                except Exception as exc:
+                    if strict:
+                        raise exc
+                    else:
+                        decoded_log = RawEvent(e)
             else:
-                ret.append(RawEvent(e))
+                decoded_log = RawEvent(e)
+            ret.append(decoded_log)
 
         return ret
 
