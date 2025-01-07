@@ -36,8 +36,6 @@ def test_prev_hash():
     def get_prevhash() -> bytes32:
         return block.prevhash
     """)
-    # print(getter_contract.get_prevhash())
-    # assert True
     assert getter_contract.get_prevhash() == list(boa.env.evm.patch.prev_hashes)[0]
 
 
