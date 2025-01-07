@@ -416,7 +416,7 @@ class PyEVM:
         self.patch.block_number = int(block_info["number"], 16)
         self.patch.chain_id = int(rpc.fetch("eth_chainId", []), 16)
         
-        self.patch.prev_hashes = [bytes.fromhex("0"* 32)] * 255  # placeholder not to fetch all prev hashes
+        self.patch.prev_hashes = [b"\x00" * 32] * 255  # placeholder not to fetch all prev hashes
         self.patch.prev_hashes[0] = bytes.fromhex(block_info["parentHash"].removeprefix('0x')) # this one we fetched
 
         self.vm.state._account_db._rpc._init_db()
