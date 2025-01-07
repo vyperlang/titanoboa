@@ -113,7 +113,12 @@ def mock_fork(mock_callback):
     mock_callback("evm_snapshot", "0x123456")
     mock_callback("evm_revert", "0x12345678")
     mock_callback("eth_chainId", "0x1")
-    data = {"number": "0x123", "timestamp": "0x65bbb460"}
+    data = {
+        "number": "0x123",
+        "timestamp": "0x65bbb460",
+        "blockHash": "0x1234",
+        "parentHash": "0x5678",
+    }
     mock_callback("eth_getBlockByNumber", data)
 
 
