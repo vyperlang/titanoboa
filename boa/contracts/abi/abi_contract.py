@@ -324,7 +324,13 @@ class ABIContract(_BaseEVMContract):
 
         topic_abis = []
         arg_abis = []
-        tuple_names = []
+
+        # add `address` to the tuple. this is prevented from being an
+        # actual fieldname in vyper and solidity since it is a reserved keyword
+        # in both languages. if for some reason some abi actually has a field
+        # named `address`, it will be renamed by namedtuple(rename=True).
+        tuple_names = ["address"]
+
         for item_abi in event_abi["inputs"]:
             is_topic = item_abi["indexed"]
             assert isinstance(is_topic, bool)
@@ -351,9 +357,11 @@ class ABIContract(_BaseEVMContract):
 
         topics_ix = 0
         args_ix = 0
-        xs = []
-        # re-align the evm topic + args lists with the way they appear in the abi
-        # ex. Transfer(indexed address, address, indexed address)
+
+        xs = [Address(address)]
+
+        # re-align the evm topic + args lists with the way they appear in the
+        # abi ex. Transfer(indexed address, address, indexed address)
         for item_abi in event_abi["inputs"]:
             is_topic = item_abi["indexed"]
             if is_topic:

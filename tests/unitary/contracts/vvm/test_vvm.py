@@ -118,13 +118,16 @@ def foo(x: uint256, y: address):
 
     assert type(logs[1]).__name__ == "MyEvent2"
     # namedtuple renames things with "from" to _1, _2 etc
-    assert logs[1]._0 == boa.env.eoa
+    assert logs[1]._1 == boa.env.eoa
     assert logs[1].addr == addr
 
     assert type(logs[2]).__name__ == "MyEvent2"
-    assert logs[2]._0 == addr
+    assert logs[2]._1 == addr
     assert logs[2].addr == boa.env.eoa
 
     assert type(logs[3]).__name__ == "MyEvent3"
     assert logs[3].addr == addr
-    assert logs[3]._1 == boa.env.eoa
+    assert logs[3]._2 == boa.env.eoa
+
+    for log in logs:
+        assert log.address == c.address
