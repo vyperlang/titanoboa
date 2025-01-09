@@ -1,4 +1,5 @@
 from functools import cached_property
+from typing import Optional
 
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
 from boa.environment import Env
@@ -12,27 +13,30 @@ class VVMDeployer:
     can interact with new versions using the ABI definition.
     """
 
-    def __init__(self, abi, bytecode, filename):
+    def __init__(self, abi, bytecode, name, filename):
         """
         Initialize a VVMDeployer instance.
         :param abi: The contract's ABI.
         :param bytecode: The contract's bytecode.
         :param filename: The filename of the contract.
         """
-        self.abi = abi
-        self.bytecode = bytecode
-        self.filename = filename
+        self.abi: dict = abi
+        self.bytecode: bytes = bytecode
+        self.name: Optional[str] = name
+        self.filename: str = filename
 
     @classmethod
-    def from_compiler_output(cls, compiler_output, filename):
+    def from_compiler_output(cls, compiler_output, name, filename):
         abi = compiler_output["abi"]
         bytecode_nibbles = compiler_output["bytecode"]
         bytecode = bytes.fromhex(bytecode_nibbles.removeprefix("0x"))
-        return cls(abi, bytecode, filename)
+        return cls(abi, bytecode, name, filename)
 
     @cached_property
     def factory(self):
-        return ABIContractFactory.from_abi_dict(self.abi)
+        return ABIContractFactory.from_abi_dict(
+            self.abi, name=self.name, filename=self.filename
+        )
 
     @cached_property
     def constructor(self):
@@ -51,10 +55,22 @@ class VVMDeployer:
         if env is None:
             env = Env.get_singleton()
 
-        address, _ = env.deploy_code(bytecode=self.bytecode + encoded_args, **kwargs)
+        address, computation = env.deploy(
+            bytecode=self.bytecode + encoded_args, **kwargs
+        )
 
-        # TODO: pass thru contract_name
-        return self.at(address)
+        # set nowarn=True. if there was a problem in the deploy, it will
+        # be caught at computation.is_error, so the warning is redundant
+        # (and annoying!)
+        ret = self.at(address, nowarn=True)
+        if contract_name is not None:
+            # override contract name
+            ret.contract_name = contract_name
+
+        if computation.is_error:
+            ret.handle_error(computation)
+
+        return ret
 
     @cached_property
     def _blueprint_deployer(self):
@@ -75,9 +91,12 @@ class VVMDeployer:
         blueprint_bytecode = generate_blueprint_bytecode(
             self.bytecode, blueprint_preamble
         )
-        address, _ = env.deploy_code(bytecode=blueprint_bytecode, **kwargs)
+        address, computation = env.deploy(bytecode=blueprint_bytecode, **kwargs)
 
         ret = self._blueprint_deployer.at(address)
+
+        if computation.is_error:
+            ret.handle_error(computation)
 
         env.register_blueprint(self.bytecode, ret)
         return ret
@@ -85,5 +104,5 @@ class VVMDeployer:
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
 
-    def at(self, address):
-        return self.factory.at(address)
+    def at(self, address, nowarn=False):
+        return self.factory.at(address, nowarn=nowarn)

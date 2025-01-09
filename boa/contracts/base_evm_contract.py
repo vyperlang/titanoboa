@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from eth.abc import ComputationAPI
 
@@ -11,6 +11,11 @@ from boa.util.exceptions import strip_internal_frames
 if TYPE_CHECKING:
     from boa.contracts.vyper.vyper_contract import DevReason
     from boa.vm.py_evm import titanoboa_computation
+
+
+@dataclass
+class RawEvent:
+    event_data: Any
 
 
 class _BaseEVMContract:
@@ -56,6 +61,44 @@ class _BaseEVMContract:
             # avoid assert, in pytest it would call repr(self) which segfaults
             raise RuntimeError("Contract address is not set")
         return self._address
+
+    # ## handling events
+    def _get_logs(self, computation, include_child_logs):
+        if computation is None:
+            return []
+
+        if include_child_logs:
+            return list(computation.get_raw_log_entries())
+
+        return computation._log_entries
+
+    def get_logs(self, computation=None, include_child_logs=True, strict=True):
+        if computation is None:
+            computation = self._computation
+
+        entries = self._get_logs(computation, include_child_logs)
+
+        # py-evm log format is (log_id, topics, data)
+        # sort on log_id
+        entries = sorted(entries)
+
+        ret = []
+        for e in entries:
+            logger_address = e[1]
+            c = self.env.lookup_contract(logger_address)
+            if c is not None:
+                try:
+                    decoded_log = c.decode_log(e)
+                except Exception as exc:
+                    if strict:
+                        raise exc
+                    else:
+                        decoded_log = RawEvent(e)
+            else:
+                decoded_log = RawEvent(e)
+            ret.append(decoded_log)
+
+        return ret
 
 
 class StackTrace(list):  # list[str|ErrorDetail]

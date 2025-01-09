@@ -53,6 +53,11 @@ class DiskCache:
         digest = hashlib.sha256(preimage).digest().hex()
         return self.cache_dir.joinpath(f"{self.version_salt}/{digest}.pickle")
 
+    def invalidate(self, string):
+        p = self.cal(string)
+        with _silence_io_errors():
+            p.unlink()
+
     # look up x in the cal; on a miss, write back to the cache
     def caching_lookup(self, string, func):
         gc_interval = self.ttl // 10

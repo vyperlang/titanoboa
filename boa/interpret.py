@@ -4,7 +4,7 @@ from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import vvm
 import vyper
@@ -256,8 +256,7 @@ def loads_partial(
     if specifier_set is not None and not specifier_set.contains(vyper.__version__):
         version = _pick_vyper_version(specifier_set)
         filename = str(filename)  # help mypy
-        # TODO: pass name to loads_partial_vvm, not filename
-        return _loads_partial_vvm(source_code, version, filename)
+        return _loads_partial_vvm(source_code, version, name, filename)
 
     compiler_args = compiler_args or {}
 
@@ -273,25 +272,52 @@ def load_partial(filename: str, compiler_args=None):
         )
 
 
-def _loads_partial_vvm(source_code: str, version: Version, filename: str):
+def _loads_partial_vvm(
+    source_code: str,
+    version: Version,
+    name: Optional[str],
+    filename: str,
+    base_path=None,
+):
     global _disk_cache
+
+    if base_path is None:
+        base_path = Path(".")
 
     # install the requested version if not already installed
     vvm.install_vyper(version=version)
 
     def _compile():
-        compiled_src = vvm.compile_source(source_code, vyper_version=version)
+        return vvm.compile_source(
+            source_code, vyper_version=version, base_path=base_path
+        )
+
+    # separate _handle_output and _compile so that we don't trample
+    # name and filename in the VVMDeployer from separate invocations
+    # (with different values for name+filename).
+    def _handle_output(compiled_src):
         compiler_output = compiled_src["<stdin>"]
-        return VVMDeployer.from_compiler_output(compiler_output, filename=filename)
+        return VVMDeployer.from_compiler_output(
+            compiler_output, name=name, filename=filename
+        )
 
     # Ensure the cache is initialized
     if _disk_cache is None:
-        return _compile()
+        return _handle_output(_compile())
 
     # Generate a unique cache key
     cache_key = f"{source_code}:{version}"
+
     # Check the cache and return the result if available
-    return _disk_cache.caching_lookup(cache_key, _compile)
+    ret = _disk_cache.caching_lookup(cache_key, _compile)
+
+    # backwards compatibility: old versions of boa returned a VVMDeployer.
+    # here we detect the case and invalidate the cache so it can recompile.
+    if isinstance(ret, VVMDeployer):
+        _disk_cache.invalidate(cache_key)
+        ret = _disk_cache.caching_lookup(cache_key, _compile)
+
+    return _handle_output(ret)
 
 
 def from_etherscan(

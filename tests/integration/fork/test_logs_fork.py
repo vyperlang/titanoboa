@@ -2,7 +2,7 @@ import pytest
 from vyper.utils import keccak256
 
 import boa
-from boa.contracts.vyper.event import RawEvent
+from boa.contracts.base_evm_contract import RawEvent
 
 WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
