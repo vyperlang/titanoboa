@@ -59,6 +59,9 @@ class VVMDeployer:
             bytecode=self.bytecode + encoded_args, **kwargs
         )
 
+        # set nowarn=True. if there was a problem in the deploy, it will
+        # be caught at computation.is_error, so the warning is redundant
+        # (and annoying!)
         ret = self.at(address, nowarn=True)
         if contract_name is not None:
             # override contract name
