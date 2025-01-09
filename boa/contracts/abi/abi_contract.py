@@ -250,6 +250,7 @@ class ABIContract(_BaseEVMContract):
         address: Address,
         filename: Optional[str] = None,
         env=None,
+        nowarn=False,
     ):
         super().__init__(name, env, filename=filename, address=address)
         self._abi = abi
@@ -257,7 +258,7 @@ class ABIContract(_BaseEVMContract):
         self._events = events
 
         self._bytecode = self.env.get_code(address)
-        if not self._bytecode:
+        if not self._bytecode and not nowarn:
             warn(
                 f"Requested {self} but there is no bytecode at that address!",
                 stacklevel=2,
@@ -472,13 +473,13 @@ class ABIContractFactory:
     def from_abi_dict(cls, abi, name="<anonymous contract>", filename=None):
         return cls(name, abi, filename)
 
-    def at(self, address: Address | str) -> ABIContract:
+    def at(self, address: Address | str, nowarn=False) -> ABIContract:
         """
         Create an ABI contract object for a deployed contract at `address`.
         """
         address = Address(address)
         contract = ABIContract(
-            self._name, self._abi, self.functions, self.events, address, self.filename
+            self._name, self._abi, self.functions, self.events, address, self.filename,nowarn=nowarn
         )
 
         contract.env.register_contract(address, contract)

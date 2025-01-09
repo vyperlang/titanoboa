@@ -59,10 +59,10 @@ class VVMDeployer:
             bytecode=self.bytecode + encoded_args, **kwargs
         )
 
-        # TODO: pass thru contract_name
-        # NOTE: if computation.is_error, `self.at()` will raise a warning
-        # in the future we should refactor so that the warning is silenced
-        ret = self.at(address)
+        ret = self.at(address, nowarn=True)
+        if contract_name is not None:
+            # override contract name
+            ret.contract_name = contract_name
 
         if computation.is_error:
             ret.handle_error(computation)
@@ -101,5 +101,5 @@ class VVMDeployer:
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
 
-    def at(self, address):
-        return self.factory.at(address)
+    def at(self, address, nowarn=False):
+        return self.factory.at(address, nowarn=nowarn)

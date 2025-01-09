@@ -71,7 +71,9 @@ def test_forward_args_on_deploy():
     assert random_addy == contract.address
 
 
-def test_cache_clean_name():
+def test_vvm_name_forwarding():
+    # test that names passed to loads_partial() and deploy()
+    # get forwarded to the final contract properly.
     with open(mock_3_10_path) as f:
         code = f.read()
 
@@ -81,7 +83,17 @@ def test_cache_clean_name():
     assert deployer1.name == "foo"
     assert deployer2.name == "bar"
 
+    c1 = deployer1.deploy(100)
+    c2 = deployer2.deploy(101)
+    assert c1.contract_name == "foo"
+    assert c2.contract_name == "bar"
+
+    # test override in deploy()
+    c = deployer1.deploy(100, contract_name="baz")
+    assert c.contract_name == "baz"
+
 def test_ctor_revert():
+    # test that revert in ctor throws proper BoaError
     code = """
 # pragma version 0.3.10
 @external
@@ -92,6 +104,7 @@ def __init__():
         boa.loads(code)
 
 def test_logs():
+    # test namedtuple decoder for logs
     code = """
 # pragma version 0.3.10
 
@@ -144,6 +157,7 @@ def foo(x: uint256, y: address):
 
 
 def test_nested_logs():
+    # test namedtuple decoder for nested logs
     code1 = """
 # pragma version 0.3.10
 event Foo:
@@ -199,6 +213,7 @@ def bar(target: CallFoo):
 
 
 def test_structs():
+    # test namedtuple decoder for structs
     code = """
 # pragma version 0.3.10
 
