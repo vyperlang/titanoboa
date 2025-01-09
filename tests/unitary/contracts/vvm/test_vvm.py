@@ -95,7 +95,8 @@ event MyEvent2:
 
 event MyEvent3:
     addr: address
-    _from: address
+    # throw in out-of-order indexed field for fun
+    _from: indexed(address)
 
 @external
 def foo(x: uint256, y: address):
