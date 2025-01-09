@@ -80,3 +80,51 @@ def test_cache_clean_name():
 
     assert deployer1.name == "foo"
     assert deployer2.name == "bar"
+
+
+def test_logs():
+    code = """
+# pragma version 0.3.10
+
+event MyEvent1:
+    x: uint256
+
+event MyEvent2:
+    _from: address
+    addr: address
+
+event MyEvent3:
+    addr: address
+    _from: address
+
+@external
+def foo(x: uint256, y: address):
+    log MyEvent1(x)
+    log MyEvent2(msg.sender, y)
+    log MyEvent2(y, msg.sender)
+    log MyEvent3(y, msg.sender)
+    """
+
+    c = boa.loads(code)
+
+    addr = boa.env.generate_address()
+    c.foo(1, addr)
+
+    logs = c.get_logs()
+    assert len(logs) == 4
+
+    assert type(logs[0]).__name__ == "MyEvent1"
+    assert logs[0].x == 1
+
+    assert type(logs[1]).__name__ == "MyEvent2"
+    # namedtuple renames things with "from" to _1, _2 etc
+    assert logs[1]._0 == boa.env.eoa
+    assert logs[1].addr == addr
+
+    assert type(logs[2]).__name__ == "MyEvent2"
+    assert logs[2]._0 == addr
+    assert logs[2].addr == boa.env.eoa
+
+    assert type(logs[3]).__name__ == "MyEvent3"
+    assert logs[3].addr == addr
+    assert logs[3]._1 == boa.env.eoa
