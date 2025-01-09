@@ -294,7 +294,8 @@ class ABIContract(_BaseEVMContract):
     def event_for(self):
         # [{"name": "Bar", "inputs":
         #   [{"name": "x", "type": "uint256", "indexed": false},
-        #   {"name": "y", "type": "tuple", "components": [{"name": "x", "type": "uint256"}], "indexed": false}],
+        #   {"name": "y", "type": "tuple", "components":
+        #     [{"name": "x", "type": "uint256"}], "indexed": false}],
         # "anonymous": false, "type": "event"},
         # }]
         ret = {}
@@ -550,7 +551,8 @@ def _parse_complex(abi: dict, value: Any, name=None) -> str:
     components = abi["components"]
     typname = name or abi["name"] or "user_struct"
     component_names = [item["name"] for item in components]
-    typ = namedtuple(typname, component_names, rename=True)
+
+    typ = namedtuple(typname, component_names, rename=True)  # type: ignore[misc]
 
     def _leaf(tuple_vals):
         components_parsed = [
