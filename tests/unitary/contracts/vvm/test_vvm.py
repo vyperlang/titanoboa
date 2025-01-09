@@ -92,6 +92,7 @@ def test_vvm_name_forwarding():
     c = deployer1.deploy(100, contract_name="baz")
     assert c.contract_name == "baz"
 
+
 def test_ctor_revert():
     # test that revert in ctor throws proper BoaError
     code = """
@@ -102,6 +103,7 @@ def __init__():
     """
     with boa.reverts():
         boa.loads(code)
+
 
 def test_logs():
     # test namedtuple decoder for logs

@@ -479,7 +479,13 @@ class ABIContractFactory:
         """
         address = Address(address)
         contract = ABIContract(
-            self._name, self._abi, self.functions, self.events, address, self.filename,nowarn=nowarn
+            self._name,
+            self._abi,
+            self.functions,
+            self.events,
+            address,
+            self.filename,
+            nowarn=nowarn,
         )
 
         contract.env.register_contract(address, contract)
