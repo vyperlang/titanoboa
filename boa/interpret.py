@@ -310,6 +310,13 @@ def _loads_partial_vvm(
 
     # Check the cache and return the result if available
     ret = _disk_cache.caching_lookup(cache_key, _compile)
+
+    # backwards compatibility: old versions of boa returned a VVMDeployer.
+    # here we detect the case and invalidate the cache so it can recompile.
+    if isinstance(ret, VVMDeployer):
+        _disk_cache.invalidate(cache_key)
+        ret = _disk_cache.caching_lookup(cache_key, _compile)
+
     return _handle_output(ret)
 
 
