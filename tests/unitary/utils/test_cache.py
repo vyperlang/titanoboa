@@ -47,19 +47,19 @@ x: constant(int128) = 1000
         assert mock_compile.call_count == 0
 
         # First call should hit vvm.compile_source
-        test1 = _loads_partial_vvm(code, version, "fake_file.vy")
+        test1 = _loads_partial_vvm(code, version, None, "fake_file.vy")
         assert mock_compile.call_count == 1
 
         # Second call should hit the cache
-        test2 = _loads_partial_vvm(code, version, "fake_file.vy")
+        test2 = _loads_partial_vvm(code, version, None, "fake_file.vy")
         assert mock_compile.call_count == 1
 
         # using a different filename should also hit the cache
-        test3 = _loads_partial_vvm(code, version, "fake_fileeeee.vy")
+        test3 = _loads_partial_vvm(code, version, None, "fake_fileeeee.vy")
         assert mock_compile.call_count == 1
 
         # using a different vyper version should *miss* the cache
-        _loads_partial_vvm(code, version2, "fake_file.vy")
+        _loads_partial_vvm(code, version2, None, "fake_file.vy")
         assert mock_compile.call_count == 2
 
     assert test1.abi == test2.abi == test3.abi
