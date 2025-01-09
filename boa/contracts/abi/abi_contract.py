@@ -550,7 +550,7 @@ def _parse_complex(abi: dict, value: Any, name=None) -> str:
     components = abi["components"]
     typname = name or abi["name"] or "user_struct"
     component_names = [item["name"] for item in components]
-    typ = namedtuple(typname, component_names)
+    typ = namedtuple(typname, component_names, rename=True)
 
     def _leaf(tuple_vals):
         components_parsed = [
