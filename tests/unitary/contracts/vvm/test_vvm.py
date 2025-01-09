@@ -134,6 +134,61 @@ def foo(x: uint256, y: address):
         assert log.address == c.address
 
 
+def test_nested_logs():
+    code1 = """
+# pragma version 0.3.10
+event Foo:
+    pass
+
+@external
+def foo():
+    log Foo()
+    """
+    code2 = """
+# pragma version 0.3.10
+event Foo:
+    pass
+
+interface CallFoo:
+    def foo(): nonpayable
+
+@external
+def bar(target: CallFoo):
+    target.foo()
+    log Foo()
+    target.foo()
+    """
+    c1 = boa.loads(code1)
+    c2 = boa.loads(code2)
+
+    c1.foo()
+    logs = c1.get_logs()
+    assert len(logs) == 1
+    assert type(logs[0]).__name__ == "Foo"
+    assert len(logs[0]) == 1
+    assert logs[0].address == c1.address
+
+    c2.bar(c1)
+    logs = c2.get_logs()
+    expected_addresses = [c1.address, c2.address, c1.address]
+    assert len(logs) == len(expected_addresses) == 3
+
+    for addr, log in zip(expected_addresses, logs):
+        assert type(log).__name__ == "Foo"
+        assert len(log) == 1
+        assert log.address == addr
+
+    # test with no subcalls
+    logs = c2.get_logs(include_child_logs=False)
+    expected_addresses = [c2.address]
+    assert len(logs) == len(expected_addresses) == 1
+
+    for log in logs:
+        assert type(log).__name__ == "Foo"
+        assert len(log) == 1
+        assert log.address == c2.address
+
+
 def test_structs():
     code = """
 # pragma version 0.3.10
