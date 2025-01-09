@@ -81,6 +81,15 @@ def test_cache_clean_name():
     assert deployer1.name == "foo"
     assert deployer2.name == "bar"
 
+def test_ctor_revert():
+    code = """
+# pragma version 0.3.10
+@external
+def __init__():
+    raise
+    """
+    with boa.reverts():
+        boa.loads(code)
 
 def test_logs():
     code = """
