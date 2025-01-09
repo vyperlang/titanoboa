@@ -69,3 +69,14 @@ def test_forward_args_on_deploy():
     contract = contract_vvm_deployer.deploy(43, override_address=random_addy)
 
     assert random_addy == contract.address
+
+
+def test_cache_clean_name():
+    with open(mock_3_10_path) as f:
+        code = f.read()
+
+    deployer1 = boa.loads_partial(code, name="foo")
+    deployer2 = boa.loads_partial(code, name="bar")
+
+    assert deployer1.name == "foo"
+    assert deployer2.name == "bar"
