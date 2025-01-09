@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Templates
 
 Templates used throughout the documentation.
@@ -20,10 +25,10 @@ Templates used throughout the documentation.
 
 ---
 
-
 ## Function Documentation Template
 
 Basic template for documenting functions. The link to the source code needs to be added manually. If no link is given, the GitHub emoji with the embedded link will not be rendered.
+
 ### `load`
 !!! function "`load`"
     <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L171-L177" class="source-code-link" target="_blank" rel="noopener"></a>
