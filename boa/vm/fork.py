@@ -49,9 +49,6 @@ class CachingRPC(RPC):
             cls._loaded = {}
             cls._pid = os.getpid()
 
-        if cache_dir is None:
-            cache_dir = DEFAULT_CACHE_DIR
-
         if (rpc.identifier, chain_id, cache_dir) in cls._loaded:
             return cls._loaded[(rpc.identifier, chain_id, cache_dir)]
 
@@ -68,10 +65,10 @@ class CachingRPC(RPC):
 
         self._chain_id = chain_id  # TODO: check if this is needed
 
-        if cache_dir is None:
-            cache_dir = DEFAULT_CACHE_DIR
+        self._cache_file = None
+        if cache_dir is not None:
+            self._cache_file = self._cache_filepath(cache_dir, chain_id)
 
-        self._cache_file = self._cache_filepath(cache_dir, chain_id)
         self._init_db()
 
     @classmethod
