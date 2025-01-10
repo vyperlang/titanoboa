@@ -29,7 +29,6 @@ _HAS_KEY = b"\x01"  # could be anything
 
 class CachingRPC(RPC):
     def __init__(self, rpc: RPC, cache_file: str = DEFAULT_CACHE_DIR):
-        # (default to memory db plyvel not found or cache_file is None)
         self._rpc = rpc
 
         self._cache_file = cache_file
@@ -47,6 +46,7 @@ class CachingRPC(RPC):
             # use CacheDB as an additional layer over disk
             self._db = CacheDB(sqlitedb, cache_size=1024 * 1024)  # type: ignore
 
+        # use memory db if cache_file is None
         else:
             self._db = MemoryDB(lrudict(1024 * 1024))
 
