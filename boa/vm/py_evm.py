@@ -407,8 +407,10 @@ class PyEVM:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork_rpc(self, rpc: RPC, block_identifier: str, **kwargs):
-        account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
+    def fork_rpc(self, rpc: RPC, block_identifier: str, debug: bool, **kwargs):
+        account_db_class = AccountDBFork.class_from_rpc(
+            rpc, block_identifier, debug, **kwargs
+        )
         self._init_vm(account_db_class)
 
         block_info = self.vm.state._account_db._block_info

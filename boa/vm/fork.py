@@ -1,5 +1,6 @@
 import os
 import pickle
+import sys
 from pathlib import Path
 from typing import Any, Type
 
@@ -35,7 +36,7 @@ class CachingRPC(RPC):
     _loaded: dict[tuple[str, int, str], "CachingRPC"] = {}
     _pid: int = os.getpid()  # so we can detect if our fds are bad
 
-    def __new__(cls, rpc, chain_id, cache_dir=None):
+    def __new__(cls, rpc, chain_id, debug, cache_dir=None):
         if isinstance(rpc, cls):
             if rpc._chain_id == chain_id:
                 return rpc
@@ -55,12 +56,15 @@ class CachingRPC(RPC):
             return cls._loaded[(rpc.identifier, chain_id, cache_dir)]
 
         ret = super().__new__(cls)
-        ret.__init__(rpc, chain_id, cache_dir)
+        ret.__init__(rpc, chain_id, debug, cache_dir)
         cls._loaded[(rpc.identifier, chain_id, cache_dir)] = ret
         return ret
 
-    def __init__(self, rpc: RPC, chain_id: int, cache_dir: str = None):
+    def __init__(
+        self, rpc: RPC, chain_id: int, debug: bool = False, cache_dir: str = None
+    ):
         self._rpc = rpc
+        self._debug = debug
 
         self._chain_id = chain_id  # TODO: check if this is needed
 
@@ -97,14 +101,29 @@ class CachingRPC(RPC):
     def _mk_key(self, method: str, params: Any) -> Any:
         return pickle.dumps((method, params))
 
+    _col_limit = 97
+
+    def _debug_dump(self, item):
+        str_item = str(item)
+        # TODO: make this configurable
+        if len(str_item) > self._col_limit:
+            return str_item[: self._col_limit] + "..."
+        return str_item
+
     def fetch(self, method, params):
         # cannot dispatch into fetch_multi, doesn't work for debug_traceCall.
         key = self._mk_key(method, params)
+        if self._debug:
+            print(method, self._debug_dump(params), file=sys.stderr)
         if key in self._db:
             ret = pickle.loads(self._db[key])
+            if self._debug:
+                print("(hit)", self._debug_dump(ret), file=sys.stderr)
             return ret
 
         result = self._rpc.fetch(method, params)
+        if self._debug:
+            print("(miss)", self._debug_dump(result), file=sys.stderr)
         self._db[key] = pickle.dumps(result)
         return result
 
@@ -120,6 +139,9 @@ class CachingRPC(RPC):
             key = self._mk_key(method, params)
             try:
                 ret[item_ix] = pickle.loads(self._db[key])
+                if self._debug:
+                    print(method, self._debug_dump(params), file=sys.stderr)
+                    print("(hit)", self._debug_dump(ret[item_ix]), file=sys.stderr)
             except KeyError:
                 keys.append((key, item_ix))
                 batch.append((method, params))
@@ -130,6 +152,10 @@ class CachingRPC(RPC):
             for result_ix, rpc_result in enumerate(self._rpc.fetch_multi(batch)):
                 key, item_ix = keys[result_ix]
                 ret[item_ix] = rpc_result
+                if self._debug:
+                    params = batch[item_ix][1]
+                    print(method, self._debug_dump(params), file=sys.stderr)
+                    print("(miss)", self._debug_dump(rpc_result), file=sys.stderr)
                 self._db[key] = pickle.dumps(rpc_result)
 
         return [ret[i] for i in range(len(ret))]
@@ -140,12 +166,12 @@ class CachingRPC(RPC):
 class AccountDBFork(AccountDB):
     @classmethod
     def class_from_rpc(
-        cls, rpc: RPC, block_identifier: str, **kwargs
+        cls, rpc: RPC, block_identifier: str, debug: bool, **kwargs
     ) -> Type["AccountDBFork"]:
         class _ConfiguredAccountDB(AccountDBFork):
             def __init__(self, *args, **kwargs2):
                 chain_id = int(rpc.fetch_uncached("eth_chainId", []), 16)
-                caching_rpc = CachingRPC(rpc, chain_id, **kwargs)
+                caching_rpc = CachingRPC(rpc, chain_id, debug, **kwargs)
                 super().__init__(
                     caching_rpc, chain_id, block_identifier, *args, **kwargs2
                 )

@@ -61,14 +61,24 @@ class Env:
         url: str,
         reset_traces=True,
         block_identifier="safe",
+        debug=False,
         deprecated=True,
         **kwargs,
     ):
         if deprecated:
             warnings.warn("using boa.env.fork directly is deprecated; use `boa.fork`!")
-        return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
+        return self.fork_rpc(
+            EthereumRPC(url), reset_traces, block_identifier, debug, **kwargs
+        )
 
-    def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork_rpc(
+        self,
+        rpc: RPC,
+        reset_traces=True,
+        block_identifier="safe",
+        debug=False,
+        **kwargs,
+    ):
         """
         Fork the environment to a local chain.
         :param rpc: RPC to fork from
@@ -82,7 +92,7 @@ class Env:
             self.sha3_trace = {}
             self.sstore_trace = {}
 
-        self.evm.fork_rpc(rpc, block_identifier, **kwargs)
+        self.evm.fork_rpc(rpc, block_identifier, debug=debug, **kwargs)
 
     def get_gas_meter_class(self):
         return self.evm.get_gas_meter_class()
