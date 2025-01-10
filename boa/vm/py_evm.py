@@ -428,8 +428,6 @@ class PyEVM:
             block_info["parentHash"].removeprefix("0x")
         )
 
-        self.vm.state._account_db._rpc._init_db()
-
     @property
     def is_forked(self):
         return issubclass(
