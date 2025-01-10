@@ -7,7 +7,16 @@ from eth.constants import ZERO_ADDRESS
 import boa
 from boa import BoaError
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
-from boa.util.abi import Address
+from boa.util.abi import Address, abi_decode
+
+
+def test_abi_decode():
+    # test for vendored eth-stdlib fix. can be removed once the following
+    # PR is merged + released:
+    # https://github.com/skellet0r/eth-stdlib/pull/22
+    bytez = b"\x00" * 33
+    val = abi_decode("(uint256)", bytez)
+    assert val == (0,)
 
 
 def load_via_abi(code, name="test contract"):
