@@ -2,7 +2,7 @@ import os
 import pickle
 import sys
 from pathlib import Path
-from typing import Any, Type
+from typing import Any, Optional, Type
 
 import rlp
 from eth.db.account import AccountDB, keccak
@@ -36,7 +36,7 @@ class CachingRPC(RPC):
     _loaded: dict[tuple[str, int, str], "CachingRPC"] = {}
     _pid: int = os.getpid()  # so we can detect if our fds are bad
 
-    def __new__(cls, rpc, chain_id, debug, cache_dir=None):
+    def __new__(cls, rpc, chain_id, debug, cache_dir=DEFAULT_CACHE_DIR):
         if isinstance(rpc, cls):
             if rpc._chain_id == chain_id:
                 return rpc
@@ -58,16 +58,17 @@ class CachingRPC(RPC):
         return ret
 
     def __init__(
-        self, rpc: RPC, chain_id: int, debug: bool = False, cache_dir: str = None
+        self,
+        rpc: RPC,
+        chain_id: int,
+        debug: bool = False,
+        cache_dir: Optional[str] = DEFAULT_CACHE_DIR,
     ):
         self._rpc = rpc
         self._debug = debug
 
         self._chain_id = chain_id  # TODO: check if this is needed
-
-        self._cache_file = None
-        if cache_dir is not None:
-            self._cache_file = self._cache_filepath(cache_dir, chain_id)
+        self._cache_dir = cache_dir
 
         self._init_db()
 
@@ -76,8 +77,9 @@ class CachingRPC(RPC):
         return Path(cache_dir) / f"chainid_{hex(chain_id)}-sqlite.db"
 
     def _init_db(self):
-        if self._cache_file is not None:
-            cache_file = os.path.expanduser(self._cache_file)
+        if self._cache_dir is not None:
+            cache_file = self._cache_filepath(self._cache_dir, self._chain_id)
+            cache_file = os.path.expanduser(cache_file)
             sqlitedb = SqliteCache.create(cache_file)
             # use CacheDB as an additional layer over disk
             self._db = CacheDB(sqlitedb, cache_size=1024 * 1024)  # type: ignore

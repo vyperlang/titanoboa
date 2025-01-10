@@ -5,7 +5,7 @@ from pathlib import Path
 
 from eth.db.backends.base import BaseDB
 
-#from vyper.utils import timeit
+# from vyper.utils import timeit
 
 # poor man's constant
 _ONE_MONTH = 30 * 24 * 3600
@@ -114,7 +114,7 @@ class SqliteCache(BaseDB):
             return True
         return False
 
-    #@timeit("FLUSH")
+    # @timeit("FLUSH")
     def _flush(self, nolock=False):
         # set nolock=True if the caller has already acquired a lock.
         if len(self._expiry_updates) == 0:
@@ -178,7 +178,7 @@ class SqliteCache(BaseDB):
         current_time = get_current_time()
         return current_time + self.ttl
 
-    #@timeit("CACHE HIT")
+    # @timeit("CACHE HIT")
     def __getitem__(self, key: bytes) -> bytes:
         query_string = """
         SELECT value, expires_at FROM kv_store
@@ -201,9 +201,9 @@ class SqliteCache(BaseDB):
 
         return val
 
-    #@timeit("CACHE MISS")
+    # @timeit("CACHE MISS")
     def __setitem__(self, key: bytes, value: bytes) -> None:
-        #with timeit("CACHE MISS"):
+        # with timeit("CACHE MISS"):
         with self.acquire_write_lock():
             query_string = """
             INSERT INTO kv_store(key, value, expires_at) VALUES (?,?,?)
