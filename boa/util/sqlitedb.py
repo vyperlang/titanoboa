@@ -47,6 +47,7 @@ class SqliteCache(BaseDB):
     def gc(self):
         current_time = get_current_time()
         self.db.execute("DELETE FROM kv_store WHERE expires_at < ?", (current_time,))
+        self.db.commit()
 
     @classmethod
     # Creates db as a class variable to avoid level db lock error
