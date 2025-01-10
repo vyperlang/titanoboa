@@ -5,7 +5,7 @@ from pathlib import Path
 
 from eth.db.backends.base import BaseDB
 
-# from vyper.utils import timeit
+#from vyper.utils import timeit
 
 # poor man's constant
 _ONE_MONTH = 30 * 24 * 3600
@@ -28,13 +28,20 @@ class SqliteCache(BaseDB):
     _CREATE_CMD = """
         -- tuning
         pragma journal_mode = wal;
-        pragma synchronous = normal;
         pragma temp_store = memory;
 
+        -- it's ok to lose some of the wal, this is just a cache
+        pragma synchronous = normal;
+
+        -- https://sqlite.org/forum/forumpost/3ce1ee76242cfb29
+        /* "I'm of the opinion that you should never use mmap"
+           - Richard Hipp
+        */
+        -- pragma mmap_size = 30000000000;
         -- not sure if these help or hurt things:
-        pragma mmap_size = 30000000000;
-        pragma auto_vacuum = incremental;
-        pragma page_size = 512;
+        -- pragma auto_vacuum = incremental;
+        -- pragma page_size = 512;
+        pragma cache_size = 10000;
 
         -- initialize schema
         CREATE TABLE IF NOT EXISTS kv_store (
@@ -57,7 +64,7 @@ class SqliteCache(BaseDB):
         # a good balance.
         # note that informal benchmarks performed on my machine(TM) had
         # the following results:
-        # __getitem__: 15us
+        # __getitem__: 45us
         # __getitem__ (from wal): 120us
         # __setitem__: 300us
         # gc: 40us
@@ -107,7 +114,7 @@ class SqliteCache(BaseDB):
             return True
         return False
 
-    # @timeit("FLUSH")
+    #@timeit("FLUSH")
     def _flush(self, nolock=False):
         # set nolock=True if the caller has already acquired a lock.
         if len(self._expiry_updates) == 0:
@@ -171,6 +178,7 @@ class SqliteCache(BaseDB):
         current_time = get_current_time()
         return current_time + self.ttl
 
+    #@timeit("CACHE HIT")
     def __getitem__(self, key: bytes) -> bytes:
         query_string = """
         SELECT value, expires_at FROM kv_store
@@ -193,8 +201,9 @@ class SqliteCache(BaseDB):
 
         return val
 
+    #@timeit("CACHE MISS")
     def __setitem__(self, key: bytes, value: bytes) -> None:
-        # with timeit("CACHE MISS"):
+        #with timeit("CACHE MISS"):
         with self.acquire_write_lock():
             query_string = """
             INSERT INTO kv_store(key, value, expires_at) VALUES (?,?,?)
