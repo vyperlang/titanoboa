@@ -5,9 +5,10 @@
 Titanoboa automatically caches states when running in fork mode. It uses python's builtin [sqlite](https://docs.python.org/3/library/sqlite3.html) support
 This allows forking to take less time and use less memory.
 
-The cache file is by default located at `~/.cache/titanoboa/fork-sqlite.db`
-To customize this folder, pass the `cache_file` argument to the `fork` function (see [fork](../api/testing.md#fork)).
-In case cache_file is `None`, the cache will be disabled.
+The cache file is by default located at `~/.cache/titanoboa/fork/chainid_<0x_chainid>-sqlite.db` (one sqlite db file is generated per chain id).
+To customize this folder, pass the `cache_dir` argument to the `fork` function (see [fork](../api/testing.md#fork)).
+In case `cache_dir` is set to `None`, the cache will be disabled.
+To debug cache hits and misses, pass `debug=True` to the `fork` function.
 
 !!! warning
     Caching a fresh block might lead to incorrect results and stale cache files.
