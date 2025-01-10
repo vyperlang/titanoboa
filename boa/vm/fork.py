@@ -1,5 +1,4 @@
 import os
-import sys
 from typing import Any, Type
 
 import rlp
@@ -15,11 +14,12 @@ from requests import HTTPError
 
 from boa.rpc import RPC, RPCError, fixup_dict, json, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
+from boa.util.sqlitedb import SqliteCache
 
 TIMEOUT = 60  # default timeout for http requests in seconds
 
 
-DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork.db"
+DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork-sqlite.db"
 _PREDEFINED_BLOCKS = {"safe", "latest", "finalized", "pending", "earliest"}
 
 
@@ -42,23 +42,13 @@ class CachingRPC(RPC):
 
     def _init_db(self):
         if self._cache_file is not None:
-            try:
-                from boa.util.leveldb import LevelDB
+            cache_file = os.path.expanduser(self._cache_file)
+            sqlitedb = SqliteCache.create(cache_file)
+            # use CacheDB as an additional layer over disk
+            self._db = CacheDB(sqlitedb, cache_size=1024 * 1024)  # type: ignore
 
-                print("(using leveldb)", file=sys.stderr)
-
-                cache_file = os.path.expanduser(self._cache_file)
-                # use CacheDB as an additional layer over disk
-                # (ideally would use leveldb lru cache but it's not configurable
-                # via LevelDB API).
-                leveldb = LevelDB.create(cache_file)
-                self._db = CacheDB(leveldb, cache_size=1024 * 1024)  # type: ignore
-                return
-            except ImportError:
-                # plyvel not found
-                pass
-
-        self._db = MemoryDB(lrudict(1024 * 1024))
+        else:
+            self._db = MemoryDB(lrudict(1024 * 1024))
 
     @property
     def identifier(self) -> str:
