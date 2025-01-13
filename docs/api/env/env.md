@@ -2,15 +2,17 @@
 
 ### Description
 
-TODO
-<!-- A wrapper class around py-evm which provides a "contract-centric" API. TODO more details on the singleton architecture in [boa-singleton-env](../../explain/singleton_env.md). -->
-
-### Attributes
-
-- `eoa`: The account to use as `msg.sender` for top-level calls and `tx.origin` in the context of state mutating function calls.
-- `chain`: The global py-evm chain instance.
+A wrapper class around py-evm which provides a "contract-centric" API. More details on the environment architecture in [boa-singleton-env](../../explain/singleton_env.md).
 
 ---
+
+## `timestamp`
+
+!!! function "`boa.env.timestamp()`"
+
+    **Description**
+
+    Returns the internal pyevm timestamp. A devex shortcut to `boa.env.evm.patch.timestamp`.
 
 ## `alias`
 
