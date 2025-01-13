@@ -507,7 +507,6 @@ class NetworkEnv(Env):
             self._rpc,
             reset_traces=False,
             block_identifier=block_identifier,
-            cache_file=None,
         )
 
     def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
