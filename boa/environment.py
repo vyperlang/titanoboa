@@ -369,5 +369,10 @@ class Env:
             assert blocks is not None  # mypy hint
             seconds = blocks * block_delta
 
-        self.evm.patch.timestamp += seconds
-        self.evm.patch.block_number += blocks
+        if (new_blknum := self.evm.patch.block_number + blocks) < 0:
+            raise ValueError(f"negative blocknumber: to set to {new_blknum}")
+        if (new_ts := self.evm.patch.timestamp + seconds) < 0:
+            raise ValueError(f"negative timestamp: to set to {new_ts}")
+
+        self.evm.patch.timestamp = new_ts
+        self.evm.patch.block_number = new_blknum
