@@ -371,3 +371,7 @@ class Env:
 
         self.evm.patch.timestamp += seconds
         self.evm.patch.block_number += blocks
+
+    def timestamp(self) -> int:
+        # shortcut for devex
+        return self.evm.patch.timestamp
