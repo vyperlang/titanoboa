@@ -66,6 +66,7 @@ class VVMDeployer:
         if contract_name is not None:
             # override contract name
             ret.contract_name = contract_name
+        ret._computation = computation
 
         if computation.is_error:
             ret.handle_error(computation)
