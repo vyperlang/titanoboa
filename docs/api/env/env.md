@@ -8,11 +8,13 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ## `timestamp`
 
-!!! function "`boa.env.timestamp()`"
+!!! property "`boa.env.timestamp`"
 
     **Description**
 
-    Returns the internal pyevm timestamp. A devex shortcut to `boa.env.evm.patch.timestamp`.
+    Returns the internal pyevm timestamp. Should be equal to evaluating `block.timestamp`.
+
+    Uses the low level `boa.env.patch` object to ensure that changes to the are rolled back after exiting `boa.env.anchor()` blocks.
 
 ## `alias`
 
@@ -37,7 +39,7 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
     **Description**
 
-    A context manager which snapshots the state and the vm, and reverts to the snapshot on exit.
+    A context manager which snapshots the state and the vm, and reverts to the snapshot on exit. Properties in the low-level `boa.env.patch` object are also rolled back after exiting the context manager.
 
     ---
 
