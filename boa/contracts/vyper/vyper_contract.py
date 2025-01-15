@@ -40,6 +40,7 @@ from boa.contracts.base_evm_contract import (
     _handle_child_trace,
 )
 from boa.contracts.call_trace import TraceSource
+from boa.contracts.event_decoder import decode_log
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
@@ -51,7 +52,6 @@ from boa.contracts.vyper.decoder_utils import (
     ByteAddressableStorage,
     decode_vyper_object,
 )
-from boa.contracts.vyper.event import Event
 from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
 from boa.profiling import cache_gas_used_for_computation
@@ -716,33 +716,15 @@ class VyperContract(_BaseVyperContract):
         module_t = self.compiler_data.global_ctx
         return {e.event_id: e for e in module_t.used_events}
 
-    def decode_log(self, e):
-        log_id, address, topics, data = e
-        assert self._address.canonical_address == address
-        event_hash = topics[0]
-        event_t = self.event_for[event_hash]
+    @cached_property
+    def event_abi_for(self):
+        return {
+            k: event_t.to_toplevel_abi_dict()[0]
+            for k, event_t in self.event_for.items()
+        }
 
-        topic_typs = []
-        arg_typs = []
-        for is_topic, typ in zip(event_t.indexed, event_t.arguments.values()):
-            if not is_topic:
-                arg_typs.append(typ)
-            else:
-                topic_typs.append(typ)
-
-        decoded_topics = []
-        for typ, t in zip(topic_typs, topics[1:]):
-            # convert to bytes for abi decoder
-            encoded_topic = t.to_bytes(32, "big")
-            decoded_topics.append(
-                abi_decode(typ.abi_type.selector_name(), encoded_topic)
-            )
-
-        tuple_typ = TupleT(arg_typs)
-
-        args = abi_decode(tuple_typ.abi_type.selector_name(), data)
-
-        return Event(log_id, self._address, event_t, decoded_topics, args)
+    def decode_log(self, raw_log):
+        return decode_log(self._address, self.event_abi_for, raw_log)
 
     def marshal_to_python(self, computation, vyper_typ):
         self._computation = computation  # for further inspection
