@@ -371,3 +371,12 @@ class Env:
 
         self.evm.patch.timestamp += seconds
         self.evm.patch.block_number += blocks
+
+    # EVM API - access to evm.patch attributes
+    @property
+    def timestamp(self) -> int:
+        return self.evm.patch.timestamp
+
+    @timestamp.setter
+    def timestamp(self, val: int) -> None:
+        self.evm.patch.timestamp = val
