@@ -728,7 +728,8 @@ class VyperContract(_BaseVyperContract):
 
     def decode_log(self, raw_log):
         # use decode_log() because it is convenient, but we probably
-        # want to specialize this for vyper contracts.
+        # want to specialize this for vyper contracts as is done in
+        # marshal_to_python/vyper_object.
         return decode_log(self._address, self.event_abi_for, raw_log)
 
     def marshal_to_python(self, computation, vyper_typ):
