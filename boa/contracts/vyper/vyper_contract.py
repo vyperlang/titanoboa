@@ -4,7 +4,9 @@
 
 import contextlib
 import copy
+import sys
 import warnings
+from collections import namedtuple
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -30,7 +32,8 @@ from vyper.compiler.output import build_abi_output, build_solc_json
 from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.types import AddressT, HashMapT, TupleT
+from vyper.semantics.types import AddressT, DArrayT, HashMapT, SArrayT, StructT, TupleT
+from vyper.semantics.types.bytestrings import _BytestringT
 from vyper.utils import method_id
 
 from boa import BoaError
@@ -1113,25 +1116,51 @@ class _InjectVyperFunction(VyperFunction):
         self._source_map = source_map
 
 
-_typ_cache = {}
+_typ_cache: dict[StructT, type] = {}
+
+
+def _get_struct_type(st: StructT):
+    if st in _typ_cache:
+        return _typ_cache[st]
+
+    typ = namedtuple(st._id, list(st.tuple_keys()), rename=True)  # type: ignore[misc]
+
+    _typ_cache[st] = typ
+    return typ
 
 
 def vyper_object(val, vyper_type):
-    # make a thin wrapper around whatever type val is,
-    # and tag it with _vyper_type metadata
-
-    vt = type(val)
-    if vt is bool or vt is Address:
-        # https://stackoverflow.com/q/2172189
-        # bool is not ambiguous wrt vyper type anyways.
+    # prim types and bytestrings
+    if vyper_type._is_prim_word:
+        # TODO: special handling for addresses, interfaces, contracts
         return val
 
-    if vt not in _typ_cache:
-        # ex. class int_wrapper(int): pass
-        _typ_cache[vt] = type(f"{vt.__name__}_wrapper", (vt,), {})
+    if isinstance(vyper_type, _BytestringT):
+        return val
 
-    t = _typ_cache[type(val)]
+    # handling for complex types. recurse
+    if isinstance(vyper_type, StructT):
+        struct_t = _get_struct_type(vyper_type)
+        assert isinstance(val, tuple)
+        item_types = list(vyper_type.tuple_members())
+        assert len(val) == len(item_types)
+        val = [vyper_object(item, item_t) for (item, item_t) in zip(val, item_types)]
+        return struct_t(*val)
 
-    ret = t(val)
-    ret._vyper_type = vyper_type
-    return ret
+    if isinstance(vyper_type, TupleT):
+        assert isinstance(val, tuple)
+        item_types = list(vyper_type.tuple_members())
+        assert len(val) == len(item_types)
+        val = [vyper_object(item, item_t) for (item, item_t) in zip(val, item_types)]
+        return tuple(val)
+
+    if isinstance(vyper_type, (SArrayT, DArrayT)):
+        assert isinstance(val, list)
+        child_t = vyper_type.value_type
+        return [vyper_object(item, child_t) for item in val]
+
+    if "pytest" in sys.modules:
+        # should be unreachable! but we only assert in test mode. otherwise,
+        # we just return the value (and hope users report the missed case.
+        raise AssertionError()
+    return val
