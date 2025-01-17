@@ -4,7 +4,6 @@
 
 import contextlib
 import copy
-import sys
 import warnings
 from collections import namedtuple
 from dataclasses import dataclass
@@ -33,7 +32,6 @@ from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
 from vyper.semantics.types import AddressT, DArrayT, HashMapT, SArrayT, StructT, TupleT
-from vyper.semantics.types.bytestrings import _BytestringT
 from vyper.utils import method_id
 
 from boa import BoaError
@@ -1131,14 +1129,6 @@ def _get_struct_type(st: StructT):
 
 
 def vyper_object(val, vyper_type):
-    # prim types and bytestrings
-    if vyper_type._is_prim_word:
-        # TODO: special handling for addresses, interfaces, contracts
-        return val
-
-    if isinstance(vyper_type, _BytestringT):
-        return val
-
     # handling for complex types. recurse
     if isinstance(vyper_type, StructT):
         struct_t = _get_struct_type(vyper_type)
@@ -1160,8 +1150,5 @@ def vyper_object(val, vyper_type):
         child_t = vyper_type.value_type
         return [vyper_object(item, child_t) for item in val]
 
-    if "pytest" in sys.modules:
-        # should be unreachable! but we only assert in test mode. otherwise,
-        # we just return the value (and hope users report the missed case.
-        raise AssertionError()
+    # note: we can add special handling for addresses, interfaces, contracts here
     return val
