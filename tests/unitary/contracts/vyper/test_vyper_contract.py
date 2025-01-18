@@ -287,19 +287,18 @@ def baz(x: uint256, _from: address, y: uint256) -> (MyStruct1, MyStruct2):
     c = boa.loads(code)
 
     t = c.foo(1)
-    # don't get correct struct names from the abi.
-    # assert type(t).__name__ == "MyStruct1"
+    assert type(t).__name__ == "MyStruct1"
     assert t.x == 1
 
     addy = boa.env.generate_address()
     s = c.bar(addy, 2)
-    # assert type(s).__name__ == "MyStruct2"
+    assert type(s).__name__ == "MyStruct2"
     assert s._0 == addy  # test renames
     assert s.x == 2
 
     u, v = c.baz(3, addy, 4)
-    # assert type(u).__name__ == "MyStruct1"
+    assert type(u).__name__ == "MyStruct1"
     assert u.x == 3
-    # assert type(v).__name__ == "MyStruct2"
+    assert type(v).__name__ == "MyStruct2"
     assert v._0 == addy
     assert v.x == 4
