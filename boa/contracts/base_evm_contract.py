@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, NamedTuple, Optional
 
 from eth.abc import ComputationAPI
 
 from boa.contracts.call_trace import TraceFrame
+from boa.contracts.event_decoder import RawLogEntry
 from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.exceptions import strip_internal_frames
@@ -11,11 +12,6 @@ from boa.util.exceptions import strip_internal_frames
 if TYPE_CHECKING:
     from boa.contracts.vyper.vyper_contract import DevReason
     from boa.vm.py_evm import titanoboa_computation
-
-
-@dataclass
-class RawEvent:
-    event_data: Any
 
 
 class _BaseEVMContract:
@@ -72,7 +68,9 @@ class _BaseEVMContract:
 
         return computation._log_entries
 
-    def get_logs(self, computation=None, include_child_logs=True, strict=True):
+    def get_logs(
+        self, computation=None, include_child_logs=True, strict=True
+    ) -> list["RawLogEntry | NamedTuple"]:
         if computation is None:
             computation = self._computation
 
@@ -82,21 +80,23 @@ class _BaseEVMContract:
         # sort on log_id
         entries = sorted(entries)
 
-        ret = []
+        ret: list["RawLogEntry | NamedTuple"] = []
         for e in entries:
-            logger_address = e[1]
+            log_entry = RawLogEntry(*e)
+            logger_address = log_entry.address
             c = self.env.lookup_contract(logger_address)
+            decoded_log = None
             if c is not None:
                 try:
-                    decoded_log = c.decode_log(e)
+                    decoded_log = c.decode_log(log_entry)
                 except Exception as exc:
                     if strict:
                         raise exc
-                    else:
-                        decoded_log = RawEvent(e)
+
+            if decoded_log is None:  # decoding unsuccessful
+                ret.append(log_entry)
             else:
-                decoded_log = RawEvent(e)
-            ret.append(decoded_log)
+                ret.append(decoded_log)
 
         return ret
 

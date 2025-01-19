@@ -14,6 +14,7 @@ from boa.contracts.base_evm_contract import (
     _handle_child_trace,
 )
 from boa.contracts.call_trace import TraceSource
+from boa.contracts.event_decoder import decode_log
 from boa.util.abi import ABIError, Address, abi_decode, abi_encode, is_abi_encodable
 
 
@@ -311,75 +312,7 @@ class ABIContract(_BaseEVMContract):
         return ret
 
     def decode_log(self, log_entry):
-        # low level log id
-        _log_id, address, topics, data = log_entry
-        assert self._address.canonical_address == address
-        event_hash = topics[0]
-
-        if event_hash not in self.event_for:
-            # our abi is wrong, we can't decode it. fail loudly.
-            msg = f"can't find event with hash {hex(event_hash)} in abi"
-            msg += f" (possible events: {self.event_for})"
-            raise ValueError(msg)
-
-        event_abi = self.event_for[event_hash]
-
-        topic_abis = []
-        arg_abis = []
-
-        # add `address` to the tuple. this is prevented from being an
-        # actual fieldname in vyper and solidity since it is a reserved keyword
-        # in both languages. if for some reason some abi actually has a field
-        # named `address`, it will be renamed by namedtuple(rename=True).
-        tuple_names = ["address"]
-
-        for item_abi in event_abi["inputs"]:
-            is_topic = item_abi["indexed"]
-            assert isinstance(is_topic, bool)
-            if not is_topic:
-                arg_abis.append(item_abi)
-            else:
-                topic_abis.append(item_abi)
-
-            tuple_names.append(item_abi["name"])
-
-        tuple_typ = namedtuple(event_abi["name"], tuple_names, rename=True)
-
-        decoded_topics = []
-        for topic_abi, t in zip(topic_abis, topics[1:]):
-            # convert to bytes for abi decoder
-            encoded_topic = t.to_bytes(32, "big")
-            decoded_topics.append(abi_decode(_abi_from_json(topic_abi), encoded_topic))
-
-        args_selector = _format_abi_type(
-            [_abi_from_json(arg_abi) for arg_abi in arg_abis]
-        )
-
-        decoded_args = abi_decode(args_selector, data)
-
-        topics_ix = 0
-        args_ix = 0
-
-        xs = [Address(address)]
-
-        # re-align the evm topic + args lists with the way they appear in the
-        # abi ex. Transfer(indexed address, address, indexed address)
-        for item_abi in event_abi["inputs"]:
-            is_topic = item_abi["indexed"]
-            if is_topic:
-                abi = topic_abis[topics_ix]
-                topic = decoded_topics[topics_ix]
-                # topic abi is currently never complex, but use _parse_complex
-                # as future-proofing mechanism
-                xs.append(_parse_complex(abi, topic))
-                topics_ix += 1
-            else:
-                abi = arg_abis[args_ix]
-                arg = decoded_args[args_ix]
-                xs.append(_parse_complex(abi, arg))
-                args_ix += 1
-
-        return tuple_typ(*xs)
+        return decode_log(self._address, self.event_for, log_entry)
 
     def marshal_to_python(self, computation, abi_type: list[str]) -> tuple[Any, ...]:
         """
