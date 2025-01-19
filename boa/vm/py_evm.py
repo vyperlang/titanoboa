@@ -283,18 +283,28 @@ class titanoboa_computation:
     def apply_create_message(cls, state, msg, tx_ctx, **kwargs):
         computation = super().apply_create_message(state, msg, tx_ctx, **kwargs)
 
-        bytecode = msg.code
+        bytecode = msg.code  # initcode
         # cf. eth/vm/logic/system/Create* opcodes
         contract_address = msg.storage_address
 
-        if is_eip1167_contract(bytecode):
-            contract_address = extract_eip1167_address(bytecode)
-            bytecode = cls.env.evm.vm.state.get_code(contract_address)
-
+        # blueprints
         if bytecode in cls.env._code_registry:
             target = cls.env._code_registry[bytecode].deployer.at(contract_address)
             target.created_from = Address(msg.sender)
             cls.env.register_contract(contract_address, target)
+
+        # register eip1167 contracts
+        runtime_bytecode = computation.output
+        if is_eip1167_contract(runtime_bytecode):
+            proxied_address = extract_eip1167_address(runtime_bytecode)
+            proxied_contract = cls.env.lookup_contract(proxied_address)
+            if proxied_contract is not None and hasattr(proxied_contract, "deployer"):
+                contract = proxied_contract.deployer.at(contract_address)
+                if hasattr(contract, "created_from"):
+                    contract.created_from = Address(msg.sender)
+                cls.env.register_contract(contract_address, contract)
+
+        # TODO: register contracts created with `create_copy_of()`
 
         return computation
 
