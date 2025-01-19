@@ -1,9 +1,28 @@
 from functools import cached_property
 from typing import Optional
 
-from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
+from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.environment import Env
+from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
+
+
+class VVMBlueprint(ABIContract):
+    def __init__(self, deployer: "VVMDeployer", address: Address):
+        name = deployer.name or "<unknown>"  # help mypy
+        super().__init__(
+            name,
+            abi=[],
+            address=address,
+            filename=deployer.filename,
+            functions=[],
+            events=[],
+        )
+        self._deployer = deployer
+
+    @property
+    def deployer(self):
+        return self._deployer
 
 
 class VVMDeployer:
@@ -73,11 +92,6 @@ class VVMDeployer:
 
         return ret
 
-    @cached_property
-    def _blueprint_deployer(self):
-        # TODO: add filename
-        return ABIContractFactory.from_abi_dict([])
-
     def deploy_as_blueprint(self, env=None, blueprint_preamble=None, **kwargs):
         """
         Deploy a new blueprint from this contract.
@@ -94,7 +108,7 @@ class VVMDeployer:
         )
         address, computation = env.deploy(bytecode=blueprint_bytecode, **kwargs)
 
-        ret = self._blueprint_deployer.at(address)
+        ret = VVMBlueprint(self, address)
 
         if computation.is_error:
             ret.handle_error(computation)

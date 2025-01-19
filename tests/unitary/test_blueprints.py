@@ -3,8 +3,8 @@ import vyper
 from eth_utils import to_canonical_address
 
 import boa
-from boa.contracts.vyper.vyper_contract import VyperContract
 from boa.contracts.abi.abi_contract import ABIContract
+from boa.contracts.vyper.vyper_contract import VyperContract
 from boa.util.eip5202 import get_create2_address
 
 _blueprint_code = """
@@ -68,7 +68,8 @@ def test_blueprint_registration(blueprint_code, factory_code, version):
     else:
         expected_contract_type = ABIContract
     assert isinstance(child_contract, expected_contract_type)
-    # TODO: add more checks on child_contract.deployer
+
+    assert child_contract.some_function() == 5
 
 
 def test_create2_address_bad_salt(blueprint_code):
