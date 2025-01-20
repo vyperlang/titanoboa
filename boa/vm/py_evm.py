@@ -407,14 +407,18 @@ class PyEVM:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork_rpc(self, rpc: RPC, block_identifier: str, force: bool = False, **kwargs):
-        account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
+    def fork_rpc(self, rpc: RPC, block_identifier: str, debug: bool, **kwargs):
+        account_db_class = AccountDBFork.class_from_rpc(
+            rpc, block_identifier, debug, **kwargs
+        )
         self._init_vm(account_db_class)
+
         block_info = self.vm.state._account_db._block_info
+        chain_id = self.vm.state._account_db._chain_id
 
         self.patch.timestamp = int(block_info["timestamp"], 16)
         self.patch.block_number = int(block_info["number"], 16)
-        self.patch.chain_id = int(rpc.fetch("eth_chainId", []), 16)
+        self.patch.chain_id = chain_id
 
         # placeholder not to fetch all prev hashes
         # (NOTE: we should document this)
@@ -423,8 +427,6 @@ class PyEVM:
         self.patch.prev_hashes[0] = bytes.fromhex(
             block_info["parentHash"].removeprefix("0x")
         )
-
-        self.vm.state._account_db._rpc._init_db()
 
     @property
     def is_forked(self):

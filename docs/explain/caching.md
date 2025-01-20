@@ -2,20 +2,13 @@
 
 ## Forked States
 
-Titanoboa caches states when running in fork mode.
-It uses [LevelDB](https://github.com/google/leveldb) via the [Plyvel](https://plyvel.readthedocs.io) wrapper.
+Titanoboa automatically caches states when running in fork mode. It uses python's builtin [sqlite](https://docs.python.org/3/library/sqlite3.html) support
 This allows forking to take less time and use less memory.
 
-To enable it, install `plyvel`, which is a wrapper around the C++ LevelDB.
-Titanoboa will automatically use it.
-
-The cache file is by default located at `~/.cache/titanoboa/fork.db`
-To customize this folder, pass the `cache_file` argument to the `fork` function (see [fork](../api/testing.md#fork)).
-In case cache_file is `None`, cache will be disabled.
-
-!!! note
-    If you are not using Linux, you might need to install `plyvel-ci` instead.
-    This is part of a [Pull Request](https://github.com/wbolster/plyvel/pull/129) waiting for merge since 2021.
+The cache file is by default located at `~/.cache/titanoboa/fork/chainid_<0x_chainid>-sqlite.db` (one sqlite db file is generated per chain id).
+To customize this folder, pass the `cache_dir` argument to the `fork` function (see [fork](../api/testing.md#fork)).
+In case `cache_dir` is set to `None`, the cache will be disabled.
+To debug cache hits and misses, pass `debug=True` to the `fork` function.
 
 !!! warning
     Caching a fresh block might lead to incorrect results and stale cache files.
