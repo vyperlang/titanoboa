@@ -1,5 +1,7 @@
 from functools import cached_property
 
+import vyper.utils
+
 from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.contracts.base_evm_contract import StackTrace
 from boa.environment import Env
@@ -15,11 +17,24 @@ class VVMContract(ABIContract):
         functions: list[ABIFunction],
         events: list[dict],
         address: Address,
-        source_map: dict,
+        deployer: "VVMDeployer",
         **kwargs,
     ):
-        self.source_map = source_map
+        self._deployer = deployer
         super().__init__(name, abi, functions, events, address, **kwargs)
+
+    @property
+    def deployer(self) -> "VVMDeployer":
+        # override deployer getter in ABIContract
+        return self._deployer
+
+    @cached_property
+    def source_code(self) -> str:
+        return self.deployer.source_code  # .split("\n")
+
+    @cached_property
+    def source_map(self) -> dict:
+        return self.deployer.source_map
 
     def stack_trace(self, computation):
         code_stream = computation.code
@@ -32,7 +47,15 @@ class VVMContract(ABIContract):
             if pc in ast_map.keys():
                 error = ast_map[pc]
 
-        ret = StackTrace([str(error)])
+        print(error)
+        lineno, _, _, _ = error
+
+        line = vyper.utils.annotate_source_code(
+            self.source_code, lineno, context_lines=3
+        )
+
+        ret = StackTrace([line])
+        print(ret)
         return ret
 
 
@@ -141,7 +164,7 @@ class VVMDeployer(ABIContractFactory):
             self.functions,
             self.events,
             address,
-            self.source_map,
+            self,
             nowarn=nowarn,
         )
 
