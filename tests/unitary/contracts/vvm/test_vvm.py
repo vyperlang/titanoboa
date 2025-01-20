@@ -258,3 +258,29 @@ def baz(x: uint256, _from: address, y: uint256) -> (MyStruct1, MyStruct2):
     # assert type(v).__name__ == "MyStruct2"
     assert v._0 == addy
     assert v.x == 4
+
+
+def test_vvm_source_maps():
+    code = """
+# pragma version 0.3.10
+
+struct MyStruct1:
+    x: uint256
+
+@external
+def foo(x: uint256) -> MyStruct1:
+    if x == 0:
+        return MyStruct1({x: x})
+
+    if x == 1:
+        raise "x is 1"
+
+    return MyStruct1({x: x})
+
+@external
+def bar() -> uint256:
+    return 42
+    """
+
+    c = boa.loads(code)
+    c.foo(1)

@@ -1,42 +1,67 @@
 from functools import cached_property
-from typing import Optional
 
-from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
+from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
+from boa.contracts.base_evm_contract import StackTrace
 from boa.environment import Env
+from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
 
 
-class VVMDeployer:
+class VVMContract(ABIContract):
+    def __init__(
+        self,
+        name: str,
+        abi: list[dict],
+        functions: list[ABIFunction],
+        events: list[dict],
+        address: Address,
+        source_map: dict,
+        **kwargs,
+    ):
+        self.source_map = source_map
+        super().__init__(name, abi, functions, events, address, **kwargs)
+
+    def stack_trace(self, computation):
+        code_stream = computation.code
+
+        ast_map = self.source_map["pc_pos_map"]
+
+        error = None
+        for pc in reversed(code_stream._trace):
+            pc = str(pc)
+            if pc in ast_map.keys():
+                error = ast_map[pc]
+
+        ret = StackTrace([str(error)])
+        return ret
+
+
+class VVMDeployer(ABIContractFactory):
     """
     A deployer that uses the Vyper Version Manager (VVM).
     This allows deployment of contracts written in older versions of Vyper that
     can interact with new versions using the ABI definition.
     """
 
-    def __init__(self, abi, bytecode, name, filename):
+    def __init__(self, abi, bytecode, name, filename, source_code, source_map):
         """
         Initialize a VVMDeployer instance.
         :param abi: The contract's ABI.
         :param bytecode: The contract's bytecode.
         :param filename: The filename of the contract.
         """
-        self.abi: dict = abi
         self.bytecode: bytes = bytecode
-        self.name: Optional[str] = name
-        self.filename: str = filename
+        self.source_map: dict = source_map
+        self.source_code = source_code
+        super().__init__(name, abi, filename=filename)
 
     @classmethod
-    def from_compiler_output(cls, compiler_output, name, filename):
+    def from_compiler_output(cls, compiler_output, name, filename, source_code):
         abi = compiler_output["abi"]
         bytecode_nibbles = compiler_output["bytecode"]
         bytecode = bytes.fromhex(bytecode_nibbles.removeprefix("0x"))
-        return cls(abi, bytecode, name, filename)
-
-    @cached_property
-    def factory(self):
-        return ABIContractFactory.from_abi_dict(
-            self.abi, name=self.name, filename=self.filename
-        )
+        source_map = compiler_output["source_map"]
+        return cls(abi, bytecode, name, filename, source_code, source_map)
 
     @cached_property
     def constructor(self):
@@ -74,6 +99,7 @@ class VVMDeployer:
 
     @cached_property
     def _blueprint_deployer(self):
+        # TODO: this can definitely be removed with some refactoring
         # TODO: add filename
         return ABIContractFactory.from_abi_dict([])
 
@@ -104,5 +130,20 @@ class VVMDeployer:
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
 
-    def at(self, address, nowarn=False):
-        return self.factory.at(address, nowarn=nowarn)
+    def at(self, address: Address | str, nowarn=False) -> VVMContract:
+        """
+        Create an VVMContract object for a deployed contract at `address`.
+        """
+        address = Address(address)
+        contract = VVMContract(
+            self._name,
+            self.abi,
+            self.functions,
+            self.events,
+            address,
+            self.source_map,
+            nowarn=nowarn,
+        )
+
+        contract.env.register_contract(address, contract)
+        return contract
