@@ -78,5 +78,5 @@ def test_minimal_proxy_registration(blueprint_code, factory_code, version):
   ---> 6     return 5
   ------------------^
        7
-"""
-    assert error in str(child_contract.stack_trace()), "incorrect stack trace"
+    """
+    assert error.strip() == str(child_contract.stack_trace()).strip()
