@@ -58,3 +58,25 @@ def test_minimal_proxy_registration(blueprint_code, factory_code, version):
 
     with boa.reverts(dev="fail"):
         child_contract.some_other_function()
+
+    # last frame is wrong, leaving it here to notify if this gets fixed
+    error = """<<unknown> at 0x0880cf17Bd263d3d3a5c09D2D86cCecA3CcbD97c, compiled with vyper-0.4.0+e9db8d9>
+ <compiler: user assert>
+
+  function "some_other_function", line 10:4 
+        9 def some_other_function():
+  ---> 10     assert msg.sender == self  # dev: fail
+  ------------^
+       11
+
+
+<<unknown> at 0xD6e90d0441B1362f5C062950F77Cf4f2068fa574, compiled with vyper-0.4.0+e9db8d9> (created by 0x2cb6bCe32aeF4eD506382896e702DE7Ff109D9E9)
+ <compiler: bad calldatasize or callvalue>
+
+  function "some_function", line 6:11 
+       5 def some_function() -> uint256:
+  ---> 6     return 5
+  ------------------^
+       7
+"""
+    assert error in str(child_contract.stack_trace()), "incorrect stack trace"
