@@ -57,6 +57,7 @@ from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
 from boa.profiling import cache_gas_used_for_computation
 from boa.util.abi import Address, abi_decode, abi_encode
+from boa.util.eip1167 import is_eip1167_contract
 from boa.util.eip5202 import generate_blueprint_bytecode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
@@ -759,9 +760,13 @@ class VyperContract(_BaseVyperContract):
 
     def stack_trace(self, computation=None):
         computation = computation or self._computation
+        is_minimal_proxy = is_eip1167_contract(self.bytecode)
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation)
-        if error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS:
+        if (
+            error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS
+            and not is_minimal_proxy
+        ):
             return ret
         return _handle_child_trace(computation, self.env, ret)
 
