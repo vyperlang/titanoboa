@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from functools import cached_property
 
 import vyper.utils
@@ -39,24 +40,35 @@ class VVMContract(ABIContract):
     def stack_trace(self, computation):
         code_stream = computation.code
 
-        ast_map = self.source_map["pc_pos_map"]
+        error_map = self.source_map["pc_pos_map"]
 
         error = None
         for pc in reversed(code_stream._trace):
             pc = str(pc)
-            if pc in ast_map.keys():
-                error = ast_map[pc]
+            if pc in error_map:
+                error = error_map[pc]
+                break
 
-        print(error)
-        lineno, _, _, _ = error
+        # we only report the line for simplicity, could be more precise
+        lineno, *_ = error
 
-        line = vyper.utils.annotate_source_code(
-            self.source_code, lineno, context_lines=3
+        annotated_error = vyper.utils.annotate_source_code(
+            self.source_code, lineno, context_lines=3, line_numbers=True
         )
 
-        ret = StackTrace([line])
-        print(ret)
-        return ret
+        return StackTrace([VVMErrorDetail(annotated_error)])
+
+
+@dataclass
+class VVMErrorDetail:
+    # this class is useful to detect that the error comes
+    # from a VVM contract in BoaError. Also useful if
+    # source_map based reporting is improved in the future
+    # (similarly to ErrorDetail).
+    annotated_source: str
+
+    def __str__(self):
+        return self.annotated_source
 
 
 class VVMDeployer(ABIContractFactory):

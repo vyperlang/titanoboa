@@ -171,7 +171,13 @@ class BoaError(Exception):
         else:
             err = frame
 
-        ret = f"{err}\n\n{self.stack_trace}"
+        # we don't use isinstance here to avoid circular imports
+        if frame.__class__.__name__ == "VVMErrorDetail":
+            # vvm error details contain less information
+            ret = str(frame)
+        else:
+            ret = f"{err}\n\n{self.stack_trace}"
+
         call_tree = str(self.call_trace)
         ledge = "=" * 72
         return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"
