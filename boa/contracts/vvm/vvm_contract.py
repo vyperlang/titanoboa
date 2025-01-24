@@ -73,7 +73,7 @@ class VVMErrorDetail:
 
 class VVMBlueprint(ABIContract):
     def __init__(self, deployer: "VVMDeployer", address: Address):
-        name = deployer.name or "<unknown>"  # help mypy
+        name = deployer._name or "<unknown>"  # help mypy
         super().__init__(
             name,
             abi=[],
