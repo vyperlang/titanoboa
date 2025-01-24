@@ -37,7 +37,8 @@ class VVMContract(ABIContract):
     def source_map(self) -> dict:
         return self.deployer.source_map
 
-    def stack_trace(self, computation):
+    def stack_trace(self, computation=None):
+        computation = computation or self._computation
         code_stream = computation.code
 
         error_map = self.source_map["pc_pos_map"]
