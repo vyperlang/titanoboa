@@ -3,8 +3,8 @@ from functools import cached_property
 
 import vyper.utils
 
-from boa.contracts.base_evm_contract import StackTrace
 from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
+from boa.contracts.base_evm_contract import StackTrace
 from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
