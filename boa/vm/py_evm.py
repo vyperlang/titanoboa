@@ -299,7 +299,7 @@ class titanoboa_computation:
             proxied_address = extract_eip1167_address(runtime_bytecode)
             proxied_contract = cls.env.lookup_contract(proxied_address)
             if proxied_contract is not None and hasattr(proxied_contract, "deployer"):
-                contract = proxied_contract.deployer.at(contract_address)
+                contract = proxied_contract.deployer.at(contract_address, nowarn=True)
                 if hasattr(contract, "created_from"):
                     contract.created_from = Address(msg.sender)
                 cls.env.register_contract(contract_address, contract)
