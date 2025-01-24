@@ -612,7 +612,7 @@ class VyperContract(_BaseVyperContract):
         if to_check != self.compiler_data.bytecode_runtime and not nowarn:
             warnings.warn(
                 f"casted bytecode does not match compiled bytecode at {self}",
-                stacklevel=2,
+                stacklevel=3,
             )
         self.bytecode = bytecode
 
