@@ -62,10 +62,9 @@ class VVMContract(ABIContract):
 
 @dataclass
 class VVMErrorDetail:
-    # this class is useful to detect that the error comes
-    # from a VVM contract in BoaError. Also useful if
-    # source_map based reporting is improved in the future
-    # (similarly to ErrorDetail).
+    # minimal class for now, will be expanded when source_map
+    # based reporting is improved in the future (similarly
+    # to ErrorDetail).
     annotated_source: str
 
     def __str__(self):
