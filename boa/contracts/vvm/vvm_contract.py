@@ -31,7 +31,7 @@ class VVMContract(ABIContract):
 
     @cached_property
     def source_code(self) -> str:
-        return self.deployer.source_code  # .split("\n")
+        return self.deployer.source_code
 
     @cached_property
     def source_map(self) -> dict:
