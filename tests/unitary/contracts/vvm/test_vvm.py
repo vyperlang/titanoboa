@@ -283,4 +283,16 @@ def bar() -> uint256:
     """
 
     c = boa.loads(code)
-    c.foo(1)
+
+    with boa.reverts():
+        c.foo(1)
+
+    error = """     10         return MyStruct1({x: x})
+     11
+     12     if x == 1:
+---> 13         raise "x is 1"
+     14
+     15     return MyStruct1({x: x})
+     16"""
+
+    assert error == str(c.stack_trace().last_frame), "incorrect reported error source"
