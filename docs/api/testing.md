@@ -58,7 +58,8 @@ Boa provides various utilities to test vyper contracts and execute them in a for
     - `block_identifier: int | str = "safe"`: The block identifier to fork from, can be an integer or a string (default is "safe").
     - `allow_dirty: bool = False`: If `True`, allows forking with a dirty state (default is `False`).
     - `reset_traces: bool = True`: Whether to reset the traces.
-    - `cache_file: str | None = None`: The file to cache the forked state to. To learn more about caching see [Caching](../explain/caching.md).
+    - `cache_dir: str | None = ~/.cache/titanoboa/fork/`: The directory to create the cache database for forked state. To learn more about caching see [Caching](../explain/caching.md).
+    - `debug: bool = False`: Whether to debug RPC calls.
     - `**kwargs`: Additional arguments for the RPC.
     ---
 

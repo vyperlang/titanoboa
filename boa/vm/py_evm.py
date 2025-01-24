@@ -283,18 +283,28 @@ class titanoboa_computation:
     def apply_create_message(cls, state, msg, tx_ctx, **kwargs):
         computation = super().apply_create_message(state, msg, tx_ctx, **kwargs)
 
-        bytecode = msg.code
+        bytecode = msg.code  # initcode
         # cf. eth/vm/logic/system/Create* opcodes
         contract_address = msg.storage_address
 
-        if is_eip1167_contract(bytecode):
-            contract_address = extract_eip1167_address(bytecode)
-            bytecode = cls.env.evm.vm.state.get_code(contract_address)
-
+        # blueprints
         if bytecode in cls.env._code_registry:
             target = cls.env._code_registry[bytecode].deployer.at(contract_address)
             target.created_from = Address(msg.sender)
             cls.env.register_contract(contract_address, target)
+
+        # register eip1167 contracts
+        runtime_bytecode = computation.output
+        if is_eip1167_contract(runtime_bytecode):
+            proxied_address = extract_eip1167_address(runtime_bytecode)
+            proxied_contract = cls.env.lookup_contract(proxied_address)
+            if proxied_contract is not None and hasattr(proxied_contract, "deployer"):
+                contract = proxied_contract.deployer.at(contract_address)
+                if hasattr(contract, "created_from"):
+                    contract.created_from = Address(msg.sender)
+                cls.env.register_contract(contract_address, contract)
+
+        # TODO: register contracts created with `create_copy_of()`
 
         return computation
 
@@ -407,14 +417,18 @@ class PyEVM:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork_rpc(self, rpc: RPC, block_identifier: str, force: bool = False, **kwargs):
-        account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
+    def fork_rpc(self, rpc: RPC, block_identifier: str, debug: bool, **kwargs):
+        account_db_class = AccountDBFork.class_from_rpc(
+            rpc, block_identifier, debug, **kwargs
+        )
         self._init_vm(account_db_class)
+
         block_info = self.vm.state._account_db._block_info
+        chain_id = self.vm.state._account_db._chain_id
 
         self.patch.timestamp = int(block_info["timestamp"], 16)
         self.patch.block_number = int(block_info["number"], 16)
-        self.patch.chain_id = int(rpc.fetch("eth_chainId", []), 16)
+        self.patch.chain_id = chain_id
 
         # placeholder not to fetch all prev hashes
         # (NOTE: we should document this)
@@ -423,8 +437,6 @@ class PyEVM:
         self.patch.prev_hashes[0] = bytes.fromhex(
             block_info["parentHash"].removeprefix("0x")
         )
-
-        self.vm.state._account_db._rpc._init_db()
 
     @property
     def is_forked(self):

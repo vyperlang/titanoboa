@@ -3,8 +3,8 @@ from functools import cached_property
 
 import vyper.utils
 
-from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.contracts.base_evm_contract import StackTrace
+from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
@@ -71,6 +71,24 @@ class VVMErrorDetail:
         return self.annotated_source
 
 
+class VVMBlueprint(ABIContract):
+    def __init__(self, deployer: "VVMDeployer", address: Address):
+        name = deployer.name or "<unknown>"  # help mypy
+        super().__init__(
+            name,
+            abi=[],
+            address=address,
+            filename=deployer.filename,
+            functions=[],
+            events=[],
+        )
+        self._deployer = deployer
+
+    @property
+    def deployer(self):
+        return self._deployer
+
+
 class VVMDeployer(ABIContractFactory):
     """
     A deployer that uses the Vyper Version Manager (VVM).
@@ -126,17 +144,12 @@ class VVMDeployer(ABIContractFactory):
         if contract_name is not None:
             # override contract name
             ret.contract_name = contract_name
+        ret._computation = computation
 
         if computation.is_error:
             ret.handle_error(computation)
 
         return ret
-
-    @cached_property
-    def _blueprint_deployer(self):
-        # TODO: this can definitely be removed with some refactoring
-        # TODO: add filename
-        return ABIContractFactory.from_abi_dict([])
 
     def deploy_as_blueprint(self, env=None, blueprint_preamble=None, **kwargs):
         """
@@ -154,7 +167,7 @@ class VVMDeployer(ABIContractFactory):
         )
         address, computation = env.deploy(bytecode=blueprint_bytecode, **kwargs)
 
-        ret = self._blueprint_deployer.at(address)
+        ret = VVMBlueprint(self, address)
 
         if computation.is_error:
             ret.handle_error(computation)

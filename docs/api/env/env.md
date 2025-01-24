@@ -2,15 +2,19 @@
 
 ### Description
 
-TODO
-<!-- A wrapper class around py-evm which provides a "contract-centric" API. TODO more details on the singleton architecture in [boa-singleton-env](../../explain/singleton_env.md). -->
-
-### Attributes
-
-- `eoa`: The account to use as `msg.sender` for top-level calls and `tx.origin` in the context of state mutating function calls.
-- `chain`: The global py-evm chain instance.
+A wrapper class around py-evm which provides a "contract-centric" API. More details on the environment architecture in [boa-singleton-env](../../explain/singleton_env.md).
 
 ---
+
+## `timestamp`
+
+!!! property "`boa.env.timestamp`"
+
+    **Description**
+
+    Returns the internal pyevm timestamp. Should be equal to evaluating `block.timestamp`.
+
+    Uses the low level `boa.env.patch` object to ensure that changes to the are rolled back after exiting `boa.env.anchor()` blocks.
 
 ## `alias`
 
@@ -35,7 +39,7 @@ TODO
 
     **Description**
 
-    A context manager which snapshots the state and the vm, and reverts to the snapshot on exit.
+    A context manager which snapshots the state and the vm, and reverts to the snapshot on exit. Properties in the low-level `boa.env.patch` object are also rolled back after exiting the context manager.
 
     ---
 

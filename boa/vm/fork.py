@@ -1,6 +1,8 @@
 import os
+import pickle
 import sys
-from typing import Any, Type
+from pathlib import Path
+from typing import Any, Optional, Type
 
 import rlp
 from eth.db.account import AccountDB, keccak
@@ -13,13 +15,14 @@ from eth.vm.message import Message
 from eth_utils import int_to_big_endian, to_canonical_address, to_checksum_address
 from requests import HTTPError
 
-from boa.rpc import RPC, RPCError, fixup_dict, json, to_bytes, to_hex, to_int
+from boa.rpc import RPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
+from boa.util.sqlitedb import SqliteCache
 
 TIMEOUT = 60  # default timeout for http requests in seconds
 
 
-DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork.db"
+DEFAULT_CACHE_DIR = "~/.cache/titanoboa/fork/"
 _PREDEFINED_BLOCKS = {"safe", "latest", "finalized", "pending", "earliest"}
 
 
@@ -28,37 +31,62 @@ _HAS_KEY = b"\x01"  # could be anything
 
 
 class CachingRPC(RPC):
-    def __init__(self, rpc: RPC, cache_file: str = DEFAULT_CACHE_DIR):
-        # (default to memory db plyvel not found or cache_file is None)
-        self._rpc = rpc
-
-        self._cache_file = cache_file
-        self._init_db()
-
     # _loaded is a cache for the constructor.
     # reduces fork time after the first fork.
-    _loaded: dict[tuple[str, str], "CachingRPC"] = {}
+    _loaded: dict[tuple[str, int, str], "CachingRPC"] = {}
     _pid: int = os.getpid()  # so we can detect if our fds are bad
 
+    def __new__(cls, rpc, chain_id, debug, cache_dir=DEFAULT_CACHE_DIR):
+        if isinstance(rpc, cls):
+            if rpc._chain_id == chain_id:
+                return rpc
+            else:
+                # unwrap
+                rpc = rpc._rpc
+
+        if os.getpid() != cls._pid:
+            # we are in a fork. reload everything so that fds are not corrupted
+            cls._loaded = {}
+            cls._pid = os.getpid()
+
+        if (rpc.identifier, chain_id, cache_dir) in cls._loaded:
+            return cls._loaded[(rpc.identifier, chain_id, cache_dir)]
+
+        ret = super().__new__(cls)
+        ret.__init__(rpc, chain_id, debug, cache_dir)
+        cls._loaded[(rpc.identifier, chain_id, cache_dir)] = ret
+        return ret
+
+    def __init__(
+        self,
+        rpc: RPC,
+        chain_id: int,
+        debug: bool = False,
+        cache_dir: Optional[str] = DEFAULT_CACHE_DIR,
+    ):
+        self._rpc = rpc
+        self._debug = debug
+
+        self._chain_id = chain_id  # TODO: check if this is needed
+        self._cache_dir = cache_dir
+
+        self._init_db()
+
+    @classmethod
+    def _cache_filepath(cls, cache_dir, chain_id):
+        return Path(cache_dir) / f"chainid_{hex(chain_id)}-sqlite.db"
+
     def _init_db(self):
-        if self._cache_file is not None:
-            try:
-                from boa.util.leveldb import LevelDB
+        if self._cache_dir is not None:
+            cache_file = self._cache_filepath(self._cache_dir, self._chain_id)
+            cache_file = os.path.expanduser(cache_file)
+            sqlitedb = SqliteCache.create(cache_file)
+            # use CacheDB as an additional layer over disk
+            self._db = CacheDB(sqlitedb, cache_size=1024 * 1024)  # type: ignore
 
-                print("(using leveldb)", file=sys.stderr)
-
-                cache_file = os.path.expanduser(self._cache_file)
-                # use CacheDB as an additional layer over disk
-                # (ideally would use leveldb lru cache but it's not configurable
-                # via LevelDB API).
-                leveldb = LevelDB.create(cache_file)
-                self._db = CacheDB(leveldb, cache_size=1024 * 1024)  # type: ignore
-                return
-            except ImportError:
-                # plyvel not found
-                pass
-
-        self._db = MemoryDB(lrudict(1024 * 1024))
+        # use memory db if cache_file is None
+        else:
+            self._db = MemoryDB(lrudict(1024 * 1024))
 
     @property
     def identifier(self) -> str:
@@ -68,35 +96,34 @@ class CachingRPC(RPC):
     def name(self):
         return self._rpc.name
 
-    def __new__(cls, rpc, cache_file=DEFAULT_CACHE_DIR):
-        if isinstance(rpc, cls):
-            return rpc
-
-        if os.getpid() != cls._pid:
-            # we are in a fork. reload everything so that fds are not corrupted
-            cls._loaded = {}
-            cls._pid = os.getpid()
-
-        if (rpc.identifier, cache_file) in cls._loaded:
-            return cls._loaded[(rpc.identifier, cache_file)]
-
-        ret = super().__new__(cls)
-        ret.__init__(rpc, cache_file)
-        cls._loaded[(rpc.identifier, cache_file)] = ret
-        return ret
-
     # a stupid key for the kv store
     def _mk_key(self, method: str, params: Any) -> Any:
-        return json.dumps({"method": method, "params": params}).encode("utf-8")
+        return pickle.dumps((method, params))
+
+    _col_limit = 97
+
+    def _debug_dump(self, item):
+        str_item = str(item)
+        # TODO: make this configurable
+        if len(str_item) > self._col_limit:
+            return str_item[: self._col_limit] + "..."
+        return str_item
 
     def fetch(self, method, params):
         # cannot dispatch into fetch_multi, doesn't work for debug_traceCall.
         key = self._mk_key(method, params)
+        if self._debug:
+            print(method, self._debug_dump(params), file=sys.stderr)
         if key in self._db:
-            return json.loads(self._db[key])
+            ret = pickle.loads(self._db[key])
+            if self._debug:
+                print("(hit)", self._debug_dump(ret), file=sys.stderr)
+            return ret
 
         result = self._rpc.fetch(method, params)
-        self._db[key] = json.dumps(result).encode("utf-8")
+        if self._debug:
+            print("(miss)", self._debug_dump(result), file=sys.stderr)
+        self._db[key] = pickle.dumps(result)
         return result
 
     def fetch_uncached(self, method, params):
@@ -110,7 +137,10 @@ class CachingRPC(RPC):
         for item_ix, (method, params) in enumerate(payload):
             key = self._mk_key(method, params)
             try:
-                ret[item_ix] = json.loads(self._db[key])
+                ret[item_ix] = pickle.loads(self._db[key])
+                if self._debug:
+                    print(method, self._debug_dump(params), file=sys.stderr)
+                    print("(hit)", self._debug_dump(ret[item_ix]), file=sys.stderr)
             except KeyError:
                 keys.append((key, item_ix))
                 batch.append((method, params))
@@ -121,7 +151,11 @@ class CachingRPC(RPC):
             for result_ix, rpc_result in enumerate(self._rpc.fetch_multi(batch)):
                 key, item_ix = keys[result_ix]
                 ret[item_ix] = rpc_result
-                self._db[key] = json.dumps(rpc_result).encode("utf-8")
+                if self._debug:
+                    params = batch[item_ix][1]
+                    print(method, self._debug_dump(params), file=sys.stderr)
+                    print("(miss)", self._debug_dump(rpc_result), file=sys.stderr)
+                self._db[key] = pickle.dumps(rpc_result)
 
         return [ret[i] for i in range(len(ret))]
 
@@ -131,16 +165,21 @@ class CachingRPC(RPC):
 class AccountDBFork(AccountDB):
     @classmethod
     def class_from_rpc(
-        cls, rpc: RPC, block_identifier: str, **kwargs
+        cls, rpc: RPC, block_identifier: str, debug: bool, **kwargs
     ) -> Type["AccountDBFork"]:
         class _ConfiguredAccountDB(AccountDBFork):
             def __init__(self, *args, **kwargs2):
-                caching_rpc = CachingRPC(rpc, **kwargs)
-                super().__init__(caching_rpc, block_identifier, *args, **kwargs2)
+                chain_id = int(rpc.fetch_uncached("eth_chainId", []), 16)
+                caching_rpc = CachingRPC(rpc, chain_id, debug, **kwargs)
+                super().__init__(
+                    caching_rpc, chain_id, block_identifier, *args, **kwargs2
+                )
 
         return _ConfiguredAccountDB
 
-    def __init__(self, rpc: CachingRPC, block_identifier: str, *args, **kwargs) -> None:
+    def __init__(
+        self, rpc: CachingRPC, chain_id: int, block_identifier: str, *args, **kwargs
+    ) -> None:
         super().__init__(*args, **kwargs)
 
         self._dontfetch = JournalDB(MemoryDB())
@@ -149,6 +188,8 @@ class AccountDBFork(AccountDB):
 
         if block_identifier not in _PREDEFINED_BLOCKS:
             block_identifier = to_hex(block_identifier)
+
+        self._chain_id = chain_id
 
         self._block_info = self._rpc.fetch_uncached(
             "eth_getBlockByNumber", [block_identifier, False]
