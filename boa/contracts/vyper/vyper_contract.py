@@ -160,6 +160,15 @@ class _BaseVyperContract(_BaseEVMContract):
     def _constants(self):
         return ConstantsModel(self.compiler_data)
 
+    @cached_property
+    def deployer(self):
+        # TODO add test
+        return VyperDeployer(self.compiler_data, filename=self.filename)
+
+    # is this actually useful?
+    def at(self, address):
+        return self.deployer.at(address)
+
 
 # create a blueprint for use with `create_from_blueprint`.
 # uses a ERC5202 preamble, when calling `create_from_blueprint` will
@@ -200,10 +209,6 @@ class VyperBlueprint(_BaseVyperContract):
         self._address = Address(addr)
 
         self.env.register_blueprint(compiler_data.bytecode, self)
-
-    @cached_property
-    def deployer(self):
-        return VyperDeployer(self.compiler_data, filename=self.filename)
 
 
 class FrameDetail(dict):
@@ -628,15 +633,6 @@ class VyperContract(_BaseVyperContract):
     @cached_property
     def _immutables(self):
         return ImmutablesModel(self)
-
-    @cached_property
-    def deployer(self):
-        # TODO add test
-        return VyperDeployer(self.compiler_data, filename=self.filename)
-
-    # is this actually useful?
-    def at(self, address):
-        return self.deployer.at(address)
 
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation)
