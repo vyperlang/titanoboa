@@ -1,6 +1,6 @@
 [project]
 name = "titanoboa"
-version = "0.2.0"
+version = "0.2.5"
 description = "A Vyper interpreter"
 #authors = []
 license = { file = "LICENSE" }
@@ -24,6 +24,9 @@ dependencies = [
     "pytest",
     "pytest-cov",
 
+    # required to compile older versions of vyper
+    "vvm>=0.3.2",
+
     # eth-rlp requirement, not installed by default with 3.12
     "typing-extensions",
 
@@ -35,10 +38,11 @@ dependencies = [
 
     # required for networked accounts
     "eth-account>=0.13.0",
+    "mkdocs-material==9.5.41 ",
 ]
 
 [project.optional-dependencies]
-forking-recommended = ["ujson"]
+forking-recommended = ["ujson>=5.10.0", "requests-cache>=1.2.1"]
 
 # colab has antient ipykernel which causes bugs with decimals: https://github.com/jupyter/notebook/issues/5260
 colab = ["ipykernel>=6.29.4"]
@@ -57,7 +61,7 @@ markers = [
 ]
 
 [tool.setuptools.package-data]
-boa = ["integrations/**/*.js"]
+boa = ["integrations/**/*.js", "contracts/**/*.html"]
 
 #[dev-dependencies]
 #black = { version = "^18.3-alpha.0", python = "^3.6" }

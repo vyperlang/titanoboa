@@ -7,12 +7,21 @@ from eth.constants import ZERO_ADDRESS
 import boa
 from boa import BoaError
 from boa.contracts.abi.abi_contract import ABIContractFactory, ABIFunction
-from boa.util.abi import Address
+from boa.util.abi import Address, abi_decode
 
 
-def load_via_abi(code):
+def test_abi_decode():
+    # test for vendored eth-stdlib fix. can be removed once the following
+    # PR is merged + released:
+    # https://github.com/skellet0r/eth-stdlib/pull/22
+    bytez = b"\x00" * 33
+    val = abi_decode("(uint256)", bytez)
+    assert val == (0,)
+
+
+def load_via_abi(code, name="test contract"):
     contract = boa.loads(code)
-    factory = ABIContractFactory.from_abi_dict(contract.abi)
+    factory = ABIContractFactory.from_abi_dict(contract.abi, name)
     return factory.at(contract.address), contract
 
 
@@ -167,10 +176,10 @@ def test(n: uint256) -> uint256:
     assert n > 0
     return 0
 """
-    c, _ = load_via_abi(code)
+    c, _ = load_via_abi(code, "revert test")
     with pytest.raises(BoaError) as exc_info:
         c.test(0)
-    ((error,),) = exc_info.value.args
+    (_, (error,)) = exc_info.value.args
     assert re.match(r"^ +\(.*\.test\(uint256\) -> \['uint256']\)$", error)
 
     with pytest.raises(Exception) as exc_info:
@@ -199,7 +208,7 @@ def test(n: uint256) -> uint256:
     abi_contract.method_id_map.clear()  # mess up the method IDs
     with pytest.raises(BoaError) as exc_info:
         abi_contract.test(0)
-    ((error,),) = exc_info.value.args
+    (_, (error,)) = exc_info.value.args
     assert re.match(r"^ +\(unknown method id .*\.0x29e99f07\)$", error)
 
 
@@ -238,6 +247,7 @@ def test_abi_invalid_components():
 
     assert "Components found in non-tuple type uint256" == str(exc_info.value)
 
+
 def test_abi_factory_multi_deploy():
     code = """
 foo: public(uint256)
@@ -255,4 +265,3 @@ def __init__(x: uint256):
 
     assert wrapper.foo() == 5
     assert wrapper2.foo() == 6
-

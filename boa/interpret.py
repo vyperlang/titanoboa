@@ -1,13 +1,16 @@
-import json
 import sys
 import textwrap
 from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
+import vvm
 import vyper
+from packaging.version import Version
+from vvm.utils.versioning import _pick_vyper_version, detect_version_specifier_set
+from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import (
     ABIInput,
@@ -17,17 +20,20 @@ from vyper.compiler.input_bundle import (
 )
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings
+from vyper.semantics.analysis.module import analyze_module
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
+from boa.contracts.vvm.vvm_contract import VVMDeployer
 from boa.contracts.vyper.vyper_contract import (
     VyperBlueprint,
     VyperContract,
     VyperDeployer,
 )
 from boa.environment import Env
-from boa.explorer import fetch_abi_from_etherscan
+from boa.explorer import Etherscan, get_etherscan
+from boa.rpc import json
 from boa.util.abi import Address
 from boa.util.disk_cache import DiskCache
 
@@ -125,16 +131,21 @@ def get_module_fingerprint(
 
 
 def compiler_data(
-    source_code: str, contract_name: str, filename: str | Path, deployer=None, **kwargs
+    source_code: str,
+    contract_name: str | None,
+    filename: str | Path,
+    deployer=None,
+    **kwargs,
 ) -> CompilerData:
     global _disk_cache, _search_path
 
+    path = Path(filename)
+    resolved_path = Path(filename).resolve(strict=False)
+
     file_input = FileInput(
-        contents=source_code,
-        source_id=-1,
-        path=Path(contract_name),
-        resolved_path=Path(filename),
+        contents=source_code, source_id=-1, path=path, resolved_path=resolved_path
     )
+
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
@@ -157,9 +168,9 @@ def compiler_data(
             _ = ret.bytecode, ret.bytecode_runtime
         return ret
 
-    assert isinstance(deployer, type)
+    assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
-    cache_key = str((contract_name, fingerprint, kwargs, deployer_id))
+    cache_key = str((contract_name, filename, fingerprint, kwargs, deployer_id))
     return _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
 
@@ -183,20 +194,48 @@ def loads(
 ):
     d = loads_partial(source_code, name, filename=filename, compiler_args=compiler_args)
     if as_blueprint:
-        return d.deploy_as_blueprint(**kwargs)
+        return d.deploy_as_blueprint(contract_name=name, **kwargs)
     else:
-        return d.deploy(*args, **kwargs)
+        return d.deploy(*args, contract_name=name, **kwargs)
 
 
 def load_abi(filename: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     if name is None:
-        name = filename
+        name = Path(filename).stem
+    # TODO: pass filename to ABIContractFactory
     with open(filename) as fp:
         return loads_abi(fp.read(), *args, name=name, **kwargs)
 
 
 def loads_abi(json_str: str, *args, name: str = None, **kwargs) -> ABIContractFactory:
     return ABIContractFactory.from_abi_dict(json.loads(json_str), name, *args, **kwargs)
+
+
+# load from .vyi file.
+# NOTE: substantially same interface as load_abi and loads_abi, consider
+# fusing them into load_interface?
+def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
+    if name is None:
+        name = Path(filename).stem
+    with open(filename) as fp:
+        return loads_vyi(fp.read(), name=name, filename=filename)
+
+
+# load interface from .vyi file string contents.
+def loads_vyi(source_code: str, name: str = None, filename: str = None):
+    global _search_path
+
+    ast = parse_to_ast(source_code)
+
+    if name is None:
+        name = "VyperContract.vyi"
+
+    search_paths = get_search_paths(_search_path)
+    input_bundle = FilesystemInputBundle(search_paths)
+
+    module_t = analyze_module(ast, input_bundle, is_interface=True)
+    abi = module_t.interface.to_toplevel_abi_dict()
+    return ABIContractFactory(name, abi, filename=filename)
 
 
 def loads_partial(
@@ -206,10 +245,18 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
 ) -> VyperDeployer:
-    name = name or "VyperContract"  # TODO handle this upstream in CompilerData
-    filename = filename or "<unknown>"
+    if filename is None:
+        filename = "<unknown>"
+
     if dedent:
         source_code = textwrap.dedent(source_code)
+
+    specifier_set = detect_version_specifier_set(source_code)
+    # Use VVM only if the installed version is not in the specifier set
+    if specifier_set is not None and not specifier_set.contains(vyper.__version__):
+        version = _pick_vyper_version(specifier_set)
+        filename = str(filename)  # help mypy
+        return _loads_partial_vvm(source_code, version, name, filename)
 
     compiler_args = compiler_args or {}
 
@@ -225,11 +272,65 @@ def load_partial(filename: str, compiler_args=None):
         )
 
 
+def _loads_partial_vvm(
+    source_code: str,
+    version: Version,
+    name: Optional[str],
+    filename: str,
+    base_path=None,
+):
+    global _disk_cache
+
+    if base_path is None:
+        base_path = Path(".")
+
+    # install the requested version if not already installed
+    vvm.install_vyper(version=version)
+
+    def _compile():
+        return vvm.compile_source(
+            source_code, vyper_version=version, base_path=base_path
+        )
+
+    # separate _handle_output and _compile so that we don't trample
+    # name and filename in the VVMDeployer from separate invocations
+    # (with different values for name+filename).
+    def _handle_output(compiled_src):
+        compiler_output = compiled_src["<stdin>"]
+        return VVMDeployer.from_compiler_output(
+            compiler_output, name=name, filename=filename
+        )
+
+    # Ensure the cache is initialized
+    if _disk_cache is None:
+        return _handle_output(_compile())
+
+    # Generate a unique cache key
+    cache_key = f"{source_code}:{version}"
+
+    # Check the cache and return the result if available
+    ret = _disk_cache.caching_lookup(cache_key, _compile)
+
+    # backwards compatibility: old versions of boa returned a VVMDeployer.
+    # here we detect the case and invalidate the cache so it can recompile.
+    if isinstance(ret, VVMDeployer):
+        _disk_cache.invalidate(cache_key)
+        ret = _disk_cache.caching_lookup(cache_key, _compile)
+
+    return _handle_output(ret)
+
+
 def from_etherscan(
-    address: Any, name=None, uri="https://api.etherscan.io/api", api_key=None
+    address: Any, name: str = None, uri: str = None, api_key: str = None
 ):
     addr = Address(address)
-    abi = fetch_abi_from_etherscan(addr, uri, api_key)
+
+    if uri is not None or api_key is not None:
+        etherscan = Etherscan(uri, api_key)
+    else:
+        etherscan = get_etherscan()
+
+    abi = etherscan.fetch_abi(addr)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 

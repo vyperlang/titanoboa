@@ -6,6 +6,7 @@ The entry point for managing the execution environment.
 
 import contextlib
 import random
+import warnings
 from typing import Any, Optional, TypeAlias
 
 import eth.constants as constants
@@ -40,12 +41,9 @@ class Env:
         self.sha3_trace: dict = {}
         self.sstore_trace: dict = {}
 
-        self._profiled_contracts = {}
-        self._cached_call_profiles = {}
-        self._cached_line_profiles = {}
-        self._coverage_data = {}
-
         self._gas_tracker = 0
+
+        self.nickname = "pyevm"
 
         self.evm = PyEVM(self, fast_mode_enabled, fork_try_prefetch_state)
 
@@ -58,10 +56,29 @@ class Env:
     def enable_fast_mode(self, flag: bool = True):
         self.evm.enable_fast_mode(flag)
 
-    def fork(self, url: str, reset_traces=True, block_identifier="safe", **kwargs):
-        return self.fork_rpc(EthereumRPC(url), reset_traces, block_identifier, **kwargs)
+    def fork(
+        self,
+        url: str,
+        reset_traces=True,
+        block_identifier="safe",
+        debug=False,
+        deprecated=True,
+        **kwargs,
+    ):
+        if deprecated:
+            warnings.warn("using boa.env.fork directly is deprecated; use `boa.fork`!")
+        return self.fork_rpc(
+            EthereumRPC(url), reset_traces, block_identifier, debug, **kwargs
+        )
 
-    def fork_rpc(self, rpc: RPC, reset_traces=True, block_identifier="safe", **kwargs):
+    def fork_rpc(
+        self,
+        rpc: RPC,
+        reset_traces=True,
+        block_identifier="safe",
+        debug=False,
+        **kwargs,
+    ):
         """
         Fork the environment to a local chain.
         :param rpc: RPC to fork from
@@ -75,7 +92,7 @@ class Env:
             self.sha3_trace = {}
             self.sstore_trace = {}
 
-        self.evm.fork_rpc(rpc, block_identifier, **kwargs)
+        self.evm.fork_rpc(rpc, block_identifier, debug=debug, **kwargs)
 
     def get_gas_meter_class(self):
         return self.evm.get_gas_meter_class()
@@ -203,6 +220,8 @@ class Env:
         start_pc: int = 0,  # TODO: This isn't used
         # override the target address:
         override_address: Optional[_AddressType] = None,
+        # the calling vyper contract
+        contract: Any = None,
     ):
         sender = self._get_sender(sender)
 
@@ -222,8 +241,12 @@ class Env:
             bytecode=bytecode,
         )
 
+        if self._coverage_enabled:
+            self._trace_computation(computation, contract)
+
         if computation._gas_meter_class != NoGasMeter:
             self._update_gas_used(computation.get_gas_used())
+
         return target_address, computation
 
     def deploy_code(self, *args, **kwargs) -> tuple[Address, bytes]:
@@ -295,24 +318,39 @@ class Env:
             contract=contract,
         )
         if self._coverage_enabled:
-            self._hook_trace_computation(ret, contract)
+            self._trace_computation(ret, contract)
 
         if ret._gas_meter_class != NoGasMeter:
             self._update_gas_used(ret.get_gas_used())
 
         return ret
 
-    def _hook_trace_computation(self, computation, contract=None):
-        # XXX perf: don't trace if contract is None
-        for _pc in computation.code._trace:
-            # loop over pc so that it is available when coverage hooks into it
-            pass
+    # trace pcs for coverage sake. dummy function which
+    # just issues the right calls to _trace_cov() to get picked
+    # up by coverage. bit ugly, but tracer only allows
+    # dynamic_source_filename to be set once per (python) function call,
+    # so we need to use this in case the pc trace covers multiple files
+    def _trace_computation(self, computation, contract=None):
+        # perf: don't trace if contract is None
+        if contract is not None and hasattr(contract, "source_map"):
+            ast_map = contract.source_map["pc_raw_ast_map"]
+            seen_pcs = set()
+            for pc in computation.code._trace:
+                if pc in seen_pcs:
+                    continue
+                if (node := ast_map.get(pc)) is not None:
+                    mod = node.module_node
+                    self._trace_cov(mod.resolved_path, node)
+                seen_pcs.add(pc)
 
         for child in computation.children:
             if child.msg.code_address == b"":
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
-            self._hook_trace_computation(child, child_contract)
+            self._trace_computation(child, child_contract)
+
+    def _trace_cov(self, filename, node):
+        pass
 
     def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))
@@ -334,7 +372,7 @@ class Env:
         block_delta: int = 12,
     ) -> None:
         if (seconds is None) == (blocks is None):
-            raise ValueError("One of seconds or blocks should be set")
+            raise ValueError("One (and only one) of seconds or blocks should be set")
         if seconds is not None:
             blocks = seconds // block_delta
         else:
@@ -343,3 +381,12 @@ class Env:
 
         self.evm.patch.timestamp += seconds
         self.evm.patch.block_number += blocks
+
+    # EVM API - access to evm.patch attributes
+    @property
+    def timestamp(self) -> int:
+        return self.evm.patch.timestamp
+
+    @timestamp.setter
+    def timestamp(self, val: int) -> None:
+        self.evm.patch.timestamp = val

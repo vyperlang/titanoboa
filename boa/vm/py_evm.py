@@ -7,12 +7,14 @@ import contextlib
 import logging
 import sys
 import warnings
+from functools import cached_property
 from typing import Any, Iterator, Optional, Type
 
 import eth.constants as constants
 import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
+from eth.abc import ComputationAPI
 from eth.chains.mainnet import MainnetChain
 from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
@@ -24,6 +26,7 @@ from eth.vm.opcode_values import STOP
 from eth.vm.transaction_context import BaseTransactionContext
 from eth_utils import setup_DEBUG2_logging
 
+from boa.contracts.call_trace import TraceFrame
 from boa.rpc import RPC
 from boa.util.abi import Address, abi_decode
 from boa.util.eip1167 import extract_eip1167_address, is_eip1167_contract
@@ -280,18 +283,28 @@ class titanoboa_computation:
     def apply_create_message(cls, state, msg, tx_ctx, **kwargs):
         computation = super().apply_create_message(state, msg, tx_ctx, **kwargs)
 
-        bytecode = msg.code
+        bytecode = msg.code  # initcode
         # cf. eth/vm/logic/system/Create* opcodes
         contract_address = msg.storage_address
 
-        if is_eip1167_contract(bytecode):
-            contract_address = extract_eip1167_address(bytecode)
-            bytecode = cls.env.evm.vm.state.get_code(contract_address)
-
+        # blueprints
         if bytecode in cls.env._code_registry:
             target = cls.env._code_registry[bytecode].deployer.at(contract_address)
             target.created_from = Address(msg.sender)
             cls.env.register_contract(contract_address, target)
+
+        # register eip1167 contracts
+        runtime_bytecode = computation.output
+        if is_eip1167_contract(runtime_bytecode):
+            proxied_address = extract_eip1167_address(runtime_bytecode)
+            proxied_contract = cls.env.lookup_contract(proxied_address)
+            if proxied_contract is not None and hasattr(proxied_contract, "deployer"):
+                contract = proxied_contract.deployer.at(contract_address)
+                if hasattr(contract, "created_from"):
+                    contract.created_from = Address(msg.sender)
+                cls.env.register_contract(contract_address, contract)
+
+        # TODO: register contracts created with `create_copy_of()`
 
         return computation
 
@@ -331,6 +344,23 @@ class titanoboa_computation:
         # return computation outside of with block; computation.__exit__
         # swallows exceptions (including Revert).
         return finalize(computation)
+
+    @cached_property
+    def call_trace(self) -> TraceFrame:
+        return self._get_call_trace()
+
+    def _get_call_trace(self, depth=0) -> TraceFrame:
+        computation: ComputationAPI = self  # help mypy
+        address = computation.msg.code_address
+        contract = computation.env._lookup_contract_fast(address)
+        if contract is None:  # TODO: Retrieve from etherscan?
+            source = None
+        else:
+            source = contract.trace_source(computation)
+
+        # NOTE: using computation.msg.depth probably works equally well here.
+        children = [child._get_call_trace(depth + 1) for child in computation.children]
+        return TraceFrame(computation, source, depth, children)
 
 
 # Message object with extra attrs we can use to thread things through
@@ -387,22 +417,37 @@ class PyEVM:
         else:
             unpatch_pyevm_state_object(self.vm.state)
 
-    def fork_rpc(self, rpc: RPC, block_identifier: str, **kwargs):
-        account_db_class = AccountDBFork.class_from_rpc(rpc, block_identifier, **kwargs)
+    def fork_rpc(self, rpc: RPC, block_identifier: str, debug: bool, **kwargs):
+        account_db_class = AccountDBFork.class_from_rpc(
+            rpc, block_identifier, debug, **kwargs
+        )
         self._init_vm(account_db_class)
+
         block_info = self.vm.state._account_db._block_info
+        chain_id = self.vm.state._account_db._chain_id
 
         self.patch.timestamp = int(block_info["timestamp"], 16)
         self.patch.block_number = int(block_info["number"], 16)
-        self.patch.chain_id = int(rpc.fetch("eth_chainId", []), 16)
+        self.patch.chain_id = chain_id
 
-        self.vm.state._account_db._rpc._init_db()
+        # placeholder not to fetch all prev hashes
+        # (NOTE: we should document this)
+        self.patch.prev_hashes = [b"\x00" * 32] * 255
+        # this one we already fetched
+        self.patch.prev_hashes[0] = bytes.fromhex(
+            block_info["parentHash"].removeprefix("0x")
+        )
 
     @property
     def is_forked(self):
         return issubclass(
             self.vm.__class__._state_class.account_db_class, AccountDBFork
         )
+
+    @property
+    def is_state_dirty(self):
+        # detect if state has been written to
+        return len(self.vm.state._account_db._journaltrie._journal._current_values) > 0
 
     def get_gas_meter_class(self):
         return self.vm.state.computation_class._gas_meter_class

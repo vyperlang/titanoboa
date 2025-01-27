@@ -1,7 +1,7 @@
 # Contributing
 
-Thank you for wanting to contribute! This project reviews PRs that have an associated issue with 
-them. If you have not make an issue for your PR, please make one first. 
+Thank you for wanting to contribute! This project reviews PRs that have an associated issue with
+them. If you have not make an issue for your PR, please make one first.
 
 Issues, feedback, and sharing that you're using Titanoboa and Vyper on social media is always welcome!
 
@@ -21,7 +21,7 @@ Issues, feedback, and sharing that you're using Titanoboa and Vyper on social me
 
 ## Requirements
 
-You must have the following installed to proceed with contributing to this project. 
+You must have the following installed to proceed with contributing to this project.
 
 - [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
   - You'll know you did it right if you can run `git --version` and you see a response like `git version x.x.x`
@@ -32,7 +32,7 @@ You must have the following installed to proceed with contributing to this proje
 - Linux and/or MacOS
   - This project is not tested on Windows, so it is recommended to use a Linux or MacOS machine, or use a tool like [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) for windows users.
 
-## Installing for local development 
+## Installing for local development
 
 Follow the steps to clone the repo for you to make changes to this project.
 
@@ -50,7 +50,10 @@ cd titanoboa
 ```bash
 python -m venv venv
 source venv/bin/activate
+# Install dev requirements
 pip install -r dev-requirements.txt
+# Install prod requirements (in the pyproject.tom)
+pip install .
 ```
 
 *Note: When you delete your terminal/shell, you will need to reactivate this virtual environment again each time. To exit this python virtual environment, type `deactivate`*
@@ -64,9 +67,14 @@ git checkout -b <branch_name>
 And start making your changes! Once you're done, you can commit your changes and push them to your forked repo.
 
 ```bash
-git add .
-git commit -m 'your commit message'
+git commit -a
 git push <your_forked_github>
+```
+
+4. Run the linter
+
+```bash
+make lint
 ```
 
 ## Running Tests
@@ -85,7 +93,7 @@ This will skip the integration tests, which need extra "stuff".
 
 ### Integration tests
 
-Once you have setup your virtual environment, to run integration tests, you'll need to add environment variables. 
+Once you have setup your virtual environment, to run integration tests, you'll need to add environment variables.
 
 You can see the `.env.unsafe.example` for environment variables you'll want to use.
 

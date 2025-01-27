@@ -5,8 +5,10 @@
 import contextlib
 import copy
 import warnings
+from collections import namedtuple
 from dataclasses import dataclass
 from functools import cached_property
+from pathlib import Path
 from typing import Any, Optional
 
 import vyper
@@ -25,11 +27,11 @@ from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import generate_ir_for_module
 from vyper.compiler import CompilerData
 from vyper.compiler import output as compiler_output
-from vyper.compiler.output import build_abi_output
+from vyper.compiler.output import build_abi_output, build_solc_json
 from vyper.compiler.settings import OptimizationLevel, anchor_settings
 from vyper.exceptions import VyperException
 from vyper.ir.optimizer import optimize
-from vyper.semantics.types import AddressT, HashMapT, TupleT
+from vyper.semantics.types import AddressT, DArrayT, HashMapT, SArrayT, StructT, TupleT
 from vyper.utils import method_id
 
 from boa import BoaError
@@ -38,6 +40,8 @@ from boa.contracts.base_evm_contract import (
     _BaseEVMContract,
     _handle_child_trace,
 )
+from boa.contracts.call_trace import TraceSource
+from boa.contracts.event_decoder import decode_log
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
@@ -49,11 +53,12 @@ from boa.contracts.vyper.decoder_utils import (
     ByteAddressableStorage,
     decode_vyper_object,
 )
-from boa.contracts.vyper.event import Event, RawEvent
 from boa.contracts.vyper.ir_executor import executor_from_ir
 from boa.environment import Env
-from boa.profiling import LineProfile, cache_gas_used_for_computation
+from boa.profiling import cache_gas_used_for_computation
 from boa.util.abi import Address, abi_decode, abi_encode
+from boa.util.eip1167 import is_eip1167_contract
+from boa.util.eip5202 import generate_blueprint_bytecode
 from boa.util.lrudict import lrudict
 from boa.vm.gas_meters import ProfilingGasMeter
 from boa.vm.utils import to_bytes, to_int
@@ -97,8 +102,8 @@ class VyperDeployer:
         address = Address(address)
 
         ret = self.deploy(override_address=address, skip_initcode=True)
-        vm = ret.env.vm
-        old_bytecode = vm.state.get_code(address.canonical_address)
+        vm = ret.env.evm
+        old_bytecode = vm.get_code(address)
         new_bytecode = self.compiler_data.bytecode_runtime
 
         immutables_size = self.compiler_data.global_ctx.immutable_section_bytes
@@ -106,7 +111,7 @@ class VyperDeployer:
             data_section = old_bytecode[-immutables_size:]
             new_bytecode += data_section
 
-        vm.state.set_code(address.canonical_address, new_bytecode)
+        vm.set_code(address, new_bytecode)
         ret.env.register_contract(address, ret)
         ret._set_bytecode(new_bytecode)
         return ret
@@ -121,8 +126,14 @@ class VyperDeployer:
         ret._set_bytecode(bytecode)
 
         ret.env.register_contract(address, ret)
-
         return ret
+
+    @cached_property
+    def solc_json(self):
+        """
+        Generates a solc "standard json" representation of the Vyper contract.
+        """
+        return build_solc_json(self.compiler_data)
 
     @cached_property
     def _constants(self):
@@ -135,10 +146,14 @@ class _BaseVyperContract(_BaseEVMContract):
     def __init__(
         self,
         compiler_data: CompilerData,
+        contract_name: Optional[str] = None,
         env: Optional[Env] = None,
         filename: Optional[str] = None,
     ):
-        super().__init__(env, filename)
+        if contract_name is None:
+            contract_name = Path(compiler_data.contract_path).stem
+
+        super().__init__(contract_name, env, filename)
         self.compiler_data = compiler_data
 
         with anchor_settings(self.compiler_data.settings):
@@ -151,6 +166,10 @@ class _BaseVyperContract(_BaseEVMContract):
                 msg += f"{compiler_evm_version} but network only has "
                 msg += f"{capabilities.describe_capabilities()}"
                 raise Exception(msg)
+
+    @cached_property
+    def deployer(self):
+        return VyperDeployer(self.compiler_data, filename=self.filename)
 
     @cached_property
     def abi(self):
@@ -179,24 +198,16 @@ class VyperBlueprint(_BaseVyperContract):
         compiler_data,
         env=None,
         override_address=None,
-        blueprint_preamble=b"\xFE\x71\x00",
+        blueprint_preamble=None,
+        contract_name=None,
         filename=None,
         gas=None,
     ):
-        # note slight code duplication with VyperContract ctor,
-        # maybe use common base class?
-        super().__init__(compiler_data, env, filename)
+        super().__init__(compiler_data, contract_name, env, filename)
 
-        if blueprint_preamble is None:
-            blueprint_preamble = b""
-
-        blueprint_bytecode = blueprint_preamble + compiler_data.bytecode
-
-        # the length of the deployed code in bytes
-        len_bytes = len(blueprint_bytecode).to_bytes(2, "big")
-        deploy_bytecode = b"\x61" + len_bytes + b"\x3d\x81\x60\x0a\x3d\x39\xf3"
-
-        deploy_bytecode += blueprint_bytecode
+        deploy_bytecode = generate_blueprint_bytecode(
+            compiler_data.bytecode, blueprint_preamble
+        )
 
         addr, computation = self.env.deploy(
             bytecode=deploy_bytecode, override_address=override_address, gas=gas
@@ -256,9 +267,7 @@ class ErrorDetail:
         reason = None
         if ast_source is not None:
             reason = DevReason.at_source_location(
-                contract.compiler_data.source_code,
-                ast_source.lineno,
-                ast_source.end_lineno,
+                ast_source.full_source_code, ast_source.lineno, ast_source.end_lineno
             )
         frame_detail = contract.debug_frame(computation)
 
@@ -508,6 +517,8 @@ class ConstantsModel:
 
 
 class VyperContract(_BaseVyperContract):
+    _can_line_profile = True
+
     def __init__(
         self,
         compiler_data: CompilerData,
@@ -518,10 +529,11 @@ class VyperContract(_BaseVyperContract):
         # whether to skip constructor
         skip_initcode=False,
         created_from: Address = None,
+        contract_name=None,
         filename: str = None,
         gas=None,
     ):
-        super().__init__(compiler_data, env, filename)
+        super().__init__(compiler_data, contract_name, env, filename)
 
         self.created_from = created_from
         self._computation = None
@@ -583,15 +595,14 @@ class VyperContract(_BaseVyperContract):
                 value=value,
                 override_address=override_address,
                 gas=gas,
+                contract=self,
             )
-            self._computation = computation
-            self.bytecode = computation.output
 
             self._computation = computation
             self.bytecode = computation.output
 
             if computation.is_error:
-                raise BoaError(self.stack_trace(computation))
+                self.handle_error(computation)
 
             return address
 
@@ -647,7 +658,9 @@ class VyperContract(_BaseVyperContract):
             # TODO: figure out why fn is None.
             return None
 
-        frame_info = self.compiler_data.function_signatures[fn.name]._ir_info.frame_info
+        fn_t = fn._metadata["func_type"]
+
+        frame_info = fn_t._ir_info.frame_info
 
         mem = computation._memory
         frame_detail = FrameDetail(fn.name)
@@ -688,7 +701,7 @@ class VyperContract(_BaseVyperContract):
                 return error_map[pc]
         return None
 
-    def find_source_of(self, computation, is_initcode=False):
+    def find_source_of(self, computation):
         if hasattr(computation, "vyper_source_pos"):
             # this is set by ir executor currently.
             return self.source_map.get(computation.vyper_source_pos)
@@ -700,69 +713,28 @@ class VyperContract(_BaseVyperContract):
                 return ast_map[pc]
         return None
 
-    # ## handling events
-    def _get_logs(self, computation, include_child_logs):
-        if computation is None:
-            return []
-
-        if include_child_logs:
-            return list(computation.get_raw_log_entries())
-
-        return computation._log_entries
-
-    def get_logs(self, computation=None, include_child_logs=True):
-        if computation is None:
-            computation = self._computation
-
-        entries = self._get_logs(computation, include_child_logs)
-
-        # py-evm log format is (log_id, topics, data)
-        # sort on log_id
-        entries = sorted(entries)
-
-        ret = []
-        for e in entries:
-            logger_address = e[1]
-            c = self.env.lookup_contract(logger_address)
-            if c is not None:
-                ret.append(c.decode_log(e))
-            else:
-                ret.append(RawEvent(e))
-
-        return ret
+    def trace_source(self, computation) -> Optional["VyperTraceSource"]:
+        if (node := self.find_source_of(computation)) is None:
+            return None
+        return VyperTraceSource(self, node, method_id=computation.msg.data[:4])
 
     @cached_property
     def event_for(self):
         module_t = self.compiler_data.global_ctx
         return {e.event_id: e for e in module_t.used_events}
 
-    def decode_log(self, e):
-        log_id, address, topics, data = e
-        assert self._address.canonical_address == address
-        event_hash = topics[0]
-        event_t = self.event_for[event_hash]
+    @cached_property
+    def event_abi_for(self):
+        return {
+            k: event_t.to_toplevel_abi_dict()[0]
+            for k, event_t in self.event_for.items()
+        }
 
-        topic_typs = []
-        arg_typs = []
-        for is_topic, typ in zip(event_t.indexed, event_t.arguments.values()):
-            if not is_topic:
-                arg_typs.append(typ)
-            else:
-                topic_typs.append(typ)
-
-        decoded_topics = []
-        for typ, t in zip(topic_typs, topics[1:]):
-            # convert to bytes for abi decoder
-            encoded_topic = t.to_bytes(32, "big")
-            decoded_topics.append(
-                abi_decode(typ.abi_type.selector_name(), encoded_topic)
-            )
-
-        tuple_typ = TupleT(arg_typs)
-
-        args = abi_decode(tuple_typ.abi_type.selector_name(), data)
-
-        return Event(log_id, self._address, event_t, decoded_topics, args)
+    def decode_log(self, raw_log):
+        # use decode_log() because it is convenient, but we probably
+        # want to specialize this for vyper contracts as is done in
+        # marshal_to_python/vyper_object.
+        return decode_log(self._address, self.event_abi_for, raw_log)
 
     def marshal_to_python(self, computation, vyper_typ):
         self._computation = computation  # for further inspection
@@ -778,6 +750,10 @@ class VyperContract(_BaseVyperContract):
         if vyper_typ is None:
             return None
 
+        # selfdestruct
+        if len(computation.beneficiaries) > 0:
+            return None
+
         return_typ = calculate_type_for_external_return(vyper_typ)
         ret = abi_decode(return_typ.abi_type.selector_name(), computation.output)
 
@@ -789,21 +765,15 @@ class VyperContract(_BaseVyperContract):
 
     def stack_trace(self, computation=None):
         computation = computation or self._computation
+        is_minimal_proxy = is_eip1167_contract(self.bytecode)
         ret = StackTrace([ErrorDetail.from_computation(self, computation)])
         error_detail = self.find_error_meta(computation)
-        if error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS:
+        if (
+            error_detail not in EXTERNAL_CALL_ERRORS + CREATE_ERRORS
+            and not is_minimal_proxy
+        ):
             return ret
         return _handle_child_trace(computation, self.env, ret)
-
-    def line_profile(self, computation=None):
-        computation = computation or self._computation
-        ret = LineProfile.from_single(self, computation)
-        for child in computation.children:
-            child_obj = self.env.lookup_contract(child.msg.code_address)
-            # TODO: child obj is opaque contract that calls back into known contract
-            if child_obj is not None:
-                ret.merge(child_obj.line_profile(child))
-        return ret
 
     def ensure_id(self, fn_t):  # mimic vyper.codegen.module.IDGenerator api
         if fn_t._function_id is None:
@@ -1099,6 +1069,49 @@ class VyperInternalFunction(VyperFunction):
         return source_map
 
 
+class VyperTraceSource(TraceSource):
+    def __init__(
+        self, contract: VyperContract, node: vy_ast.VyperNode, method_id: bytes
+    ):
+        self.contract = contract
+        self.node = node
+        self.method_id = method_id
+
+    def __str__(self):
+        return f"{self.contract.contract_name}.{self.func_t.name}:{self.node.lineno}"
+
+    def __repr__(self):
+        return repr(self.node)
+
+    @cached_property
+    def _func_t_helper(self):
+        method_id_int = int(self.method_id.hex(), 16)
+        for fn_t in self.contract.compiler_data.global_ctx.exposed_functions:
+            for schema, id_ in fn_t.method_ids.items():
+                if id_ == method_id_int:
+                    return schema, fn_t
+
+    @property
+    def func_t(self):
+        return self._func_t_helper[1]
+
+    @cached_property
+    def args_abi_type(self) -> str:
+        schema, fn_t = self._func_t_helper
+        return schema.replace(f"{fn_t.name}(", "(")
+
+    @cached_property
+    def _argument_names(self) -> list[str]:
+        return [arg.name for arg in self.func_t.arguments]
+
+    @cached_property
+    def return_abi_type(self) -> str:  # must be implemented by subclasses
+        typ = self.func_t.return_type
+        if typ is None:
+            return "()"
+        return typ.abi_type.selector_name()
+
+
 class _InjectVyperFunction(VyperFunction):
     def __init__(self, contract, fn_source):
         ast, ir_executor, bytecode, source_map, _ = compile_vyper_function(
@@ -1112,25 +1125,40 @@ class _InjectVyperFunction(VyperFunction):
         self._source_map = source_map
 
 
-_typ_cache = {}
+_typ_cache: dict[StructT, type] = {}
+
+
+def _get_struct_type(st: StructT):
+    if st in _typ_cache:
+        return _typ_cache[st]
+
+    typ = namedtuple(st._id, list(st.tuple_keys()), rename=True)  # type: ignore[misc]
+
+    _typ_cache[st] = typ
+    return typ
 
 
 def vyper_object(val, vyper_type):
-    # make a thin wrapper around whatever type val is,
-    # and tag it with _vyper_type metadata
+    # handling for complex types. recurse
+    if isinstance(vyper_type, StructT):
+        struct_t = _get_struct_type(vyper_type)
+        assert isinstance(val, tuple)
+        item_types = list(vyper_type.tuple_members())
+        assert len(val) == len(item_types)
+        val = [vyper_object(item, item_t) for (item, item_t) in zip(val, item_types)]
+        return struct_t(*val)
 
-    vt = type(val)
-    if vt is bool or vt is Address:
-        # https://stackoverflow.com/q/2172189
-        # bool is not ambiguous wrt vyper type anyways.
-        return val
+    if isinstance(vyper_type, TupleT):
+        assert isinstance(val, tuple)
+        item_types = list(vyper_type.tuple_members())
+        assert len(val) == len(item_types)
+        val = [vyper_object(item, item_t) for (item, item_t) in zip(val, item_types)]
+        return tuple(val)
 
-    if vt not in _typ_cache:
-        # ex. class int_wrapper(int): pass
-        _typ_cache[vt] = type(f"{vt.__name__}_wrapper", (vt,), {})
+    if isinstance(vyper_type, (SArrayT, DArrayT)):
+        assert isinstance(val, list)
+        child_t = vyper_type.value_type
+        return [vyper_object(item, child_t) for item in val]
 
-    t = _typ_cache[type(val)]
-
-    ret = t(val)
-    ret._vyper_type = vyper_type
-    return ret
+    # note: we can add special handling for addresses, interfaces, contracts here
+    return val

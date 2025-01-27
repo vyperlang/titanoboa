@@ -30,7 +30,7 @@ pip install git+https://github.com/vyperlang/titanoboa
 
 Sometimes, using [pypy](https://www.pypy.org/download.html) can result in a substantial performance improvement for computation heavy contracts. `Pypy` can usually be used as a drop-in replacement for `CPython`.
 
-To get a performance boost for mainnet forking, install with the `forking-recommended` extra (`pip install "git+https://github.com/vyperlang/titanoboa#egg=titanoboa[forking-recommended]"`, or `pip install titanoboa[forking-recommended]`). This installs `plyvel` to cache RPC results between sessions, and `ujson` which improves json performance.
+To get a performance boost for mainnet forking, install with the `forking-recommended` extra (`pip install "git+https://github.com/vyperlang/titanoboa#egg=titanoboa[forking-recommended]"`, or `pip install titanoboa[forking-recommended]`). This installs `requests-cache` to cache certain HTTP requests between sessions, and `ujson` which improves json performance.
 
 If you are running titanoboa on a local [Vyper](https://github.com/vyperlang/vyper) project folder, you might need to run `python setup.py install` on your [Vyper](https://github.com/vyperlang/vyper) project if you encounter errors such as `ModuleNotFoundError: No module named 'vyper.version'`
 
@@ -199,10 +199,10 @@ Cast current deployed addresses to vyper contract
 
 ```python
 >>> import boa
->>> boa.env.set_network_env("<rpc server address>")
+>>> boa.set_network_env("<rpc server address>")
 >>> from eth_account import Account
 >>> # in a real codebase, always load private keys safely from an encrypted store!
->>> boa.env.add_account(Account(<a private key>))
+>>> boa.env.add_account(Account.from_key("<a private key>"))
 >>> c = boa.load("examples/ERC20.vy", "My Token", "TKN", 10**18, 10)
 >>> c.name()
     'My Token'
