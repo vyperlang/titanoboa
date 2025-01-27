@@ -177,7 +177,6 @@ class _BaseVyperContract(_BaseEVMContract):
 
     @cached_property
     def deployer(self):
-        # TODO add test
         return VyperDeployer(self.compiler_data, filename=self.filename)
 
     # is this actually useful?
