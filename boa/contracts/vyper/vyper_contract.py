@@ -168,10 +168,6 @@ class _BaseVyperContract(_BaseEVMContract):
                 raise Exception(msg)
 
     @cached_property
-    def deployer(self):
-        return VyperDeployer(self.compiler_data, filename=self.filename)
-
-    @cached_property
     def abi(self):
         return build_abi_output(self.compiler_data)
 
