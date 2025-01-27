@@ -1,9 +1,7 @@
+import contextlib
 import sys
-from vyper.semantics.analysis.imports import resolve_imports
-
 import textwrap
 from importlib.abc import MetaPathFinder
-import contextlib
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
 from pathlib import Path
@@ -23,6 +21,7 @@ from vyper.compiler.input_bundle import (
 )
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings
+from vyper.semantics.analysis.imports import resolve_imports
 from vyper.semantics.analysis.module import analyze_module
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
@@ -196,7 +195,9 @@ def loads(
     no_vvm=False,
     **kwargs,
 ):
-    d = loads_partial(source_code, name, filename=filename, compiler_args=compiler_args, no_vvm=no_vvm)
+    d = loads_partial(
+        source_code, name, filename=filename, compiler_args=compiler_args, no_vvm=no_vvm
+    )
     if as_blueprint:
         return d.deploy_as_blueprint(contract_name=name, **kwargs)
     else:
@@ -245,7 +246,7 @@ def loads_vyi(source_code: str, name: str = None, filename: str = None):
     else:
         ctx = contextlib.nullcontext()
     with ctx:
-        imports = resolve_imports(ast, input_bundle)
+        _ = resolve_imports(ast, input_bundle)
 
     module_t = analyze_module(ast)
     abi = module_t.interface.to_toplevel_abi_dict()

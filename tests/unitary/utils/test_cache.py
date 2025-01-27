@@ -23,12 +23,12 @@ def test_cache_contract_name():
 x: constant(int128) = 1000
 """
     assert _disk_cache is not None
-    test1 = compiler_data(code, "test1", "test1.vy", VyperDeployer)
+    test1 = compiler_data(code, "test1", "test1.vy", VyperDeployer)  # noqa: F841
     test2 = compiler_data(code, "test2", "test2.vy", VyperDeployer)
-    test3 = compiler_data(code, "test1", "test1.vy", VyperDeployer)
+    test3 = compiler_data(code, "test1", "test1.vy", VyperDeployer)  # noqa: F841
     # TODO: these asserts no longer work for vyper 0.4.1, investigate
-    #assert test1 == test3, "Should hit the cache"
-    #assert _to_dict(test1) != _to_dict(test2), "Should be different objects"
+    # assert test1 == test3, "Should hit the cache"
+    # assert _to_dict(test1) != _to_dict(test2), "Should be different objects"
     assert str(test2.contract_path) == "test2.vy"
 
 
