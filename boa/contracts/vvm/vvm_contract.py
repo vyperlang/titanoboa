@@ -50,14 +50,18 @@ class VVMContract(ABIContract):
                 error = error_map[pc]
                 break
 
-        # we only report the line for simplicity, could be more precise
-        lineno, *_ = error
+        # this condition is because source maps are not yet implemented for
+        # the ctor
+        if error is not None:
+            # we only report the line for simplicity, could be more precise
+            lineno, *_ = error
 
-        annotated_error = vyper.utils.annotate_source_code(
-            self.source_code, lineno, context_lines=3, line_numbers=True
-        )
+            annotated_error = vyper.utils.annotate_source_code(
+                self.source_code, lineno, context_lines=3, line_numbers=True
+            )
 
-        return StackTrace([VVMErrorDetail(annotated_error)])
+            return StackTrace([VVMErrorDetail(annotated_error)])
+        return StackTrace([])
 
 
 @dataclass
