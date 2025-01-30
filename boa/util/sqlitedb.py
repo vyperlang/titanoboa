@@ -25,7 +25,7 @@ class SqliteCache(BaseDB):
 
     _debug = False
 
-    _CREATE_CMD = """
+    _PRAGMA_CMD = """
         -- tuning
         pragma journal_mode = wal;
         pragma temp_store = memory;
@@ -42,13 +42,19 @@ class SqliteCache(BaseDB):
         -- pragma auto_vacuum = incremental;
         -- pragma page_size = 512;
         pragma cache_size = 10000;
+        """
 
+    _CREATE_CMDS = [
+        """
         -- initialize schema
         CREATE TABLE IF NOT EXISTS kv_store (
             key TEXT PRIMARY KEY, value BLOB, expires_at float
         );
-        CREATE INDEX IF NOT EXISTS expires_at_index ON kv_store(expires_at);
+        """,
         """
+        CREATE INDEX IF NOT EXISTS expires_at_index ON kv_store(expires_at);
+        """,
+    ]
 
     # flush at least once every second
     _FLUSH_INTERVAL = 1.0
@@ -85,7 +91,10 @@ class SqliteCache(BaseDB):
         # ttl of cache entries in seconds
         self.ttl: float = float(ttl)
 
-        self._cursor.executescript(self._CREATE_CMD)
+        self._cursor.executescript(self._PRAGMA_CMD)
+        with self.acquire_write_lock():
+            for cmd in self._CREATE_CMDS:
+                self._cursor.execute(cmd)
 
         self.gc()
 
