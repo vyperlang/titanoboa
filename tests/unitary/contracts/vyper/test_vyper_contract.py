@@ -62,6 +62,22 @@ def __init__():
 """
     assert boa.loads(code)._storage.point.get() == [1, 2]
 
+def test_decode_hashmap():
+    code = """
+xs: HashMap[uint256, uint256]
+ys: HashMap[uint256, HashMap[uint256, uint256]]
+
+@deploy
+def __init__():
+    self.xs[5] = 6
+    self.ys[1][2] = 3
+    self.ys[2][3] = 4
+    self.ys[2][6] = 7
+"""
+    c = boa.loads(code)
+    assert c._storage.xs.get() == {5: 6}
+    assert c._storage.ys.get() == {1: {2: 3}, 2: {3: 4, 6: 7}}
+
 
 def test_self_destruct():
     code = """

@@ -418,7 +418,7 @@ class StorageVar:
     def get(self, truncate_limit=None):
         if isinstance(self.typ, HashMapT):
             ret = {}
-            for k in self.contract.env.sstore_trace.get(self.addr, {}):
+            for k in self.contract.env.sstore_trace.get(self.addr, set()):
                 path = unwrap_storage_key(self.contract.env.sha3_trace, k)
                 if to_int(path[0]) != self.slot:
                     continue
