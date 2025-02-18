@@ -62,6 +62,7 @@ def __init__():
 """
     assert boa.loads(code)._storage.point.get() == [1, 2]
 
+
 def test_decode_hashmap():
     code = """
 xs: HashMap[uint256, uint256]
