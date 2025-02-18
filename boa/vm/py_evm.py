@@ -208,7 +208,7 @@ class Sha3PreimageTracer:
         value = computation._stack.values[-1]
         image = to_bytes(value)
 
-        self.env.sha3_trace[preimage] = image
+        self.env.sha3_trace[image] = preimage
 
 
 class SstoreTracer:
@@ -220,7 +220,7 @@ class SstoreTracer:
 
     def __call__(self, computation):
         value, slot = [to_int(t) for t in computation._stack.values[-2:]]
-        account = computation.msg.storage_address
+        account = Address(computation.msg.storage_address)
 
         # we don't want to deal with snapshots/commits/reverts, so just
         # register that the slot was touched and downstream can filter
