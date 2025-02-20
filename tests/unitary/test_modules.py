@@ -9,7 +9,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 @pytest.fixture
 def module_contract():
-    return boa.load(FIXTURES / "module_contract.vy")
+    return boa.load(FIXTURES / "module_contract.vy", no_vvm=True)
 
 
 def test_user_raise(module_contract):

@@ -50,7 +50,7 @@ def compile_vyper_function(vyper_function, contract):
         # override namespace and add wrapper code at the top
         with contract.override_vyper_namespace():
             _swipe_constants(compiler_data.annotated_vyper_module, ast)
-            analysis.analyze_module(ast, compiler_data.input_bundle)
+            analysis.analyze_module(ast)
 
         ast = ast.body[0]
         func_t = ast._metadata["func_type"]
@@ -112,17 +112,25 @@ def generate_bytecode_for_internal_fn(fn):
         fn_call = "return "
     fn_call += f"self.{fn_name}({fn_args})"
 
-    if len(fn.func_t.arguments) == 0:
-        # special case - when there are no arguments, node_source_code is
-        # garbage
-        fn_sig = ""
-    else:
-        fn_sig = fn_ast.args.node_source_code.replace("\n", " ")
+    # construct the signature of the external function
+    # little alignment of args with defaults
+    n_kwargs = len(fn_ast.args.defaults)
+    n_posargs = len(fn_ast.args.args) - n_kwargs
+    sig_args = []
+    for i, arg in enumerate(fn_ast.args.args):
+        if i < n_posargs:
+            sig_args.append(arg.node_source_code)
+        else:
+            default = fn_ast.args.defaults[i - n_posargs].node_source_code
+            sig_args.append(f"{arg.node_source_code} = {default}")
+
+    fn_sig = f"def __boa_private_{fn_name}__(" + ", ".join(sig_args) + ")"
+    fn_sig += f"{return_sig}:"
 
     wrapper_code = f"""
 @external
 @payable
-def __boa_private_{fn_name}__({fn_sig}){return_sig}:
+{fn_sig}
     {fn_call}
     """
     return compile_vyper_function(wrapper_code, contract)
