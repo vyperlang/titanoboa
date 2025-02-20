@@ -61,3 +61,4 @@ jobs:
         env:
           SEPOLIA_ENDPOINT: ${{ secrets.ALCHEMY_SEPOLIA_ENDPOINT }}
           SEPOLIA_PKEY: ${{ secrets.SEPOLIA_PKEY }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
