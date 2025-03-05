@@ -25,14 +25,19 @@ class SqliteCache(BaseDB):
 
     _debug = False
 
-    _PRAGMA_CMD = """
+    _PRAGMA_CMDS = [
+        """
         -- tuning
         pragma journal_mode = wal;
+        """,
+        """
         pragma temp_store = memory;
-
+        """,
+        """
         -- it's ok to lose some of the wal, this is just a cache
         pragma synchronous = normal;
-
+        """,
+        """
         -- https://sqlite.org/forum/forumpost/3ce1ee76242cfb29
         /* "I'm of the opinion that you should never use mmap"
            - Richard Hipp
@@ -42,7 +47,8 @@ class SqliteCache(BaseDB):
         -- pragma auto_vacuum = incremental;
         -- pragma page_size = 512;
         pragma cache_size = 10000;
-        """
+        """,
+    ]
 
     _CREATE_CMDS = [
         """
@@ -91,7 +97,9 @@ class SqliteCache(BaseDB):
         # ttl of cache entries in seconds
         self.ttl: float = float(ttl)
 
-        self._cursor.executescript(self._PRAGMA_CMD)
+        # executescript does not work in multiprocess environment
+        for cmd in self._PRAGMA_CMDS:
+            self._cursor.execute(cmd)
         with self.acquire_write_lock():
             for cmd in self._CREATE_CMDS:
                 self._cursor.execute(cmd)
