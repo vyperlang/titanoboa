@@ -3,18 +3,58 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from http import HTTPStatus
-from typing import Optional
+from typing import Callable, Generic, Optional, TypeVar
 
 import requests
 
+from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
 
 DEFAULT_BLOCKSCOUT_URI = "https://eth.blockscout.com"
+T = TypeVar("T")
+P = TypeVar("P")
+
+
+class ContractVerifier(Generic[T]):
+    def verify(
+        self,
+        address: Address,
+        contract_name: str,
+        solc_json: dict,
+        constructor_calldata: bytes,
+        chain_id: int,
+        license_type: str = "1",
+        wait: bool = False,
+    ) -> Optional["VerificationResult[T]"]:
+        raise NotImplementedError
+
+    def wait_for_verification(self, identifier: T) -> None:
+        raise NotImplementedError
+
+    def is_verified(self, identifier: T) -> bool:
+        raise NotImplementedError
+
+    @staticmethod
+    def _wait_until(
+        predicate: Callable[[], P],
+        wait_for: timedelta,
+        backoff: timedelta,
+        backoff_factor: float,
+    ) -> P:
+        timeout = datetime.now() + wait_for
+        wait_time = backoff
+        while datetime.now() < timeout:
+            if result := predicate():
+                return result
+            time.sleep(wait_time.total_seconds())
+            wait_time *= backoff_factor
+
+        raise TimeoutError("Timeout waiting for verification to complete")
 
 
 @dataclass
-class Blockscout:
+class Blockscout(ContractVerifier[Address]):
     """
     Allows users to verify contracts on Blockscout.
     This is independent of Vyper contracts, and can be used to verify any smart contract.
@@ -37,14 +77,18 @@ class Blockscout:
         address: Address,
         contract_name: str,
         solc_json: dict,
-        license_type: str = None,
+        constructor_calldata: bytes,
+        chain_id: int,
+        license_type: str = "1",
         wait: bool = False,
-    ) -> Optional["VerificationResult"]:
+    ) -> Optional["VerificationResult[Address]"]:
         """
         Verify the Vyper contract on Blockscout.
         :param address: The address of the contract.
         :param contract_name: The name of the contract.
         :param solc_json: The solc_json output of the Vyper compiler.
+        :param constructor_calldata: The calldata for the constructor.
+        :param chain_id: The ID of the chain where the contract is deployed.
         :param license_type: The license to use for the contract. Defaults to "none".
         :param wait: Whether to return a VerificationResult immediately
                      or wait for verification to complete. Defaults to False
@@ -83,18 +127,15 @@ class Blockscout:
         Waits for the contract to be verified on Blockscout.
         :param address: The address of the contract.
         """
-        timeout = datetime.now() + self.timeout
-        wait_time = self.backoff
-        while datetime.now() < timeout:
-            if self.is_verified(address):
-                msg = "Contract verified!"
-                msg += f" {self.uri}/address/{address}?tab=contract_code"
-                print(msg)
-                return
-            time.sleep(wait_time.total_seconds())
-            wait_time *= self.backoff_factor
-
-        raise TimeoutError("Timeout waiting for verification to complete")
+        self._wait_until(
+            lambda: self.is_verified(address),
+            self.timeout,
+            self.backoff,
+            self.backoff_factor,
+        )
+        msg = "Contract verified!"
+        msg += f" {self.uri}/address/{address}?tab=contract_code"
+        print(msg)
 
     def is_verified(self, address: Address) -> bool:
         api_key = self.api_key or ""
@@ -107,19 +148,19 @@ class Blockscout:
         return response.json().get("is_verified", False)
 
 
-_verifier = Blockscout()
+_verifier: ContractVerifier = Blockscout()
 
 
 @dataclass
-class VerificationResult:
-    address: Address
-    verifier: Blockscout
+class VerificationResult(Generic[T]):
+    identifier: T
+    verifier: ContractVerifier
 
     def wait_for_verification(self):
-        self.verifier.wait_for_verification(self.address)
+        self.verifier.wait_for_verification(self.identifier)
 
     def is_verified(self):
-        return self.verifier.is_verified(self.address)
+        return self.verifier.is_verified(self.identifier)
 
 
 def _set_verifier(verifier):
@@ -133,7 +174,7 @@ def get_verifier():
 
 
 # TODO: maybe allow like `set_verifier("blockscout", *args, **kwargs)`
-def set_verifier(verifier):
+def set_verifier(verifier: ContractVerifier):
     return Open(get_verifier, _set_verifier, verifier)
 
 
@@ -147,14 +188,14 @@ def get_verification_bundle(contract_like):
 
 # should we also add a `verify_deployment` function?
 def verify(
-    contract, verifier=None, license_type: str = None, wait=False
-) -> VerificationResult:
+    contract, verifier: ContractVerifier = None, wait=False, **kwargs
+) -> VerificationResult | None:
     """
     Verifies the contract on a block explorer.
     :param contract: The contract to verify.
     :param verifier: The block explorer verifier to use.
                      Defaults to get_verifier().
-    :param license_type: Optional license to use for the contract.
+    :param wait: Whether to wait for verification to complete.
     """
     if verifier is None:
         verifier = get_verifier()
@@ -166,6 +207,8 @@ def verify(
         address=contract.address,
         solc_json=bundle,
         contract_name=contract.contract_name,
-        license_type=license_type,
+        constructor_calldata=contract.ctor_calldata,
         wait=wait,
+        chain_id=Env.get_singleton().get_chain_id(),
+        **kwargs,
     )
