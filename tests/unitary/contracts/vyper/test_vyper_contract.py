@@ -11,7 +11,7 @@ point: Point
 
 @deploy
 def __init__():
-    self.point = Point({x: 1, y: 2})
+    self.point = Point(x=1, y=2)
 """
     result = boa.loads(code)._storage.point.get()
     assert str(result) == "Point({'x': 1, 'y': 2})"
@@ -187,10 +187,10 @@ event MyEvent3:
 
 @external
 def foo(x: uint256, y: address):
-    log MyEvent1(x)
-    log MyEvent2(msg.sender, y)
-    log MyEvent2(y, msg.sender)
-    log MyEvent3(y, msg.sender)
+    log MyEvent1(x=x)
+    log MyEvent2(_from=msg.sender, addr=y)
+    log MyEvent2(_from=y, addr=msg.sender)
+    log MyEvent3(addr=y, _from=msg.sender)
     """
 
     c = boa.loads(code)
@@ -290,15 +290,15 @@ struct MyStruct2:
 
 @external
 def foo(x: uint256) -> MyStruct1:
-    return MyStruct1({x: x})
+    return MyStruct1(x=x)
 
 @external
 def bar(_from: address, x: uint256) -> MyStruct2:
-    return MyStruct2({_from: _from, x: x})
+    return MyStruct2(_from=_from, x=x)
 
 @external
 def baz(x: uint256, _from: address, y: uint256) -> (MyStruct1, MyStruct2):
-    return MyStruct1({x: x}), MyStruct2({_from: _from, x: y})
+    return MyStruct1(x=x), MyStruct2(_from=_from, x=y)
     """
 
     c = boa.loads(code)
