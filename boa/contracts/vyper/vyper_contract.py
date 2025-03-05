@@ -418,7 +418,7 @@ class StorageVar:
     def get(self, truncate_limit=None):
         if isinstance(self.typ, HashMapT):
             ret = {}
-            for k in self.contract.env.sstore_trace.get(self.addr, {}):
+            for k in self.contract.env.sstore_trace.get(self.addr, set()):
                 path = unwrap_storage_key(self.contract.env.sha3_trace, k)
                 if to_int(path[0]) != self.slot:
                     continue
@@ -575,11 +575,11 @@ class VyperContract(_BaseVyperContract):
         self.env.register_contract(self._address, self)
 
     def _run_init(self, *args, value=0, override_address=None, gas=None):
-        encoded_args = b""
+        self.ctor_calldata = b""
         if self._ctor:
-            encoded_args = self._ctor.prepare_calldata(*args)
+            self.ctor_calldata = self._ctor.prepare_calldata(*args)
 
-        initcode = self.compiler_data.bytecode + encoded_args
+        initcode = self.compiler_data.bytecode + self.ctor_calldata
         with self._anchor_source_map(self._deployment_source_map):
             address, computation = self.env.deploy(
                 bytecode=initcode,

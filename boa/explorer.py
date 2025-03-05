@@ -1,15 +1,22 @@
+import re
 import time
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Optional
 
 from boa.rpc import json
+from boa.util.abi import Address
+from boa.verifiers import ContractVerifier, VerificationResult
 
 try:
     from requests_cache import CachedSession
 
+    def filter_fn(response):
+        return response.ok and _is_success_response(response.json())
+
     SESSION = CachedSession(
         "~/.cache/titanoboa/explorer_cache",
-        filter_fn=lambda response: _is_success_response(response.json()),
+        filter_fn=filter_fn,
         allowable_codes=[200],
         cache_control=True,
         expire_after=3600 * 6,
@@ -22,15 +29,120 @@ except ImportError:
     SESSION = Session()
 
 DEFAULT_ETHERSCAN_URI = "https://api.etherscan.io/api"
+VERSION_RE = re.compile(r"v(\d+\.\d+\.\d+)(\+commit.*)?")
 
 
 @dataclass
-class Etherscan:
+class Etherscan(ContractVerifier[str]):
     uri: Optional[str] = DEFAULT_ETHERSCAN_URI
     api_key: Optional[str] = None
     num_retries: int = 10
     backoff_ms: int | float = 400.0
     backoff_factor: float = 1.1  # 1.1**10 ~= 2.59
+    timeout = timedelta(minutes=2)
+
+    def verify(
+        self,
+        address: Address,
+        contract_name: str,
+        solc_json: dict,
+        constructor_calldata: bytes,
+        chain_id: int,
+        license_type: str = "1",
+        wait: bool = False,
+    ) -> Optional["VerificationResult[str]"]:
+        """
+        Verify the Vyper contract on Etherscan.
+        :param address: The address of the contract.
+        :param contract_name: The name of the contract.
+        :param solc_json: The solc_json output of the Vyper compiler.
+        :param constructor_calldata: The calldata for the contract constructor.
+        :param chain_id: The ID of the chain where the contract is deployed.
+        :param license_type: The license to use for the contract. Defaults to "none".
+        :param wait: Whether to return a VerificationResult immediately
+                     or wait for verification to complete. Defaults to False
+        """
+        api_key = self.api_key or ""
+        output_selection = solc_json["settings"]["outputSelection"]
+        contract_file = next(k for k, v in output_selection.items() if "*" in v)
+        compiler_version = solc_json["compiler_version"]
+        version_match = re.match(VERSION_RE, compiler_version)
+        if not version_match:
+            raise ValueError(f"Failed to extract Vyper version from {compiler_version}")
+
+        data = {
+            "module": "contract",
+            "action": "verifysourcecode",
+            "apikey": api_key,
+            "chainId": chain_id,
+            "codeformat": "vyper-json",
+            "sourceCode": json.dumps(solc_json),
+            "constructorArguments": constructor_calldata.hex(),
+            "contractaddress": address,
+            "contractname": f"{contract_file}:{contract_name}",
+            "compilerversion": f"vyper:{version_match.group(1)}",
+            "licenseType": license_type,
+            "optimizationUsed": "1",
+        }
+
+        def verification_created():
+            # we need to retry until the contract is found by Etherscan
+            response = SESSION.post(self.uri, data=data)
+            response.raise_for_status()
+            response_json = response.json()
+            if response_json.get("status") == "1":
+                return response_json["result"]
+            if (
+                response_json.get("message") == "NOTOK"
+                and "Unable to locate ContractCode" not in response_json["result"]
+            ):
+                raise ValueError(f"Failed to verify: {response_json['result']}")
+            print(
+                f'Verification could not be created yet: {response_json["result"]}. Retrying...'
+            )
+            return None
+
+        etherscan_guid = self._wait_until(
+            verification_created, timedelta(minutes=2), timedelta(seconds=5), 1.1
+        )
+        print(f"Verification started with etherscan_guid {etherscan_guid}")
+        if not wait:
+            return VerificationResult(etherscan_guid, self)
+
+        self.wait_for_verification(etherscan_guid)
+        return None
+
+    def wait_for_verification(self, etherscan_guid: str) -> None:
+        """
+        Waits for the contract to be verified on Etherscan.
+        :param etherscan_guid: The unique ID of the contract verification.
+        """
+        self._wait_until(
+            lambda: self.is_verified(etherscan_guid),
+            self.timeout,
+            self.backoff,
+            self.backoff_factor,
+        )
+        print("Contract verified!")
+
+    @property
+    def backoff(self):
+        return timedelta(milliseconds=self.backoff_ms)
+
+    def is_verified(self, etherscan_guid: str) -> bool:
+        api_key = self.api_key or ""
+        url = f"{self.uri}?module=contract&action=checkverifystatus"
+        url += f"&guid={etherscan_guid}&apikey={api_key}"
+
+        response = SESSION.get(url)
+        response.raise_for_status()
+        response_json = response.json()
+        if (
+            response_json.get("message") == "NOTOK"
+            and "Pending in queue" not in response_json["result"]
+        ):
+            raise ValueError(f"Failed to verify: {response_json['result']}")
+        return response_json.get("status") == "1"
 
     def __post_init__(self):
         if self.uri is None:
