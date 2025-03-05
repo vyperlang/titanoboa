@@ -1,3 +1,4 @@
+import contextlib
 import sys
 import textwrap
 from importlib.abc import MetaPathFinder
@@ -20,6 +21,7 @@ from vyper.compiler.input_bundle import (
 )
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings
+from vyper.semantics.analysis.imports import resolve_imports
 from vyper.semantics.analysis.module import analyze_module
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
@@ -190,9 +192,12 @@ def loads(
     name=None,
     filename=None,
     compiler_args=None,
+    no_vvm=False,
     **kwargs,
 ):
-    d = loads_partial(source_code, name, filename=filename, compiler_args=compiler_args)
+    d = loads_partial(
+        source_code, name, filename=filename, compiler_args=compiler_args, no_vvm=no_vvm
+    )
     if as_blueprint:
         return d.deploy_as_blueprint(contract_name=name, **kwargs)
     else:
@@ -222,10 +227,12 @@ def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
 
 
 # load interface from .vyi file string contents.
+# NOTE: since vyi files can be compiled in 0.4.1, this codepath can probably
+# be refactored to use CompilerData (or straight loads_partial)
 def loads_vyi(source_code: str, name: str = None, filename: str = None):
     global _search_path
 
-    ast = parse_to_ast(source_code)
+    ast = parse_to_ast(source_code, is_interface=True)
 
     if name is None:
         name = "VyperContract.vyi"
@@ -233,7 +240,15 @@ def loads_vyi(source_code: str, name: str = None, filename: str = None):
     search_paths = get_search_paths(_search_path)
     input_bundle = FilesystemInputBundle(search_paths)
 
-    module_t = analyze_module(ast, input_bundle, is_interface=True)
+    # cf. CompilerData._resolve_imports
+    if filename is not None:
+        ctx = input_bundle.search_path(Path(filename).parent)
+    else:
+        ctx = contextlib.nullcontext()
+    with ctx:
+        _ = resolve_imports(ast, input_bundle)
+
+    module_t = analyze_module(ast)
     abi = module_t.interface.to_toplevel_abi_dict()
     return ABIContractFactory(name, abi, filename=filename)
 
@@ -244,6 +259,7 @@ def loads_partial(
     filename: str | Path | None = None,
     dedent: bool = True,
     compiler_args: dict = None,
+    no_vvm: bool = False,
 ) -> VyperDeployer:
     if filename is None:
         filename = "<unknown>"
@@ -251,12 +267,13 @@ def loads_partial(
     if dedent:
         source_code = textwrap.dedent(source_code)
 
-    specifier_set = detect_version_specifier_set(source_code)
-    # Use VVM only if the installed version is not in the specifier set
-    if specifier_set is not None and not specifier_set.contains(vyper.__version__):
-        version = _pick_vyper_version(specifier_set)
-        filename = str(filename)  # help mypy
-        return _loads_partial_vvm(source_code, version, name, filename)
+    if not no_vvm:
+        specifier_set = detect_version_specifier_set(source_code)
+        # Use VVM only if the installed version is not in the specifier set
+        if specifier_set is not None and not specifier_set.contains(vyper.__version__):
+            version = _pick_vyper_version(specifier_set)
+            filename = str(filename)  # help mypy
+            return _loads_partial_vvm(source_code, version, name, filename)
 
     compiler_args = compiler_args or {}
 

@@ -12,7 +12,7 @@ event Transfer:
 
 @deploy
 def __init__(supply: uint256):
-    log Transfer(empty(address), msg.sender, supply)
+    log Transfer(sender=empty(address), receiver=msg.sender, value=supply)
 """,
         100,
     )
