@@ -68,6 +68,11 @@ class TransactionSettings:
     # amount of time to wait, in seconds before giving up on a transaction
     poll_timeout: float = 240.0
 
+    # The block identifier to use in the call to `eth_estimateGas` for a
+    # transaction. Defaults to "pending". Set to `None` to avoid adding
+    # the block param at all.
+    estimate_gas_block_identifier = "pending"
+
 
 @dataclass
 class ExternalAccount:
@@ -530,9 +535,12 @@ class NetworkEnv(Env):
 
         if gas is None:
             try:
-                tx_data["gas"] = self._rpc.fetch(
-                    "eth_estimateGas", [tx_data, "pending"]
-                )
+                if self.tx_settings.estimate_gas_block_identifier is None:
+                    params = [tx_data]
+                else:
+                    params = [tx_data, self.tx_settings.estimate_gas_block_identifier]
+                tx_data["gas"] = self._rpc.fetch("eth_estimateGas", params)
+
             except RPCError as e:
                 if e.code == 3:
                     # execution failed at estimateGas, probably the txn reverted
