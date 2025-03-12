@@ -145,6 +145,8 @@ class _SingleComputation:
         ret = {}
         source_map = self.contract.source_map["pc_raw_ast_map"]
         seen = set()
+
+        node = None
         for pc in self.computation.code._trace:
             if pc in seen:
                 # TODO: this is a kludge, it prevents lines from being
@@ -152,7 +154,10 @@ class _SingleComputation:
                 # probably either not have this guard, or actually count
                 # the number of times a line is hit per- computation.
                 continue
-            if (node := source_map.get(pc)) is None:
+            if (new_node := source_map.get(pc)) is not None:
+                node = new_node
+
+            if node is None:
                 continue
 
             current_line = node.lineno
