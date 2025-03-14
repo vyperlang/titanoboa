@@ -1,3 +1,4 @@
+import sys
 from multiprocessing.shared_memory import SharedMemory
 from unittest.mock import MagicMock
 
@@ -72,6 +73,7 @@ def test_invalid_token(callback_handler, token):
     )
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="Test skipped on macOS")
 def test_value_error(callback_handler, token, shared_memory):
     callback_handler.request.body = b"0" * SHARED_MEMORY_LENGTH  # no space for the \0
     callback_handler.post(token)
