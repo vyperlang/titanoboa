@@ -666,6 +666,8 @@ class VyperContract(_BaseVyperContract):
             if v.location.name != "memory":
                 continue
             ofst = v.pos
+            if v.alloca is not None:
+                ofst = v.alloca.ofst
             size = v.typ.memory_bytes_required
             frame_detail[k] = decode_vyper_object(mem.read(ofst, size), v.typ)
 
