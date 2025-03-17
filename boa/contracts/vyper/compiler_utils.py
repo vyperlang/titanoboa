@@ -14,6 +14,7 @@ from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.constant_folding import ConstantFolder
 from vyper.semantics.analysis.utils import get_exact_type_from_node
+from vyper.venom import generate_assembly_experimental, generate_ir
 
 from boa.contracts.vyper.ir_executor import executor_from_ir
 
@@ -42,8 +43,9 @@ def compile_vyper_function(vyper_function, contract):
     """
 
     compiler_data = contract.compiler_data
+    settings = compiler_data.settings
 
-    with anchor_settings(compiler_data.settings):
+    with anchor_settings(settings):
         module_t = contract.module_t
         ast = parse_to_ast(vyper_function)
 
@@ -84,15 +86,25 @@ def compile_vyper_function(vyper_function, contract):
             )
 
         ir = IRnode.from_list(ir_list)
-        ir = optimizer.optimize(ir)
+        if settings.experimental_codegen:
+            venom_code = generate_ir(ir, settings)
+            assembly = generate_assembly_experimental(
+                venom_code, optimize=settings.optimize
+            )
 
-        assembly = compile_ir.compile_to_assembly(ir)
+        else:
+            ir = optimizer.optimize(ir)
+            assembly = compile_ir.compile_to_assembly(ir)
+
         bytecode, source_map = compile_ir.assembly_to_evm(assembly)
         bytecode += contract.data_section
         typ = func_t.return_type
 
         # generate the IR executor
-        ir_executor = executor_from_ir(ir, compiler_data)
+        if settings.experimental_codegen:
+            ir_executor = None
+        else:
+            ir_executor = executor_from_ir(ir, compiler_data)
 
         return ast, ir_executor, bytecode, source_map, typ
 
