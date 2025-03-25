@@ -13,6 +13,16 @@ def test_load_partial_vvm():
     assert contract.foo() == 42
     assert contract.bar() == 43
 
+    # test that compiler_output exists on the contract_deployer
+    # and is valid
+    compiler_output = contract_deployer.compiler_output
+    assert contract.abi == compiler_output["abi"]
+
+    bytecode_runtime = bytes.fromhex(
+        compiler_output["bytecode_runtime"].removeprefix("0x")
+    )
+    assert bytecode_runtime == boa.env.evm.get_code(contract.address)
+
 
 def test_loads_partial_vvm():
     with open(mock_3_10_path) as f:
