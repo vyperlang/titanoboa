@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import vvm
 import vyper
+import vyper.ir.compile_ir as compile_ir
 from packaging.version import Version
 from vvm.utils.versioning import _pick_vyper_version, detect_version_specifier_set
 from vyper.ast.parse import parse_to_ast
