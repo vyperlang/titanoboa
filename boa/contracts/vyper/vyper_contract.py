@@ -683,12 +683,8 @@ class VyperContract(_BaseVyperContract):
         if self._source_map is None:
             # cache- backwards compatibility (some caches might not have it
             # until next release)
-            if hasattr(self.compiler_data, "source_map"):
-                return self.compiler_data.source_map
+            self._source_map = self.compiler_data.source_map
 
-            with anchor_settings(self.compiler_data.settings):
-                assembly = self.compiler_data.assembly_runtime
-                _, self._source_map = compile_ir.assembly_to_evm(assembly)
         return self._source_map
 
     def find_error_meta(self, computation):

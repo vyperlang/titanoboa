@@ -173,15 +173,28 @@ def compiler_data(
             # workaround since CompilerData does not compute source_map
             if not hasattr(ret, "source_map"):
                 # cache source map
-                assembly = ret.assembly_runtime
-                ret.source_map = compile_ir.assembly_to_evm(assembly)
+                ret.source_map = _compute_source_map(ret)
 
         return ret
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
     cache_key = str((contract_name, filename, fingerprint, kwargs, deployer_id))
-    return _disk_cache.caching_lookup(cache_key, get_compiler_data)
+
+    ret = _disk_cache.caching_lookup(cache_key, get_compiler_data)
+
+    if not hasattr(ret, "source_map"):
+        # invalidate so it will be cached on the next run
+        _disk_cache.invalidate(cache_key)
+
+        # compute source map so it's available downstream
+        ret.source_map = _compute_source_map(ret)
+
+    return ret
+
+
+def _compute_source_map(compiler_data: CompilerData) -> Any:
+    return compile_ir.assembly_to_evm(compiler_data.assembly_runtime)
 
 
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
