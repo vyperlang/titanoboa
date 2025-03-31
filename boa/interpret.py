@@ -168,6 +168,13 @@ def compiler_data(
         with anchor_settings(ret.settings):
             # force compilation to happen so DiskCache will cache the compiled artifact:
             _ = ret.bytecode, ret.bytecode_runtime
+
+            # workaround since CompilerData does not compute source_map
+            if not hasattr(ret, "source_map"):
+                # cache source map
+                assembly = ret.assembly_runtime
+                ret.source_map = compile_ir.assembly_to_evm(assembly)
+
         return ret
 
     assert isinstance(deployer, type) or deployer is None
