@@ -194,7 +194,8 @@ def compiler_data(
 
 
 def _compute_source_map(compiler_data: CompilerData) -> Any:
-    return compile_ir.assembly_to_evm(compiler_data.assembly_runtime)
+    source_map, _ = compile_ir.assembly_to_evm(compiler_data.assembly_runtime)
+    return source_map
 
 
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
