@@ -13,6 +13,23 @@ from boa.vm.gas_meters import ProfilingGasMeter
 _old_init = hypothesis.core.HypothesisHandle.__init__
 
 
+# variant of env.anchor() which *doesn't* roll back state if an
+# exception is caught. this makes it so that the user can inspect the
+# state in the case of an error, but if a test is successful, the state
+# is correctly isolated.
+@contextlib.contextmanager
+def _test_anchor(env):
+    ctx = env.anchor()
+
+    try:
+        ctx.__enter__()
+        yield
+    except Exception:  # except EvmError?
+        raise
+
+    ctx.__exit__(None, None, None)
+
+
 def _HypothesisHandle__init__(self, *args, **kwargs):
     _old_init(self, *args, **kwargs)
 

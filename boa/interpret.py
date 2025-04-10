@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import vvm
 import vyper
+import vyper.ir.compile_ir as compile_ir
 from packaging.version import Version
 from vvm.utils.versioning import _pick_vyper_version, detect_version_specifier_set
 from vyper.ast.parse import parse_to_ast
@@ -168,12 +169,32 @@ def compiler_data(
         with anchor_settings(ret.settings):
             # force compilation to happen so DiskCache will cache the compiled artifact:
             _ = ret.bytecode, ret.bytecode_runtime
+
+            # workaround since CompilerData does not compute source_map
+            if not hasattr(ret, "source_map"):
+                # cache source map
+                ret.source_map = _compute_source_map(ret)
+
         return ret
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
     cache_key = str((contract_name, filename, fingerprint, kwargs, deployer_id))
-    return _disk_cache.caching_lookup(cache_key, get_compiler_data)
+
+    ret = _disk_cache.caching_lookup(cache_key, get_compiler_data)
+
+    if not hasattr(ret, "source_map"):
+        # invalidate so it will be cached on the next run
+        _disk_cache.invalidate(cache_key)
+
+        # compute source map so it's available downstream
+        ret.source_map = _compute_source_map(ret)
+
+    return ret
+
+
+def _compute_source_map(compiler_data: CompilerData) -> Any:
+    return compile_ir.assembly_to_evm(compiler_data.assembly_runtime)
 
 
 def load(filename: str | Path, *args, **kwargs) -> _Contract:  # type: ignore
