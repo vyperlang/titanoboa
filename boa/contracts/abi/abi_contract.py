@@ -132,6 +132,7 @@ class ABIFunction:
             value=value,
             gas=gas,
             is_modifying=self.is_mutable,
+            simulate=simulate,
             contract=self.contract,
         )
 
@@ -210,7 +211,7 @@ class ABIOverload:
             *args, disambiguate_signature=disambiguate_signature, **kwargs
         )
         return function(
-            *args, value=value, gas=gas, sender=sender, simulate=False, **kwargs
+            *args, value=value, gas=gas, sender=sender, simulate=simulate, **kwargs
         )
 
     def _pick_overload(
