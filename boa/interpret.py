@@ -194,7 +194,7 @@ def compiler_data(
 
 
 def _compute_source_map(compiler_data: CompilerData) -> Any:
-    source_map, _ = compile_ir.assembly_to_evm(compiler_data.assembly_runtime)
+    _, source_map = compile_ir.assembly_to_evm(compiler_data.assembly_runtime)
     return source_map
 
 
