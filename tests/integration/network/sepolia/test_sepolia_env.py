@@ -99,6 +99,26 @@ def test_raise_exception(simple_contract, amount):
         simple_contract.raise_exception(amount)
 
 
+# test that simulate= doesn't actually modify the chain
+def test_simulate_network():
+    # NOTE duplicated code with test_simulate_local
+    code = """
+counter: public(uint256)
+
+@external
+def get_next_counter() -> uint256:
+    self.counter += 1
+    return self.counter
+    """
+    c = boa.loads(code)
+
+    assert c.get_next_counter() == 1
+    assert c.counter() == 1
+
+    assert c.get_next_counter(simulate=True) == 2
+    assert c.counter() == 1
+
+
 # XXX: probably want to test deployment revert behavior
 
 

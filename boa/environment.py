@@ -166,8 +166,14 @@ class Env:
 
     # context manager which snapshots the state and reverts
     # to the snapshot on exiting the with statement
-    @contextlib.contextmanager
+    @property
     def anchor(self):
+        return self._anchor
+
+    # internal anchor function. useful for internals which don't want
+    # to call an overridden `anchor()` function.
+    @contextlib.contextmanager
+    def _anchor(self):
         snapshot_id = self.evm.snapshot()
         try:
             with self.evm.patch.anchor():
@@ -312,7 +318,7 @@ class Env:
         is_static = not is_modifying
         anchor: Any  # mypy hint
         if simulate:
-            anchor = self.anchor
+            anchor = self._anchor
         else:
             anchor = contextlib.nullcontext
         with anchor():
