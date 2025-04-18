@@ -283,6 +283,7 @@ class NetworkEnv(Env):
         override_bytecode=None,
         contract=None,
         is_modifying=True,
+        simulate=False,
         ir_executor=None,  # maybe just have **kwargs to collect extra kwargs
     ):
         if is_modifying:
@@ -299,6 +300,7 @@ class NetworkEnv(Env):
             value=value,
             data=data,
             is_modifying=is_modifying,
+            simulate=simulate,
             contract=contract,
         )
 
@@ -306,7 +308,8 @@ class NetworkEnv(Env):
 
         hexdata = to_hex(data)
 
-        if is_modifying:
+        eth_call = simulate or not is_modifying
+        if not eth_call:
             try:
                 txdata, receipt, trace = self._send_txn(
                     from_=sender, to=to_address, value=value, gas=gas, data=hexdata
