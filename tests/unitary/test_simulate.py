@@ -1,8 +1,13 @@
+import pytest
+
 import boa
 
 
-def test_simulate_local():
-    code = """
+@pytest.mark.parametrize("pragma", ["# pragma version 0.4.0", ""])
+def test_simulate_local(pragma):
+    code = f"""
+{pragma}
+
 counter: public(uint256)
 
 @external

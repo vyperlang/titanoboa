@@ -100,9 +100,12 @@ def test_raise_exception(simple_contract, amount):
 
 
 # test that simulate= doesn't actually modify the chain
-def test_simulate_network():
+@pytest.mark.parametrize("pragma", ["# pragma version 0.4.0", ""])
+def test_simulate_network(pragma):
     # NOTE duplicated code with test_simulate_local
-    code = """
+    code = f"""
+{pragma}
+
 counter: public(uint256)
 
 @external
