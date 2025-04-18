@@ -1007,7 +1007,7 @@ class VyperFunction:
 
         return method_id + encoded_args
 
-    def __call__(self, *args, value=0, gas=None, sender=None, **kwargs):
+    def __call__(self, *args, value=0, gas=None, sender=None, simulate=False, **kwargs):
         calldata_bytes = self.prepare_calldata(*args, **kwargs)
 
         # getattr(x, attr, None) swallows exceptions. use explicit hasattr+getattr
@@ -1029,6 +1029,7 @@ class VyperFunction:
                 value=value,
                 gas=gas,
                 is_modifying=self.func_t.is_mutable,
+                simulate=simulate,
                 override_bytecode=override_bytecode,
                 ir_executor=ir_executor,
                 contract=self.contract,

@@ -262,11 +262,17 @@ class Env:
         gas: Optional[int] = None,
         value: int = 0,
         data: bytes = b"",
+        simulate=False,
     ):
         # simple wrapper around `execute_code` to help simulate calling
         # a contract from an EOA.
         ret = self.execute_code(
-            to_address=to_address, sender=sender, gas=gas, value=value, data=data
+            to_address=to_address,
+            sender=sender,
+            gas=gas,
+            value=value,
+            data=data,
+            simulate=simulate,
         )
         if ret.is_error:
             # differ from execute_code, consumers of execute_code want to get
@@ -287,6 +293,7 @@ class Env:
         override_bytecode: Optional[bytes] = None,
         ir_executor: Any = None,
         is_modifying: bool = True,
+        simulate: bool = False,
         start_pc: int = 0,
         fake_codesize: Optional[int] = None,
         contract: Any = None,  # the calling VyperContract
@@ -303,27 +310,33 @@ class Env:
             bytecode = self.evm.get_code(to)
 
         is_static = not is_modifying
-        ret = self.evm.execute_code(
-            sender=sender,
-            to=to,
-            gas=gas,
-            gas_price=self.get_gas_price(),
-            value=value,
-            bytecode=bytecode,
-            data=data,
-            is_static=is_static,
-            fake_codesize=fake_codesize,
-            start_pc=start_pc,
-            ir_executor=ir_executor,
-            contract=contract,
-        )
-        if self._coverage_enabled:
-            self._trace_computation(ret, contract)
+        anchor: Any  # mypy hint
+        if simulate:
+            anchor = self.anchor
+        else:
+            anchor = contextlib.nullcontext
+        with anchor():
+            ret = self.evm.execute_code(
+                sender=sender,
+                to=to,
+                gas=gas,
+                gas_price=self.get_gas_price(),
+                value=value,
+                bytecode=bytecode,
+                data=data,
+                is_static=is_static,
+                fake_codesize=fake_codesize,
+                start_pc=start_pc,
+                ir_executor=ir_executor,
+                contract=contract,
+            )
+            if self._coverage_enabled:
+                self._trace_computation(ret, contract)
 
-        if ret._gas_meter_class != NoGasMeter:
-            self._update_gas_used(ret.get_gas_used())
+            if ret._gas_meter_class != NoGasMeter:
+                self._update_gas_used(ret.get_gas_used())
 
-        return ret
+            return ret
 
     # trace pcs for coverage sake. dummy function which
     # just issues the right calls to _trace_cov() to get picked
