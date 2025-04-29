@@ -334,15 +334,16 @@ def _loads_partial_vvm(
     # separate _handle_output and _compile so that we don't trample
     # name and filename in the VVMDeployer from separate invocations
     # (with different values for name+filename).
-    def _handle_output(compiled_src):
+    def _handle_output(compiled_src, source_code):
+        # pprint.pp(compiled_src)
         compiler_output = compiled_src["<stdin>"]
         return VVMDeployer.from_compiler_output(
-            compiler_output, name=name, filename=filename
+            compiler_output, source_code=source_code, name=name, filename=filename
         )
 
     # Ensure the cache is initialized
     if _disk_cache is None:
-        return _handle_output(_compile())
+        return _handle_output(_compile(), source_code)
 
     # Generate a unique cache key
     cache_key = f"{source_code}:{version}"
@@ -356,7 +357,7 @@ def _loads_partial_vvm(
         _disk_cache.invalidate(cache_key)
         ret = _disk_cache.caching_lookup(cache_key, _compile)
 
-    return _handle_output(ret)
+    return _handle_output(ret, source_code)
 
 
 def from_etherscan(
