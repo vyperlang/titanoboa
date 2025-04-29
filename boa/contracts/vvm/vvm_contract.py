@@ -25,6 +25,12 @@ class VVMBlueprint(ABIContract):
         return self._deployer
 
 
+class VVMContractFactory(ABIContractFactory):
+    def __init__(self, deployer):
+        self.deployer = deployer
+        super().__init__(deployer.name, deployer.abi, deployer.filename)
+
+
 class VVMDeployer:
     """
     A deployer that uses the Vyper Version Manager (VVM).
@@ -32,13 +38,19 @@ class VVMDeployer:
     can interact with new versions using the ABI definition.
     """
 
-    def __init__(self, abi, bytecode, name, filename):
+    def __init__(self, compiler_output: dict, name: str, filename: str):
         """
         Initialize a VVMDeployer instance.
         :param abi: The contract's ABI.
         :param bytecode: The contract's bytecode.
         :param filename: The filename of the contract.
         """
+        self.compiler_output: dict = compiler_output
+
+        abi = compiler_output["abi"]
+        bytecode_nibbles = compiler_output["bytecode"]
+        bytecode = bytes.fromhex(bytecode_nibbles.removeprefix("0x"))
+
         self.abi: dict = abi
         self.bytecode: bytes = bytecode
         self.name: Optional[str] = name
@@ -46,16 +58,11 @@ class VVMDeployer:
 
     @classmethod
     def from_compiler_output(cls, compiler_output, name, filename):
-        abi = compiler_output["abi"]
-        bytecode_nibbles = compiler_output["bytecode"]
-        bytecode = bytes.fromhex(bytecode_nibbles.removeprefix("0x"))
-        return cls(abi, bytecode, name, filename)
+        return cls(compiler_output, name, filename)
 
     @cached_property
     def factory(self):
-        return ABIContractFactory.from_abi_dict(
-            self.abi, name=self.name, filename=self.filename
-        )
+        return VVMContractFactory(self)
 
     @cached_property
     def constructor(self):
