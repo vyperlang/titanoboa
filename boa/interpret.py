@@ -14,12 +14,7 @@ from packaging.version import Version
 from vvm.utils.versioning import _pick_vyper_version, detect_version_specifier_set
 from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
-from vyper.compiler.input_bundle import (
-    ABIInput,
-    CompilerInput,
-    FileInput,
-    FilesystemInputBundle,
-)
+from vyper.compiler.input_bundle import CompilerInput, FileInput, FilesystemInputBundle
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import Settings, anchor_settings
 from vyper.semantics.analysis.imports import resolve_imports
@@ -103,16 +98,13 @@ sys.meta_path.append(BoaImporter())
 
 
 def hash_input(compiler_input: CompilerInput) -> str:
-    if isinstance(compiler_input, FileInput):
-        return compiler_input.sha256sum
-    if isinstance(compiler_input, ABIInput):
-        return sha256sum(str(compiler_input.abi))
-    raise RuntimeError(f"bad compiler input {compiler_input}")
+    return compiler_input.sha256sum
 
 
 # compute a fingerprint for a module which changes if any of its
 # dependencies change
 # TODO consider putting this in its own module
+# TODO: refactor with new machinery in vyper 0.4.2+
 def get_module_fingerprint(
     module_t: ModuleT, seen: dict["ImportInfo", str] = None
 ) -> str:
