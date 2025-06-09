@@ -43,6 +43,8 @@ nav:
       - Computing Test Coverage: guides/testing/coverage.md
       - Stateful Testing with Hypothesis: guides/testing/fuzzing_strategies.md
       - Gas profiling: guides/testing/gas_profiling.md
+    - Advanced Features: guides/advanced_features.md
+    - Performance Optimization: guides/performance_optimization.md
     - Forge Analogues: guides/forge.md
   - API Reference:
     - boa:
@@ -76,6 +78,7 @@ nav:
       - get_logs: api/vyper_contract/get_logs.md
       - decode_log: api/vyper_contract/decode_log.md
       - inject_function: api/vyper_contract/inject_function.md
+      - storage_introspection: api/vyper_contract/storage_introspection.md
     - VyperDeployer:
       - Overview: api/vyper_deployer/overview.md
       - deploy: api/vyper_deployer/deploy.md

@@ -658,3 +658,169 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
     **Note**
 
     This is useful when you want to start a fresh gas measurement.
+
+---
+
+## `capabilities`
+
+!!! property "`boa.env.capabilities`"
+
+    **Description**
+
+    Access the capabilities detection system that automatically detects EVM features supported by the current environment. This property provides information about supported opcodes and EVM versions.
+
+    ---
+
+    **Attributes**
+
+    - `has_cancun`: Whether Cancun opcodes (PUSH0, MCOPY, TLOAD/TSTORE) are supported
+    - `has_shanghai`: Whether Shanghai opcodes are supported
+    - `has_paris`: Whether Paris opcodes are supported
+    - `describe_capabilities()`: Get a human-readable string describing the capabilities
+
+    ---
+
+    **Examples**
+
+    ```python
+    >>> import boa
+    >>> # Check if Cancun features are available
+    >>> if boa.env.capabilities.has_cancun:
+    ...     print("Cancun features are supported")
+    ... else:
+    ...     print("Cancun features not available")
+    ...
+    >>> # Get human-readable description
+    >>> print(boa.env.capabilities.describe_capabilities())
+    'cancun'  # or 'shanghai', 'paris', etc.
+    ```
+
+    ---
+
+    **Note**
+
+    This is particularly useful when deploying contracts that use newer opcodes, as it prevents deployment failures on networks that don't support them.
+
+---
+
+## `set_balance`
+
+!!! function "`boa.env.set_balance(address: str, value: int)`"
+
+    **Description**
+
+    Set the ether balance of an account. This is useful for testing scenarios that require specific account balances.
+
+    ---
+
+    **Parameters**
+
+    - `address`: The address to set the balance for
+    - `value`: The new balance in wei
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> boa.env.set_balance("0x1234...", 10**18)  # Set balance to 1 ETH
+    >>> boa.env.get_balance("0x1234...")
+    1000000000000000000
+    ```
+
+---
+
+## `set_storage`
+
+!!! function "`boa.env.set_storage(address: str, slot: int, value: int)`"
+
+    **Description**
+
+    Set a value in a specific storage slot for the given address. This allows direct manipulation of contract storage, which can be useful for advanced testing scenarios.
+
+    ---
+
+    **Parameters**
+
+    - `address`: The address of the contract
+    - `slot`: The storage slot to write to
+    - `value`: The value to store
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> # Set storage slot 0 to value 42
+    >>> boa.env.set_storage("0x1234...", 0, 42)
+    >>> boa.env.get_storage("0x1234...", 0)
+    42
+    ```
+
+    ---
+
+    **Warning**
+
+    Direct storage manipulation can break contract invariants. Use with caution.
+
+---
+
+## `get_tx_settings`
+
+!!! function "`boa.env.get_tx_settings()`"
+
+    **Description**
+
+    Get the current transaction settings for the environment. This returns the settings object that controls transaction behavior.
+
+    ---
+
+    **Returns**
+
+    The transaction settings object with various configuration options.
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> settings = boa.env.get_tx_settings()
+    >>> print(settings.poll_timeout)
+    120.0  # Default timeout in seconds
+    ```
+
+---
+
+## `set_code`
+
+!!! function "`boa.env.set_code(address: str, bytecode: bytes)`"
+
+    **Description**
+
+    Set the bytecode at a specific address. This is useful for testing upgrades or deploying code to specific addresses.
+
+    ---
+
+    **Parameters**
+
+    - `address`: The address to set the code at
+    - `bytecode`: The bytecode to deploy
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> bytecode = bytes.fromhex("6080604052...")
+    >>> boa.env.set_code("0x1234...", bytecode)
+    ```
+
+    ---
+
+    **Warning**
+
+    This operation bypasses normal deployment procedures and should be used carefully.
