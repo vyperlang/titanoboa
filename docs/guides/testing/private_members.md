@@ -60,7 +60,7 @@ my_contract._immutables.y # returns 1234
 
 Since vyper 0.4.0 it is possible to modularize contracts.
 
-Boa doesn't yet support accessing private module variables. However this can easily be done using [`eval`]() TODO.
+Boa doesn't yet support accessing private module variables. However this can easily be done using [`eval`](../../api/vyper_contract/eval.md).
 
 Given a module `bar.vy`:
 

@@ -203,6 +203,22 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     The return data from the transaction.
 
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> # Call a view function manually
+    >>> returndata = boa.env.execute_code(
+    ...     to="0x...",
+    ...     data=bytes.fromhex("18160ddd")  # totalSupply() selector
+    ... )
+    >>> from eth.codecs import abi
+    >>> total_supply = abi.decode("(uint256)", returndata)[0]
+    >>> print(f"Total supply: {total_supply}")
+    ```
+
 ---
 
 ## `get_balance`
@@ -225,6 +241,16 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     The balance in wei.
 
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> balance = boa.env.get_balance("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
+    >>> print(f"Balance: {balance / 10**18:.4f} ETH")
+    ```
+
 ---
 
 ## `get_code`
@@ -246,6 +272,19 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     **Returns**
 
     The bytecode as bytes.
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> code = boa.env.get_code("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    >>> if code:
+    ...     print(f"Contract has {len(code)} bytes of code")
+    ... else:
+    ...     print("No code at address (EOA)")
+    ```
 
 ---
 

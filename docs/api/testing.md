@@ -72,7 +72,12 @@ Boa provides various utilities to test vyper contracts and execute them in a for
     **Examples**
 
     ```python
-    SOON
+    import boa
+    
+    # Fork mainnet at latest safe block
+    with boa.fork("https://eth.llamarpc.com"):
+        # Deploy and test against mainnet state
+        contract = boa.loads_partial(source).deploy()
     ```
 
 
@@ -100,7 +105,6 @@ Boa provides various utilities to test vyper contracts and execute them in a for
     **Examples**
 
     === "Vanilla ERC20"
-        TODO verify this example
 
         Let's modify the balance of `alice` for `usdc` to 100.
 
@@ -118,7 +122,14 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
         1. We multiply the amount by `10 ** usdc.decimals()` to account for the token's decimals.
     === "WETH"
-        TODO need to use adjust_supply=False
+        ```python
+        boa.fork(os.getenv("ETH_RPC_URL"))
+        
+        weth = ERC20.at("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", name="WETH")
+        alice = boa.env.generate_address("alice")
+        
+        boa.deal(weth, alice, 10 * 10**18, adjust_supply=False)
+        ```
 
 
 
@@ -147,7 +158,6 @@ Boa provides various utilities to test vyper contracts and execute them in a for
     Boa supports matching against different revert reasons, to learn more about them see [Revert Reasons](../explain/revert_reasons.md).
 
     === "Revert reason provided as a positional argument"
-        TODO reorganize this part
 
         ```python
         import boa
