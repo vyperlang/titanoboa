@@ -661,48 +661,6 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ---
 
-## `capabilities`
-
-!!! property "`boa.env.capabilities`"
-
-    **Description**
-
-    Access the capabilities detection system that automatically detects EVM features supported by the current environment. This property provides information about supported opcodes and EVM versions.
-
-    ---
-
-    **Attributes**
-
-    - `has_cancun`: Whether Cancun opcodes (PUSH0, MCOPY, TLOAD/TSTORE) are supported
-    - `has_shanghai`: Whether Shanghai opcodes are supported
-    - `has_paris`: Whether Paris opcodes are supported
-    - `describe_capabilities()`: Get a human-readable string describing the capabilities
-
-    ---
-
-    **Examples**
-
-    ```python
-    >>> import boa
-    >>> # Check if Cancun features are available
-    >>> if boa.env.capabilities.has_cancun:
-    ...     print("Cancun features are supported")
-    ... else:
-    ...     print("Cancun features not available")
-    ...
-    >>> # Get human-readable description
-    >>> print(boa.env.capabilities.describe_capabilities())
-    'cancun'  # or 'shanghai', 'paris', etc.
-    ```
-
-    ---
-
-    **Note**
-
-    This is particularly useful when deploying contracts that use newer opcodes, as it prevents deployment failures on networks that don't support them.
-
----
-
 ## `set_balance`
 
 !!! function "`boa.env.set_balance(address: str, value: int)`"
@@ -764,33 +722,6 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
     **Warning**
 
     Direct storage manipulation can break contract invariants. Use with caution.
-
----
-
-## `get_tx_settings`
-
-!!! function "`boa.env.get_tx_settings()`"
-
-    **Description**
-
-    Get the current transaction settings for the environment. This returns the settings object that controls transaction behavior.
-
-    ---
-
-    **Returns**
-
-    The transaction settings object with various configuration options.
-
-    ---
-
-    **Example**
-
-    ```python
-    >>> import boa
-    >>> settings = boa.env.get_tx_settings()
-    >>> print(settings.poll_timeout)
-    120.0  # Default timeout in seconds
-    ```
 
 ---
 

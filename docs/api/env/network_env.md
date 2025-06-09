@@ -50,6 +50,52 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
 ---
 
+## `capabilities`
+
+!!! property "`boa.env.capabilities`"
+
+    **Description**
+
+    Access the capabilities detection system that automatically detects EVM features supported by the current network. This property provides information about supported opcodes and EVM versions.
+
+    ---
+
+    **Attributes**
+
+    - `has_cancun`: Whether Cancun opcodes (PUSH0, MCOPY, TLOAD/TSTORE) are supported
+    - `has_shanghai`: Whether Shanghai opcodes are supported
+    - `has_push0`: Whether PUSH0 opcode is supported
+    - `has_mcopy`: Whether MCOPY opcode is supported
+    - `has_transient`: Whether transient storage (TLOAD/TSTORE) is supported
+    - `describe_capabilities()`: Get a human-readable string describing the capabilities
+
+    ---
+
+    **Examples**
+
+    ```python
+    >>> import boa
+    >>> boa.set_network_env("https://eth-mainnet.g.alchemy.com/v2/YOUR-KEY")
+    >>> 
+    >>> # Check if Cancun features are available
+    >>> if boa.env.capabilities.has_cancun:
+    ...     print("Cancun features are supported")
+    ... else:
+    ...     print("Cancun features not available")
+    ...
+    >>> # Get human-readable description
+    >>> print(boa.env.capabilities.describe_capabilities())
+    'cancun'  # or 'shanghai', 'paris', etc.
+    ```
+
+    ---
+
+    **Note**
+
+    This is particularly useful when deploying contracts that use newer opcodes, as it prevents deployment failures on networks that don't support them yet.
+
+---
+
 ## `add_account`
 
 !!! function "`add_account(account: Account, force_eoa=False)`"
@@ -144,7 +190,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
 ## `deploy_code`
 
-!!! function "`deploy_code(bytecode: bytes, *args, value=0, gas=None, sender=None) -> str`"
+!!! function "`deploy_code(bytecode: bytes, *args, value=0, gas=None, sender=None) -> tuple[Address, bytes]`"
 
     **Description**
 
@@ -164,7 +210,9 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Returns**
 
-    The address of the deployed contract.
+    A tuple containing:
+    - The address of the deployed contract
+    - The return data from the deployment transaction
 
     ---
 
@@ -173,50 +221,8 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     ```python
     >>> import boa
     >>> bytecode = bytes.fromhex("608060...")
-    >>> address = boa.env.deploy_code(bytecode)
+    >>> address, runtime_bytecode = boa.env.deploy_code(bytecode)
     >>> print(f"Deployed at: {address}")
-    ```
-
----
-
-## `execute_code`
-
-!!! function "`execute_code(to: str, data: bytes = b"", value: int = 0, gas: int = None, sender: str = None) -> bytes`"
-
-    **Description**
-
-    Execute a transaction on the network and return the result.
-
-    ---
-
-    **Parameters**
-
-    - `to`: Target address
-    - `data`: Calldata
-    - `value`: ETH value to send
-    - `gas`: Gas limit (auto-estimated if None)
-    - `sender`: Sender address (uses env.eoa if None)
-
-    ---
-
-    **Returns**
-
-    The return data from the transaction.
-
-    ---
-
-    **Example**
-
-    ```python
-    >>> import boa
-    >>> # Call a view function manually
-    >>> returndata = boa.env.execute_code(
-    ...     to="0x...",
-    ...     data=bytes.fromhex("18160ddd")  # totalSupply() selector
-    ... )
-    >>> from eth.codecs import abi
-    >>> total_supply = abi.decode("(uint256)", returndata)[0]
-    >>> print(f"Total supply: {total_supply}")
     ```
 
 ---
@@ -288,39 +294,6 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
 ---
 
-## `wait_for_tx_receipt`
-
-!!! function "`wait_for_tx_receipt(tx_hash: str, timeout: float = None) -> dict`"
-
-    **Description**
-
-    Wait for a transaction receipt. Uses the timeout from `tx_settings.poll_timeout` if not specified.
-
-    ---
-
-    **Parameters**
-
-    - `tx_hash`: The transaction hash to wait for
-    - `timeout`: Custom timeout in seconds (optional)
-
-    ---
-
-    **Returns**
-
-    The transaction receipt as a dictionary.
-
-    ---
-
-    **Example**
-
-    ```python
-    >>> import boa
-    >>> tx_hash = contract.some_function()
-    >>> receipt = boa.env.wait_for_tx_receipt(tx_hash)
-    >>> print(f"Gas used: {receipt['gasUsed']}")
-    ```
-
----
 
 ## `set_balance`
 
@@ -328,7 +301,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Description**
 
-    Set the ETH balance of an address. Only works with local development networks that support `evm_setBalance`.
+    Set the ETH balance of an address. **Note: This method is not implemented in NetworkEnv and will raise NotImplementedError.**
 
     ---
 
@@ -351,4 +324,4 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Note**
 
-    This only works on local development networks (Anvil, Hardhat) that support the `evm_setBalance` RPC method.
+    This method raises `NotImplementedError` in NetworkEnv. To set balances in a test environment, use `boa.fork()` which returns a regular Env instance that supports balance manipulation.

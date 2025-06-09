@@ -43,7 +43,7 @@ print(addr.canonical_address)  # b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\
 
 ### String Representation
 
-The Address class provides multiple string representations:
+The Address class inherits from `str` and provides checksum address representation:
 
 ```python
 addr = Address("0x5B38Da6a701c568545dCfcB03FcB875f56beddC4")
@@ -52,7 +52,7 @@ addr = Address("0x5B38Da6a701c568545dCfcB03FcB875f56beddC4")
 print(str(addr))  # 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4
 
 # Lowercase hex
-print(addr.hex())  # 0x5b38da6a701c568545dcfcb03fcb875f56beddc4
+print(str(addr).lower())  # 0x5b38da6a701c568545dcfcb03fcb875f56beddc4
 ```
 
 ---

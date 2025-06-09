@@ -82,16 +82,15 @@ contract.approve(spender, amount)
 contract.transferFrom(sender, recipient, amount)
 ```
 
-### Constructor Arguments
+### Working with Already Deployed Contracts
 
-When deploying with bytecode:
+ABIContract is designed for interacting with contracts that are already deployed on the blockchain. It cannot deploy new contracts.
 
 ```python
-abi = [...] # Contract ABI with constructor
-bytecode = "0x608060405234801561001057600080fd5b5..."
+# Load an existing contract at a known address
+contract = boa.loads_abi(abi, at="0x...")
 
-deployer = boa.loads_abi(abi, bytecode=bytecode)
-contract = deployer.deploy("Token Name", "TKN", 18, 1000000)
+# For deploying new contracts, use boa.load() with Vyper source code instead
 ```
 
 ### Events
@@ -103,13 +102,15 @@ Access and decode events:
 logs = contract.get_logs()
 
 # Filter specific events
-transfers = [log for log in logs if log.event_type.name == "Transfer"]
+# Decoded logs are returned as namedtuples where the type name is the event name
+transfers = [log for log in logs if type(log).__name__ == "Transfer"]
 
-# Access event data
+# Access event data (namedtuple attributes)
 for transfer in transfers:
-    print(f"From: {transfer.args['from']}")
-    print(f"To: {transfer.args['to']}")
-    print(f"Value: {transfer.args['value']}")
+    # Note: 'from' is a Python keyword, so it's renamed to 'from_' in the namedtuple
+    print(f"From: {transfer.from_}")
+    print(f"To: {transfer.to}")
+    print(f"Value: {transfer.value}")
 ```
 
 ---
@@ -176,12 +177,13 @@ contract.deposit(value=10**18)  # 1 ETH
 
 ### Overloaded Functions
 
-For contracts with overloaded functions, use the full signature:
+For contracts with overloaded functions (same name, different parameters), you need to disambiguate by providing the full signature:
 
 ```python
 # If contract has multiple transfer functions
-contract["transfer(address,uint256)"](recipient, amount)
-contract["transfer(address,uint256,bytes)"](recipient, amount, data)
+# Use the disambiguate_signature parameter
+contract.transfer(recipient, amount, disambiguate_signature="transfer(address,uint256)")
+contract.transfer(recipient, amount, data, disambiguate_signature="transfer(address,uint256,bytes)")
 ```
 
 ### Raw Calls
@@ -189,8 +191,9 @@ contract["transfer(address,uint256,bytes)"](recipient, amount, data)
 For low-level interactions:
 
 ```python
-# Encode function call
-data = contract.transfer.encode_input(recipient, amount)
+# Get the function selector and prepare calldata
+fn = contract.transfer
+data = fn.prepare_calldata(recipient, amount)
 
 # Execute raw call
 result = boa.env.raw_call(
@@ -200,8 +203,9 @@ result = boa.env.raw_call(
     gas=100000
 )
 
-# Decode result
-success = contract.transfer.decode_output(result)
+# Decode result using abi_decode
+from eth.codecs import abi
+success = abi.decode("(bool)", result)[0]
 ```
 
 ---
