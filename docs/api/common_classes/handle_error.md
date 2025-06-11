@@ -5,8 +5,13 @@ Base method for error handling in EVM contracts.
 ## Signature
 
 ```python
-def handle_error(self, computation) -> None
+def handle_error(self, computation: ComputationAPI) -> None
 ```
+
+## Parameters
+
+- `self`: The contract instance
+- `computation`: The failed computation object containing execution state and error information
 
 ## Description
 
