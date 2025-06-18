@@ -42,7 +42,23 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Examples**
 
-    SOON
+    ```python
+    >>> import boa
+    >>> # Basic contract loading
+    >>> contract = boa.load("contracts/Token.vy", "MyToken", "TKN", 18, 1000000)
+    >>> 
+    >>> # Load with specific compiler settings
+    >>> contract = boa.load("contracts/Complex.vy", compiler_args={"optimize": "codesize"})
+    >>> 
+    >>> # Load as blueprint
+    >>> blueprint = boa.load("contracts/Factory.vy", as_blueprint=True)
+    >>> 
+    >>> # Load with value (payable constructor)
+    >>> contract = boa.load("contracts/Vault.vy", value=10**18)  # 1 ETH
+    >>> 
+    >>> # Load at specific address (for testing upgrades)
+    >>> contract = boa.load("contracts/V2.vy", override_address="0x1234...")
+    ```
 
 ---
 
@@ -72,7 +88,131 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
     **Examples**
 
-    SOON
+    ```python
+    >>> import boa
+    >>> # Fetch from Etherscan
+    >>> usdc = boa.from_etherscan("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", name="USDC")
+    >>> 
+    >>> # Use custom API key
+    >>> contract = boa.from_etherscan(
+    ...     "0x1234...", 
+    ...     api_key="YOUR_ETHERSCAN_API_KEY"
+    ... )
+    >>> 
+    >>> # Fetch from other explorers
+    >>> contract = boa.from_etherscan(
+    ...     "0x5678...",
+    ...     uri="https://api.arbiscan.io/api",  # Arbitrum
+    ...     api_key="YOUR_ARBISCAN_API_KEY"
+    ... )
+    ```
+
+---
+
+## **Cache Management**
+
+TitanoBoa includes a disk caching system to speed up contract compilation. Compiled contracts are cached based on their content hash.
+
+### `set_cache_dir`
+!!! function "`boa.set_cache_dir(path)`"
+
+    **Description**
+
+    Set the directory for caching compiled contracts. By default, contracts are cached in a system-appropriate location.
+
+    ---
+
+    **Parameters**
+
+    - `path`: The directory path for storing cached contracts. Can be a string or Path object.
+
+    ---
+
+    **Examples**
+
+    ```python
+    >>> import boa
+    >>> # Set custom cache directory
+    >>> boa.set_cache_dir("~/.my_boa_cache")
+    >>> 
+    >>> # Use Path object
+    >>> from pathlib import Path
+    >>> boa.set_cache_dir(Path.home() / ".cache" / "boa")
+    ```
+
+---
+
+### `disable_cache`
+!!! function "`boa.disable_cache()`"
+
+    **Description**
+
+    Disable the contract compilation cache. This forces recompilation of all contracts.
+
+    ---
+
+    **Examples**
+
+    ```python
+    >>> import boa
+    >>> # Disable caching for debugging
+    >>> boa.disable_cache()
+    >>> 
+    >>> # All subsequent loads will recompile
+    >>> contract = boa.load("MyContract.vy")  # Always recompiles
+    ```
+
+    ---
+
+    **Note**
+
+    Disabling cache can significantly slow down test suites and development workflows. Use sparingly.
+
+---
+
+## **Module System**
+
+TitanoBoa integrates with Python's import system, allowing you to import Vyper files directly.
+
+### Direct Import
+
+```python
+# Assuming you have token.vy in your project
+import token  # Imports token.vy
+
+# Deploy the contract
+deployed_token = token.deploy("MyToken", "TKN", 18, 1000000)
+```
+
+### Import with Custom Names
+
+```python
+# Import with alias
+import token as MyToken
+
+# Or use from import
+from contracts import token, vault
+
+# Deploy contracts
+token_contract = token.deploy()
+vault_contract = vault.deploy(token_contract.address)
+```
+
+### Module Search Path
+
+Vyper files are searched in:
+1. Current working directory
+2. Directories in `sys.path`
+3. Directories added via `boa.interpret.add_search_path()`
+
+```python
+>>> import boa.interpret
+>>> # Add custom search path
+>>> boa.interpret.add_search_path("/path/to/my/contracts")
+>>> 
+>>> # Now you can import from that directory
+>>> import my_contract
+```
 
 ---
 

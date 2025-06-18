@@ -10,14 +10,21 @@ Internal and external contract functions are available as methods on `VyperContr
 
 - [eval](eval.md)
 - [deployer](deployer.md)
-TODO mention common classes
-<!-- - [Common Classes](../common_classes/overview.md) -->
 - [marshal_to_python](marshal_to_python.md)
 - [stack_trace](stack_trace.md)
 - [trace_source](trace_source.md)
 - [get_logs](get_logs.md)
 - [decode_log](decode_log.md)
 - [inject_function](inject_function.md)
+- [storage_introspection](storage_introspection.md) - Access storage, immutables, and constants
+
+### Properties
+
+- `_storage` - Access storage variables with automatic decoding
+- `_immutables` - Access immutable values
+- `_constants` - Access contract constants
+- `address` - The deployed address of the contract
+- `created_from` - Address that deployed this contract
 
 ### Examples
 
