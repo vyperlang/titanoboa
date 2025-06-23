@@ -117,6 +117,7 @@ nav:
     - Singleton Env: explain/singleton_env.md
     - Legacy Vyper Contracts: explain/vvm_contracts.md
     - Caching: explain/caching.md
+    - Deployments Database: explain/deployments.md
 
 extra_css:
   - assets/stylesheets/extra.css
