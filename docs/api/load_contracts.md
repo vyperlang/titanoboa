@@ -111,7 +111,7 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
 
 ## **Cache Management**
 
-TitanoBoa includes a disk caching system to speed up contract compilation. Compiled contracts are cached based on their content hash.
+Titanoboa includes a disk caching system to speed up contract compilation. Compiled contracts are cached based on their content hash.
 
 ### `set_cache_dir`
 !!! function "`boa.set_cache_dir(path)`"
@@ -172,7 +172,7 @@ TitanoBoa includes a disk caching system to speed up contract compilation. Compi
 
 ## **Module System**
 
-TitanoBoa integrates with Python's import system, allowing you to import Vyper files directly.
+Titanoboa integrates with Python's import system, allowing you to import Vyper files directly.
 
 ### Direct Import
 

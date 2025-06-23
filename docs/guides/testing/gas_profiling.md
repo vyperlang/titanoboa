@@ -1,6 +1,6 @@
 # Gas Profiling
 
-TitanoBoa provides comprehensive gas profiling tools that help you understand and optimize gas consumption in your contracts. The profiler tracks gas usage at both the function level and line-by-line, providing detailed statistics.
+Titanoboa provides comprehensive gas profiling tools that help you understand and optimize gas consumption in your contracts. The profiler tracks gas usage at both the function level and line-by-line, providing detailed statistics.
 
 ## Overview
 

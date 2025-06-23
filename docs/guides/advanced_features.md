@@ -6,7 +6,7 @@ This guide covers advanced Titanoboa features that provide powerful capabilities
 
 ### Storage Variable Access
 
-TitanoBoa provides direct access to contract storage variables through special properties:
+Titanoboa provides direct access to contract storage variables through special properties:
 
 ```python
 import boa
@@ -166,7 +166,7 @@ print(child.created_from)  # Factory contract address
 
 ### Open Context Manager Pattern
 
-TitanoBoa uses a special "open" pattern that allows functions to work both as regular calls and context managers:
+Titanoboa uses a special "open" pattern that allows functions to work both as regular calls and context managers:
 
 ```python
 import boa
@@ -448,7 +448,7 @@ contract.function()
 
 ### Hypothesis Integration
 
-The TitanoBoa pytest plugin automatically handles state isolation for Hypothesis:
+The Titanoboa pytest plugin automatically handles state isolation for Hypothesis:
 
 ```python
 from hypothesis import given, strategies as st
