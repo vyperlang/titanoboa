@@ -169,7 +169,7 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ## `execute_code`
 
-!!! function "`boa.env.execute_code() -> bytes`"
+!!! function "`boa.env.execute_code() -> ComputationAPI`"
 
     **Description**
 
@@ -191,7 +191,17 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
     **Returns**
 
-    The return value from the top-level call.
+    A `ComputationAPI` object containing the execution result. Key attributes include:
+    - `output`: The return data as bytes
+    - `is_error`: Boolean indicating if the execution failed
+    - `error`: The exception if execution failed
+    - `gas_used`: Amount of gas consumed
+
+    ---
+
+    **Note**
+
+    Unlike `raw_call`, this method returns the computation object directly without raising exceptions on errors.
 
 ---
 
@@ -524,12 +534,11 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ## `raw_call`
 
-!!! function "`boa.env.raw_call(to_address) -> bytes`"
+!!! function "`boa.env.raw_call(to_address) -> ComputationAPI`"
 
     **Description**
 
-    TODO too many details this should go in the explain section
-    Simple wrapper around `execute_code`, to execute as if the contract is being called from an EOA.
+    Execute a call to a contract address, simulating an EOA transaction.
 
     ---
 
@@ -540,12 +549,32 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
     - `gas`: The gas limit provided for the execution (a.k.a. `msg.gas`).
     - `value`: The ether value to attach to the execution (a.k.a `msg.value`).
     - `data`: The data to attach to the execution (a.k.a. `msg.data`).
+    - `simulate`: If True, the call is executed in a context that is rolled back after execution.
 
     ---
 
     **Returns**
 
-    The return value from the top-level call.
+    A `ComputationAPI` object containing the execution result. Key attributes include:
+    - `output`: The return data as bytes
+    - `is_error`: Boolean indicating if the execution failed
+    - `error`: The exception if execution failed
+    - `gas_used`: Amount of gas consumed
+
+    ---
+
+    **Important**
+
+    Unlike `execute_code`, if the computation fails (`is_error` is True), this method raises the error as an exception.
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> computation = boa.env.raw_call(contract_address, data=b"\x00\x00\x00\x00")
+    >>> print(computation.output.hex())
+    ```
 
 ---
 
