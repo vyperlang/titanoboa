@@ -369,6 +369,7 @@ contract = boa.load("MyContract.vy")  # Can import modules from search paths
 ```
 
 The search path resolution order (from highest to lowest precedence):
+
 1. Paths specified via `set_search_paths()` (last path has highest precedence)
 2. Current directory (".")
 3. Python's `sys.path` (in reverse order)
