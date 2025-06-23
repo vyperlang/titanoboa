@@ -189,15 +189,15 @@ transfer_strategy = st.tuples(
 @given(transfer_data=transfer_strategy)
 def test_token_transfer(token_contract, transfer_data):
     sender, recipient, amount = transfer_data
-    
+
     # Setup sender balance
     boa.env.set_balance(sender, 10**18)
     token_contract.mint(sender, amount * 2)
-    
+
     # Test transfer
     with boa.env.prank(sender):
         token_contract.transfer(recipient, amount)
-    
+
     assert token_contract.balanceOf(recipient) == amount
 ```
 
@@ -214,7 +214,7 @@ class TokenStateMachine(RuleBasedStateMachine):
         self.token = boa.load("Token.vy")
         self.balances = {}
         self.total_supply = 0
-    
+
     @rule(
         account=boa_st.address(),
         amount=boa_st.uint256().filter(lambda x: x < 10**20)
@@ -223,7 +223,7 @@ class TokenStateMachine(RuleBasedStateMachine):
         self.token.mint(account, amount)
         self.balances[account] = self.balances.get(account, 0) + amount
         self.total_supply += amount
-    
+
     @rule(
         sender=boa_st.address(),
         recipient=boa_st.address(),
@@ -235,11 +235,11 @@ class TokenStateMachine(RuleBasedStateMachine):
                 self.token.transfer(recipient, amount)
             self.balances[sender] -= amount
             self.balances[recipient] = self.balances.get(recipient, 0) + amount
-    
+
     @invariant()
     def check_total_supply(self):
         assert self.token.totalSupply() == self.total_supply
-    
+
     @invariant()
     def check_balances(self):
         for account, expected in self.balances.items():
@@ -285,13 +285,13 @@ pytest_plugins = ["boa.test"]
 )
 def test_token_economics(initial_supply, transfer_amount):
     token = boa.load("Token.vy", initial_supply)
-    
+
     if transfer_amount <= initial_supply:
         owner = boa.env.eoa
         recipient = boa.env.generate_address()
-        
+
         token.transfer(recipient, transfer_amount)
-        
+
         assert token.balanceOf(owner) == initial_supply - transfer_amount
         assert token.balanceOf(recipient) == transfer_amount
 ```
@@ -302,7 +302,7 @@ def test_token_economics(initial_supply, transfer_amount):
    ```python
    # Good: Realistic gas prices
    gas_price = boa_st.uint256().filter(lambda x: 10**9 <= x <= 10**11)
-   
+
    # Bad: Any uint256 (includes unrealistic values)
    gas_price = boa_st.uint256()
    ```
@@ -313,7 +313,7 @@ def test_token_economics(initial_supply, transfer_amount):
    def test_zero_transfer():
        with boa.reverts("Cannot transfer 0"):
            contract.transfer(recipient, 0)
-   
+
    # Fuzzing for general properties
    @given(amount=boa_st.uint256().filter(lambda x: x > 0))
    def test_transfer_properties(amount):
@@ -324,7 +324,7 @@ def test_token_economics(initial_supply, transfer_amount):
 3. **Set reasonable test budgets**:
    ```python
    from hypothesis import settings
-   
+
    @settings(max_examples=1000, deadline=None)
    @given(value=boa_st.uint256())
    def test_expensive_operation(value):
@@ -353,7 +353,7 @@ def mint(amount: uint256):
     assert self.total_supply + amount <= MAX_SUPPLY, "Exceeds max supply"
     self.total_supply += amount
 """)
-    
+
     if value <= 10**24:
         contract.mint(value)
     else:
@@ -380,7 +380,7 @@ def __init__(owner: address):
 def restricted_function():
     assert msg.sender == self.owner, "Not authorized"
 """, authorized)
-    
+
     with boa.env.prank(caller):
         if caller == authorized:
             contract.restricted_function()

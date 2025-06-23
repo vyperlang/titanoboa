@@ -32,10 +32,10 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     >>> import boa
     >>> # Increase base fee estimation to 10 blocks ahead (for congested networks)
     >>> boa.env.tx_settings.base_fee_estimator_constant = 10
-    >>> 
+    >>>
     >>> # Increase timeout for slow networks
     >>> boa.env.tx_settings.poll_timeout = 300.0  # 5 minutes
-    >>> 
+    >>>
     >>> # Don't use block parameter for gas estimation (for certain RPC providers)
     >>> boa.env.tx_settings.estimate_gas_block_identifier = None
     ```
@@ -45,7 +45,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     **Note**
 
     These settings are particularly useful when dealing with network congestion or RPC provider quirks.
-    
+
     The `base_fee_estimator_constant` determines how many blocks ahead to calculate the base fee cap. Since EIP-1559 allows base fee to increase by at most 12.5% per block, the maximum base fee after n blocks is calculated as: `current_base_fee * (9/8)^n`. For example, with the default value of 5, the base fee cap would be `current_base_fee * 1.8` (approximately). If you encounter errors like "max fee per gas less than block base fee", try increasing this value.
 
 ---
@@ -76,7 +76,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     ```python
     >>> import boa
     >>> boa.set_network_env("https://eth-mainnet.g.alchemy.com/v2/YOUR-KEY")
-    >>> 
+    >>>
     >>> # Check if Cancun features are available
     >>> if boa.env.capabilities.has_cancun:
     ...     print("Cancun features are supported")
@@ -141,7 +141,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     >>> import boa
     >>> contract = boa.load("MyContract.vy")
     >>> initial_value = contract.get_value()
-    >>> 
+    >>>
     >>> with boa.env.anchor():
     ...     contract.set_value(42)
     ...     assert contract.get_value() == 42
@@ -181,7 +181,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     >>> import boa
     >>> # Fork mainnet at a specific block
     >>> boa.fork("https://eth-mainnet.g.alchemy.com/v2/YOUR-API-KEY", block_identifier=18000000)
-    >>> 
+    >>>
     >>> # Now you can interact with mainnet contracts
     >>> usdc = boa.from_etherscan("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "USDC")
     ```

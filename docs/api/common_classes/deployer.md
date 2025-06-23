@@ -224,7 +224,7 @@ contract = implementation_deployer.at(proxy.address)
 def batch_deploy(deployer, configs):
     """Deploy multiple contracts efficiently"""
     contracts = {}
-    
+
     for config in configs:
         contract = deployer.deploy(
             config["name"],
@@ -232,7 +232,7 @@ def batch_deploy(deployer, configs):
             value=config.get("value", 0)
         )
         contracts[config["name"]] = contract
-        
+
     return contracts
 
 # Deploy batch

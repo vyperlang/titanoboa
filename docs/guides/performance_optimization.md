@@ -157,7 +157,7 @@ boa.fork("https://eth-mainnet.g.alchemy.com/v2/KEY", block_identifier="safe")
 # Repeated calls to same addresses are cached
 usdc = boa.from_etherscan("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
 # First call: fetches from network
-balance1 = usdc.balanceOf(user)  
+balance1 = usdc.balanceOf(user)
 # Second call: uses cached state
 balance2 = usdc.balanceOf(user)  # Much faster
 ```
@@ -205,13 +205,13 @@ Even though pytest provides automatic anchoring, you can still use manual anchor
 ```python
 def test_multiple_scenarios():
     contract = boa.load("Complex.vy")
-    
+
     scenarios = [
         {"input": 10, "expected": 100},
         {"input": 20, "expected": 400},
         {"input": 30, "expected": 900},
     ]
-    
+
     for scenario in scenarios:
         with boa.env.anchor():
             # Each scenario gets its own isolated state
@@ -329,22 +329,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-      
+
       - name: Cache Vyper compilations
         uses: actions/cache@v3
         with:
           path: ~/.cache/titanoboa
           key: ${{ runner.os }}-vyper-${{ hashFiles('**/*.vy') }}
-      
+
       - name: Install dependencies
         run: |
           pip install -e ".[test]"
-      
+
       - name: Run tests (accurate mode)
         run: |
           # Tests run in accurate mode by default
@@ -385,7 +385,7 @@ def cleanup():
     yield
     # Force garbage collection after each test
     gc.collect()
-    
+
     # Reset gas profiling data if needed
     if hasattr(boa.env, "_gas_profile_state"):
         boa.env.reset_gas_used()

@@ -31,24 +31,24 @@ VyperContract provides powerful introspection capabilities for examining contrac
     ... owner: public(address)
     ... balances: public(HashMap[address, uint256])
     ... total_supply: public(uint256)
-    ... 
+    ...
     ... @deploy
     ... def __init__():
     ...     self.owner = msg.sender
     ...     self.total_supply = 1000000
     ... """
     >>> contract = boa.loads(src)
-    >>> 
+    >>>
     >>> # Access individual storage variables
     >>> contract._storage.owner
     '0x0000000000000000000000000000000000000065'
     >>> contract._storage.total_supply
     1000000
-    >>> 
+    >>>
     >>> # Access mapping contents
     >>> contract._storage.balances
     {}  # Empty mapping
-    >>> 
+    >>>
     >>> # Dump all storage variables
     >>> contract._storage.dump()
     {'owner': '0x0000000000000000000000000000000000000065', 'balances': {}, 'total_supply': 1000000}
@@ -79,14 +79,14 @@ VyperContract provides powerful introspection capabilities for examining contrac
     >>> src = """
     ... DECIMALS: public(immutable(uint8))
     ... INITIAL_SUPPLY: public(immutable(uint256))
-    ... 
+    ...
     ... @deploy
     ... def __init__(decimals: uint8, supply: uint256):
     ...     DECIMALS = decimals
     ...     INITIAL_SUPPLY = supply
     ... """
     >>> contract = boa.loads(src, 18, 1000000 * 10**18)
-    >>> 
+    >>>
     >>> # Access immutable values
     >>> contract._immutables.DECIMALS
     18
@@ -116,7 +116,7 @@ VyperContract provides powerful introspection capabilities for examining contrac
     ... FEE_DENOMINATOR: public(constant(uint256)) = 10000
     ... """
     >>> contract = boa.loads(src)
-    >>> 
+    >>>
     >>> # Access constants
     >>> contract._constants.VERSION
     '1.0.0'
@@ -142,10 +142,10 @@ When debugging contracts with complex storage layouts, introspection can be inva
 ...     balance: uint256
 ...     locked_until: uint256
 ...     rewards_claimed: bool
-... 
+...
 ... users: public(HashMap[address, UserInfo])
 ... user_list: public(DynArray[address, 1000])
-... 
+...
 ... @external
 ... def add_user(user: address, balance: uint256, lock_time: uint256):
 ...     self.users[user] = UserInfo(
@@ -156,23 +156,23 @@ When debugging contracts with complex storage layouts, introspection can be inva
 ...     self.user_list.append(user)
 ... """
 >>> contract = boa.loads(src)
->>> 
+>>>
 >>> # Add some users
 >>> user1 = boa.env.generate_address()
 >>> user2 = boa.env.generate_address()
 >>> contract.add_user(user1, 1000, 86400)
 >>> contract.add_user(user2, 2000, 172800)
->>> 
+>>>
 >>> # Inspect storage
 >>> contract._storage.users
 {
     '0x...': {'balance': 1000, 'locked_until': 1234567890, 'rewards_claimed': False},
     '0x...': {'balance': 2000, 'locked_until': 1234654290, 'rewards_claimed': False}
 }
->>> 
+>>>
 >>> contract._storage.user_list
 ['0x...', '0x...']
->>> 
+>>>
 >>> # Get a complete snapshot
 >>> snapshot = contract._storage.dump()
 >>> print(snapshot)
@@ -189,7 +189,7 @@ For advanced use cases, you can find the actual storage slot of a variable:
 ... my_value: uint256
 ... my_mapping: HashMap[address, uint256]
 ... """)
->>> 
+>>>
 >>> # Storage variables have slot information
 >>> contract._storage.my_value.slot
 0

@@ -1,6 +1,7 @@
 import contextlib
 import sys
 import textwrap
+import warnings
 from importlib.abc import MetaPathFinder
 from importlib.machinery import SourceFileLoader
 from importlib.util import spec_from_loader
@@ -45,9 +46,16 @@ _disk_cache = None
 _search_path = None
 
 
-def set_search_path(path: list[str]):
+def set_search_paths(path: list[str]):
     global _search_path
     _search_path = path
+
+
+def set_search_path(paths: list[str]):
+    warnings.warn(
+        DeprecationWarning("set_search_path is deprecated, use set_search_paths.")
+    )
+    set_search_paths(paths)
 
 
 def set_cache_dir(cache_dir="~/.cache/titanoboa"):

@@ -85,7 +85,7 @@ try:
     # This uses `eth_call` internally
     result = contract.expensive_operation(simulate=True)
     print(f"Operation would succeed with result: {result}")
-    
+
 except Exception as e:
     print(f"Operation would fail: {e}")
 
@@ -96,7 +96,7 @@ actual_result = contract.expensive_operation()
 ### Other Parameters
 
 - `value`: Amount of ETH to send with the transaction (in wei)
-- `gas`: Gas limit for the transaction  
+- `gas`: Gas limit for the transaction
 - `sender`: Override the sender address for this call
 
 ```python

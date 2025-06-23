@@ -297,12 +297,12 @@ import boa
 def deploy():
     # For testnet/mainnet deployment
     boa.set_network_env("https://eth-sepolia.g.alchemy.com/v2/KEY")
-    
+
     # Add deployer account
     from eth_account import Account
     account = Account.from_key("0x...")
     boa.env.add_account(account)
-    
+
     # Deploy contract
     contract = boa.load("MyContract.vy")
     print(f"Deployed at: {contract.address}")
@@ -335,7 +335,7 @@ boa.set_verifier("etherscan", api_key="YOUR_KEY")
 contract TestContract is Test {
     MyContract contract;
     address alice = address(0x1);
-    
+
     function setUp() public {
         contract = new MyContract();
         vm.deal(alice, 100 ether);

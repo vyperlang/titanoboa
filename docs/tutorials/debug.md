@@ -11,14 +11,14 @@ The simplest debugging tool is Vyper's built-in `print` function:
 @external
 def calculate(x: uint256, y: uint256) -> uint256:
     print("Starting calculation with x=", x, "y=", y)
-    
+
     result: uint256 = x * y + 100
     print("Intermediate result:", result)
-    
+
     if result > 1000:
         print("Result is large, applying adjustment")
         result = result // 2
-    
+
     print("Final result:", result)
     return result
 ```
@@ -170,12 +170,12 @@ def process_stage_2(input: uint256):
 with boa.env.anchor():
     contract.process_stage_1(10)
     print("After stage 1:", contract.eval("self.data"))
-    
+
     with boa.env.anchor():
         contract.process_stage_2(20)
         print("After stage 2:", contract.eval("self.data"))
     # Inner anchor reverts
-    
+
     print("Back to stage 1:", contract.eval("self.data"))
 ```
 
@@ -219,9 +219,9 @@ event Debug:
 @external
 def process(input: uint256):
     log Debug("Starting process", input)
-    
+
     result: uint256 = input * 2
-    
+
     log Debug("Process complete", result)
 """)
 
@@ -266,7 +266,7 @@ print(f"Contract fails at: {breaking_point}")
 2. **Create debug versions with conditional prints**
    ```python
    DEBUG = True
-   
+
    code = """
    @external
    def process(x: uint256) -> uint256:

@@ -206,17 +206,17 @@ def test_contract_upgrade():
     # Deploy V1
     v1 = boa.load("ContractV1.vy")
     v1.initialize(100)
-    
+
     # Store address
     contract_address = v1.address
-    
+
     # Simulate upgrade by connecting V2 ABI to same address
     v2_deployer = boa.load_partial("ContractV2.vy")
     v2 = v2_deployer.at(contract_address)
-    
+
     # Verify state persisted
     assert v2.get_value() == 100
-    
+
     # Use new functionality
     v2.new_function()
 ```

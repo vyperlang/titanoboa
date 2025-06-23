@@ -127,15 +127,15 @@ from boa.profiling import get_line_profile_table, get_call_profile_table, global
 @pytest.mark.gas_profile
 def test_analyze_gas():
     contract = boa.load("Complex.vy")
-    
+
     # Multiple calls to gather statistics
     for i in range(10):
         contract.process(i)
-    
+
     # Access raw profile data
     call_profiles = global_profile().call_profiles
     line_profiles = global_profile().line_profiles
-    
+
     # Get specific function's gas usage
     for (contract_addr, fn_name), profile in call_profiles.items():
         if fn_name == "process":
@@ -151,12 +151,12 @@ def test_gas_optimization_comparison():
     # Compare two implementations
     contract_v1 = boa.load("OptimizedV1.vy")
     contract_v2 = boa.load("OptimizedV2.vy")
-    
+
     # Test both versions
     for i in range(100):
         contract_v1.compute(i)
         contract_v2.compute(i)
-    
+
     # Results will show gas differences in the profile tables
 ```
 
@@ -170,7 +170,7 @@ def test_specific_profiling():
     with boa.env.gas_meter_class(ProfilingGasMeter):
         contract = boa.load("MyContract.vy")
         result = contract.expensive_operation()
-        
+
         # Get immediate results
         from boa.profiling import get_line_profile_table
         print(get_line_profile_table())
@@ -184,10 +184,10 @@ def test_specific_profiling():
 @pytest.mark.gas_profile
 def test_realistic_usage():
     contract = boa.load("DEX.vy")
-    
+
     # Simulate realistic usage patterns
     users = [boa.env.generate_address() for _ in range(10)]
-    
+
     # Various transaction types
     for user in users:
         with boa.env.prank(user):
@@ -202,7 +202,7 @@ def test_realistic_usage():
 @pytest.mark.gas_profile
 def test_with_statistics():
     contract = boa.load("Storage.vy")
-    
+
     # Run enough iterations for meaningful statistics
     for i in range(100):
         # Vary the input to test different code paths
@@ -210,23 +210,23 @@ def test_with_statistics():
             contract.store_single(i)
         else:
             contract.store_batch([i, i+1, i+2])
-    
+
     # The stdev in the output will show consistency
 ```
 
 ### 3. Isolate Gas-Critical Functions
 
 ```python
-@pytest.mark.gas_profile  
+@pytest.mark.gas_profile
 def test_critical_function_only():
     contract = boa.load("Protocol.vy")
-    
+
     # Setup (not critical for gas)
     contract.initialize(admin, fee_recipient)
-    
+
     # Reset gas tracking for the critical part
     boa.env.reset_gas_used()
-    
+
     # Profile only the critical function
     contract.critical_operation(large_input_data)
 ```
@@ -244,11 +244,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Run Gas Profiling
         run: |
           pytest tests/ --gas-profile -v > gas-report.txt
-      
+
       - name: Post Gas Report as Comment
         uses: actions/github-script@v6
         with:
@@ -294,10 +294,10 @@ def test_consistent_gas():
     # Warm up the EVM
     contract = boa.load("MyContract.vy")
     contract.function()  # First call might have different gas
-    
+
     # Reset before actual measurement
     boa.env.reset_gas_used()
-    
+
     # Now measure
     for _ in range(50):
         contract.function()
