@@ -57,7 +57,7 @@ Create a contract instance at an existing address.
 existing = deployer.at("0x1234567890123456789012345678901234567890")
 
 # Works with Address objects too
-from boa import Address
+from boa.util.abi import Address
 addr = Address("0x1234567890123456789012345678901234567890")
 existing = deployer.at(addr)
 ```

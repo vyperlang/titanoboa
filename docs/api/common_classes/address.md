@@ -10,7 +10,7 @@ The `Address` class represents an Ethereum address in Titanoboa. It provides a t
 
 ```python
 import boa
-from boa import Address
+from boa.util.abi import Address
 
 # From hex string
 addr1 = Address("0x0000000000000000000000000000000000000001")
