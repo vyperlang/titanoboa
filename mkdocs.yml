@@ -58,7 +58,7 @@ nav:
         - Overview: api/verify/overview.md
       - EVM and Precompiles:
         - register_precompile: api/pyevm/register_precompile.md
-        - deregister_precomile: api/pyevm/deregister_precompile.md
+        - deregister_precompile: api/pyevm/deregister_precompile.md
         - patch_opcode: api/pyevm/patch_opcode.md
       - Exceptions:
         - BoaError: api/exceptions/boa_error.md
