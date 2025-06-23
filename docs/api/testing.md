@@ -73,7 +73,7 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
     ```python
     import boa
-    
+
     # Fork mainnet at latest safe block
     with boa.fork("https://eth.llamarpc.com"):
         # Deploy and test against mainnet state
@@ -124,10 +124,10 @@ Boa provides various utilities to test vyper contracts and execute them in a for
     === "WETH"
         ```python
         boa.fork(os.getenv("ETH_RPC_URL"))
-        
+
         weth = ERC20.at("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", name="WETH")
         alice = boa.env.generate_address("alice")
-        
+
         boa.deal(weth, alice, 10 * 10**18, adjust_supply=False)
         ```
 

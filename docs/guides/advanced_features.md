@@ -118,7 +118,7 @@ contract = boa.loads("""
 struct Position:
     amount: uint256
     entry_price: uint256
-    
+
 positions: HashMap[address, Position]
 total_positions: uint256
 
@@ -196,12 +196,12 @@ checkpoint: uint256
 # Nested state management
 with boa.env.anchor():
     contract.eval("self.value = 100")
-    
+
     with boa.env.anchor():
         contract.eval("self.value = 200")
         contract.eval("self.checkpoint = self.value")
         assert contract.eval("self.checkpoint") == 200
-    
+
     # Inner anchor reverted
     assert contract.eval("self.value") == 100
     assert contract.eval("self.checkpoint") == 0
@@ -248,10 +248,10 @@ user2 = boa.env.generate_address("user2")
 
 with boa.env.prank(user1):
     assert boa.env.eoa == user1
-    
+
     with boa.env.prank(user2):
         assert boa.env.eoa == user2
-    
+
     assert boa.env.eoa == user1
 
 assert boa.env.eoa == original
@@ -355,10 +355,10 @@ Titanoboa allows you to configure custom search paths for Vyper imports and modu
 
 ```python
 import boa
-from boa.interpret import set_search_path
+from boa.interpret import set_search_paths
 
 # Set custom search paths for module resolution
-set_search_path([
+set_search_paths([
     "/path/to/contracts",
     "/path/to/interfaces",
     "/path/to/libraries"
@@ -369,7 +369,8 @@ contract = boa.load("MyContract.vy")  # Can import modules from search paths
 ```
 
 The search path resolution order (from highest to lowest precedence):
-1. Paths specified via `set_search_path()` (last path has highest precedence)
+
+1. Paths specified via `set_search_paths()` (last path has highest precedence)
 2. Current directory (".")
 3. Python's `sys.path` (in reverse order)
 
@@ -389,7 +390,7 @@ Example with imports:
 # import libraries.math as math
 
 # Set up search paths
-set_search_path(["/projects"])
+set_search_paths(["/projects"])
 
 # Load contract - imports will be resolved
 token = boa.load("/projects/contracts/Token.vy")
@@ -401,7 +402,7 @@ Titanoboa automatically integrates with Python's import system for `.vy` files:
 
 ```python
 # After setting search paths, you can import Vyper files directly
-set_search_path(["/path/to/vyper/contracts"])
+set_search_paths(["/path/to/vyper/contracts"])
 
 # Import as Python modules (loads the contract)
 import mytoken  # Loads /path/to/vyper/contracts/mytoken.vy
@@ -457,12 +458,12 @@ from hypothesis import given, strategies as st
 def test_property(value):
     contract = boa.loads("""
     total: uint256
-    
+
     @external
     def add(amount: uint256):
         self.total += amount
     """)
-    
+
     contract.add(value)
     assert contract.eval("self.total") == value
     # State automatically isolated between examples
@@ -506,7 +507,7 @@ contract.expensive_operation()
    ```python
    # Good: Debugging in tests
    assert contract._storage.balance == expected
-   
+
    # Bad: Relying on internals in production tests
    if contract._storage.balance > 0:  # Don't do this
        contract.withdraw()
@@ -518,10 +519,10 @@ contract.expensive_operation()
    with boa.env.anchor():
        # Manipulate internal state
        contract.eval("self.internal_flag = True")
-       
+
        # Test behavior with modified state
        result = contract.public_function()
-       
+
        # Verify using introspection
        assert contract._storage.internal_flag == True
    ```

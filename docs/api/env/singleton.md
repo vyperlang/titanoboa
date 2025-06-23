@@ -48,9 +48,9 @@ Forks from a live network, creating a new environment with the forked state.
 
 ```python
 def fork(
-    url: str, 
-    block_identifier: int | str = "safe", 
-    allow_dirty: bool = False, 
+    url: str,
+    block_identifier: int | str = "safe",
+    allow_dirty: bool = False,
     **kwargs
 ) -> Open
 ```

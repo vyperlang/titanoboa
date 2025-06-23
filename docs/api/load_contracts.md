@@ -46,16 +46,16 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
     >>> import boa
     >>> # Basic contract loading
     >>> contract = boa.load("contracts/Token.vy", "MyToken", "TKN", 18, 1000000)
-    >>> 
+    >>>
     >>> # Load with specific compiler settings
     >>> contract = boa.load("contracts/Complex.vy", compiler_args={"optimize": "codesize"})
-    >>> 
+    >>>
     >>> # Load as blueprint
     >>> blueprint = boa.load("contracts/Factory.vy", as_blueprint=True)
-    >>> 
+    >>>
     >>> # Load with value (payable constructor)
     >>> contract = boa.load("contracts/Vault.vy", value=10**18)  # 1 ETH
-    >>> 
+    >>>
     >>> # Load at specific address (for testing upgrades)
     >>> contract = boa.load("contracts/V2.vy", override_address="0x1234...")
     ```
@@ -92,13 +92,13 @@ Boa offers multiple ways to load contracts from various sources. Either from [lo
     >>> import boa
     >>> # Fetch from Etherscan
     >>> usdc = boa.from_etherscan("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", name="USDC")
-    >>> 
+    >>>
     >>> # Use custom API key
     >>> contract = boa.from_etherscan(
-    ...     "0x1234...", 
+    ...     "0x1234...",
     ...     api_key="YOUR_ETHERSCAN_API_KEY"
     ... )
-    >>> 
+    >>>
     >>> # Fetch from other explorers
     >>> contract = boa.from_etherscan(
     ...     "0x5678...",
@@ -134,7 +134,7 @@ Titanoboa includes a disk caching system to speed up contract compilation. Compi
     >>> import boa
     >>> # Set custom cache directory
     >>> boa.set_cache_dir("~/.my_boa_cache")
-    >>> 
+    >>>
     >>> # Use Path object
     >>> from pathlib import Path
     >>> boa.set_cache_dir(Path.home() / ".cache" / "boa")
@@ -157,7 +157,7 @@ Titanoboa includes a disk caching system to speed up contract compilation. Compi
     >>> import boa
     >>> # Disable caching for debugging
     >>> boa.disable_cache()
-    >>> 
+    >>>
     >>> # All subsequent loads will recompile
     >>> contract = boa.load("MyContract.vy")  # Always recompiles
     ```
@@ -203,13 +203,13 @@ vault_contract = vault.deploy(token_contract.address)
 Vyper files are searched in:
 1. Current working directory
 2. Directories in `sys.path`
-3. Directories added via `boa.interpret.add_search_path()`
+3. Directories added via `boa.interpret.set_search_paths()`
 
 ```python
 >>> import boa.interpret
->>> # Add custom search path
->>> boa.interpret.add_search_path("/path/to/my/contracts")
->>> 
+>>> # Add custom search paths
+>>> boa.interpret.set_search_paths(["/path/to/my/contracts"])
+>>>
 >>> # Now you can import from that directory
 >>> import my_contract
 ```

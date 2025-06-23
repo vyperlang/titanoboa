@@ -6,9 +6,9 @@ Verifies a smart contract on a block explorer.
 
 ```python
 def verify(
-    contract, 
-    verifier: ContractVerifier = None, 
-    wait=False, 
+    contract,
+    verifier: ContractVerifier = None,
+    wait=False,
     **kwargs
 ) -> VerificationResult | None
 ```
