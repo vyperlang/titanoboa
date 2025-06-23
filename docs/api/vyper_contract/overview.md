@@ -17,6 +17,7 @@ Internal and external contract functions are available as methods on `VyperContr
 - [decode_log](decode_log.md)
 - [inject_function](inject_function.md)
 - [storage_introspection](storage_introspection.md) - Access storage, immutables, and constants
+- [function_calls](function_calls.md) - Special parameters for function calls (simulate, value, gas, sender)
 
 ### Properties
 
