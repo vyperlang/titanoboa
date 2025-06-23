@@ -43,6 +43,7 @@ nav:
       - Computing Test Coverage: guides/testing/coverage.md
       - Stateful Testing with Hypothesis: guides/testing/fuzzing_strategies.md
       - Gas profiling: guides/testing/gas_profiling.md
+    - Deployments Database: guides/deployments.md
     - Advanced Features: guides/advanced_features.md
     - Performance Optimization: guides/performance_optimization.md
     - Forge Analogues: guides/forge.md
@@ -117,7 +118,6 @@ nav:
     - Singleton Env: explain/singleton_env.md
     - Legacy Vyper Contracts: explain/vvm_contracts.md
     - Caching: explain/caching.md
-    - Deployments Database: explain/deployments.md
 
 extra_css:
   - assets/stylesheets/extra.css
