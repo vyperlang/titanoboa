@@ -133,7 +133,13 @@ class VyperDeployer:
         """
         Generates a solc "standard json" representation of the Vyper contract.
         """
-        return build_solc_json(self.compiler_data)
+        ret = build_solc_json(self.compiler_data)
+        search_paths = ret["settings"]["search_paths"]
+        if "." not in search_paths:
+            # handle loads like "../../foo.vy". may be handled upstream by
+            # https://github.com/vyperlang/vyper/pull/4706
+            search_paths.append(".")
+        return ret
 
     @cached_property
     def _constants(self):
