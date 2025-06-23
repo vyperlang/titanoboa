@@ -146,7 +146,7 @@ boa.env.tx_settings.base_fee_estimator_constant = 3  # Estimate base fee 3 block
 
 ### Fork Caching
 
-When forking, TitanoBoa caches remote state locally:
+When forking, Titanoboa caches remote state locally:
 
 ```python
 import boa
@@ -166,7 +166,7 @@ balance2 = usdc.balanceOf(user)  # Much faster
 
 ### Pytest Auto-Anchoring
 
-The TitanoBoa pytest plugin automatically wraps each test in an `anchor()` context, providing automatic isolation:
+The Titanoboa pytest plugin automatically wraps each test in an `anchor()` context, providing automatic isolation:
 
 ```python
 # test_contract.py
