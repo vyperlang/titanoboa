@@ -5,6 +5,7 @@ Titanoboa provides a deployment tracking system that automatically logs contract
 ## Overview
 
 The deployment tracking system uses SQLite to store deployment information including:
+
 - Contract address and name
 - Source filename
 - RPC endpoint URL
