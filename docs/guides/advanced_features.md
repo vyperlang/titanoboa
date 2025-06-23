@@ -349,15 +349,66 @@ contract_a.call_b(contract_b.address, 123)
 
 ### Module System Hooks
 
+#### Custom Search Paths
+
+Titanoboa allows you to configure custom search paths for Vyper imports and module resolution. This is useful when working with contracts that have dependencies in different directories.
+
 ```python
-import boa.interpret
+import boa
+from boa.interpret import set_search_path
 
-# Add custom search paths for Vyper imports
-boa.interpret.add_search_path("/path/to/contracts")
-boa.interpret.add_search_path("/path/to/interfaces")
+# Set custom search paths for module resolution
+set_search_path([
+    "/path/to/contracts",
+    "/path/to/interfaces",
+    "/path/to/libraries"
+])
 
-# Now you can import from these directories
-import mytoken  # Loads /path/to/contracts/mytoken.vy
+# Now contracts can import from these directories
+contract = boa.load("MyContract.vy")  # Can import modules from search paths
+```
+
+The search path resolution order (from highest to lowest precedence):
+1. Paths specified via `set_search_path()` (last path has highest precedence)
+2. Current directory (".")
+3. Python's `sys.path` (in reverse order)
+
+Example with imports:
+```python
+# Directory structure:
+# /projects/
+#   ├── interfaces/
+#   │   └── IERC20.vyi
+#   ├── libraries/
+#   │   └── math.vy
+#   └── contracts/
+#       └── Token.vy
+
+# Token.vy contains:
+# import interfaces.IERC20 as IERC20
+# import libraries.math as math
+
+# Set up search paths
+set_search_path(["/projects"])
+
+# Load contract - imports will be resolved
+token = boa.load("/projects/contracts/Token.vy")
+```
+
+#### Python Import System Integration
+
+Titanoboa automatically integrates with Python's import system for `.vy` files:
+
+```python
+# After setting search paths, you can import Vyper files directly
+set_search_path(["/path/to/vyper/contracts"])
+
+# Import as Python modules (loads the contract)
+import mytoken  # Loads /path/to/vyper/contracts/mytoken.vy
+import protocols.lending.vault  # Loads /path/to/vyper/contracts/protocols/lending/vault.vy
+
+# Use the imported contracts
+token_contract = mytoken.deploy()
 ```
 
 ### Compiler Control
