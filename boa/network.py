@@ -24,6 +24,15 @@ from boa.rpc import (
 from boa.util.abi import Address
 from boa.verifiers import get_verification_bundle
 
+# EIP-2935: Serve historical block hashes from state
+# This bytecode is deployed at 0x0000F90827F1C53a10cb7A02335B175320002935 in Prague
+EIP_2935_BYTECODE = (
+    "3373fffffffffffffffffffffffffffffffffffffffe14604657602036036042"
+    "575f35600143038111604257611fff81430311604257611fff9006545f526020"
+    "5ff35b5f5ffd5b5f35611fff60014303065500"
+)
+EIP_2935_CONTRACT_ADDRESS = "0x0000F90827F1C53a10cb7A02335B175320002935"
+
 
 class TraceObject:
     def __init__(self, raw_trace):
@@ -98,7 +107,7 @@ class Capabilities:
 
     def _get_capability(self, hex_bytecode):
         try:
-            self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}])
+            self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}, "latest"])
             return True
         except RPCError:
             return False
@@ -126,14 +135,27 @@ class Capabilities:
     def has_shanghai(self):
         return self.has_push0
 
+    @cached_property
+    def has_prague(self):
+        # Check if the EIP-2935 contract is deployed with the expected codehash
+        # eth_getAccount returns account info including codeHash
+        bytecode = self._rpc.fetch("eth_getCode", [EIP_2935_CONTRACT_ADDRESS, "latest"])
+        # small amount of cleaning
+        bytecode = bytecode.lower().removeprefix("0x")
+        return bytecode == EIP_2935_BYTECODE
+
     def describe_capabilities(self):
         if not self.has_shanghai:
             return "pre-shanghai"
         if not self.has_cancun:
             return "shanghai"
-        return "cancun"
+        if not self.has_prague:
+            return "cancun"
+        return "prague"
 
     def check_evm_version(self, evm_version):
+        if evm_version == "prague":
+            return self.has_prague
         if evm_version == "cancun":
             return self.has_cancun
         if evm_version == "shanghai":
