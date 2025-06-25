@@ -325,3 +325,188 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     **Note**
 
     This method raises `NotImplementedError` in NetworkEnv. To set balances in a test environment, use `boa.fork()` which returns a regular Env instance that supports balance manipulation.
+
+---
+
+## `sign_authorization`
+
+!!! function "`sign_authorization(account, contract_address, nonce=None, chain_id=None)`"
+
+    **Description**
+
+    Sign an EIP-7702 authorization for an EOA to temporarily delegate its execution to smart contract code. This allows EOAs to act like smart contracts for the duration of a transaction.
+
+    ---
+
+    **Parameters**
+
+    - `account`: An account object with `sign_authorization` method (e.g., from eth_account library)
+    - `contract_address`: Address of the contract whose code to execute, or a contract object with an `address` attribute
+    - `nonce`: Authorization nonce (defaults to current EOA nonce)
+    - `chain_id`: Chain ID for the authorization (defaults to current chain, use 0 for all chains)
+
+    ---
+
+    **Returns**
+
+    A signed authorization dictionary that can be included in a transaction's `authorization_list`.
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> from eth_account import Account
+    >>>
+    >>> # Deploy a smart wallet contract
+    >>> wallet = boa.load("SmartWallet.vy")
+    >>>
+    >>> # Create and add an EOA
+    >>> eoa = Account.create()
+    >>> boa.env.add_account(eoa)
+    >>>
+    >>> # Sign authorization for EOA to execute wallet code
+    >>> auth = boa.env.sign_authorization(
+    ...     account=eoa,
+    ...     contract_address=wallet,  # Can pass contract object directly
+    ...     nonce=0  # First authorization for this EOA
+    ... )
+    >>>
+    >>> # The authorization can now be used in transactions
+    >>> result = some_contract.method(authorization_list=[auth])
+    ```
+
+    ---
+
+    **Note**
+
+    EIP-7702 authorizations are temporary and only apply to the transaction that includes them. The EOA returns to normal behavior after the transaction completes.
+
+---
+
+## `authorize`
+
+!!! function "`authorize(account, contract_address)`"
+
+    **Description**
+
+    Activate EIP-7702 authorization for an EOA by sending a self-call transaction. This convenience method allows an EOA to delegate its execution to contract code for subsequent operations within the same transaction context.
+
+    ---
+
+    **Parameters**
+
+    - `account`: Account object or address of an account managed by the environment
+    - `contract_address`: Address of the contract to delegate to, or a contract object
+
+    ---
+
+    **Returns**
+
+    The result of the authorization transaction.
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> from eth_account import Account
+    >>>
+    >>> # Create account and contract
+    >>> alice = Account.create()
+    >>> boa.env.add_account(alice)
+    >>> wallet = boa.load("SmartWallet.vy")
+    >>>
+    >>> # Activate authorization for alice
+    >>> boa.env.authorize(alice, wallet)
+    >>>
+    >>> # Now alice can be called as if it were the wallet contract
+    >>> # (within the same transaction context)
+    ```
+
+    ---
+
+    **Note**
+
+    This method sends a transaction from the EOA to itself with the authorization. For more complex use cases involving multiple authorizations or specific calldata, use the `authorization_list` parameter available on contract call methods.
+
+---
+
+## `execute_with_authorizations`
+
+!!! function "`execute_with_authorizations(authorizations, target=None, data=b"", **kwargs)`"
+
+    **Description**
+
+    Execute a transaction with one or more EIP-7702 authorizations. This is a convenience method for sending transactions where EOAs need to delegate to contract code.
+
+    ---
+
+    **Parameters**
+
+    - `authorizations`: List of either:
+        - Signed authorization dicts (from `sign_authorization`)
+        - `(account, contract_address)` tuples to auto-sign
+    - `target`: Target address for the transaction (optional)
+    - `data`: Transaction data (optional)
+    - `**kwargs`: Additional transaction parameters (sender, value, gas, etc.)
+
+    ---
+
+    **Returns**
+
+    The computation result from executing the transaction.
+
+    ---
+
+    **Example**
+
+    ```python
+    >>> import boa
+    >>> from eth_account import Account
+    >>>
+    >>> # Example 1: Simple auto-signing with tuples
+    >>> wallet = boa.load("SmartWallet.vy")
+    >>> alice = Account.create()
+    >>> boa.env.add_account(alice)
+    >>>
+    >>> # Execute with auto-signed authorization
+    >>> result = boa.env.execute_with_authorizations(
+    ...     [(alice, wallet)],  # Auto-signs authorization
+    ...     target=some_contract.address,
+    ...     data=some_contract.method.prepare_calldata(args)
+    ... )
+    >>>
+    >>> # Example 2: Multi-party delegation
+    >>> defi_protocol = boa.load("DefiProtocol.vy")
+    >>> bob = Account.create()
+    >>> carol = Account.create()
+    >>> boa.env.add_account(bob)
+    >>> boa.env.add_account(carol)
+    >>>
+    >>> # Option 1: Simple tuple syntax (auto-signs)
+    >>> boa.env.execute_with_authorizations(
+    ...     [(alice, defi_protocol), (bob, defi_protocol), (carol, defi_protocol)],
+    ...     target=defi_protocol.address,
+    ...     data=defi_protocol.initialize.prepare_calldata(),
+    ...     sender=alice.address
+    ... )
+    >>>
+    >>> # Option 2: Manual signing (for advanced control)
+    >>> auth_alice = boa.env.sign_authorization(alice, defi_protocol, nonce=1)
+    >>> auth_bob = boa.env.sign_authorization(bob, defi_protocol, chain_id=1)
+    >>> auth_carol = boa.env.sign_authorization(carol, defi_protocol)
+    >>>
+    >>> boa.env.execute_with_authorizations(
+    ...     [auth_alice, auth_bob, auth_carol],
+    ...     target=defi_protocol.address
+    ... )
+    ```
+
+    ---
+
+    **Note**
+
+    This method is particularly useful for testing account abstraction patterns and multi-party protocols where multiple EOAs need to delegate atomically.
