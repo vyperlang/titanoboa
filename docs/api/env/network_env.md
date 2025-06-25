@@ -334,7 +334,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Description**
 
-    Sign an EIP-7702 authorization for an EOA to temporarily delegate its execution to smart contract code. This allows EOAs to act like smart contracts for the duration of a transaction.
+    Sign an EIP-7702 authorization for an EOA to delegate its execution to smart contract code. When processed in a transaction, this sets the EOA's code to a delegation designator that points to the specified contract. The delegation is persistent and remains active until explicitly cleared or changed.
 
     ---
 
@@ -381,7 +381,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Note**
 
-    EIP-7702 authorizations are temporary and only apply to the transaction that includes them. The EOA returns to normal behavior after the transaction completes.
+    EIP-7702 delegations are persistent. Once an authorization is processed, the EOA's code is set to a delegation designator (`0xef0100` + contract address) that remains active until the EOA sends another authorization to change or clear it (by delegating to address `0x0`).
 
 ---
 
@@ -391,7 +391,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Description**
 
-    Activate EIP-7702 authorization for an EOA by sending a self-call transaction. This convenience method allows an EOA to delegate its execution to contract code for subsequent operations within the same transaction context.
+    Activate EIP-7702 authorization for an EOA by sending a self-call transaction. This convenience method allows an EOA to delegate its execution to contract code. The delegation persists beyond the transaction and remains active until explicitly changed or cleared.
 
     ---
 
@@ -430,7 +430,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Note**
 
-    This method sends a transaction from the EOA to itself with the authorization. For more complex use cases involving multiple authorizations or specific calldata, use the `authorization_list` parameter available on contract call methods.
+    This method sends a transaction from the EOA to itself with the authorization, establishing a persistent delegation. The EOA will continue to execute the delegated contract's code in all future transactions until the delegation is changed or cleared. For more complex use cases involving multiple authorizations or specific calldata, use the `authorization_list` parameter available on contract call methods.
 
 ---
 
