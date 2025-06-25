@@ -26,7 +26,11 @@ from boa.verifiers import get_verification_bundle
 
 # EIP-2935: Serve historical block hashes from state
 # This bytecode is deployed at 0x0000F90827F1C53a10cb7A02335B175320002935 in Prague
-EIP_2935_CODEHASH = "6e49e66782037c0555897870e29fa5e552daf4719552131a0abce779daec0a5d"
+EIP_2935_BYTECODE = (
+    "3373fffffffffffffffffffffffffffffffffffffffe14604657602036036042"
+    "575f35600143038111604257611fff81430311604257611fff9006545f526020"
+    "5ff35b5f5ffd5b5f35611fff60014303065500"
+)
 EIP_2935_CONTRACT_ADDRESS = "0x0000F90827F1C53a10cb7A02335B175320002935"
 
 
@@ -103,7 +107,7 @@ class Capabilities:
 
     def _get_capability(self, hex_bytecode):
         try:
-            self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}])
+            self._rpc.fetch("eth_call", [{"to": None, "data": hex_bytecode}, "latest"])
             return True
         except RPCError:
             return False
@@ -135,13 +139,10 @@ class Capabilities:
     def has_prague(self):
         # Check if the EIP-2935 contract is deployed with the expected codehash
         # eth_getAccount returns account info including codeHash
-        account_info = self._rpc.fetch(
-            "eth_getAccount", [EIP_2935_CONTRACT_ADDRESS, "latest"]
-        )
+        bytecode = self._rpc.fetch("eth_getCode", [EIP_2935_CONTRACT_ADDRESS, "latest"])
         # small amount of cleaning
-        codehash = account_info.get("codeHash", "")
-        clean_codehash = codehash.lower().removeprefix("0x")
-        return clean_codehash == EIP_2935_CODEHASH
+        bytecode = bytecode.lower().removeprefix("0x")
+        return bytecode == EIP_2935_BYTECODE
 
     def describe_capabilities(self):
         if not self.has_shanghai:
