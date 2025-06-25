@@ -307,6 +307,8 @@ class NetworkEnv(Env):
         is_modifying=True,
         simulate=False,
         ir_executor=None,  # maybe just have **kwargs to collect extra kwargs
+        authorization_list=None,
+        authorize=None,
     ):
         if is_modifying:
             # reset to latest block for code simulation
@@ -330,11 +332,21 @@ class NetworkEnv(Env):
 
         hexdata = to_hex(data)
 
+        # Process EIP-7702 authorizations
+        authorization_list = self._process_authorization_args(
+            authorization_list, authorize, sender
+        )
+
         eth_call = simulate or not is_modifying
         if not eth_call:
             try:
                 txdata, receipt, trace = self._send_txn(
-                    from_=sender, to=to_address, value=value, gas=gas, data=hexdata
+                    from_=sender,
+                    to=to_address,
+                    value=value,
+                    gas=gas,
+                    data=hexdata,
+                    authorization_list=authorization_list,
                 )
             except _EstimateGasFailed:
                 # no need to actually run the txn.
@@ -391,7 +403,15 @@ class NetworkEnv(Env):
 
     # OVERRIDES
     def deploy(
-        self, sender=None, gas=None, value=0, bytecode=b"", contract=None, **kwargs
+        self,
+        sender=None,
+        gas=None,
+        value=0,
+        bytecode=b"",
+        contract=None,
+        authorization_list=None,
+        authorize=None,
+        **kwargs,
     ):
         # reset to latest block for simulation
         self._reset_fork()
@@ -408,10 +428,19 @@ class NetworkEnv(Env):
         bytecode = to_hex(bytecode)
         sender = self._check_sender(self._get_sender(sender))
 
+        # Process EIP-7702 authorizations
+        auth_list = self._process_authorization_args(
+            authorization_list, authorize, sender
+        )
+
         broadcast_ts = time.time()
 
         txdata, receipt, trace = self._send_txn(
-            from_=sender, value=value, gas=gas, data=bytecode
+            from_=sender,
+            value=value,
+            gas=gas,
+            data=bytecode,
+            authorization_list=auth_list,
         )
 
         create_address = Address(receipt["contractAddress"])
@@ -535,10 +564,15 @@ class NetworkEnv(Env):
         # but use reset_traces=False to help with storage dumps
         self.fork_rpc(self._rpc, reset_traces=False, block_identifier=block_identifier)
 
-    def _send_txn(self, from_, to=None, gas=None, value=None, data=None):
+    def _send_txn(
+        self, from_, to=None, gas=None, value=None, data=None, authorization_list=None
+    ):
         tx_data = fixup_dict(
             {"from": from_, "to": to, "gas": gas, "value": value, "data": data}
         )
+
+        if authorization_list is not None:
+            tx_data["authorizationList"] = authorization_list
 
         try:
             # eip-1559 txn
@@ -618,3 +652,158 @@ class NetworkEnv(Env):
 
     def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
         raise NotImplementedError("Cannot use set_storage in network mode")
+
+    def _process_authorization_args(self, authorization_list, authorize, sender=None):
+        """
+        Process authorization_list and authorize parameters into a single list of
+        signed authorizations.
+
+        :param authorization_list: List of authorizations or None
+        :param authorize: Contract to authorize for sender or None
+        :param sender: Sender address (required if authorize is not None)
+        :return: List of signed authorization dicts or None
+        """
+        # Start with a copy of authorization_list if provided
+        if authorization_list is None:
+            auth_list = []
+        elif isinstance(authorization_list, list):
+            auth_list = authorization_list.copy()
+        else:
+            auth_list = list(authorization_list)
+
+        # Handle authorize parameter - add authorization for sender
+        if authorize is not None:
+            if sender is None:
+                raise ValueError(
+                    "sender must be provided when using authorize parameter"
+                )
+
+            # Find the account object for the sender
+            account = self._get_account_for_address(sender)
+            if account is None:
+                raise ValueError(
+                    f"Account {sender} not found in environment for authorization"
+                )
+
+            auth_list.append((account, authorize))
+
+        # Return None if no authorizations
+        if not auth_list:
+            return None
+
+        # Validate non-empty
+        if len(auth_list) == 0:
+            raise ValueError("authorization_list cannot be empty")
+
+        # Process each authorization entry
+        processed = []
+        for auth in auth_list:
+            processed.append(self._process_single_authorization(auth))
+
+        return processed
+
+    def _get_account_for_address(self, address):
+        """Get account object for a given address."""
+        address = Address(address)
+        for acc in self._accounts.values():
+            if hasattr(acc, "address") and Address(acc.address) == address:
+                return acc
+        return None
+
+    def _process_single_authorization(self, auth):
+        """
+        Process a single authorization entry into a signed authorization dict.
+
+        :param auth: Either:
+            - Signed authorization dict (with signature fields)
+            - Tuple of (account, contract_address) to auto-sign
+        :return: Signed authorization dict
+        """
+        # If it's already a signed authorization (dict with signature fields)
+        if isinstance(auth, dict) and any(
+            key in auth for key in ["r", "s", "v", "yParity", "signature"]
+        ):
+            return auth
+
+        # If it's a tuple to auto-sign
+        if isinstance(auth, (tuple, list)) and len(auth) == 2:
+            account, contract_address = auth
+            return self.sign_authorization(account, contract_address)
+
+        raise ValueError(
+            f"Invalid authorization format: {auth}. "
+            "Expected either signed dict or (account, contract_address) tuple"
+        )
+
+    def authorize(self, account, contract_address):
+        """
+        Activate EIP-7702 authorization for an EOA by sending a self-call transaction.
+        This convenience method allows an EOA to delegate to contract code.
+
+        :param account: Account object or address
+        :param contract_address: Contract to delegate to
+        :return: Transaction result
+        """
+        # If account is just an address, try to find the Account object
+        if isinstance(account, (str, Address)):
+            account = self._get_account_for_address(account)
+            if account is None:
+                raise ValueError(f"Account {account} not found in environment")
+
+        # Sign the authorization
+        auth = self.sign_authorization(account, contract_address)
+
+        # Send transaction from EOA to itself with the authorization
+        return self.execute_code(
+            to_address=account.address,
+            sender=account.address,
+            data=b"",
+            authorization_list=[auth],
+        )
+
+    def sign_authorization(self, account, contract_address, nonce=None, chain_id=None):
+        """
+        Sign an EIP-7702 authorization for an EOA to delegate to contract code.
+
+        :param account: Account object with sign_authorization method
+        :param contract_address: Address of the contract whose code to execute,
+                                or a contract object with an address attribute
+        :param nonce: Authorization nonce (defaults to current EOA nonce)
+        :param chain_id: Chain ID (defaults to current chain, 0 for all chains)
+        :return: Signed authorization dict
+        """
+        if not hasattr(account, "sign_authorization"):
+            raise ValueError("Account does not support EIP-7702 authorization signing")
+
+        # Extract address from contract object if needed
+        if hasattr(contract_address, "address"):
+            contract_address = contract_address.address
+
+        contract_address = Address(contract_address)
+
+        if nonce is None:
+            nonce = to_int(self._get_nonce(account.address))
+        if chain_id is None:
+            chain_id = self.get_chain_id()
+
+        auth_dict = {"chainId": chain_id, "address": contract_address, "nonce": nonce}
+
+        return account.sign_authorization(auth_dict)
+
+    def execute_with_authorizations(
+        self, authorizations, target=None, data=b"", **kwargs
+    ):
+        """
+        Execute a transaction with multiple EOA delegations.
+
+        :param authorizations: List of either:
+            - Signed authorization dicts
+            - (account, contract_address) tuples to auto-sign
+        :param target: Target address for the transaction
+        :param data: Transaction data
+        :param **kwargs: Additional transaction parameters
+        :return: Computation result
+        """
+        return self.execute_code(
+            to_address=target, data=data, authorization_list=authorizations, **kwargs
+        )

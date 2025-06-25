@@ -120,7 +120,17 @@ class ABIFunction:
             error = f"Missing keyword argument {e} for `{self.signature}`. Passed {args} {kwargs}"
             raise TypeError(error)
 
-    def __call__(self, *args, value=0, gas=None, sender=None, simulate=False, **kwargs):
+    def __call__(
+        self,
+        *args,
+        value=0,
+        gas=None,
+        sender=None,
+        simulate=False,
+        authorization_list=None,
+        authorize=None,
+        **kwargs,
+    ):
         """Calls the function with the given arguments based on the ABI contract."""
         if not self.contract or not self.contract.env:
             raise Exception(f"Cannot call {self} without deploying contract.")
@@ -134,6 +144,8 @@ class ABIFunction:
             is_modifying=self.is_mutable,
             simulate=simulate,
             contract=self.contract,
+            authorization_list=authorization_list,
+            authorize=authorize,
         )
 
         val = self.contract.marshal_to_python(computation, self.return_type)
@@ -201,6 +213,8 @@ class ABIOverload:
         sender=None,
         simulate=False,
         disambiguate_signature=None,
+        authorization_list=None,
+        authorize=None,
         **kwargs,
     ):
         """
@@ -211,7 +225,14 @@ class ABIOverload:
             *args, disambiguate_signature=disambiguate_signature, **kwargs
         )
         return function(
-            *args, value=value, gas=gas, sender=sender, simulate=simulate, **kwargs
+            *args,
+            value=value,
+            gas=gas,
+            sender=sender,
+            simulate=simulate,
+            authorization_list=authorization_list,
+            authorize=authorize,
+            **kwargs,
         )
 
     def _pick_overload(

@@ -228,7 +228,15 @@ class Env:
         override_address: Optional[_AddressType] = None,
         # the calling vyper contract
         contract: Any = None,
+        authorization_list=None,
+        authorize=None,
     ):
+        if authorization_list is not None or authorize is not None:
+            raise NotImplementedError(
+                "EIP-7702 authorization_list/authorize is not yet supported in local mode. "
+                "Use NetworkEnv with a network that supports EIP-7702."
+            )
+
         sender = self._get_sender(sender)
 
         if override_address is None:
@@ -303,7 +311,15 @@ class Env:
         start_pc: int = 0,
         fake_codesize: Optional[int] = None,
         contract: Any = None,  # the calling VyperContract
+        authorization_list=None,  # EIP-7702 support
+        authorize=None,  # EIP-7702 convenience
     ) -> Any:
+        if authorization_list is not None or authorize is not None:
+            raise NotImplementedError(
+                "EIP-7702 authorization_list/authorize is not yet supported in local mode. "
+                "Use NetworkEnv with a network that supports EIP-7702."
+            )
+
         if gas is None:
             gas = self.evm.get_gas_limit()
 
@@ -409,3 +425,26 @@ class Env:
     @timestamp.setter
     def timestamp(self, val: int) -> None:
         self.evm.patch.timestamp = val
+
+    def sign_authorization(self, account, contract_address, nonce=None, chain_id=None):
+        """Not supported in local mode."""
+        raise NotImplementedError(
+            "EIP-7702 sign_authorization is not yet supported in local mode. "
+            "Use NetworkEnv with a network that supports EIP-7702."
+        )
+
+    def authorize(self, account, contract_address):
+        """Not supported in local mode."""
+        raise NotImplementedError(
+            "EIP-7702 authorize is not yet supported in local mode. "
+            "Use NetworkEnv with a network that supports EIP-7702."
+        )
+
+    def execute_with_authorizations(
+        self, authorizations, target=None, data=b"", **kwargs
+    ):
+        """Not supported in local mode."""
+        raise NotImplementedError(
+            "EIP-7702 execute_with_authorizations is not yet supported in local mode. "
+            "Use NetworkEnv with a network that supports EIP-7702."
+        )
