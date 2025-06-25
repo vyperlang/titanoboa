@@ -26,11 +26,8 @@ from boa.verifiers import get_verification_bundle
 
 # EIP-2935: Serve historical block hashes from state
 # This bytecode is deployed at 0x0000F90827F1C53a10cb7A02335B175320002935 in Prague
-EIP_2935_BYTECODE = (
-    "0x3373fffffffffffffffffffffffffffffffffffffffe14604657602036036042575f3560"
-    "0143038111604257611fff81430311604257611fff9006545f5260205ff35b5f5ffd5b5f"
-    "35611fff60014303065500"
-)
+EIP_2935_CODEHASH = "0x6e49e66782037c0555897870e29fa5e552daf4719552131a0abce779daec0a5d"
+EIP_2935_CONTRACT_ADDRESS = "0x0000F90827F1C53a10cb7A02335B175320002935"
 
 
 class TraceObject:
@@ -136,12 +133,13 @@ class Capabilities:
 
     @cached_property
     def has_prague(self):
-        # Check if the magic blockhash contract is deployed at the Prague address
-        # with the expected bytecode
-        EIP_2935_CONTRACT_ADDRESS = "0x0000F90827F1C53a10cb7A02335B175320002935"
+        # Check if the EIP-2935 contract is deployed with the expected codehash
         try:
-            code = self._rpc.fetch("eth_getCode", [EIP_2935_CONTRACT_ADDRESS, "latest"])
-            return code == EIP_2935_BYTECODE
+            # eth_getAccount returns account info including codeHash
+            account_info = self._rpc.fetch(
+                "eth_getAccount", [EIP_2935_CONTRACT_ADDRESS, "latest"]
+            )
+            return account_info.get("codeHash") == EIP_2935_CODEHASH
         except RPCError:
             return False
 
