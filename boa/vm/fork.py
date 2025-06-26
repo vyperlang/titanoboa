@@ -3,7 +3,7 @@ import pickle
 import sys
 from pathlib import Path
 from typing import Any, Optional, Type
-
+import time
 import rlp
 from eth.db.account import AccountDB, keccak
 from eth.db.backends.memory import MemoryDB
@@ -191,10 +191,32 @@ class AccountDBFork(AccountDB):
 
         self._chain_id = chain_id
 
-        self._block_info = self._rpc.fetch_uncached(
-            "eth_getBlockByNumber", [block_identifier, False]
-        )
+        self._block_info = self._fetch_block_with_retry(block_identifier)
+        if self._block_info is None:
+            raise ValueError(f"Block {block_identifier} not found or invalid")
         self._block_number = to_int(self._block_info["number"])
+        print('Block Number: ', self._block_number)
+
+    def _fetch_block_with_retry(self, block_identifier: str, max_retries: int = 5, base_delay: float = 0.5):
+        """Fetch block with retry mechanism for fresh blocks that might not be available yet."""
+        for attempt in range(max_retries):
+            block_info = self._rpc.fetch_uncached(
+                "eth_getBlockByNumber", [block_identifier, False]
+            )
+
+            if block_info is not None:
+                return block_info
+
+            # Block not found, might be too fresh
+            if attempt < max_retries - 1:  # Don't sleep on last attempt
+                delay = base_delay * (2 ** attempt)  # Exponential backoff
+                print(
+                    f"Block {to_int(block_identifier)} not found, retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(delay)
+            else:
+                print(f"Block {to_int(block_identifier)} not found after {max_retries} attempts")
+
+        return None
 
     @property
     def _block_id(self):
@@ -235,13 +257,30 @@ class AccountDBFork(AccountDB):
             ("eth_getTransactionCount", [addr, self._block_id]),
             ("eth_getCode", [addr, self._block_id]),
         ]
-        res = self._rpc.fetch_multi(reqs)
-        balance = to_int(res[0])
-        nonce = to_int(res[1])
-        code = to_bytes(res[2])
-        code_hash = keccak(code)
 
-        return Account(nonce=nonce, balance=balance, code_hash=code_hash)
+        # Add retry logic for account data fetching
+        max_retries = 3
+        base_delay = 0.5
+
+        for attempt in range(max_retries):
+            try:
+                res = self._rpc.fetch_multi(reqs)
+                balance = to_int(res[0])
+                nonce = to_int(res[1])
+                code = to_bytes(res[2])
+                code_hash = keccak(code)
+                return Account(nonce=nonce, balance=balance, code_hash=code_hash)
+            except RPCError as e:
+                if "header not found" in str(e) and attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(
+                        f"Header not found for block {to_int(self._block_id)}, retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(delay)
+                else:
+                    raise e
+
+        # This should never be reached due to the raise in the loop
+        raise RPCError("Failed to fetch account data after retries")
 
     # try call debug_traceCall to get the ostensible prestate for this call
     def try_prefetch_state(self, msg: Message):
