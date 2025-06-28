@@ -15,7 +15,7 @@ import eth.tools.builder.chain as chain
 import eth.vm.forks.spurious_dragon.computation as spurious_dragon
 from eth._utils.address import generate_contract_address
 from eth.abc import ComputationAPI
-from eth.chains.mainnet import MainnetChain
+from eth.chains.base import MiningChain
 from eth.db.account import AccountDB
 from eth.db.atomic import AtomicDB
 from eth.exceptions import Halt
@@ -565,7 +565,7 @@ class PyEVM:
         return data.to_bytes(32, "big")
 
 
-GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1e8)}
+GENESIS_PARAMS = {"gas_limit": int(1e8)}
 
 
 # TODO make fork configurable - ex. "latest", "frontier", "berlin"
@@ -573,5 +573,5 @@ GENESIS_PARAMS = {"difficulty": constants.GENESIS_DIFFICULTY, "gas_limit": int(1
 def _make_chain():
     # TODO should we use MiningChain? is there a perf difference?
     # TODO debug why `fork_at()` cannot accept 0 as block num
-    _Chain = chain.build(MainnetChain, chain.latest_mainnet_at(1))
+    _Chain = chain.build(MiningChain, chain.latest_mainnet_at(0))
     return _Chain.from_genesis(AtomicDB(), GENESIS_PARAMS)
