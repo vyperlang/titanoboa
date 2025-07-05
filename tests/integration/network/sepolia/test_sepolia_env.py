@@ -44,11 +44,11 @@ def simple_contract():
 @pytest.fixture(scope="module", params=[Etherscan, Blockscout])
 def verifier(request):
     if request.param == Blockscout:
-        api_key = os.getenv("BLOCKSCOUT_API_KEY")
-        return Blockscout("https://eth-sepolia.blockscout.com", api_key)
+        # Blockscout does not require an API key
+        return Blockscout("https://eth-sepolia.blockscout.com")
     elif request.param == Etherscan:
         api_key = os.environ["ETHERSCAN_API_KEY"]
-        return Etherscan("https://api-sepolia.etherscan.io/api", api_key)
+        return Etherscan("https://api.etherscan.io/v2/api", api_key)
     raise ValueError(f"Unknown verifier: {request.param}")
 
 

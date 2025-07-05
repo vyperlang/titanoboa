@@ -2,7 +2,7 @@ import pytest
 from vyper.utils import keccak256
 
 import boa
-from boa.contracts.base_evm_contract import RawEvent
+from boa.contracts.base_evm_contract import RawLogEntry
 
 WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
@@ -33,7 +33,7 @@ def test_logs(simple_contract):
     simple_contract.deposit(value=amount, sender=eoa)
 
     topic0 = keccak256("Deposit(address,uint256)".encode())
-    expected_log = (
+    (log_id, address, topics, data) = (
         0,
         int(WETH_ADDRESS, 16).to_bytes(20, "big"),
         (int.from_bytes(topic0, "big"), int(simple_contract.address, 16)),
@@ -41,4 +41,6 @@ def test_logs(simple_contract):
     )
 
     logs = simple_contract.get_logs()
-    assert logs == [RawEvent(expected_log)]
+    assert logs == [
+        RawLogEntry(log_id=log_id, address=address, topics=topics, data=data)
+    ]
