@@ -614,12 +614,11 @@ class NetworkEnv(Env):
         self._rpc.fetch("hardhat_impersonateAccount", [to_hex(addr)])
         tmp = self.eoa
         addr = Address(address)
-        self.add_account(addr, force_eoa=True)
+        self.add_account(ExternalAccount(addr, self._rpc), force_eoa=True)
         try:
             yield
         finally:
             self.eoa = tmp
-            self._rpc.fetch("hardhat_stopImpersonatingAccount", [to_hex(addr)])
 
     def set_balance(self, address, value):
         self._rpc.fetch(
