@@ -611,11 +611,17 @@ class NetworkEnv(Env):
         return int(chain_id, 16)
 
     def set_balance(self, address, value):
-        self._rpc.fetch("hardhat_setBalance", [to_hex(address), to_hex(value)])
+        self._rpc.fetch(
+            "hardhat_setBalance", [to_hex(address), to_hex(value, pad_nibbles=64)]
+        )
 
     def set_code(self, address: _AddressType, code: bytes) -> None:
         self._rpc.fetch("hardhat_setCode", [to_hex(address), to_hex(code)])
 
     def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
         # will throw if the provider does not have hardhat_setStorageAt
-        self._rpc.fetch("hardhat_setStorageAt", [to_hex(address), to_hex(slot), to_hex(value)])
+        # hardhat requires padded hex values
+        self._rpc.fetch(
+            "hardhat_setStorageAt",
+            [to_hex(address), to_hex(slot), to_hex(value, pad_nibbles=64)],
+        )

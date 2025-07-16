@@ -23,14 +23,18 @@ def fixup_dict(kv):
     return {k: to_hex(v) for (k, v) in trim_dict(kv).items()}
 
 
-def to_hex(s: int | bytes | str) -> str:
+def pad_hex(s: str, pad_nibbles: int) -> str:
+    return "0x" + s.removeprefix("0x").rjust(pad_nibbles, "0")
+
+
+def to_hex(s: int | bytes | str, pad_nibbles=0) -> str:
     if isinstance(s, int):
-        return hex(s)
+        return pad_hex(hex(s), pad_nibbles)
     if isinstance(s, bytes):
-        return "0x" + s.hex()
+        return pad_hex("0x" + s.hex())
     if isinstance(s, str):
         assert s.startswith("0x")
-        return s
+        return pad_hex(s)
     raise TypeError(
         f"to_hex expects bytes, int or (hex) string, but got {type(s)}: {s}"
     )
