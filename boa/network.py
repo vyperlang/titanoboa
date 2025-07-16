@@ -610,6 +610,17 @@ class NetworkEnv(Env):
         chain_id = self._rpc.fetch("eth_chainId", [])
         return int(chain_id, 16)
 
+    def sender(self, address):
+        self._rpc.fetch("hardhat_impersonateAccount", [to_hex(addr)])
+        tmp = self.eoa
+        addr = Address(address)
+        self.add_account(addr, force_eoa=True)
+        try:
+            yield
+        finally:
+            self.eoa = tmp
+            self._rpc.fetch("hardhat_stopImpersonatingAccount", [to_hex(addr)])
+
     def set_balance(self, address, value):
         self._rpc.fetch(
             "hardhat_setBalance", [to_hex(address), to_hex(value, pad_nibbles=64)]
