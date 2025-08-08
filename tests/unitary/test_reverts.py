@@ -269,3 +269,38 @@ def __init__(math: address, x: uint256):
     trace = error_context.value.stack_trace
     assert [repr(frame.vm_error) for frame in trace] == ["Revert(b'')"] * 2
     assert [frame.dev_reason.reason_str for frame in trace] == ["less than 10"] * 2
+
+
+def test_multiline_assert_tokenization():
+    """Test for issue #416 - TokenError with multi-line assert statements"""
+    # This should not raise a TokenError
+    contract_code = """
+@external
+def trigger_error(n: uint256):
+    assert (
+        n > 100
+    ), "Value too low"
+"""
+    contract = boa.loads(contract_code)
+
+    # Test that assert works correctly
+    contract.trigger_error(150)  # Should succeed
+
+    with boa.reverts("Value too low"):
+        contract.trigger_error(50)  # Should revert
+
+    # Test with dev comment on same line as closing paren
+    contract_with_dev = """
+@external
+def test_with_dev(n: uint256):
+    assert (
+        n > 100
+    ), "Value too low"  # dev: custom dev reason
+"""
+    contract2 = boa.loads(contract_with_dev)
+
+    # Test basic functionality works
+    contract2.test_with_dev(150)  # Should succeed
+
+    with boa.reverts("Value too low"):
+        contract2.test_with_dev(50)  # Should revert
