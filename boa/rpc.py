@@ -31,10 +31,10 @@ def to_hex(s: int | bytes | str, pad_nibbles=0) -> str:
     if isinstance(s, int):
         return pad_hex(hex(s), pad_nibbles)
     if isinstance(s, bytes):
-        return pad_hex("0x" + s.hex())
+        return pad_hex("0x" + s.hex(), pad_nibbles)
     if isinstance(s, str):
         assert s.startswith("0x")
-        return pad_hex(s)
+        return pad_hex(s, pad_nibbles)
     raise TypeError(
         f"to_hex expects bytes, int or (hex) string, but got {type(s)}: {s}"
     )
