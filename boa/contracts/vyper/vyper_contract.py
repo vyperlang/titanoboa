@@ -199,6 +199,8 @@ class VyperBlueprint(_BaseVyperContract):
         contract_name=None,
         filename=None,
         gas=None,
+        authorization_list=None,
+        authorize=None,
     ):
         super().__init__(compiler_data, contract_name, env, filename)
 
@@ -207,7 +209,11 @@ class VyperBlueprint(_BaseVyperContract):
         )
 
         addr, computation = self.env.deploy(
-            bytecode=deploy_bytecode, override_address=override_address, gas=gas
+            bytecode=deploy_bytecode,
+            override_address=override_address,
+            gas=gas,
+            authorization_list=authorization_list,
+            authorize=authorize,
         )
         if computation.is_error:
             raise computation.error
@@ -529,6 +535,8 @@ class VyperContract(_BaseVyperContract):
         contract_name=None,
         filename: str = None,
         gas=None,
+        authorization_list=None,
+        authorize=None,
     ):
         super().__init__(compiler_data, contract_name, env, filename)
 
@@ -555,7 +563,12 @@ class VyperContract(_BaseVyperContract):
             addr = Address(override_address)
         else:
             addr = self._run_init(
-                *args, value=value, override_address=override_address, gas=gas
+                *args,
+                value=value,
+                override_address=override_address,
+                gas=gas,
+                authorization_list=authorization_list,
+                authorize=authorize,
             )
         self._address = addr
 
@@ -580,7 +593,15 @@ class VyperContract(_BaseVyperContract):
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, value=0, override_address=None, gas=None):
+    def _run_init(
+        self,
+        *args,
+        value=0,
+        override_address=None,
+        gas=None,
+        authorization_list=None,
+        authorize=None,
+    ):
         self.ctor_calldata = b""
         if self._ctor:
             self.ctor_calldata = self._ctor.prepare_calldata(*args)
@@ -593,6 +614,8 @@ class VyperContract(_BaseVyperContract):
                 override_address=override_address,
                 gas=gas,
                 contract=self,
+                authorization_list=authorization_list,
+                authorize=authorize,
             )
 
             self._computation = computation
@@ -1013,7 +1036,17 @@ class VyperFunction:
 
         return method_id + encoded_args
 
-    def __call__(self, *args, value=0, gas=None, sender=None, simulate=False, **kwargs):
+    def __call__(
+        self,
+        *args,
+        value=0,
+        gas=None,
+        sender=None,
+        simulate=False,
+        authorization_list=None,
+        authorize=None,
+        **kwargs,
+    ):
         calldata_bytes = self.prepare_calldata(*args, **kwargs)
 
         # getattr(x, attr, None) swallows exceptions. use explicit hasattr+getattr
@@ -1039,6 +1072,8 @@ class VyperFunction:
                 override_bytecode=override_bytecode,
                 ir_executor=ir_executor,
                 contract=self.contract,
+                authorization_list=authorization_list,
+                authorize=authorize,
             )
 
             typ = self.func_t.return_type
