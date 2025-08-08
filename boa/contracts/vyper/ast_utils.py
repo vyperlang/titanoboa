@@ -1,23 +1,26 @@
 import io
 import re
 import tokenize
+from functools import lru_cache
 from typing import Any, Optional
 
 import vyper.ast as vy_ast
 
 
-def get_block(source_code: str, lineno: int, end_lineno: int) -> str:
-    source_lines = source_code.splitlines(keepends=True)
-    return "".join(source_lines[lineno - 1 : end_lineno])
+@lru_cache(maxsize=128)
+def _get_tokens_for_file(source_code: str):
+    """Tokenize entire file and cache the result with line number index."""
+    tokens = list(tokenize.generate_tokens(io.StringIO(source_code).readline))
 
+    # Create an index from line number to tokens on that line
+    line_to_tokens = {}
+    for token in tokens:
+        line_num = token.start[0]
+        if line_num not in line_to_tokens:
+            line_to_tokens[line_num] = []
+        line_to_tokens[line_num].append(token)
 
-def get_line(source_code: str, lineno: int) -> str:
-    return get_block(source_code, lineno, lineno)
-
-
-def _get_comment(source_line: str) -> Optional[str]:
-    tokens = tokenize.generate_tokens(io.StringIO(source_line).readline)
-    return next((t.string for t in tokens if t.type == tokenize.COMMENT), None)
+    return line_to_tokens
 
 
 # loosely, match # `@dev asdf...` or `dev: asdf...`
@@ -36,10 +39,15 @@ def _extract_reason(comment: str) -> Any:
 def reason_at(
     source_code: str, lineno: int, end_lineno: int
 ) -> Optional[tuple[str, str]]:
-    block = get_block(source_code, lineno, end_lineno)
-    c = _get_comment(block)
-    if c is not None:
-        return _extract_reason(c)
+    line_to_tokens = _get_tokens_for_file(source_code)
+
+    # Only check tokens in the specified line range
+    for line_num in range(lineno, end_lineno + 1):
+        for token in line_to_tokens.get(line_num, []):
+            if token.type == tokenize.COMMENT:
+                reason = _extract_reason(token.string)
+                if reason:
+                    return reason
     return None
 
 
