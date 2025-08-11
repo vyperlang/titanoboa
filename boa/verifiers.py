@@ -9,6 +9,7 @@ import requests
 
 from boa.environment import Env
 from boa.util.abi import Address
+from boa.util.cached_session import get_session
 from boa.util.open_ctx import Open
 
 DEFAULT_BLOCKSCOUT_URI = "https://eth.blockscout.com"
@@ -58,6 +59,8 @@ class Blockscout(ContractVerifier[Address]):
     """
     Allows users to verify contracts on Blockscout.
     This is independent of Vyper contracts, and can be used to verify any smart contract.
+
+    @dev Blockscout does not require an API key
     """
 
     uri: str = DEFAULT_BLOCKSCOUT_URI
@@ -96,10 +99,11 @@ class Blockscout(ContractVerifier[Address]):
         if license_type is None:
             license_type = "none"
 
-        api_key = self.api_key or ""
+        # Prepare the API URL from Blockscout
+        api_contract_url = f"{self.uri}/api/v2/addresses/{address}"
+        api_verify_url = f"{self.uri}/api/v2/smart-contracts/{address}/verification/via/vyper-standard-input"
 
-        url = f"{self.uri}/api/v2/smart-contracts/{address}/"
-        url += f"verification/via/vyper-standard-input?apikey={api_key}"
+        # Prepare the data and files for the verification request
         data = {
             "compiler_version": solc_json["compiler_version"],
             "license_type": license_type,
@@ -112,9 +116,27 @@ class Blockscout(ContractVerifier[Address]):
             )
         }
 
-        response = requests.post(url, data=data, files=files)
-        response.raise_for_status()
-        print(response.json().get("message"))  # usually verification started
+        # Check if the contract is already created or verified on Blockscout
+        response_contract = self._wait_until(
+            lambda: self.contract_created(api_contract_url, address),
+            timedelta(minutes=2),
+            timedelta(seconds=5),
+            1.1,
+        )
+
+        # Check if the contract is already verified or if it is a valid contract
+        if response_contract.get("is_verified") is True:
+            print(f"Address {address} is already verified on Blockscout.")
+            return VerificationResult(address, self)
+
+        if response_contract.get("is_contract") is not True:
+            raise ValueError(f"Address {address} is not a contract on Blockscout.")
+
+        # If the address exists, we can proceed with the verification
+        print(f"Verification started with address {address}")
+        response_verif = requests.post(api_verify_url, data=data, files=files)
+        response_verif.raise_for_status()
+        print(response_verif.json().get("message"))  # usually verification started
 
         if not wait:
             return VerificationResult(address, self)
@@ -138,14 +160,40 @@ class Blockscout(ContractVerifier[Address]):
         print(msg)
 
     def is_verified(self, address: Address) -> bool:
-        api_key = self.api_key or ""
-        url = f"{self.uri}/api/v2/smart-contracts/{address}?apikey={api_key}"
+        url = f"{self.uri}/api/v2/smart-contracts/{address}"
 
         response = requests.get(url)
         if response.status_code in self.retry_http_codes:
             return False
         response.raise_for_status()
         return response.json().get("is_verified", False)
+
+    # Check if the address is valid on Blockscout
+    def contract_created(
+        self, api_contract_url: str, address: Address
+    ) -> Optional[dict]:
+        """Checks if the contract is created or verified on Blockscout.
+        :return: The response JSON if the contract is created or verified, None otherwise.
+        """
+        SESSION = get_session()
+        # we need to retry until the contract is created on Blockscout
+        response = SESSION.get(api_contract_url)
+        response.raise_for_status()
+        response_json = response.json()
+        if response_json.get("is_verified") is True:
+            print(f"Address {address} is already verified on Blockscout.")
+            return response_json
+
+        if response_json.get("is_contract") is True:
+            print(f"Address {address} exists on Blockscout.")
+            return response_json
+
+        # If the address is not a contract or not verified, we return None
+        print(
+            f"Verification could not be created yet: Address {address} not found on Blockscout. Retrying..."
+        )
+
+        return None
 
 
 _verifier: ContractVerifier = Blockscout()
