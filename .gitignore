@@ -16,3 +16,5 @@ venv/
 .coverage
 .coverage.*
 .DS_Store
+
+uv.lock

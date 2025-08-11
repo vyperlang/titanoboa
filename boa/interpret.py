@@ -369,7 +369,8 @@ def from_etherscan(
     else:
         etherscan = get_etherscan()
 
-    abi = etherscan.fetch_abi(addr)
+    # @dev add chain id Etherscan V2 from fork evm patch
+    abi = etherscan.fetch_abi(addr, chain_id=Env.get_singleton().evm.patch.chain_id)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 

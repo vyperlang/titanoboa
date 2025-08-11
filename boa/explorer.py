@@ -28,7 +28,7 @@ except ImportError:
 
     SESSION = Session()
 
-DEFAULT_ETHERSCAN_URI = "https://api.etherscan.io/api"
+DEFAULT_ETHERSCAN_URI = "https://api.etherscan.io/v2/api"
 VERSION_RE = re.compile(r"v(\d+\.\d+\.\d+)(\+commit.*)?")
 
 
@@ -36,6 +36,7 @@ VERSION_RE = re.compile(r"v(\d+\.\d+\.\d+)(\+commit.*)?")
 class Etherscan(ContractVerifier[str]):
     uri: Optional[str] = DEFAULT_ETHERSCAN_URI
     api_key: Optional[str] = None
+    chain_id: Optional[int] = None
     num_retries: int = 10
     backoff_ms: int | float = 400.0
     backoff_factor: float = 1.1  # 1.1**10 ~= 2.59
@@ -63,6 +64,8 @@ class Etherscan(ContractVerifier[str]):
                      or wait for verification to complete. Defaults to False
         """
         api_key = self.api_key or ""
+        # @dev for backward compatibility with parameter `chain_id`
+        self.chain_id = chain_id or self.chain_id
         output_selection = solc_json["settings"]["outputSelection"]
         contract_file = next(k for k, v in output_selection.items() if "*" in v)
         compiler_version = solc_json["compiler_version"]
@@ -70,24 +73,30 @@ class Etherscan(ContractVerifier[str]):
         if not version_match:
             raise ValueError(f"Failed to extract Vyper version from {compiler_version}")
 
-        data = {
+            # V2 now use query parameters instead of data
+        # @dev https://docs.etherscan.io/etherscan-v2/api-endpoints/contracts#verify-vyper-source-code
+        params = {
             "module": "contract",
             "action": "verifysourcecode",
             "apikey": api_key,
-            "chainId": chain_id,
-            "codeformat": "vyper-json",
+            "chainid": chain_id,
+            "contractname": f"{contract_file}:{contract_name}",
+            "compilerversion": f"vyper:{version_match.group(1)}",
+            "optimizationUsed": "1",
             "sourceCode": json.dumps(solc_json),
             "constructorArguments": constructor_calldata.hex(),
             "contractaddress": address,
-            "contractname": f"{contract_file}:{contract_name}",
-            "compilerversion": f"vyper:{version_match.group(1)}",
+        }
+
+        # @dev maybe not needed anymore?
+        data = {
+            "codeformat": "vyper-json",
             "licenseType": license_type,
-            "optimizationUsed": "1",
         }
 
         def verification_created():
             # we need to retry until the contract is found by Etherscan
-            response = SESSION.post(self.uri, data=data)
+            response = SESSION.post(self.uri, params=params, data=data)
             response.raise_for_status()
             response_json = response.json()
             if response_json.get("status") == "1":
@@ -98,7 +107,7 @@ class Etherscan(ContractVerifier[str]):
             ):
                 raise ValueError(f"Failed to verify: {response_json['result']}")
             print(
-                f'Verification could not be created yet: {response_json["result"]}. Retrying...'
+                f"Verification could not be created yet: {response_json['result']}. Retrying..."
             )
             return None
 
@@ -131,8 +140,9 @@ class Etherscan(ContractVerifier[str]):
 
     def is_verified(self, etherscan_guid: str) -> bool:
         api_key = self.api_key or ""
+        chain_id = self.chain_id
         url = f"{self.uri}?module=contract&action=checkverifystatus"
-        url += f"&guid={etherscan_guid}&apikey={api_key}"
+        url += f"&guid={etherscan_guid}&apikey={api_key}&chainid={chain_id}"
 
         response = SESSION.get(url)
         response.raise_for_status()
@@ -175,20 +185,27 @@ class Etherscan(ContractVerifier[str]):
 
         return data
 
-    def fetch_abi(self, address: str):
+    def fetch_abi(self, address: str, chain_id: int):
         # resolve implementation address if `address` is a proxy contract
-        address = self._resolve_implementation_address(address)
+        address = self._resolve_implementation_address(address, chain_id)
 
         # fetch ABI of `address`
-        params = dict(module="contract", action="getabi", address=address)
+        params = dict(
+            module="contract", action="getabi", address=address, chainid=chain_id
+        )
         data = self._fetch(**params)
 
         return json.loads(data["result"].strip())
 
     # fetch the address of a contract; resolves at most one layer of
     # indirection if the address is a proxy contract.
-    def _resolve_implementation_address(self, address: str):
-        params = dict(module="contract", action="getsourcecode", address=address)
+    def _resolve_implementation_address(self, address: str, chain_id: int) -> str:
+        # Set chain_id here since fetch_abi requires it
+        self.chain_id = chain_id or self.chain_id
+
+        params = dict(
+            module="contract", action="getsourcecode", address=address, chainid=chain_id
+        )
         data = self._fetch(**params)
         source_data = data["result"][0]
 
