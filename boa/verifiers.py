@@ -18,13 +18,18 @@ P = TypeVar("P")
 
 
 class ContractVerifier(Generic[T]):
+    """A base class for contract verifiers.
+
+    This class should be extended by specific verifiers like Etherscan, Blockscout, etc.
+    """
+
+    # Methods
     def verify(
         self,
         address: Address,
         contract_name: str,
         solc_json: dict,
         constructor_calldata: bytes,
-        chain_id: int,
         license_type: str = "1",
         wait: bool = False,
     ) -> Optional["VerificationResult[T]"]:
@@ -81,7 +86,6 @@ class Blockscout(ContractVerifier[Address]):
         contract_name: str,
         solc_json: dict,
         constructor_calldata: bytes,
-        chain_id: int,
         license_type: str = "1",
         wait: bool = False,
     ) -> Optional["VerificationResult[Address]"]:
@@ -91,7 +95,6 @@ class Blockscout(ContractVerifier[Address]):
         :param contract_name: The name of the contract.
         :param solc_json: The solc_json output of the Vyper compiler.
         :param constructor_calldata: The calldata for the constructor.
-        :param chain_id: The ID of the chain where the contract is deployed.
         :param license_type: The license to use for the contract. Defaults to "none".
         :param wait: Whether to return a VerificationResult immediately
                      or wait for verification to complete. Defaults to False
@@ -251,12 +254,15 @@ def verify(
     if (bundle := get_verification_bundle(contract)) is None:
         raise ValueError(f"Not a contract! {contract}")
 
+    # Set chain_id if verifier supports it
+    if hasattr(verifier, "chain_id"):
+        verifier.chain_id = Env.get_singleton().get_chain_id()
+
     return verifier.verify(
         address=contract.address,
         solc_json=bundle,
         contract_name=contract.contract_name,
         constructor_calldata=contract.ctor_calldata,
         wait=wait,
-        chain_id=Env.get_singleton().get_chain_id(),
         **kwargs,
     )

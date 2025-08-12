@@ -30,6 +30,17 @@ def proxy_contract():
     return boa.from_etherscan(voting_agent, name="VotingAgent")
 
 
+def test_wrong_chain_id():
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        boa.from_etherscan(crvusd, chain_id=-1)
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        boa.from_etherscan(crvusd, chain_id="invalid")
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        boa.from_etherscan(crvusd, chain_id=0.25)
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        boa.from_etherscan(crvusd, chain_id=0)
+
+
 def test_cache(proxy_contract):
     assert isinstance(SESSION, CachedSession)
     with patch("requests.adapters.HTTPAdapter.send") as mock:

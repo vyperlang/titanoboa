@@ -360,7 +360,11 @@ def _loads_partial_vvm(
 
 
 def from_etherscan(
-    address: Any, name: str = None, uri: str = None, api_key: str = None
+    address: Any,
+    name: str = None,
+    uri: str = None,
+    api_key: str = None,
+    chain_id: int = None,
 ):
     addr = Address(address)
 
@@ -369,8 +373,13 @@ def from_etherscan(
     else:
         etherscan = get_etherscan()
 
-    # @dev add chain id Etherscan V2 from fork evm patch
-    abi = etherscan.fetch_abi(addr, chain_id=Env.get_singleton().evm.patch.chain_id)
+    # Set the chain ID for the Etherscan instance
+    if chain_id is not None:
+        etherscan.set_chain_id(chain_id)
+    else:
+        etherscan.set_chain_id(Env.get_singleton().evm.patch.chain_id)
+
+    abi = etherscan.fetch_abi(addr)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
 
 
