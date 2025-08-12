@@ -367,8 +367,6 @@ def from_etherscan(
     chain_id: int = None,
 ):
     addr = Address(address)
-    # @dev add chain id Etherscan V2 from fork evm patch?
-    _chain_id = chain_id or Env.get_singleton().evm.patch.chain_id
 
     if uri is not None or api_key is not None:
         etherscan = Etherscan(uri, api_key)
@@ -376,7 +374,10 @@ def from_etherscan(
         etherscan = get_etherscan()
 
     # Set the chain ID for the Etherscan instance
-    etherscan.chain_id = _chain_id
+    if chain_id is not None:
+        etherscan.set_chain_id(chain_id)
+    else:
+        etherscan.set_chain_id(Env.get_singleton().evm.patch.chain_id)
 
     abi = etherscan.fetch_abi(addr)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)

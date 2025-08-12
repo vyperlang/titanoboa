@@ -54,16 +54,20 @@ def verifier(request):
 
 def test_set_etherscan_wrong_chain_id():
     with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
-        Etherscan("https://api.etherscan.io/v2/api", _chain_id=-1)
+        Etherscan("https://api.etherscan.io/v2/api", chain_id=-1)
     with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
-        Etherscan("https://api.etherscan.io/v2/api", _chain_id="invalid")
+        Etherscan("https://api.etherscan.io/v2/api", chain_id=0)
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        Etherscan("https://api.etherscan.io/v2/api", chain_id=0.25)
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        Etherscan("https://api.etherscan.io/v2/api", chain_id="invalid")
 
 
 def test_set_etherscan_with_chain_id():
     SEPOLIA_CHAIN_ID = 11155111
     # Init verifiers with the chain ID
     etherscan_verifier = Etherscan(
-        "https://api.etherscan.io/v2/api", _chain_id=SEPOLIA_CHAIN_ID
+        "https://api.etherscan.io/v2/api", chain_id=SEPOLIA_CHAIN_ID
     )
     # Assert that the chain ID is set correctly
     assert etherscan_verifier.chain_id == SEPOLIA_CHAIN_ID

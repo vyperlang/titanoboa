@@ -33,7 +33,7 @@ DEFAULT_CHAIN_ID = 1  # Mainnet
 VERSION_RE = re.compile(r"v(\d+\.\d+\.\d+)(\+commit.*)?")
 
 
-@dataclass()
+@dataclass
 class Etherscan(ContractVerifier[str]):
     uri: Optional[str] = DEFAULT_ETHERSCAN_URI
     api_key: Optional[str] = None
@@ -41,7 +41,13 @@ class Etherscan(ContractVerifier[str]):
     backoff_ms: int | float = 400.0
     backoff_factor: float = 1.1  # 1.1**10 ~= 2.59
     timeout = timedelta(minutes=2)
-    _chain_id: Optional[int] = DEFAULT_CHAIN_ID
+    chain_id: Optional[int] = DEFAULT_CHAIN_ID
+
+    # Setter
+    def set_chain_id(self, value: Optional[int]):
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError("Chain ID must be a positive integer.")
+        self.chain_id = value
 
     # Methods
     def verify(
@@ -78,7 +84,7 @@ class Etherscan(ContractVerifier[str]):
             "module": "contract",
             "action": "verifysourcecode",
             "apikey": api_key,
-            "chainid": self._chain_id,
+            "chainid": self.chain_id,
             "contractname": f"{contract_file}:{contract_name}",
             "compilerversion": f"vyper:{version_match.group(1)}",
             "optimizationUsed": "1",
@@ -140,7 +146,7 @@ class Etherscan(ContractVerifier[str]):
     def is_verified(self, etherscan_guid: str) -> bool:
         api_key = self.api_key or ""
         url = f"{self.uri}?module=contract&action=checkverifystatus"
-        url += f"&guid={etherscan_guid}&apikey={api_key}&chainid={self._chain_id}"
+        url += f"&guid={etherscan_guid}&apikey={api_key}&chainid={self.chain_id}"
 
         response = SESSION.get(url)
         response.raise_for_status()
@@ -156,7 +162,7 @@ class Etherscan(ContractVerifier[str]):
         if self.uri is None:
             self.uri = DEFAULT_ETHERSCAN_URI
         # Always pass through the setter for validation
-        self.chain_id = self._chain_id
+        self.set_chain_id(self.chain_id)
 
     def _fetch(self, **params) -> dict:
         """
@@ -168,7 +174,7 @@ class Etherscan(ContractVerifier[str]):
         :param params: Additional query parameters
         :return: JSON response
         """
-        params = {**params, "apiKey": self.api_key, "chainid": self._chain_id}
+        params = {**params, "apiKey": self.api_key, "chainid": self.chain_id}
         for i in range(self.num_retries):
             res = SESSION.get(self.uri, params=params)
             res.raise_for_status()

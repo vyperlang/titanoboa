@@ -22,21 +22,6 @@ class ContractVerifier(Generic[T]):
     This class should be extended by specific verifiers like Etherscan, Blockscout, etc.
     """
 
-    # Setup chain ID property in template class
-    _chain_id: Optional[int]
-
-    # Getter
-    @property
-    def chain_id(self) -> Optional[int]:
-        return self._chain_id
-
-    # Setter
-    @chain_id.setter
-    def chain_id(self, value: Optional[int]):
-        if value is None or isinstance(value, str) or value <= 0:
-            raise ValueError("Chain ID must be a positive integer.")
-        self._chain_id = value
-
     # Methods
     def verify(
         self,
@@ -223,8 +208,9 @@ def verify(
     if (bundle := get_verification_bundle(contract)) is None:
         raise ValueError(f"Not a contract! {contract}")
 
-    # Set chain_id
-    verifier.chain_id = Env.get_singleton().get_chain_id()
+    # Set chain_id if verifier supports it
+    if hasattr(verifier, "chain_id"):
+        verifier.chain_id = Env.get_singleton().get_chain_id()
 
     return verifier.verify(
         address=contract.address,
