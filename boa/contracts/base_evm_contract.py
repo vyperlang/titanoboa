@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple, Optional
 
@@ -13,6 +14,22 @@ if TYPE_CHECKING:
     from boa.contracts.vyper.vyper_contract import DevReason
     from boa.vm.py_evm import titanoboa_computation
 
+@dataclass
+class BoaError(Exception):
+    call_trace: TraceFrame
+    stack_trace: StackTrace
+
+    @classmethod
+    def create(cls, computation: titanoboa_computation, contract: _BaseEVMContract):
+        return cls(computation.call_trace, contract.stack_trace(computation))
+
+    # perf TODO: don't materialize the stack trace until we need it,
+    # i.e. BoaError ctor only takes what is necessary to construct the
+    # stack trace but does not require the actual stack trace itself.
+    def __str__(self):
+        call_tree = str(self.call_trace)
+        ledge = "=" * 72
+        return f"\n{ledge}\n{call_tree}\n{ledge}\n"
 
 class _BaseEVMContract:
     """
@@ -43,10 +60,10 @@ class _BaseEVMContract:
         assert self._computation is not None, "No computation to trace"
         return self._computation.call_trace
 
-    def handle_error(self, computation):
+    def handle_error(self, computation, error_type=BoaError):
         try:
-            raise BoaError.create(computation, self)
-        except BoaError as b:
+            raise error_type.create(computation, self)
+        except error_type as b:
             # modify the error so the traceback starts in userland.
             # inspired by answers in https://stackoverflow.com/q/1603940/
             raise strip_internal_frames(b) from b
@@ -148,30 +165,4 @@ def _handle_child_trace(computation, env, return_trace):
     return StackTrace(child_trace + return_trace)
 
 
-@dataclass
-class BoaError(Exception):
-    call_trace: TraceFrame
-    stack_trace: StackTrace
 
-    @classmethod
-    def create(cls, computation: "titanoboa_computation", contract: _BaseEVMContract):
-        return cls(computation.call_trace, contract.stack_trace(computation))
-
-    # perf TODO: don't materialize the stack trace until we need it,
-    # i.e. BoaError ctor only takes what is necessary to construct the
-    # stack trace but does not require the actual stack trace itself.
-    def __str__(self):
-        frame = self.stack_trace.last_frame
-        if hasattr(frame, "vm_error"):
-            err = frame.vm_error
-            if not getattr(err, "_already_pretty", False):
-                # avoid double patching when str() is called more than once
-                setattr(err, "_already_pretty", True)
-                err.args = (frame.pretty_vm_reason, *err.args[1:])
-        else:
-            err = frame
-
-        ret = f"{err}\n\n{self.stack_trace}"
-        call_tree = str(self.call_trace)
-        ledge = "=" * 72
-        return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"
