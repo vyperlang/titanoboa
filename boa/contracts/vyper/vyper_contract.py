@@ -72,6 +72,24 @@ CREATE_ERRORS = ("create failed", "create2 failed")
 DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
+class VyperError(BoaError):
+    def __str__(self):
+        frame = self.stack_trace.last_frame
+        if hasattr(frame, "vm_error"):
+            err = frame.vm_error
+            if not getattr(err, "_already_pretty", False):
+                # avoid double patching when str() is called more than once
+                setattr(err, "_already_pretty", True)
+                err.args = (frame.pretty_vm_reason, *err.args[1:])
+        else:
+            err = frame
+
+        ret = f"{err}\n\n{self.stack_trace}"
+        call_tree = str(self.call_trace)
+        ledge = "=" * 72
+        return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"
+
+
 class VyperDeployer:
     create_compiler_data = CompilerData  # this may be a different class in plugins
 
@@ -599,7 +617,7 @@ class VyperContract(_BaseVyperContract):
             self.bytecode = computation.output
 
             if computation.is_error:
-                self.handle_error(computation)
+                self.handle_error(computation, error_type=VyperError)
 
             return address
 
@@ -642,7 +660,6 @@ class VyperContract(_BaseVyperContract):
     def _immutables(self):
         return ImmutablesModel(self)
 
-    # is this actually useful?
     def at(self, address):
         return self.deployer.at(address)
 
@@ -744,7 +761,7 @@ class VyperContract(_BaseVyperContract):
         self._computation = computation  # for further inspection
 
         if computation.is_error:
-            self.handle_error(computation)
+            self.handle_error(computation, error_type=VyperError)
 
         # cache gas used for call if profiling is enabled
         gas_meter = self.env.get_gas_meter_class()
