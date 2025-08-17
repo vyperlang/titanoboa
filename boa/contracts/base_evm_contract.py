@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple, Optional
 
@@ -13,6 +14,7 @@ from boa.util.exceptions import strip_internal_frames
 if TYPE_CHECKING:
     from boa.contracts.vyper.vyper_contract import DevReason
     from boa.vm.py_evm import titanoboa_computation
+
 
 @dataclass
 class BoaError(Exception):
@@ -30,6 +32,7 @@ class BoaError(Exception):
         call_tree = str(self.call_trace)
         ledge = "=" * 72
         return f"\n{ledge}\n{call_tree}\n{ledge}\n"
+
 
 class _BaseEVMContract:
     """
@@ -163,6 +166,3 @@ def _handle_child_trace(computation, env, return_trace):
         return_trace.last_frame.dev_reason = child_trace.dev_reason
 
     return StackTrace(child_trace + return_trace)
-
-
-

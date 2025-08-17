@@ -89,6 +89,7 @@ class VyperError(BoaError):
         ledge = "=" * 72
         return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"
 
+
 class VyperDeployer:
     create_compiler_data = CompilerData  # this may be a different class in plugins
 
