@@ -34,6 +34,7 @@ def raise_exception(t: uint256):
 """
 
 STARTING_SUPPLY = 100
+SEPOLIA_CHAIN_ID = 11155111
 
 
 @pytest.fixture(scope="module")
@@ -48,8 +49,34 @@ def verifier(request):
         return Blockscout("https://eth-sepolia.blockscout.com", api_key)
     elif request.param == Etherscan:
         api_key = os.environ["ETHERSCAN_API_KEY"]
-        return Etherscan("https://api-sepolia.etherscan.io/api", api_key)
+        return Etherscan(
+            "https://api.etherscan.io/v2/api", api_key, chain_id=SEPOLIA_CHAIN_ID
+        )
     raise ValueError(f"Unknown verifier: {request.param}")
+
+
+def test_set_etherscan_wrong_chain_id():
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        Etherscan("https://api.etherscan.io/v2/api", chain_id=-1)
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        Etherscan("https://api.etherscan.io/v2/api", chain_id=0)
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        Etherscan("https://api.etherscan.io/v2/api", chain_id=0.25)
+    with pytest.raises(ValueError, match="Chain ID must be a positive integer."):
+        Etherscan("https://api.etherscan.io/v2/api", chain_id="invalid")
+
+
+def test_set_etherscan_with_chain_id():
+    # Init verifiers with the chain ID
+    etherscan_verifier = Etherscan(
+        "https://api.etherscan.io/v2/api", chain_id=SEPOLIA_CHAIN_ID
+    )
+    # Assert that the chain ID is set correctly
+    assert etherscan_verifier.chain_id == SEPOLIA_CHAIN_ID
+    # Set to Mainnet
+    etherscan_verifier.set_chain_id(1)
+    # Assert that the chain ID is set correctly
+    assert etherscan_verifier.chain_id != SEPOLIA_CHAIN_ID
 
 
 def test_verify(verifier):
@@ -72,9 +99,11 @@ def test_verify(verifier):
         value,
         name=name,
     )
+
     result = boa.verify(contract, verifier)
     result.wait_for_verification()
     assert result.is_verified()
+    assert verifier.chain_id == boa.env.get_chain_id()
 
 
 def test_env_type():

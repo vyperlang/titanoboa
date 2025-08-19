@@ -17,13 +17,18 @@ P = TypeVar("P")
 
 
 class ContractVerifier(Generic[T]):
+    """A base class for contract verifiers.
+
+    This class should be extended by specific verifiers like Etherscan, Blockscout, etc.
+    """
+
+    # Methods
     def verify(
         self,
         address: Address,
         contract_name: str,
         solc_json: dict,
         constructor_calldata: bytes,
-        chain_id: int,
         license_type: str = "1",
         wait: bool = False,
     ) -> Optional["VerificationResult[T]"]:
@@ -209,6 +214,5 @@ def verify(
         contract_name=contract.contract_name,
         constructor_calldata=contract.ctor_calldata,
         wait=wait,
-        chain_id=Env.get_singleton().get_chain_id(),
         **kwargs,
     )
