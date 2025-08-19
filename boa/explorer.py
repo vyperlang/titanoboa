@@ -161,7 +161,8 @@ class Etherscan(ContractVerifier[str]):
     def __post_init__(self):
         if self.uri is None:
             self.uri = DEFAULT_ETHERSCAN_URI
-        # Always pass through the setter for validation
+
+        # call set_chain_id for validation
         self.set_chain_id(self.chain_id)
 
     def _fetch(self, **params) -> dict:

@@ -373,11 +373,12 @@ def from_etherscan(
     else:
         etherscan = get_etherscan()
 
+    if chain_id is None:
+        # default behavior: use the chain id of the global env
+        chain_id = Env.get_singleton().evm.patch.chain_id
+
     # Set the chain ID for the Etherscan instance
-    if chain_id is not None:
-        etherscan.set_chain_id(chain_id)
-    else:
-        etherscan.set_chain_id(Env.get_singleton().evm.patch.chain_id)
+    etherscan.set_chain_id(chain_id)
 
     abi = etherscan.fetch_abi(addr)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)
