@@ -7,7 +7,6 @@ from typing import Callable, Generic, Optional, TypeVar
 
 import requests
 
-from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.cached_session import get_session
 from boa.util.open_ctx import Open
