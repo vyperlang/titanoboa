@@ -225,5 +225,5 @@ def _is_rate_limited(data: dict) -> bool:
     return "rate limit" in data.get("result", "") and data.get("status") == "0"
 
 
-# @dev put the session here so it can be used by the explorer
+# Put the session here so it can work properly
 SESSION = get_session(_is_success_response)

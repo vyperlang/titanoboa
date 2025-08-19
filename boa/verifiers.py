@@ -64,7 +64,7 @@ class Blockscout(ContractVerifier[Address]):
     Allows users to verify contracts on Blockscout.
     This is independent of Vyper contracts, and can be used to verify any smart contract.
 
-    @dev Blockscout does not require an API key
+    Blockscout does not require an API key
     """
 
     uri: str = DEFAULT_BLOCKSCOUT_URI
