@@ -34,6 +34,7 @@ def raise_exception(t: uint256):
 """
 
 STARTING_SUPPLY = 100
+SEPOLIA_CHAIN_ID = 11155111
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +48,9 @@ def verifier(request):
         return Blockscout("https://eth-sepolia.blockscout.com")
     elif request.param == Etherscan:
         api_key = os.environ["ETHERSCAN_API_KEY"]
-        return Etherscan("https://api.etherscan.io/v2/api", api_key)
+        return Etherscan(
+            "https://api.etherscan.io/v2/api", api_key, chain_id=SEPOLIA_CHAIN_ID
+        )
     raise ValueError(f"Unknown verifier: {request.param}")
 
 
@@ -63,7 +66,6 @@ def test_set_etherscan_wrong_chain_id():
 
 
 def test_set_etherscan_with_chain_id():
-    SEPOLIA_CHAIN_ID = 11155111
     # Init verifiers with the chain ID
     etherscan_verifier = Etherscan(
         "https://api.etherscan.io/v2/api", chain_id=SEPOLIA_CHAIN_ID
@@ -71,7 +73,7 @@ def test_set_etherscan_with_chain_id():
     # Assert that the chain ID is set correctly
     assert etherscan_verifier.chain_id == SEPOLIA_CHAIN_ID
     # Set to Mainnet
-    etherscan_verifier.chain_id = 1
+    etherscan_verifier.set_chain_id(1)
     # Assert that the chain ID is set correctly
     assert etherscan_verifier.chain_id != SEPOLIA_CHAIN_ID
 
