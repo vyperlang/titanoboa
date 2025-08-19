@@ -45,8 +45,7 @@ def simple_contract():
 @pytest.fixture(scope="module", params=[Etherscan, Blockscout])
 def verifier(request):
     if request.param == Blockscout:
-        api_key = os.getenv("BLOCKSCOUT_API_KEY")
-        return Blockscout("https://eth-sepolia.blockscout.com", api_key)
+        return Blockscout("https://eth-sepolia.blockscout.com")
     elif request.param == Etherscan:
         api_key = os.environ["ETHERSCAN_API_KEY"]
         return Etherscan(
@@ -103,7 +102,9 @@ def test_verify(verifier):
     result = boa.verify(contract, verifier)
     result.wait_for_verification()
     assert result.is_verified()
-    assert verifier.chain_id == boa.env.get_chain_id()
+    # Only assert for Etherscan, as Blockscout does not use chain_id
+    if isinstance(verifier, Etherscan):
+        assert verifier.chain_id == boa.env.get_chain_id()
 
 
 def test_env_type():
