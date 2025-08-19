@@ -208,10 +208,6 @@ def verify(
     if (bundle := get_verification_bundle(contract)) is None:
         raise ValueError(f"Not a contract! {contract}")
 
-    # Set chain_id if verifier supports it
-    if hasattr(verifier, "chain_id"):
-        verifier.chain_id = Env.get_singleton().get_chain_id()
-
     return verifier.verify(
         address=contract.address,
         solc_json=bundle,
