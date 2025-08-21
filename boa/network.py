@@ -610,6 +610,7 @@ class NetworkEnv(Env):
         chain_id = self._rpc.fetch("eth_chainId", [])
         return int(chain_id, 16)
 
+    @contextlib.contextmanager
     def sender(self, address):
         self._rpc.fetch("hardhat_impersonateAccount", [to_hex(addr)])
         tmp = self.eoa
