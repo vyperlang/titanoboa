@@ -622,14 +622,20 @@ class NetworkEnv(Env):
             self.eoa = tmp
 
     def set_balance(self, address, value):
+        super().set_balance(address, value)  # set it in the fork
+
         self._rpc.fetch(
             "hardhat_setBalance", [to_hex(address), to_hex(value, pad_nibbles=64)]
         )
 
     def set_code(self, address: _AddressType, code: bytes) -> None:
+        super().set_code(address, code)  # set it in the fork
+
         self._rpc.fetch("hardhat_setCode", [to_hex(address), to_hex(code)])
 
     def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
+        super().set_storage(address, slot, value)  # set it in the fork
+
         # will throw if the provider does not have hardhat_setStorageAt
         # hardhat requires padded hex values
         self._rpc.fetch(
