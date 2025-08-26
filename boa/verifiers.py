@@ -205,6 +205,8 @@ def verify(
     if (bundle := get_verification_bundle(contract)) is None:
         raise ValueError(f"Not a contract! {contract}")
 
+    # only VyperContract has this
+    # TODO: expand VyperBlueprint and ABIContract
     ctor_calldata = getattr(contract, "ctor_calldata", b"")
 
     return verifier.verify(
