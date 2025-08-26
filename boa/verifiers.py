@@ -205,11 +205,13 @@ def verify(
     if (bundle := get_verification_bundle(contract)) is None:
         raise ValueError(f"Not a contract! {contract}")
 
+    ctor_calldata = getattr(contract, "ctor_calldata", b"")
+
     return verifier.verify(
         address=contract.address,
         solc_json=bundle,
         contract_name=contract.contract_name,
-        constructor_calldata=getattr(contract, "ctor_calldata", b""),
+        constructor_calldata=ctor_calldata,
         wait=wait,
         **kwargs,
     )
