@@ -7,7 +7,6 @@ from typing import Callable, Generic, Optional, TypeVar
 
 import requests
 
-from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.open_ctx import Open
 
@@ -83,7 +82,6 @@ class Blockscout(ContractVerifier[Address]):
         contract_name: str,
         solc_json: dict,
         constructor_calldata: bytes,
-        chain_id: int,
         license_type: str = "1",
         wait: bool = False,
     ) -> Optional["VerificationResult[Address]"]:
@@ -93,7 +91,6 @@ class Blockscout(ContractVerifier[Address]):
         :param contract_name: The name of the contract.
         :param solc_json: The solc_json output of the Vyper compiler.
         :param constructor_calldata: The calldata for the constructor.
-        :param chain_id: The ID of the chain where the contract is deployed.
         :param license_type: The license to use for the contract. Defaults to "none".
         :param wait: Whether to return a VerificationResult immediately
                      or wait for verification to complete. Defaults to False
@@ -208,11 +205,15 @@ def verify(
     if (bundle := get_verification_bundle(contract)) is None:
         raise ValueError(f"Not a contract! {contract}")
 
+    # only VyperContract has this
+    # TODO: expand VyperBlueprint and ABIContract
+    ctor_calldata = getattr(contract, "ctor_calldata", b"")
+
     return verifier.verify(
         address=contract.address,
         solc_json=bundle,
         contract_name=contract.contract_name,
-        constructor_calldata=contract.ctor_calldata,
+        constructor_calldata=ctor_calldata,
         wait=wait,
         **kwargs,
     )

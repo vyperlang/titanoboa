@@ -78,30 +78,24 @@ class Etherscan(ContractVerifier[str]):
         if not version_match:
             raise ValueError(f"Failed to extract Vyper version from {compiler_version}")
 
-            # V2 now use query parameters instead of data
-        # @dev https://docs.etherscan.io/etherscan-v2/api-endpoints/contracts#verify-vyper-source-code
-        params = {
+        data = {
             "module": "contract",
             "action": "verifysourcecode",
             "apikey": api_key,
             "chainid": self.chain_id,
-            "contractname": f"{contract_file}:{contract_name}",
-            "compilerversion": f"vyper:{version_match.group(1)}",
-            "optimizationUsed": "1",
+            "codeformat": "vyper-json",
             "sourceCode": json.dumps(solc_json),
             "constructorArguments": constructor_calldata.hex(),
             "contractaddress": address,
-        }
-
-        # @dev maybe not needed anymore?
-        data = {
-            "codeformat": "vyper-json",
+            "contractname": f"{contract_file}:{contract_name}",
+            "compilerversion": f"vyper:{version_match.group(1)}",
+            "optimizationUsed": "1",
             "licenseType": license_type,
         }
 
         def verification_created():
             # we need to retry until the contract is found by Etherscan
-            response = SESSION.post(self.uri, params=params, data=data)
+            response = SESSION.post(self.uri, data=data)
             response.raise_for_status()
             response_json = response.json()
             if response_json.get("status") == "1":
@@ -151,11 +145,12 @@ class Etherscan(ContractVerifier[str]):
         response = SESSION.get(url)
         response.raise_for_status()
         response_json = response.json()
-        if (
-            response_json.get("message") == "NOTOK"
-            and "Pending in queue" not in response_json["result"]
-        ):
-            raise ValueError(f"Failed to verify: {response_json['result']}")
+        if response_json.get("message") == "NOTOK":
+            if "Already Verified" in response_json["result"]:
+                print("Contract already verified")
+                return True
+            if "Pending in queue" not in response_json["result"]:
+                raise ValueError(f"Failed to verify: {response_json['result']}")
         return response_json.get("status") == "1"
 
     def __post_init__(self):
