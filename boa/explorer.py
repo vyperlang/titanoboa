@@ -145,11 +145,12 @@ class Etherscan(ContractVerifier[str]):
         response = SESSION.get(url)
         response.raise_for_status()
         response_json = response.json()
-        if (
-            response_json.get("message") == "NOTOK"
-            and "Pending in queue" not in response_json["result"]
-        ):
-            raise ValueError(f"Failed to verify: {response_json['result']}")
+        if response_json.get("message") == "NOTOK":
+            if "Already Verified" in response_json["result"]:
+                print("Contract already verified")
+                return True
+            if "Pending in queue" not in response_json["result"]:
+                raise ValueError(f"Failed to verify: {response_json['result']}")
         return response_json.get("status") == "1"
 
     def __post_init__(self):
