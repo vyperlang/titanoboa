@@ -9,12 +9,6 @@ from boa.rpc import to_bytes
 from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
 import textwrap
-import re
-import contextlib
-import vyper.ast as vy_ast
-from vyper.ast.parse import parse_to_ast
-from vyper.exceptions import InvalidType
-from vyper.semantics.analysis.utils import get_exact_type_from_node
 
 
 class VVMBlueprint(ABIContract):
@@ -182,32 +176,6 @@ class VVMContract(ABIContract):
         self.source_code = source_code
         self.vyper_version = vyper_version
 
-    # Use a VyperContract to provide a robust namespace for analysis
-    @cached_property
-    def vyper_contract(self):
-        from boa.contracts.vyper.vyper_contract import VyperContract
-        from boa.interpret import compiler_data
-
-        # Strip version pragma variants to avoid local-compiler mismatch
-        version_re = re.compile(r"^\s*#\s*(?:@version|pragma\s+version)\b")
-        src = "\n".join(
-            line for line in self.source_code.splitlines() if not version_re.match(line)
-        )
-
-        cd = compiler_data(src, self.contract_name, self.filename)
-        return VyperContract(
-            cd,
-            env=self.env,
-            override_address=self.address,
-            skip_initcode=True,
-            filename=self.filename,
-        )
-
-    @contextlib.contextmanager
-    def override_vyper_namespace(self):
-        with self.vyper_contract.override_vyper_namespace():
-            yield
-
     def inject_function(self, fn_source_code, force=False):
         """
         Inject a function into this VVM Contract without affecting the
@@ -222,13 +190,22 @@ class VVMContract(ABIContract):
         setattr(self, fn.name, fn)
         fn.contract = self
 
-    def eval(self, stmt: str, value: int = 0, gas: Optional[int] = None, sender: Optional[Address] = None):
+    def eval(
+        self,
+        stmt: str,
+        value: int = 0,
+        gas: Optional[int] = None,
+        sender: Optional[Address] = None,
+        return_type: Optional[str] = None,
+    ):
         """Evaluate vyper code in the context of this contract using VVM injection.
 
         Wraps arbitrary statements/expressions in an external function, injects it,
         and executes it against the current contract state.
+        If `return_type` is provided, the snippet is treated as an expression
+        and the wrapper returns that type. Otherwise, no value is returned.
         """
-        wrapper_src = _generate_source_for_arbitrary_stmt(stmt, self)
+        wrapper_src = _generate_source_for_arbitrary_stmt(stmt, self, return_type)
         # Always force, so multiple evals reuse the same name without conflicts
         self.inject_function(wrapper_src, force=True)
 
@@ -266,24 +243,16 @@ class VVMInjectedFunction(ABIFunction):
 
 
 # --- Eval helpers (VVM variant) ---
-def _detect_expr_type(source_code: str, contract: VVMContract):
-    ast = parse_to_ast(source_code).body[0]
-    if isinstance(ast, vy_ast.Expr):
-        with contract.override_vyper_namespace():
-            try:
-                return get_exact_type_from_node(ast.value)
-            except InvalidType:
-                pass
-    return None
-
-def _generate_source_for_arbitrary_stmt(source_code: str, contract: VVMContract) -> str:
+def _generate_source_for_arbitrary_stmt(
+    source_code: str, contract: VVMContract, return_type: Optional[str]
+) -> str:
     """Wrap arbitrary statements with an external function and generate source code.
 
-    If the statement is an expression, detect its type and return it from the wrapper.
+    If `return_type` is provided, wrap as an expression and return its value;
+    else, emit a statement wrapper without return.
     """
-    ast_typ = _detect_expr_type(source_code, contract)
-    if ast_typ:
-        return_sig = f"-> {ast_typ}"
+    if return_type:
+        return_sig = f"-> {return_type}"
         debug_body = f"return {source_code}"
     else:
         return_sig = ""
