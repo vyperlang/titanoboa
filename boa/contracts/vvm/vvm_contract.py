@@ -8,6 +8,17 @@ from boa.environment import Env
 from boa.rpc import to_bytes
 from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
+import textwrap
+
+# Vyper helpers for type detection and namespace override
+import vyper.ast as vy_ast
+import vyper.semantics.analysis as analysis
+from vyper.ast.parse import parse_to_ast
+from vyper.exceptions import InvalidType
+from vyper.semantics.analysis.utils import get_exact_type_from_node
+import vyper.semantics.namespace as vy_ns
+import copy
+import contextlib
 
 
 class VVMBlueprint(ABIContract):
@@ -175,6 +186,40 @@ class VVMContract(ABIContract):
         self.source_code = source_code
         self.vyper_version = vyper_version
 
+    # TODO this is probably not needed but codex couldn't figure out a better way so I'll take it for now.
+    # -- Helpers to mirror VyperContract namespace behavior --
+    @cached_property
+    def _vyper_namespace(self):
+        # Build a namespace for this contract's source so we can type-check eval exprs
+        # Strip version pragma so current vyper can parse older sources
+        src = "\n".join(
+            line for line in self.source_code.splitlines() if not line.strip().startswith("# pragma")
+        )
+        module_ast = parse_to_ast(src)
+        analysis.analyze_module(module_ast)
+        # make a copy of the namespace, since we might modify it
+        ret = copy.copy(module_ast._metadata["namespace"])  # type: ignore[attr-defined]
+        ret._scopes = copy.deepcopy(ret._scopes)
+        if len(ret._scopes) == 0:
+            # funky behavior in Namespace.enter_scope()
+            ret._scopes.append(set())
+        return ret
+
+    @contextlib.contextmanager
+    def override_vyper_namespace(self):
+        # ensure self._vyper_namespace is computed
+        contract_members = self._vyper_namespace["self"].typ.members
+        try:
+            to_keep = set(contract_members.keys())
+            with vy_ns.override_global_namespace(self._vyper_namespace):
+                yield
+        finally:
+            # drop all keys which were added while yielding
+            keys = list(contract_members.keys())
+            for k in keys:
+                if k not in to_keep:
+                    contract_members.pop(k)
+
     def inject_function(self, fn_source_code, force=False):
         """
         Inject a function into this VVM Contract without affecting the
@@ -188,6 +233,20 @@ class VVMContract(ABIContract):
             raise ValueError(f"Function {fn.name} already exists on contract.")
         setattr(self, fn.name, fn)
         fn.contract = self
+
+    def eval(self, stmt: str, value: int = 0, gas: Optional[int] = None, sender: Optional[Address] = None):
+        """Evaluate vyper code in the context of this contract using VVM injection.
+
+        Wraps arbitrary statements/expressions in an external function, injects it,
+        and executes it against the current contract state.
+        """
+        wrapper_src = _generate_source_for_arbitrary_stmt(stmt, self)
+        # Always force, so multiple evals reuse the same name without conflicts
+        self.inject_function(wrapper_src, force=True)
+
+        # Call the injected function and return its value (if any)
+        fn = getattr(self, "__boa_debug__")
+        return fn(value=value, gas=gas, sender=sender)
 
 
 class VVMInjectedFunction(ABIFunction):
@@ -216,3 +275,33 @@ class VVMInjectedFunction(ABIFunction):
     @cached_property
     def source_code(self):
         return self._source_code
+
+
+# --- Eval helpers (VVM variant) ---
+def _detect_expr_type(source_code: str, contract: VVMContract):
+    ast = parse_to_ast(source_code).body[0]
+    if isinstance(ast, vy_ast.Expr):
+        with contract.override_vyper_namespace():
+            try:
+                return get_exact_type_from_node(ast.value)
+            except InvalidType:
+                pass
+    return None
+
+
+def _generate_source_for_arbitrary_stmt(source_code: str, contract: VVMContract) -> str:
+    """Wrap arbitrary statements with an external function and generate source code.
+
+    If the statement is an expression, detect its type and return it from the wrapper.
+    """
+    ast_typ = _detect_expr_type(source_code, contract)
+    if ast_typ:
+        return_sig = f"-> {ast_typ}"
+        debug_body = f"return {source_code}"
+    else:
+        return_sig = ""
+        debug_body = source_code
+
+    header = f"@external\n@payable\ndef __boa_debug__() {return_sig}:\n"
+    body = textwrap.indent(debug_body, "    ")
+    return header + body
