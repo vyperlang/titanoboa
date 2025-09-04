@@ -10,16 +10,11 @@ from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
 import textwrap
 import re
-
-# Vyper helpers for type detection and namespace override
+import contextlib
 import vyper.ast as vy_ast
-import vyper.semantics.analysis as analysis
 from vyper.ast.parse import parse_to_ast
 from vyper.exceptions import InvalidType
 from vyper.semantics.analysis.utils import get_exact_type_from_node
-import vyper.semantics.namespace as vy_ns
-import copy
-import contextlib
 
 
 class VVMBlueprint(ABIContract):
@@ -187,38 +182,31 @@ class VVMContract(ABIContract):
         self.source_code = source_code
         self.vyper_version = vyper_version
 
-    # TODO this is probably not needed but codex couldn't figure out a better way so I'll take it for now.
-    # -- Helpers to mirror VyperContract namespace behavior --
+    # Use a VyperContract to provide a robust namespace for analysis
     @cached_property
-    def _vyper_namespace(self):
-        # Build a namespace for this contract's source so we can type-check eval exprs
-        # Strip version pragma (both legacy "# @version" and "# pragma version")
-        version_line = re.compile(r"^\s*#\s*(?:@version|pragma\s+version)\b")
-        src = "\n".join(line for line in self.source_code.splitlines() if not version_line.match(line))
-        module_ast = parse_to_ast(src)
-        analysis.analyze_module(module_ast)
-        # make a copy of the namespace, since we might modify it
-        ret = copy.copy(module_ast._metadata["namespace"])  # type: ignore[attr-defined]
-        ret._scopes = copy.deepcopy(ret._scopes)
-        if len(ret._scopes) == 0:
-            # funky behavior in Namespace.enter_scope()
-            ret._scopes.append(set())
-        return ret
+    def vyper_contract(self):
+        from boa.contracts.vyper.vyper_contract import VyperContract
+        from boa.interpret import compiler_data
+
+        # Strip version pragma variants to avoid local-compiler mismatch
+        version_re = re.compile(r"^\s*#\s*(?:@version|pragma\s+version)\b")
+        src = "\n".join(
+            line for line in self.source_code.splitlines() if not version_re.match(line)
+        )
+
+        cd = compiler_data(src, self.contract_name, self.filename)
+        return VyperContract(
+            cd,
+            env=self.env,
+            override_address=self.address,
+            skip_initcode=True,
+            filename=self.filename,
+        )
 
     @contextlib.contextmanager
     def override_vyper_namespace(self):
-        # ensure self._vyper_namespace is computed
-        contract_members = self._vyper_namespace["self"].typ.members
-        try:
-            to_keep = set(contract_members.keys())
-            with vy_ns.override_global_namespace(self._vyper_namespace):
-                yield
-        finally:
-            # drop all keys which were added while yielding
-            keys = list(contract_members.keys())
-            for k in keys:
-                if k not in to_keep:
-                    contract_members.pop(k)
+        with self.vyper_contract.override_vyper_namespace():
+            yield
 
     def inject_function(self, fn_source_code, force=False):
         """
@@ -287,7 +275,6 @@ def _detect_expr_type(source_code: str, contract: VVMContract):
             except InvalidType:
                 pass
     return None
-
 
 def _generate_source_for_arbitrary_stmt(source_code: str, contract: VVMContract) -> str:
     """Wrap arbitrary statements with an external function and generate source code.
