@@ -337,7 +337,11 @@ def _loads_partial_vvm(
     def _handle_output(compiled_src):
         compiler_output = compiled_src["<stdin>"]
         return VVMDeployer.from_compiler_output(
-            compiler_output, name=name, filename=filename
+            compiler_output,
+            name=name,
+            filename=filename,
+            source_code=source_code,
+            vyper_version=version,
         )
 
     # Ensure the cache is initialized
