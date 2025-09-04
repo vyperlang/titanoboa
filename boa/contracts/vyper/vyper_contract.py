@@ -529,6 +529,7 @@ class VyperContract(_BaseVyperContract):
         contract_name=None,
         filename: str = None,
         gas=None,
+        sender: Optional[Address] = None,
     ):
         super().__init__(compiler_data, contract_name, env, filename)
 
@@ -555,7 +556,7 @@ class VyperContract(_BaseVyperContract):
             addr = Address(override_address)
         else:
             addr = self._run_init(
-                *args, value=value, override_address=override_address, gas=gas
+                *args, value=value, override_address=override_address, gas=gas, sender=sender
             )
         self._address = addr
 
@@ -580,7 +581,7 @@ class VyperContract(_BaseVyperContract):
 
         self.env.register_contract(self._address, self)
 
-    def _run_init(self, *args, value=0, override_address=None, gas=None):
+    def _run_init(self, *args, value=0, override_address=None, gas=None, sender=None):
         self.ctor_calldata = b""
         if self._ctor:
             self.ctor_calldata = self._ctor.prepare_calldata(*args)
@@ -593,6 +594,7 @@ class VyperContract(_BaseVyperContract):
                 override_address=override_address,
                 gas=gas,
                 contract=self,
+                sender=sender,
             )
 
             self._computation = computation
