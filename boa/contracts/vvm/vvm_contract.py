@@ -1,8 +1,11 @@
 from functools import cached_property
 from typing import Optional
 
+import vvm
+
 from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
 from boa.environment import Env
+from boa.rpc import to_bytes
 from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
 
@@ -32,7 +35,9 @@ class VVMDeployer:
     can interact with new versions using the ABI definition.
     """
 
-    def __init__(self, abi, bytecode, name, filename):
+    def __init__(
+        self, abi, bytecode, name, filename, compiler_output, source_code, vyper_version
+    ):
         """
         Initialize a VVMDeployer instance.
         :param abi: The contract's ABI.
@@ -43,13 +48,20 @@ class VVMDeployer:
         self.bytecode: bytes = bytecode
         self.name: Optional[str] = name
         self.filename: str = filename
+        self.compiler_output = compiler_output
+        self.source_code = source_code
+        self.vyper_version = vyper_version
 
     @classmethod
-    def from_compiler_output(cls, compiler_output, name, filename):
+    def from_compiler_output(
+        cls, compiler_output, name, filename, source_code, vyper_version
+    ):
         abi = compiler_output["abi"]
         bytecode_nibbles = compiler_output["bytecode"]
         bytecode = bytes.fromhex(bytecode_nibbles.removeprefix("0x"))
-        return cls(abi, bytecode, name, filename)
+        return cls(
+            abi, bytecode, name, filename, compiler_output, source_code, vyper_version
+        )
 
     @cached_property
     def factory(self):
@@ -64,7 +76,10 @@ class VVMDeployer:
                 return ABIFunction(t, contract_name=self.filename)
         return None
 
-    def deploy(self, *args, contract_name=None, env=None, **kwargs):
+    def deploy(self, *args, **kwargs):
+        # Accept optional kwargs without forcing keyword-only usage
+        contract_name = kwargs.pop("contract_name", None)
+        env = kwargs.pop("env", None)
         encoded_args = b""
         if self.constructor is not None:
             encoded_args = self.constructor.prepare_calldata(*args)
@@ -120,4 +135,84 @@ class VVMDeployer:
         return self.deploy(*args, **kwargs)
 
     def at(self, address, nowarn=False):
-        return self.factory.at(address, nowarn=nowarn)
+        # Build a VVMContract directly so advanced features (e.g. injection)
+        # have access to compiler/source context
+        addr = Address(address)
+        # Construct function and event descriptors from ABI
+        contract_name = self.name or "<unknown>"
+        functions = [
+            ABIFunction(item, contract_name)
+            for item in self.abi
+            if item.get("type") == "function"
+        ]
+        events = [item for item in self.abi if item.get("type") == "event"]
+
+        contract = VVMContract(
+            self.compiler_output,
+            self.source_code,
+            self.vyper_version,
+            name=contract_name,
+            abi=self.abi,
+            functions=functions,
+            events=events,
+            address=addr,
+            filename=self.filename,
+            nowarn=nowarn,
+        )
+
+        contract.env.register_contract(addr, contract)
+        return contract
+
+
+class VVMContract(ABIContract):
+    """
+    A deployed contract compiled with vvm, which is called via ABI.
+    """
+
+    def __init__(self, compiler_output, source_code, vyper_version, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.compiler_output = compiler_output
+        self.source_code = source_code
+        self.vyper_version = vyper_version
+
+    def inject_function(self, fn_source_code, force=False):
+        """
+        Inject a function into this VVM Contract without affecting the
+        contract's source code. useful for testing private functionality.
+        :param fn_source_code: The source code of the function to inject.
+        :param force: If True, the function will be injected even if it already exists.
+        :returns: The result of the statement evaluation.
+        """
+        fn = VVMInjectedFunction(fn_source_code, self)
+        if hasattr(self, fn.name) and not force:
+            raise ValueError(f"Function {fn.name} already exists on contract.")
+        setattr(self, fn.name, fn)
+        fn.contract = self
+
+
+class VVMInjectedFunction(ABIFunction):
+    def __init__(self, source_code: str, contract: VVMContract):
+        self.contract = contract
+        self._source_code = source_code
+        abi = [i for i in self._compiler_output["abi"] if i not in contract.abi]
+        if len(abi) != 1:
+            err = "Expected exactly one new ABI entry after injecting function. "
+            err += f"Found {abi}."
+            raise ValueError(err)
+
+        super().__init__(abi[0], contract.contract_name)
+
+    @cached_property
+    def _override_bytecode(self) -> bytes:
+        return to_bytes(self._compiler_output["bytecode_runtime"])
+
+    @cached_property
+    def _compiler_output(self):
+        assert isinstance(self.contract, VVMContract)  # help mypy
+        source = "\n".join((self.contract.source_code, self.source_code))
+        compiled = vvm.compile_source(source, vyper_version=self.contract.vyper_version)
+        return compiled["<stdin>"]
+
+    @cached_property
+    def source_code(self):
+        return self._source_code
