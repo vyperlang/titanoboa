@@ -9,6 +9,7 @@ from boa.rpc import to_bytes
 from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
 import textwrap
+import re
 
 # Vyper helpers for type detection and namespace override
 import vyper.ast as vy_ast
@@ -191,10 +192,9 @@ class VVMContract(ABIContract):
     @cached_property
     def _vyper_namespace(self):
         # Build a namespace for this contract's source so we can type-check eval exprs
-        # Strip version pragma so current vyper can parse older sources
-        src = "\n".join(
-            line for line in self.source_code.splitlines() if not line.strip().startswith("# pragma")
-        )
+        # Strip version pragma (both legacy "# @version" and "# pragma version")
+        version_line = re.compile(r"^\s*#\s*(?:@version|pragma\s+version)\b")
+        src = "\n".join(line for line in self.source_code.splitlines() if not version_line.match(line))
         module_ast = parse_to_ast(src)
         analysis.analyze_module(module_ast)
         # make a copy of the namespace, since we might modify it
