@@ -937,6 +937,14 @@ class VyperFunction:
     def func_t(self):
         return self.fn_ast._metadata["func_type"]
 
+    # The function type used for ABI validation/encoding. Defaults to
+    # the function's own type, but subclasses (e.g., internal wrappers)
+    # can override this to use a generated external wrapper signature
+    # which carries default-arg metadata.
+    @property
+    def abi_signature_func_t(self):
+        return self.func_t
+
     @cached_property
     def ir(self):
         module_t = self.contract.module_t
@@ -974,38 +982,58 @@ class VyperFunction:
         if num_kwargs in self._signature_cache:
             return self._signature_cache[num_kwargs]
 
-        # align the kwargs with the signature
-        sig_kwargs = self.func_t.keyword_args[:num_kwargs]
-        sig_args = self.func_t.positional_args + sig_kwargs
+        # align the kwargs with the signature used for ABI
+        func_t = self.abi_signature_func_t
+        sig_kwargs = func_t.keyword_args[:num_kwargs]
+        sig_args = func_t.positional_args + sig_kwargs
         args_abi_type = (
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
-        abi_sig = self.func_t.name + args_abi_type
+        abi_sig = func_t.name + args_abi_type
 
         _method_id = method_id(abi_sig)
         self._signature_cache[num_kwargs] = (_method_id, args_abi_type)
 
         return _method_id, args_abi_type
 
-    def prepare_calldata(self, *args, **kwargs):
-        n_total_args = self.func_t.n_total_args
-        n_pos_args = self.func_t.n_positional_args
+    # Shared helpers for arg encoding across internal/external functions
+    @staticmethod
+    def _validate_and_count(func_t, args_len: int, kwargs_len: int) -> int:
+        n_total_args = func_t.n_total_args
+        n_pos_args = func_t.n_positional_args
 
-        if not n_pos_args <= len(args) <= n_total_args:
+        if not n_pos_args <= args_len <= n_total_args:
             expectation_str = f"expected between {n_pos_args} and {n_total_args}"
             if n_pos_args == n_total_args:
                 expectation_str = f"expected {n_total_args}"
             raise Exception(
-                f"bad args to `{repr(self.func_t)}` "
-                f"({expectation_str}, got {len(args)})"
+                f"bad args to `{repr(func_t)}` (" f"{expectation_str}, got {args_len})"
             )
 
-        # align the kwargs with the signature
-        # sig_kwargs = self.func_t.default_args[: len(kwargs)]
+        # number of default/keyword overrides actually provided
+        return kwargs_len + args_len - n_pos_args
 
-        total_non_base_args = len(kwargs) + len(args) - n_pos_args
+    @staticmethod
+    def _abi_types_for_func_t(func_t, num_kwargs):
+        sig_kwargs = func_t.keyword_args[:num_kwargs]
+        sig_args = func_t.positional_args + sig_kwargs
+        args_abi_type = (
+            "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
+        )
+        _method_id = method_id(func_t.name + args_abi_type)
+        return _method_id, args_abi_type
 
-        args = [getattr(arg, "address", arg) for arg in args]
+    @staticmethod
+    def _normalize_args(args):
+        return [getattr(arg, "address", arg) for arg in args]
+
+    def prepare_calldata(self, *args, **kwargs):
+        # validate against the ABI signature func_t (handles defaults)
+        total_non_base_args = self._validate_and_count(
+            self.abi_signature_func_t, len(args), len(kwargs)
+        )
+
+        args = self._normalize_args(args)
 
         method_id, args_abi_type = self.args_abi_type(total_non_base_args)
         encoded_args = abi_encode(args_abi_type, args)
@@ -1074,6 +1102,12 @@ class VyperInternalFunction(VyperFunction):
     def _source_map(self):
         _, _, _, source_map, _ = self._compiled
         return source_map
+
+    # Point ABI handling at the generated external wrapper signature.
+    @cached_property
+    def abi_signature_func_t(self):
+        wrapper_ast, _, _, _, _ = self._compiled
+        return wrapper_ast._metadata["func_type"]
 
 
 class VyperTraceSource(TraceSource):
