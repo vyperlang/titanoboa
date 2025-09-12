@@ -38,6 +38,11 @@ def _test_bool(a: uint256, b: bool = False) -> bool:
         return True
 
 @internal
+@pure
+def _test_bool_default_true(a: uint256, b: bool = True) -> bool:
+    return b
+
+@internal
 def _test_repeat(z: int128) -> int128:
     x: int128 = 0
     for i: int128 in range(6):
@@ -104,6 +109,15 @@ def test_internal_vs_external(contract, value):
 @given(a=strategy("uint256"))
 def test_internal_default(contract, a):
     assert contract.internal._test_bool(a)
+
+
+def test_internal_default_true(contract):
+    # omit default: b=True
+    assert contract.internal._test_bool_default_true(1) is True
+    # override to False
+    assert contract.internal._test_bool_default_true(1, False) is False
+    # explicit True
+    assert contract.internal._test_bool_default_true(1, True) is True
 
 
 @given(a=strategy("int128"))
