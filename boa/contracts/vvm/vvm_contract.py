@@ -190,13 +190,12 @@ class VVMContract(ABIContract):
             raise ValueError(f"already injected: {fn.name}")
 
         setattr(self.inject, fn.name, fn)
-        fn.contract = self
 
 
 class _InjectVVMFunction(ABIFunction):
     def __init__(self, source_code: str, contract: VVMContract):
-        self.contract = contract
         self._source_code = source_code
+        self.contract = contract
         abi = [i for i in self._compiler_output["abi"] if i not in contract.abi]
         if len(abi) != 1:
             err = "Expected exactly one new ABI entry after injecting function. "
@@ -204,6 +203,9 @@ class _InjectVVMFunction(ABIFunction):
             raise ValueError(err)
 
         super().__init__(abi[0], contract.contract_name)
+        # Double assignment because ABIFunction __init__ sets it to None
+        # Perhaps we should change that behavior?
+        self.contract = contract
 
     @cached_property
     def _override_bytecode(self) -> bytes:
