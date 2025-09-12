@@ -77,7 +77,6 @@ class VVMDeployer:
         return None
 
     def deploy(self, *args, **kwargs):
-        # Accept optional kwargs without forcing keyword-only usage
         contract_name = kwargs.pop("contract_name", None)
         env = kwargs.pop("env", None)
         encoded_args = b""

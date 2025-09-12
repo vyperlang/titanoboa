@@ -41,4 +41,3 @@ def test_vvm_inject_double_vs_force():
 
     # Allow overriding with force
     c.inject_function(_inject_code(), force=True)
-
