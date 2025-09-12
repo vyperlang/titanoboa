@@ -912,7 +912,7 @@ class VyperContract(_BaseVyperContract):
         # ensure self._vyper_namespace is computed
         self._vyper_namespace["self"].typ.members.pop(fn_ast.name, None)
         f = _InjectVyperFunction(self, fn_source_code)
-        # TODO this is inconsistent with VVM contract where functions are 
+        # TODO this is inconsistent with VVM contract where functions are
         # injected directly into self
         setattr(self.inject, fn_ast.name, f)
 

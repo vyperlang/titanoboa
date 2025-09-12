@@ -182,14 +182,14 @@ class VVMContract(ABIContract):
         :param force: If True, the function will be injected even if it already exists.
         :returns: The result of the statement evaluation.
         """
-        fn = VVMInjectedFunction(fn_source_code, self)
+        fn = _InjectVVMFunction(fn_source_code, self)
         if hasattr(self, fn.name) and not force:
             raise ValueError(f"Function {fn.name} already exists on contract.")
         setattr(self, fn.name, fn)
         fn.contract = self
 
 
-class VVMInjectedFunction(ABIFunction):
+class _InjectVVMFunction(ABIFunction):
     def __init__(self, source_code: str, contract: VVMContract):
         self.contract = contract
         self._source_code = source_code
