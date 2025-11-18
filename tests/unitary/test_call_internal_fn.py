@@ -8,7 +8,9 @@ from hypothesis.strategies import characters
 import boa
 from boa.test import strategy
 
-source_code = """
+nice_number = 0x077d4048cad
+
+source_code = f"""
 interface Foo:
     def foo(): nonpayable
 
@@ -41,6 +43,13 @@ def _test_bool(a: uint256, b: bool = False) -> bool:
 @pure
 def _test_bool_default_true(a: uint256, b: bool = True) -> bool:
     return b
+
+
+@internal
+@pure
+def _test_int_default(a: uint256, b: uint256 = {nice_number}) -> uint256:
+    return b
+
 
 @internal
 def _test_repeat(z: int128) -> int128:
@@ -119,6 +128,10 @@ def test_internal_default_true(contract):
     # explicit True
     assert contract.internal._test_bool_default_true(1, True) is True
 
+def test_internal_int_default(contract):
+    assert contract.internal._test_int_default(1) == nice_number
+    for ix in range(100):
+        assert contract.internal._test_int_default(2, ix) == ix
 
 @given(a=strategy("int128"))
 def test_list(contract, a):
