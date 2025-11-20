@@ -73,7 +73,6 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
 class VyperDeployer:
-    create_compiler_data = CompilerData  # this may be a different class in plugins
 
     def __init__(self, compiler_data, filename=None):
         self.compiler_data = compiler_data
