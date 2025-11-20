@@ -13,7 +13,7 @@ def _get_tokens_for_file(source_code: str):
     tokens = list(tokenize.generate_tokens(io.StringIO(source_code).readline))
 
     # Create an index from line number to tokens on that line
-    line_to_tokens = {}
+    line_to_tokens: dict[int, list] = {}
     for token in tokens:
         line_num = token.start[0]
         if line_num not in line_to_tokens:

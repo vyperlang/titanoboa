@@ -10,6 +10,7 @@ dist/
 .vscode/
 .pytest_cache
 venv/
+.venv/
 *.env
 .env
 .env.unsafe
