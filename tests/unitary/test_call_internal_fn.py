@@ -136,3 +136,28 @@ def test_isqrt(contract, a):
 @given(a=strategy("string", max_size=32, alphabet=characters(codec="ascii")))
 def test_keccak(contract, a):
     assert contract.internal._keccak256(a) == keccak(a.encode())
+
+@given(a=strategy("uint256"), b=strategy("uint256"))
+def test_internal_default_2(a, b):
+
+    def method(name: str): 
+        return f"""
+def {name}(x: uint256 = {b}) -> uint256:
+    return x
+        """
+
+    code = f"""
+@external
+{method("m_external")}
+
+@internal
+{method("m_internal")}
+    """
+
+    contract = boa.loads(code)
+
+    assert contract.m_external(a) == a
+    assert contract.m_external() == b
+
+    assert contract.internal.m_internal(a) == a
+    assert contract.internal.m_internal() == b
