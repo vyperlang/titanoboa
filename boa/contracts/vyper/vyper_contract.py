@@ -1059,7 +1059,7 @@ class VyperInternalFunction(VyperFunction):
 
     @cached_property
     def _compiled(self):
-        return generate_bytecode_for_internal_fn(self.func_t.ast_def)
+        return generate_bytecode_for_internal_fn(self.func_t.ast_def, self.contract)
 
     # OVERRIDE so that __call__ uses the specially crafted bytecode
     @cached_property
