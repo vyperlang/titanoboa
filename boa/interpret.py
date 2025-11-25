@@ -307,7 +307,7 @@ def loads_partial(
         source_code, name, filename, deployer_class, **compiler_args
     )
 
-    wrappers_code, internal_name_to_wrapper_name = _add_external_to_internal_forwarders(
+    wrappers_code = _add_external_to_internal_forwarders(
         original_compiler_data
     )
 
@@ -322,7 +322,6 @@ def loads_partial(
         original_compiler_data,
         filename=filename,
         wrapped_compiler_data=wrapped_compiler_data,
-        internal_name_to_wrapper_name=internal_name_to_wrapper_name,
     )
 
 
@@ -333,24 +332,20 @@ def _add_external_to_internal_forwarders(compiler_data):
     -------
     wrappers_source_code : str
         The concatenation of the source code of all forwarders.
-    internal_name_to_wrapper_name: dict[str, str]
-        A mapping from internal function name to the name of the corresponding forwarder.
     """
     moduleT = compiler_data.global_ctx
 
-    internal_name_to_wrapper_name: dict[str, str] = {}
     wrappers_source_code: str = ""
 
     for fn in moduleT.function_defs:
         if not fn._metadata["func_type"].is_internal:
             continue
-        wrapper_full, wrapper_name = generate_source_code_for_internal_fn(fn)
+        wrapper_full = generate_source_code_for_internal_fn(fn)
 
-        internal_name_to_wrapper_name[fn.name] = wrapper_name
 
         wrappers_source_code += wrapper_full
 
-    return wrappers_source_code, internal_name_to_wrapper_name
+    return wrappers_source_code
 
 
 def load_partial(filename: str, compiler_args=None):

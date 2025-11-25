@@ -79,11 +79,9 @@ class VyperDeployer:
         compiler_data,
         filename=None,
         wrapped_compiler_data=None,
-        internal_name_to_wrapper_name=None,
     ):
         self.compiler_data = compiler_data
         self.wrapped_compiler_data = wrapped_compiler_data
-        self.internal_name_to_wrapper_name = internal_name_to_wrapper_name
 
         # force compilation so that if there are any errors in the contract,
         # we fail at load rather than at deploy time.
@@ -101,7 +99,6 @@ class VyperDeployer:
             *args,
             filename=self.filename,
             wrapped_compiler_data=self.wrapped_compiler_data,
-            internal_name_to_wrapper_name=self.internal_name_to_wrapper_name,
             **kwargs,
         )
 
@@ -543,7 +540,6 @@ class VyperContract(_BaseVyperContract):
         gas=None,
         sender: Optional[Address] = None,
         wrapped_compiler_data=None,
-        internal_name_to_wrapper_name=None,
     ):
         super().__init__(compiler_data, contract_name, env, filename)
 
@@ -551,7 +547,6 @@ class VyperContract(_BaseVyperContract):
         self._computation = None
         self._source_map = None
         self.wrapped_compiler_data = wrapped_compiler_data
-        self.internal_name_to_wrapper_name = internal_name_to_wrapper_name
 
         # add all exposed functions from the interface to the contract
         exposed_fns = {

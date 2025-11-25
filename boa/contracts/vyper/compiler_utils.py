@@ -144,7 +144,7 @@ def generate_source_code_for_internal_fn(fn_ast):
     wrapper_sig = f"def {wrapper_name}({', '.join(sig_args)}){return_sig}:"
 
     # TODO: Handle decorators on the original
-    wrapper_code = textwrap.dedent(
+    return textwrap.dedent(
         f"""
         @external
         @payable
@@ -153,11 +153,9 @@ def generate_source_code_for_internal_fn(fn_ast):
         """
     )
 
-    return (wrapper_code, wrapper_name)
-
 
 def generate_bytecode_for_internal_fn(fn_ast, contract):
-    wrapper_code, _ = generate_source_code_for_internal_fn(fn_ast)
+    wrapper_code = generate_source_code_for_internal_fn(fn_ast)
 
     return compile_vyper_function(wrapper_code, contract)
 
