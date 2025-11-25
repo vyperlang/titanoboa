@@ -153,13 +153,6 @@ def generate_source_code_for_internal_fn(fn_ast):
         """
     )
 
-
-def generate_bytecode_for_internal_fn(fn_ast, contract):
-    wrapper_code = generate_source_code_for_internal_fn(fn_ast)
-
-    return compile_vyper_function(wrapper_code, contract)
-
-
 def generate_bytecode_for_arbitrary_stmt(source_code, contract):
     """Wraps arbitrary stmts with external fn and generates bytecode"""
 
