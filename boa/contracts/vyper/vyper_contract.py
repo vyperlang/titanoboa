@@ -48,6 +48,7 @@ from boa.contracts.vyper.compiler_utils import (
     compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
+    internal_to_external_name,
 )
 from boa.contracts.vyper.decoder_utils import (
     ByteAddressableStorage,
@@ -73,9 +74,16 @@ DEV_REASON_ALLOWED = ("user raise", "user assert")
 
 
 class VyperDeployer:
-
-    def __init__(self, compiler_data, filename=None):
+    def __init__(
+        self,
+        compiler_data,
+        filename=None,
+        wrapped_compiler_data=None,
+        internal_name_to_wrapper_name=None,
+    ):
         self.compiler_data = compiler_data
+        self.wrapped_compiler_data = wrapped_compiler_data
+        self.internal_name_to_wrapper_name = internal_name_to_wrapper_name
 
         # force compilation so that if there are any errors in the contract,
         # we fail at load rather than at deploy time.
@@ -89,7 +97,12 @@ class VyperDeployer:
 
     def deploy(self, *args, **kwargs):
         return VyperContract(
-            self.compiler_data, *args, filename=self.filename, **kwargs
+            self.compiler_data,
+            *args,
+            filename=self.filename,
+            wrapped_compiler_data=self.wrapped_compiler_data,
+            internal_name_to_wrapper_name=self.internal_name_to_wrapper_name,
+            **kwargs,
         )
 
     def deploy_as_blueprint(self, *args, **kwargs):
@@ -529,12 +542,16 @@ class VyperContract(_BaseVyperContract):
         filename: str = None,
         gas=None,
         sender: Optional[Address] = None,
+        wrapped_compiler_data=None,
+        internal_name_to_wrapper_name=None,
     ):
         super().__init__(compiler_data, contract_name, env, filename)
 
         self.created_from = created_from
         self._computation = None
         self._source_map = None
+        self.wrapped_compiler_data = wrapped_compiler_data
+        self.internal_name_to_wrapper_name = internal_name_to_wrapper_name
 
         # add all exposed functions from the interface to the contract
         exposed_fns = {
@@ -969,6 +986,10 @@ class VyperFunction:
         bytecode, _ = compile_ir.assembly_to_evm(self.assembly)
         return bytecode
 
+    @cached_property
+    def _name(self):
+        return self.func_t.name
+
     # hotspot, cache the signature computation
     def args_abi_type(self, num_kwargs):
         if not hasattr(self, "_signature_cache"):
@@ -983,7 +1004,7 @@ class VyperFunction:
         args_abi_type = (
             "(" + ",".join(arg.typ.abi_type.selector_name() for arg in sig_args) + ")"
         )
-        abi_sig = self.func_t.name + args_abi_type
+        abi_sig = self._name + args_abi_type
 
         _method_id = method_id(abi_sig)
         self._signature_cache[num_kwargs] = (_method_id, args_abi_type)
@@ -1058,7 +1079,15 @@ class VyperInternalFunction(VyperFunction):
     """
 
     @cached_property
+    def _name(self):
+        ret = internal_to_external_name(self.func_t.name)
+        print(ret)
+        return ret
+
+    @cached_property
     def _compiled(self):
+        tmp = self.contract.wrapped_compiler_data
+        return None, None, tmp.bytecode_runtime, None, None
         return generate_bytecode_for_internal_fn(self.func_t.ast_def, self.contract)
 
     # OVERRIDE so that __call__ uses the specially crafted bytecode

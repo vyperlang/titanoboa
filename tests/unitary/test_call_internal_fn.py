@@ -137,10 +137,10 @@ def test_isqrt(contract, a):
 def test_keccak(contract, a):
     assert contract.internal._keccak256(a) == keccak(a.encode())
 
+
 @given(a=strategy("uint256"), b=strategy("uint256"))
 def test_internal_default_2(a, b):
-
-    def method(name: str): 
+    def method(name: str):
         return f"""
 def {name}(x: uint256 = {b}) -> uint256:
     return x

@@ -109,6 +109,11 @@ def compile_vyper_function(vyper_function, contract):
         return ast, ir_executor, bytecode, source_map, typ
 
 
+def internal_to_external_name(name: str) -> str:
+    """Mangles a name to be used for external forwarders to internal methods"""
+    return f"__boa_private_{name}__"
+
+
 def generate_source_code_for_internal_fn(fn_ast):
     """Wraps an internal fn with an external fn"""
     fn_name = fn_ast.name
@@ -134,20 +139,25 @@ def generate_source_code_for_internal_fn(fn_ast):
             default = fn_ast.args.defaults[i - n_posargs].node_source_code
             sig_args.append(f"{arg.node_source_code} = {default}")
 
-    wrapper_name = f"__boa_private_{fn_name}__"
+    wrapper_name = internal_to_external_name(fn_name)
 
     wrapper_sig = f"def {wrapper_name}({', '.join(sig_args)}){return_sig}:"
 
     # TODO: Handle decorators on the original
-    return f"""
-@external
-@payable
-{wrapper_sig}
-    {fn_call}
-    """
+    wrapper_code = textwrap.dedent(
+        f"""
+        @external
+        @payable
+        {wrapper_sig}
+            {fn_call}
+        """
+    )
+
+    return (wrapper_code, wrapper_name)
+
 
 def generate_bytecode_for_internal_fn(fn_ast, contract):
-    wrapper_code = generate_source_code_for_internal_fn(fn_ast)
+    wrapper_code, _ = generate_source_code_for_internal_fn(fn_ast)
 
     return compile_vyper_function(wrapper_code, contract)
 
