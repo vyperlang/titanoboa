@@ -25,6 +25,7 @@ from vyper.utils import sha256sum
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
 from boa.contracts.vvm.vvm_contract import VVMDeployer
+from boa.contracts.vyper.compiler_utils import generate_source_code_for_internal_fn
 from boa.contracts.vyper.vyper_contract import (
     VyperBlueprint,
     VyperContract,
@@ -300,8 +301,51 @@ def loads_partial(
     compiler_args = compiler_args or {}
 
     deployer_class = _get_default_deployer_class()
-    data = compiler_data(source_code, name, filename, deployer_class, **compiler_args)
-    return deployer_class(data, filename=filename)
+
+    # The actual compiled code
+    original_compiler_data = compiler_data(
+        source_code, name, filename, deployer_class, **compiler_args
+    )
+
+    wrappers_code = _add_external_to_internal_forwarders(
+        original_compiler_data
+    )
+
+    wrapped_source_code = source_code + wrappers_code
+
+    # Compiled code with additional external functions which forward to every internal one
+    wrapped_compiler_data = compiler_data(
+        wrapped_source_code, name, filename, deployer_class, **compiler_args
+    )
+
+    return deployer_class(
+        original_compiler_data,
+        filename=filename,
+        wrapped_compiler_data=wrapped_compiler_data,
+    )
+
+
+def _add_external_to_internal_forwarders(compiler_data):
+    """Generates external forwarders for all internal functions.
+
+    Returns
+    -------
+    wrappers_source_code : str
+        The concatenation of the source code of all forwarders.
+    """
+    moduleT = compiler_data.global_ctx
+
+    wrappers_source_code: str = ""
+
+    for fn in moduleT.function_defs:
+        if not fn._metadata["func_type"].is_internal:
+            continue
+        wrapper_full = generate_source_code_for_internal_fn(fn)
+
+
+        wrappers_source_code += wrapper_full
+
+    return wrappers_source_code
 
 
 def load_partial(filename: str, compiler_args=None):
