@@ -47,7 +47,6 @@ from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
     compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
-    generate_bytecode_for_internal_fn,
     internal_to_external_name,
 )
 from boa.contracts.vyper.decoder_utils import (
@@ -539,7 +538,7 @@ class VyperContract(_BaseVyperContract):
         filename: str = None,
         gas=None,
         sender: Optional[Address] = None,
-        wrapped_compiler_data=None,
+        wrapped_compiler_data: CompilerData = None,
     ):
         super().__init__(compiler_data, contract_name, env, filename)
 
@@ -1075,32 +1074,27 @@ class VyperInternalFunction(VyperFunction):
 
     @cached_property
     def _name(self):
-        ret = internal_to_external_name(self.func_t.name)
-        print(ret)
-        return ret
-
-    @cached_property
-    def _compiled(self):
-        tmp = self.contract.wrapped_compiler_data
-        return None, None, tmp.bytecode_runtime, None, None
-        return generate_bytecode_for_internal_fn(self.func_t.ast_def, self.contract)
+        return internal_to_external_name(self.func_t.name)
 
     # OVERRIDE so that __call__ uses the specially crafted bytecode
     @cached_property
     def _override_bytecode(self):
-        _, _, bytecode, _, _ = self._compiled
-        return bytecode
+        return self.contract.wrapped_compiler_data.bytecode_runtime
 
     @cached_property
     def _ir_executor(self):
-        _, ir_executor, _, _, _ = self._compiled
-        return ir_executor
+        # TODO: Add a proper ir executor, the following does not work
+        
+        # wrapped_compiler_data = self.contract.wrapped_compiler_data
+        # ir = wrapped_compiler_data.ir_runtime
+        # return executor_from_ir(ir, wrapped_compiler_data)
+
+        return None
 
     # OVERRIDE so that __call__ uses corresponding source map
     @cached_property
     def _source_map(self):
-        _, _, _, source_map, _ = self._compiled
-        return source_map
+        return self.contract.wrapped_compiler_data.source_map
 
 
 class VyperTraceSource(TraceSource):
