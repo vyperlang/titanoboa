@@ -8,7 +8,7 @@ from vyper.codegen.function_definitions import (
     generate_ir_for_internal_function,
 )
 from vyper.codegen.ir_node import IRnode
-from vyper.codegen.module import _runtime_reachable_functions
+from vyper.codegen.module import _runtime_reachable_functions, _selector_section_linear
 from vyper.compiler.settings import anchor_settings
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
@@ -58,21 +58,13 @@ def compile_vyper_function(vyper_function, contract):
         func_t = ast._metadata["func_type"]
 
         contract.ensure_id(func_t)
-        funcinfo = generate_ir_for_external_function(ast, module_t)
-        ir = funcinfo.common_ir
-
-        entry_label = func_t._ir_info.external_function_base_entry_label
-
-        ir = ["seq", ["goto", entry_label], ir]
-
-        # use a dummy method id
-        ir = ["with", _METHOD_ID_VAR, 0, ir]
+        selector_section = _selector_section_linear([ast], module_t)
 
         # first mush it with the rest of the IR in the contract to ensure
         # all labels are present, and then optimize all together
         # (use unoptimized IR, ir_executor can't handle optimized selector tables)
         _, contract_runtime = contract.unoptimized_ir
-        ir_list = ["seq", ir, contract_runtime]
+        ir_list = ["seq", selector_section, contract_runtime]
         reachable = func_t.reachable_internal_functions
 
         already_compiled = _runtime_reachable_functions(module_t, contract)
