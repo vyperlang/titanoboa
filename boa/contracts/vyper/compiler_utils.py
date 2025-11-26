@@ -58,6 +58,8 @@ def compile_vyper_function(vyper_function, contract):
         func_t = ast._metadata["func_type"]
 
         contract.ensure_id(func_t)
+        # use compiler's selector section which naturally handles edge
+        # cases (such as methods with default parameters)
         selector_section = _selector_section_linear([ast], module_t)
 
         # first mush it with the rest of the IR in the contract to ensure
