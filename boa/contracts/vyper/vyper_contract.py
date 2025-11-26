@@ -1104,7 +1104,9 @@ class VyperInternalFunction(VyperFunction):
         _, _, _, source_map, _ = self._compiled
         return source_map
 
-    # Point ABI handling at the generated external wrapper signature.
+    # use generated external wrapper signature for calldata preparation
+    # (e.g. `__boa_internal__some_internal_function__` instead of
+    # `_some_internal_function`.)
     @cached_property
     def abi_signature_func_t(self):
         wrapper_ast, _, _, _, _ = self._compiled
