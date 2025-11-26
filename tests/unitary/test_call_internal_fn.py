@@ -8,7 +8,7 @@ from hypothesis.strategies import characters
 import boa
 from boa.test import strategy
 
-nice_number = 0x077d4048cad
+nice_number = 0x077D4048CAD
 
 source_code = f"""
 interface Foo:
@@ -128,10 +128,12 @@ def test_internal_default_true(contract):
     # explicit True
     assert contract.internal._test_bool_default_true(1, True) is True
 
+
 def test_internal_int_default(contract):
     assert contract.internal._test_int_default(1) == nice_number
     for ix in range(100):
         assert contract.internal._test_int_default(2, ix) == ix
+
 
 @given(a=strategy("int128"))
 def test_list(contract, a):
@@ -164,10 +166,10 @@ def test_isqrt(contract, a):
 def test_keccak(contract, a):
     assert contract.internal._keccak256(a) == keccak(a.encode())
 
+
 @given(a=strategy("uint256"), b=strategy("uint256"))
 def test_internal_default_2(a, b):
-
-    def method(name: str): 
+    def method(name: str):
         return f"""
 def {name}(x: uint256 = {b}) -> uint256:
     return x

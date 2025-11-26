@@ -4,7 +4,6 @@ import vyper.ast as vy_ast
 import vyper.semantics.analysis as analysis
 from vyper.ast.parse import parse_to_ast
 from vyper.codegen.function_definitions import (
-    generate_ir_for_external_function,
     generate_ir_for_internal_function,
 )
 from vyper.codegen.ir_node import IRnode

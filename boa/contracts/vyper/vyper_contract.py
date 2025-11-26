@@ -557,7 +557,11 @@ class VyperContract(_BaseVyperContract):
             addr = Address(override_address)
         else:
             addr = self._run_init(
-                *args, value=value, override_address=override_address, gas=gas, sender=sender
+                *args,
+                value=value,
+                override_address=override_address,
+                gas=gas,
+                sender=sender,
             )
         self._address = addr
 
