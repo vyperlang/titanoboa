@@ -140,6 +140,9 @@ def generate_bytecode_for_internal_fn(fn):
     return compile_vyper_function(wrapper_code, contract)
 
 
+EVAL_FUNCTION_NAME = "__boa_debug__"
+
+
 def generate_bytecode_for_arbitrary_stmt(source_code, contract):
     """Wraps arbitrary stmts with external fn and generates bytecode"""
 
@@ -164,7 +167,7 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
         f"""
         @external
         @payable
-        def __boa_debug__() {return_sig}:
+        def {EVAL_FUNCTION_NAME}() {return_sig}:
             {debug_body}
     """
     )

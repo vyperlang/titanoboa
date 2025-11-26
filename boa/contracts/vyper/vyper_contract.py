@@ -45,6 +45,7 @@ from boa.contracts.event_decoder import decode_log
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node, reason_at
 from boa.contracts.vyper.compiler_utils import (
     _METHOD_ID_VAR,
+    EVAL_FUNCTION_NAME,
     compile_vyper_function,
     generate_bytecode_for_arbitrary_stmt,
     generate_bytecode_for_internal_fn,
@@ -879,11 +880,11 @@ class VyperContract(_BaseVyperContract):
         _, ir_executor, bytecode, source_map, typ = self._eval_cache[stmt]
 
         with self._anchor_source_map(source_map):
-            method_id = b"dbug"  # note dummy method id, doesn't get validated
+            debug_method_id = method_id(f"{EVAL_FUNCTION_NAME}()")
             c = self.env.execute_code(
                 to_address=self._address,
                 sender=sender,
-                data=method_id,
+                data=debug_method_id,
                 value=value,
                 gas=gas,
                 contract=self,
