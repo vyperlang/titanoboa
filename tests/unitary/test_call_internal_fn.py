@@ -8,7 +8,9 @@ from hypothesis.strategies import characters
 import boa
 from boa.test import strategy
 
-source_code = """
+nice_number = 0x077D4048CAD
+
+source_code = f"""
 interface Foo:
     def foo(): nonpayable
 
@@ -36,6 +38,18 @@ def _test_bool(a: uint256, b: bool = False) -> bool:
         return b
     else:
         return True
+
+@internal
+@pure
+def _test_bool_default_true(a: uint256, b: bool = True) -> bool:
+    return b
+
+
+@internal
+@pure
+def _test_int_default(a: uint256, b: uint256 = {nice_number}) -> uint256:
+    return b
+
 
 @internal
 def _test_repeat(z: int128) -> int128:
@@ -106,6 +120,21 @@ def test_internal_default(contract, a):
     assert contract.internal._test_bool(a)
 
 
+def test_internal_default_true(contract):
+    # omit default: b=True
+    assert contract.internal._test_bool_default_true(1) is True
+    # override to False
+    assert contract.internal._test_bool_default_true(1, False) is False
+    # explicit True
+    assert contract.internal._test_bool_default_true(1, True) is True
+
+
+def test_internal_int_default(contract):
+    assert contract.internal._test_int_default(1) == nice_number
+    for ix in range(100):
+        assert contract.internal._test_int_default(2, ix) == ix
+
+
 @given(a=strategy("int128"))
 def test_list(contract, a):
     assert contract.internal._test_list(a) == [a]
@@ -136,3 +165,28 @@ def test_isqrt(contract, a):
 @given(a=strategy("string", max_size=32, alphabet=characters(codec="ascii")))
 def test_keccak(contract, a):
     assert contract.internal._keccak256(a) == keccak(a.encode())
+
+
+@given(a=strategy("uint256"), b=strategy("uint256"))
+def test_internal_default_2(a, b):
+    def method(name: str):
+        return f"""
+def {name}(x: uint256 = {b}) -> uint256:
+    return x
+        """
+
+    code = f"""
+@external
+{method("m_external")}
+
+@internal
+{method("m_internal")}
+    """
+
+    contract = boa.loads(code)
+
+    assert contract.m_external(a) == a
+    assert contract.m_external() == b
+
+    assert contract.internal.m_internal(a) == a
+    assert contract.internal.m_internal() == b
