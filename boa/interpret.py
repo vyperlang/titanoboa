@@ -282,6 +282,7 @@ def loads_partial(
     dedent: bool = True,
     compiler_args: dict = None,
     no_vvm: bool = False,
+    base_path: Path = None,
 ) -> VyperDeployer:
     if filename is None:
         filename = "<unknown>"
@@ -295,7 +296,7 @@ def loads_partial(
         if specifier_set is not None and not specifier_set.contains(vyper.__version__):
             version = _pick_vyper_version(specifier_set)
             filename = str(filename)  # help mypy
-            return _loads_partial_vvm(source_code, version, name, filename)
+            return _loads_partial_vvm(source_code, version, name, filename, base_path)
 
     compiler_args = compiler_args or {}
 
@@ -304,10 +305,14 @@ def loads_partial(
     return deployer_class(data, filename=filename)
 
 
-def load_partial(filename: str, compiler_args=None):
+def load_partial(filename: str, compiler_args=None, **kwargs):
     with open(filename) as f:
         return loads_partial(
-            f.read(), name=filename, filename=filename, compiler_args=compiler_args
+            f.read(),
+            name=filename,
+            filename=filename,
+            compiler_args=compiler_args,
+            **kwargs,
         )
 
 
