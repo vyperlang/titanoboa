@@ -172,6 +172,7 @@ class BoaError(Exception):
             err = frame
 
         ret = f"{err}\n\n{self.stack_trace}"
+
         call_tree = str(self.call_trace)
         ledge = "=" * 72
         return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"

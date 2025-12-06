@@ -1,10 +1,78 @@
+from dataclasses import dataclass
 from functools import cached_property
-from typing import Optional
+
+import vyper.utils
 
 from boa.contracts.abi.abi_contract import ABIContract, ABIContractFactory, ABIFunction
+from boa.contracts.base_evm_contract import StackTrace
 from boa.environment import Env
 from boa.util.abi import Address
 from boa.util.eip5202 import generate_blueprint_bytecode
+
+
+class VVMContract(ABIContract):
+    def __init__(
+        self,
+        name: str,
+        abi: list[dict],
+        functions: list[ABIFunction],
+        events: list[dict],
+        address: Address,
+        deployer: "VVMDeployer",
+        **kwargs,
+    ):
+        self._deployer = deployer
+        super().__init__(name, abi, functions, events, address, **kwargs)
+
+    @property
+    def deployer(self) -> "VVMDeployer":
+        # override deployer getter in ABIContract
+        return self._deployer
+
+    @cached_property
+    def source_code(self) -> str:
+        return self.deployer.source_code
+
+    @cached_property
+    def source_map(self) -> dict:
+        return self.deployer.source_map
+
+    def stack_trace(self, computation=None):
+        computation = computation or self._computation
+        code_stream = computation.code
+
+        error_map = self.source_map["pc_pos_map"]
+
+        error = None
+        for pc in reversed(code_stream._trace):
+            pc = str(pc)
+            if pc in error_map:
+                error = error_map[pc]
+                break
+
+        # this condition is because source maps are not yet implemented for
+        # the ctor
+        if error is not None:
+            # we only report the line for simplicity, could be more precise
+            lineno, *_ = error
+
+            annotated_error = vyper.utils.annotate_source_code(
+                self.source_code, lineno, context_lines=3, line_numbers=True
+            )
+
+            return StackTrace([VVMErrorDetail(annotated_error)])
+        return StackTrace([])
+
+
+@dataclass
+class VVMErrorDetail:
+    # minimal class for now, will be expanded when source_map
+    # based reporting is improved in the future (similarly
+    # to ErrorDetail).
+    annotated_source: str
+
+    def __str__(self):
+        return self.annotated_source
 
 
 class VVMBlueprint(ABIContract):
@@ -25,37 +93,32 @@ class VVMBlueprint(ABIContract):
         return self._deployer
 
 
-class VVMDeployer:
+class VVMDeployer(ABIContractFactory):
     """
     A deployer that uses the Vyper Version Manager (VVM).
     This allows deployment of contracts written in older versions of Vyper that
     can interact with new versions using the ABI definition.
     """
 
-    def __init__(self, abi, bytecode, name, filename):
+    def __init__(self, abi, bytecode, name, filename, source_code, source_map):
         """
         Initialize a VVMDeployer instance.
         :param abi: The contract's ABI.
         :param bytecode: The contract's bytecode.
         :param filename: The filename of the contract.
         """
-        self.abi: dict = abi
         self.bytecode: bytes = bytecode
-        self.name: Optional[str] = name
-        self.filename: str = filename
+        self.source_map: dict = source_map
+        self.source_code = source_code
+        super().__init__(name, abi, filename=filename)
 
     @classmethod
-    def from_compiler_output(cls, compiler_output, name, filename):
+    def from_compiler_output(cls, compiler_output, name, filename, source_code):
         abi = compiler_output["abi"]
         bytecode_nibbles = compiler_output["bytecode"]
         bytecode = bytes.fromhex(bytecode_nibbles.removeprefix("0x"))
-        return cls(abi, bytecode, name, filename)
-
-    @cached_property
-    def factory(self):
-        return ABIContractFactory.from_abi_dict(
-            self.abi, name=self.name, filename=self.filename
-        )
+        source_map = compiler_output["source_map"]
+        return cls(abi, bytecode, name, filename, source_code, source_map)
 
     @cached_property
     def constructor(self):
@@ -119,5 +182,20 @@ class VVMDeployer:
     def __call__(self, *args, **kwargs):
         return self.deploy(*args, **kwargs)
 
-    def at(self, address, nowarn=False):
-        return self.factory.at(address, nowarn=nowarn)
+    def at(self, address: Address | str, nowarn=False) -> VVMContract:
+        """
+        Create an VVMContract object for a deployed contract at `address`.
+        """
+        address = Address(address)
+        contract = VVMContract(
+            self._name,
+            self.abi,
+            self.functions,
+            self.events,
+            address,
+            self,
+            nowarn=nowarn,
+        )
+
+        contract.env.register_contract(address, contract)
+        return contract
