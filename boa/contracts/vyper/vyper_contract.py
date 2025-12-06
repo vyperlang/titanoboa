@@ -175,16 +175,20 @@ class _BaseVyperContract(_BaseEVMContract):
                 raise Exception(msg)
 
     @cached_property
-    def deployer(self):
-        return VyperDeployer(self.compiler_data, filename=self.filename)
-
-    @cached_property
     def abi(self):
         return build_abi_output(self.compiler_data)
 
     @cached_property
     def _constants(self):
         return ConstantsModel(self.compiler_data)
+
+    @cached_property
+    def deployer(self):
+        return VyperDeployer(self.compiler_data, filename=self.filename)
+
+    # is this actually useful?
+    def at(self, address):
+        return self.deployer.at(address)
 
 
 # create a blueprint for use with `create_from_blueprint`.
@@ -648,10 +652,6 @@ class VyperContract(_BaseVyperContract):
     @cached_property
     def _immutables(self):
         return ImmutablesModel(self)
-
-    # is this actually useful?
-    def at(self, address):
-        return self.deployer.at(address)
 
     def _get_fn_from_computation(self, computation):
         node = self.find_source_of(computation)
