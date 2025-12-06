@@ -118,13 +118,13 @@ class VyperDeployer:
         return ret
 
     # TODO: allow `env=` kwargs and so on
-    def at(self, address: Any) -> "VyperContract":
+    def at(self, address: Any, nowarn=False) -> "VyperContract":
         address = Address(address)
 
         ret = self.deploy(override_address=address, skip_initcode=True)
         bytecode = ret.env.get_code(address)
 
-        ret._set_bytecode(bytecode)
+        ret._set_bytecode(bytecode, nowarn=nowarn)
 
         ret.env.register_contract(address, ret)
         return ret
@@ -617,15 +617,15 @@ class VyperContract(_BaseVyperContract):
             return source_map
 
     # manually set the runtime bytecode, instead of using deploy
-    def _set_bytecode(self, bytecode: bytes) -> None:
+    def _set_bytecode(self, bytecode: bytes, nowarn=False) -> None:
         to_check = bytecode
         if self.data_section_size != 0:
             to_check = bytecode[: -self.data_section_size]
         assert isinstance(self.compiler_data, CompilerData)
-        if to_check != self.compiler_data.bytecode_runtime:
+        if to_check != self.compiler_data.bytecode_runtime and not nowarn:
             warnings.warn(
                 f"casted bytecode does not match compiled bytecode at {self}",
-                stacklevel=2,
+                stacklevel=3,
             )
         self.bytecode = bytecode
 
