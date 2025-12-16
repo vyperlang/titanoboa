@@ -20,6 +20,7 @@ from boa.interpret import (
     loads_vyi,
 )
 from boa.network import NetworkEnv
+from boa.plugins import LOAD_PLUGINS
 from boa.precompile import precompile
 from boa.test.strategies import fuzz
 from boa.util.open_ctx import Open
@@ -116,3 +117,6 @@ def _jupyter_server_extension_points() -> list[dict]:
     where to find the `_load_jupyter_server_extension` function.
     """
     return [{"module": "boa.integrations.jupyter"}]
+
+
+LOAD_PLUGINS()
