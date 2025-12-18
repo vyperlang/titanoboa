@@ -112,7 +112,7 @@
   /* dark mode */
   [data-md-color-scheme="slate"] .md-typeset .moccasin > .admonition-title,
   [data-md-color-scheme="slate"] .md-typeset .moccasin > summary {
-    background-color: rgb(246, 242, 233)
+    background-color: rgb(246, 242, 233);
   }
 
 
