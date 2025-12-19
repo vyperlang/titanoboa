@@ -15,6 +15,7 @@ from vyper.semantics.analysis.constant_folding import ConstantFolder
 from vyper.semantics.analysis.utils import get_exact_type_from_node
 from vyper.venom import generate_assembly_experimental
 
+# TODO remove once vyper 0.4.4 is released
 try:
     from vyper.venom import generate_venom
 except ImportError:
