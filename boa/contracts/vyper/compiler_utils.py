@@ -13,7 +13,12 @@ from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.constant_folding import ConstantFolder
 from vyper.semantics.analysis.utils import get_exact_type_from_node
-from vyper.venom import generate_assembly_experimental, generate_ir
+from vyper.venom import generate_assembly_experimental
+
+try:
+    from vyper.venom import generate_venom
+except ImportError:
+    from vyper.venom import generate_ir as generate_venom
 
 from boa.contracts.vyper.ir_executor import executor_from_ir
 
@@ -80,7 +85,7 @@ def compile_vyper_function(vyper_function, contract):
 
         ir = IRnode.from_list(ir_list)
         if settings.experimental_codegen:
-            venom_code = generate_ir(ir, settings)
+            venom_code = generate_venom(ir, settings)
             assembly = generate_assembly_experimental(
                 venom_code, optimize=settings.optimize
             )

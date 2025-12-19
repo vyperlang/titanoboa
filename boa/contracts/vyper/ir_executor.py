@@ -15,7 +15,6 @@ from vyper.ast.nodes import VyperNode
 from vyper.codegen.ir_node import IRnode
 from vyper.compiler.phases import CompilerData
 from vyper.evm.opcodes import OPCODES
-from vyper.ir.compile_ir import getpos
 from vyper.utils import unsigned_to_signed
 
 from boa.util.lrudict import lrudict
@@ -23,6 +22,11 @@ from boa.vm.fast_mem import FastMem
 from boa.vm.utils import ceil32, to_bytes, to_int
 
 _keccak_cache = lrudict(256)
+
+
+def getpos(node):
+    """Extract position info from vyper AST/IR nodes."""
+    return (node.lineno, node.col_offset, node.end_lineno, node.end_col_offset)
 
 
 # note: This is used in the generated code for `Sha3_64` below.
