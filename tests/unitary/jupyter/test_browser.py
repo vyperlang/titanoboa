@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from eth_account import Account
+from eth_account.datastructures import SignedMessage
+from eth_account.messages import encode_typed_data
 
 import boa
 from boa.integrations.jupyter import BrowserRPC, BrowserSigner
@@ -321,3 +323,264 @@ def test_browser_js_error(token, display_mock, mock_callback, account, mock_fork
     with pytest.raises(RPCError) as exc_info:
         BrowserSigner()
     assert str(exc_info.value) == "-1: custom message"
+
+
+def test_sign_typed_data_eip712_with_components(
+    display_mock, mock_callback, env, account
+):
+    """Test sign_typed_data_eip712 with individual domain/types/message components."""
+    # Prepare EIP-712 data
+    domain_data = {
+        "name": "TestApp",
+        "version": "1",
+        "chainId": 1,
+        "verifyingContract": "0x1234567890123456789012345678901234567890",
+    }
+    message_types = {
+        "Message": [
+            {"name": "content", "type": "string"},
+            {"name": "value", "type": "uint256"},
+        ]
+    }
+    message_data = {"content": "Hello, world!", "value": 42}
+
+    # Create expected signature using eth_account
+    signable = encode_typed_data(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+    signed = account.sign_message(signable)
+
+    # Mock wallet response
+    mock_callback("eth_signTypedData_v4", signed.signature.hex())
+
+    # Call the method
+    result = env.signer.sign_typed_data_eip712(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+
+    # Verify result
+    assert isinstance(result, SignedMessage)
+    assert result.r == signed.r
+    assert result.s == signed.s
+    assert result.v == signed.v
+    assert result.signature == signed.signature
+
+
+def test_sign_typed_data_eip712_with_full_message(
+    display_mock, mock_callback, env, account
+):
+    """Test sign_typed_data_eip712 with full_message parameter."""
+    # Prepare full EIP-712 message
+    full_message = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+            ],
+            "Message": [{"name": "content", "type": "string"}],
+        },
+        "primaryType": "Message",
+        "domain": {"name": "TestApp", "version": "1", "chainId": 1},
+        "message": {"content": "Hello!"},
+    }
+
+    # Create expected signature
+    signable = encode_typed_data(full_message=full_message)
+    signed = account.sign_message(signable)
+
+    # Mock wallet response
+    mock_callback("eth_signTypedData_v4", signed.signature.hex())
+
+    # Call the method
+    result = env.signer.sign_typed_data_eip712(full_message=full_message)
+
+    # Verify result
+    assert isinstance(result, SignedMessage)
+    assert result.signature == signed.signature
+
+
+def test_sign_typed_data_eip712_returns_signed_message(
+    display_mock, mock_callback, env, account
+):
+    """Test that sign_typed_data_eip712 returns a proper SignedMessage object."""
+    domain_data = {"name": "Test", "version": "1", "chainId": 1}
+    message_types = {"Message": [{"name": "data", "type": "string"}]}
+    message_data = {"data": "test"}
+
+    signable = encode_typed_data(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+    signed = account.sign_message(signable)
+    mock_callback("eth_signTypedData_v4", signed.signature.hex())
+
+    result = env.signer.sign_typed_data_eip712(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+
+    # Verify SignedMessage structure
+    assert isinstance(result, SignedMessage)
+    assert hasattr(result, "messageHash")
+    assert hasattr(result, "r")
+    assert hasattr(result, "s")
+    assert hasattr(result, "v")
+    assert hasattr(result, "signature")
+    assert isinstance(result.r, int)
+    assert isinstance(result.s, int)
+    assert isinstance(result.v, int)
+
+
+def test_sign_typed_data_eip712_v_normalization(
+    display_mock, mock_callback, env, account
+):
+    """Test that v value is normalized from 0/1 to 27/28."""
+    domain_data = {"name": "Test", "version": "1", "chainId": 1}
+    message_types = {"Message": [{"name": "data", "type": "string"}]}
+    message_data = {"data": "test"}
+
+    signable = encode_typed_data(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+    signed = account.sign_message(signable)
+
+    # Create signature with v=0 (should be normalized to v=27)
+    sig_bytes = bytes(signed.signature[:64]) + bytes([0])
+    sig_hex = "0x" + sig_bytes.hex()
+
+    # Also create the properly normalized version for recovery
+    normalized_sig = bytes(signed.signature[:64]) + bytes([27])
+    normalized_hex = "0x" + normalized_sig.hex()
+
+    mock_callback("eth_signTypedData_v4", sig_hex)
+
+    result = env.signer.sign_typed_data_eip712(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+
+    # Verify v was normalized
+    assert result.v in (27, 28), f"Expected v to be 27 or 28, got {result.v}"
+
+
+def test_sign_typed_data_eip712_signature_recovery(
+    display_mock, mock_callback, env, account
+):
+    """Test that signature recovery verification works correctly."""
+    domain_data = {"name": "Test", "version": "1", "chainId": 1}
+    message_types = {"Message": [{"name": "data", "type": "string"}]}
+    message_data = {"data": "test"}
+
+    signable = encode_typed_data(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+    signed = account.sign_message(signable)
+    mock_callback("eth_signTypedData_v4", signed.signature.hex())
+
+    # This should succeed without raising ValueError
+    result = env.signer.sign_typed_data_eip712(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+
+    # Verify we can recover the correct address
+    recovered = Account.recover_message(signable, signature=result.signature)
+    assert recovered.lower() == account.address.lower()
+
+
+def test_sign_typed_data_eip712_invalid_signature(
+    display_mock, mock_callback, env, account
+):
+    """Test that invalid signature raises ValueError with detailed message."""
+    domain_data = {"name": "Test", "version": "1", "chainId": 1}
+    message_types = {"Message": [{"name": "data", "type": "string"}]}
+    message_data = {"data": "test"}
+
+    # Create a signature from a different account
+    different_account = Account.create()
+    signable = encode_typed_data(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+    wrong_signed = different_account.sign_message(signable)
+
+    mock_callback("eth_signTypedData_v4", wrong_signed.signature.hex())
+
+    # Should raise ValueError with detailed error message
+    with pytest.raises(ValueError) as exc_info:
+        env.signer.sign_typed_data_eip712(
+            domain_data=domain_data,
+            message_types=message_types,
+            message_data=message_data,
+        )
+
+    error_msg = str(exc_info.value)
+    assert "Signature verification failed" in error_msg
+    assert "recovered address" in error_msg
+    assert "does not match wallet address" in error_msg
+    assert different_account.address.lower() in error_msg.lower()
+
+
+def test_sign_typed_data_eip712_bytes_serialization(
+    display_mock, mock_callback, env, account
+):
+    """Test that bytes32 fields are properly serialized as hex strings for wallet."""
+    domain_data = {"name": "Test", "version": "1", "chainId": 1}
+    message_types = {
+        "Message": [
+            {"name": "data", "type": "bytes32"},
+            {"name": "value", "type": "uint256"},
+        ]
+    }
+    # Use bytes for the bytes32 field
+    nonce_bytes = b"\x01" * 32
+    message_data = {"data": nonce_bytes, "value": 100}
+
+    signable = encode_typed_data(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+    signed = account.sign_message(signable)
+    mock_callback("eth_signTypedData_v4", signed.signature.hex())
+
+    result = env.signer.sign_typed_data_eip712(
+        domain_data=domain_data,
+        message_types=message_types,
+        message_data=message_data,
+    )
+
+    assert isinstance(result, SignedMessage)
+    assert result.signature == signed.signature
+
+
+def test_sign_typed_data_eip712_missing_params(env):
+    """Test that TypeError is raised when neither full_message nor components provided."""
+    with pytest.raises(TypeError) as exc_info:
+        env.signer.sign_typed_data_eip712()
+
+    assert "Either full_message or all of" in str(exc_info.value)
+
+
+def test_sign_typed_data_eip712_partial_params(env):
+    """Test that TypeError is raised when only some components are provided."""
+    domain_data = {"name": "Test", "version": "1", "chainId": 1}
+
+    with pytest.raises(TypeError) as exc_info:
+        env.signer.sign_typed_data_eip712(domain_data=domain_data)
+
+    assert "Either full_message or all of" in str(exc_info.value)
