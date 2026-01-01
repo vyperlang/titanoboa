@@ -125,6 +125,10 @@ class ABIFunction:
         if not self.contract or not self.contract.env:
             raise Exception(f"Cannot call {self} without deploying contract.")
 
+        override_bytecode = None
+        if hasattr(self, "_override_bytecode"):
+            override_bytecode = self._override_bytecode
+
         computation = self.contract.env.execute_code(
             to_address=self.contract.address,
             sender=sender,
@@ -134,6 +138,7 @@ class ABIFunction:
             is_modifying=self.is_mutable,
             simulate=simulate,
             contract=self.contract,
+            override_bytecode=override_bytecode,
         )
 
         val = self.contract.marshal_to_python(computation, self.return_type)
