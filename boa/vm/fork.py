@@ -1,4 +1,5 @@
 import os
+import hashlib
 import pickle
 import sys
 from pathlib import Path
@@ -69,16 +70,19 @@ class CachingRPC(RPC):
 
         self._chain_id = chain_id  # TODO: check if this is needed
         self._cache_dir = cache_dir
+        self._rpc_id_hash = hashlib.sha256(rpc.identifier.encode()).hexdigest()[:12]
 
         self._init_db()
 
     @classmethod
-    def _cache_filepath(cls, cache_dir, chain_id):
-        return Path(cache_dir) / f"chainid_{hex(chain_id)}-sqlite.db"
+    def _cache_filepath(cls, cache_dir, chain_id, rpc_id_hash):
+        return Path(cache_dir) / f"chainid_{hex(chain_id)}-{rpc_id_hash}.sqlite.db"
 
     def _init_db(self):
         if self._cache_dir is not None:
-            cache_file = self._cache_filepath(self._cache_dir, self._chain_id)
+            cache_file = self._cache_filepath(
+                self._cache_dir, self._chain_id, self._rpc_id_hash
+            )
             cache_file = os.path.expanduser(cache_file)
             sqlitedb = SqliteCache.create(cache_file)
             # use CacheDB as an additional layer over disk
