@@ -70,7 +70,10 @@ class CachingRPC(RPC):
 
         self._chain_id = chain_id  # TODO: check if this is needed
         self._cache_dir = cache_dir
-        self._rpc_id_hash = hashlib.sha256(rpc.identifier.encode()).hexdigest()[:12]
+        # Cache is keyed by chain id, but local test chains (anvil/hardhat)
+        # often reuse the same chain id while pointing at different RPC URLs.
+        # Include the RPC identifier to avoid cross-process cache collisions.
+        self._rpc_id_hash = hashlib.sha256(rpc.identifier.encode()).hexdigest()
 
         self._init_db()
 
