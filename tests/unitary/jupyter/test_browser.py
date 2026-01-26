@@ -113,6 +113,9 @@ def mock_fork(mock_callback):
     mock_callback("evm_snapshot", "0x123456")
     mock_callback("evm_revert", "0x12345678")
     mock_callback("eth_chainId", "0x1")
+    mock_callback("eth_getBalance", "0x0")
+    mock_callback("eth_getTransactionCount", "0x0")
+    mock_callback("eth_getCode", "0x")
     data = {
         "number": "0x123",
         "timestamp": "0x65bbb460",
