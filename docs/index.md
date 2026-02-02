@@ -11,6 +11,7 @@ Titanoboa (also called `boa`) is a [Vyper](https://vyper.readthedocs.io/) interp
 - [iPython integration](guides/scripting/ipython_vyper_cells.md)
 - [native Python import syntax](guides/scripting/native_import_syntax.md)
 - [legacy Vyper support](api/vvm_deployer/overview.md)
+- [Moccasin compatibility](https://cyfrin.github.io/moccasin/) - CLI framework for full project management
 - *and more ...*
 
 `titanoboa` is not just a framework, but a library that can be used in any Python environment.
