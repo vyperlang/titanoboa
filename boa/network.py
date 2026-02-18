@@ -610,11 +610,35 @@ class NetworkEnv(Env):
         chain_id = self._rpc.fetch("eth_chainId", [])
         return int(chain_id, 16)
 
+    @contextlib.contextmanager
+    def sender(self, address):
+        self._rpc.fetch("hardhat_impersonateAccount", [to_hex(addr)])
+        tmp = self.eoa
+        addr = Address(address)
+        self.add_account(ExternalAccount(addr, self._rpc), force_eoa=True)
+        try:
+            yield
+        finally:
+            self.eoa = tmp
+
     def set_balance(self, address, value):
-        raise NotImplementedError("Cannot use set_balance in network mode")
+        super().set_balance(address, value)  # set it in the fork
+
+        self._rpc.fetch(
+            "hardhat_setBalance", [to_hex(address), to_hex(value, pad_nibbles=64)]
+        )
 
     def set_code(self, address: _AddressType, code: bytes) -> None:
-        raise NotImplementedError("Cannot use set_code in network mode")
+        super().set_code(address, code)  # set it in the fork
+
+        self._rpc.fetch("hardhat_setCode", [to_hex(address), to_hex(code)])
 
     def set_storage(self, address: _AddressType, slot: int, value: int) -> None:
-        raise NotImplementedError("Cannot use set_storage in network mode")
+        super().set_storage(address, slot, value)  # set it in the fork
+
+        # will throw if the provider does not have hardhat_setStorageAt
+        # hardhat requires padded hex values
+        self._rpc.fetch(
+            "hardhat_setStorageAt",
+            [to_hex(address), to_hex(slot), to_hex(value, pad_nibbles=64)],
+        )
