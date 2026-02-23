@@ -52,7 +52,7 @@ python -m venv venv
 source venv/bin/activate
 # Install dev requirements
 pip install -r dev-requirements.txt
-# Install prod requirements (in the pyproject.tom)
+# Install prod requirements (in the pyproject.toml)
 pip install .
 ```
 
