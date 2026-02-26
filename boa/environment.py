@@ -10,12 +10,47 @@ import warnings
 from typing import Any, Optional, TypeAlias
 
 import eth.constants as constants
+import vyper.ast as vy_ast
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
+
+
+def _collapse_cov_node(node):
+    """Collapse AST nodes for coverage line reporting.
+
+    - Nodes inside an If.test subtree → the If node itself.
+    - FunctionDef nodes → None (function-level bytecode for loop
+      management, setup/teardown — invisible to coverage).
+    """
+    # For If.test descendants: walk up to find If parent
+    child = node
+    parent = getattr(node, "_parent", None)
+    while parent is not None:
+        if isinstance(parent, vy_ast.If) and child is parent.test:
+            return parent
+        child = parent
+        parent = getattr(parent, "_parent", None)
+
+    if isinstance(node, vy_ast.FunctionDef):
+        return None
+
+    return node
+
+
+def _dedup_nodes(nodes):
+    """Remove consecutive nodes with the same lineno."""
+    result = []
+    last_lineno = None
+    for node in nodes:
+        if node.lineno != last_lineno:
+            result.append(node)
+            last_lineno = node.lineno
+    return result
+
 
 # make mypy happy
 _AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
@@ -353,14 +388,58 @@ class Env:
         # perf: don't trace if contract is None
         if contract is not None and hasattr(contract, "source_map"):
             ast_map = contract.source_map["pc_raw_ast_map"]
-            seen_pcs = set()
+
+            # Build contiguous segments: [(filename, [node, ...]), ...]
+            # Note: we do NOT deduplicate PCs here — loops produce
+            # repeated PCs for different branches across iterations,
+            # and we need all of them for correct arc tracking.
+            # _dedup_nodes later removes only consecutive duplicates.
+            segments = []
+            current_file = None
+            current_nodes = []
+
+            # Count consecutive FunctionDef PCs to distinguish real
+            # loop iteration boundaries (many FuncDef PCs for counter
+            # increment/bounds check) from intra-expression gaps
+            # (1-2 FuncDef PCs within the if-condition evaluation).
+            funcdef_gap_size = 0
+
             for pc in computation.code._trace:
-                if pc in seen_pcs:
-                    continue
                 if (node := ast_map.get(pc)) is not None:
-                    mod = node.module_node
-                    self._trace_cov(mod.resolved_path, node)
-                seen_pcs.add(pc)
+                    node = _collapse_cov_node(node)
+                    # None means FunctionDef (function-level bytecode
+                    # for loop mgmt, cleanup) — skip it, but count
+                    # the gap size.
+                    if node is None:
+                        funcdef_gap_size += 1
+                        continue
+                    # Detect for-loop backedge: same line as previous
+                    # node, large FunctionDef gap (loop iteration mgmt,
+                    # not just intra-expression bytecode), and inside
+                    # a For loop body.
+                    if (
+                        funcdef_gap_size > 2
+                        and current_nodes
+                        and node.lineno == current_nodes[-1].lineno
+                        and isinstance(getattr(node, "_parent", None), vy_ast.For)
+                    ):
+                        current_nodes.append(node._parent)
+                    funcdef_gap_size = 0
+                    fname = node.module_node.resolved_path
+                    if fname != current_file:
+                        # New file segment — flush previous
+                        if current_nodes:
+                            segments.append((current_file, current_nodes))
+                        current_file = fname
+                        current_nodes = []
+                    current_nodes.append(node)
+
+            if current_nodes:
+                segments.append((current_file, current_nodes))
+
+            for filename, nodes in segments:
+                deduped = _dedup_nodes(nodes)
+                self._trace_cov(filename, deduped)
 
         for child in computation.children:
             if child.msg.code_address == b"":
@@ -368,8 +447,10 @@ class Env:
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._trace_computation(child, child_contract)
 
-    def _trace_cov(self, filename, node):
-        pass
+    def _trace_cov(self, filename, nodes):
+        node = None
+        for node in nodes:
+            filename  # noqa: B018 -- dummy expression; triggers a line event
 
     def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))

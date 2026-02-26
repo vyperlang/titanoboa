@@ -35,13 +35,28 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
 
 class TitanoboaTracer(coverage.plugin.FileTracer):
     def __init__(self):
-        pass
+        # The body line of _trace_cov's loop (the `filename` expression).
+        # Computed lazily on first use.
+        self._body_line = None
 
     # coverage.py requires us to inspect the python call frame to
     # see what line number to produce. we hook into specially crafted
     # Env._trace_cov which is called for every unique pc if coverage is
     # enabled, and then back out the contract and lineno information
     # from there.
+
+    def _get_body_line(self):
+        """Get the Python source line of the body expression in _trace_cov."""
+        if self._body_line is None:
+            import dis
+
+            code = Env._trace_cov.__code__
+            # Find the last line number in the bytecode — this is the
+            # body expression (`filename`) inside the for loop.
+            for instr in dis.get_instructions(code):
+                if instr.starts_line is not None:
+                    self._body_line = instr.starts_line
+        return self._body_line
 
     def _valid_frame(self, frame):
         if hasattr(frame.f_code, "co_qualname"):
@@ -73,13 +88,19 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
         if not self._valid_frame(frame):
             return (-1, -1)
 
-        ast_node = frame.f_locals["node"]
+        # Only report on the body line of _trace_cov's loop where
+        # 'node' in f_locals is the current (not stale) value.
+        # All other lines (for-header, init) return (-1, -1) so the
+        # CTracer skips them and preserves last_line for arc continuity.
+        if frame.f_lineno != self._get_body_line():
+            return (-1, -1)
 
-        start_lineno = ast_node.lineno
-        end_lineno = ast_node.end_lineno
-        if end_lineno is None:
-            end_lineno = start_lineno
-        return start_lineno, end_lineno
+        node = frame.f_locals.get("node")
+        if node is None:
+            return (-1, -1)
+
+        # Always (lineno, lineno) — never the full span.
+        return (node.lineno, node.lineno)
 
     # XXX: dynamic context. return function name or something
     def dynamic_context(self, frame):
@@ -124,7 +145,11 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
                     break
             else:
                 # the if stmt was the last stmt in the enclosing scope.
-                arc_false = ast_node._parent.end_lineno + 1
+                if isinstance(ast_node._parent, vy_ast.For):
+                    # inside a for loop: false branch loops back
+                    arc_false = ast_node._parent.lineno
+                else:
+                    arc_false = ast_node._parent.end_lineno + 1
 
             # unless there is an else or elif. then the other
             # arc is to the else/elif statement.
