@@ -152,7 +152,7 @@ def _false_arc(if_node, fn_node):
     # find the next sibling statement after the if
     children = if_node._parent.get_children()
     for node, next_ in zip(children, children[1:]):
-        if id(node) == id(if_node):
+        if node is if_node:
             target = next_.lineno
             # past end of function → implicit return
             if target > fn_node.end_lineno:
@@ -208,6 +208,17 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
                         # tokenizer bug with vyper parser, just ignore it
                         continue
                     ret.add(node.lineno)
+
+        # Exclude continuation lines from multi-line If conditions.
+        # The tracer collapses If.test nodes to the If line, so any
+        # extra lines from the test subtree would appear perpetually
+        # uncovered.
+        for if_node in self._ast.get_descendants(vy_ast.If):
+            for node in if_node.test.get_descendants():
+                if node.lineno != if_node.lineno:
+                    ret.discard(node.lineno)
+            if if_node.test.lineno != if_node.lineno:
+                ret.discard(if_node.test.lineno)
 
         return ret
 

@@ -168,6 +168,37 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     ), f"Expected for-body line {for_body_line} in lines: {sorted(lines)}"
 
 
+def test_reporter_lines_excludes_multiline_if_continuation():
+    """Continuation lines of multi-line if conditions are excluded from lines().
+
+    The tracer collapses If.test nodes to the If line, so continuation
+    lines (e.g. the second line of a wrapped condition) must not appear
+    as separate statements — otherwise they'd be perpetually uncovered.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if (x > 5 and
+        y > 10):
+        return 1
+    else:
+        return 0
+"""
+    with _reporter_for(source) as reporter:
+        lines = reporter.lines()
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # The if-line itself must be in lines
+    assert if_node.lineno in lines, f"If-line {if_node.lineno} not in lines"
+    # Continuation lines from the test subtree must NOT be in lines
+    for node in if_node.test.get_descendants():
+        if node.lineno != if_node.lineno:
+            assert node.lineno not in lines, (
+                f"Continuation line {node.lineno} from If.test should be "
+                f"excluded from lines: {sorted(lines)}"
+            )
+
+
 # --- reporter exit_counts ---
 
 

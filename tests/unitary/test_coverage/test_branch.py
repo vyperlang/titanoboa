@@ -7,6 +7,7 @@ import boa
 from .conftest import (
     _check_branch_coverage,
     _check_full_branch_coverage,
+    _coverage_session,
     _coverage_session_multi,
 )
 
@@ -146,6 +147,28 @@ def foo(x: uint256, y: uint256) -> uint256:
 """
     missing = _check_branch_coverage(source, lambda c: (c.foo(10, 20), c.foo(1, 1)))
     assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_multiline_condition_no_missing_lines():
+    """Multi-line if condition: continuation lines must not appear as uncovered.
+
+    Regression test — the tracer collapses If.test nodes to the If line,
+    so the reporter must exclude continuation lines from statements.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if (x > 5 and
+        y > 10):
+        return 1
+    else:
+        return 0
+"""
+    with _coverage_session(source, lambda c: (c.foo(10, 20), c.foo(1, 1))) as analysis:
+        assert not analysis.missing, (
+            f"No lines should be missing when both branches are hit, "
+            f"got missing lines: {analysis.missing}"
+        )
 
 
 # --- branch negative controls (partial coverage) ---
