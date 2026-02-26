@@ -21,22 +21,14 @@ def isolate_cache(tmp_path):
         set_cache_dir(saved)
 
 
-def _check_branch_coverage(vyper_source, calls_fn):
-    """Run branch coverage in-process and return missing_branch_arcs.
-
-    Args:
-        vyper_source: Vyper source code string
-        calls_fn: callable(contract) that exercises the contract
-
-    Returns:
-        dict of {line: [target_lines]} for missing branch arcs
-    """
+@contextlib.contextmanager
+def _coverage_session(vyper_source, calls_fn):
+    """Set up coverage, load+exercise contract, yield analysis object."""
     saved_coverage = Env._coverage_enabled
     fd, vy_path = tempfile.mkstemp(suffix=".vy")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(vyper_source)
-
         cov = coverage.Coverage(branch=True, config_file=False, data_file=None)
         cov.set_option("run:plugins", ["boa.coverage"])
         cov.start()
@@ -45,43 +37,57 @@ def _check_branch_coverage(vyper_source, calls_fn):
             calls_fn(c)
         finally:
             cov.stop()
-
-        analysis = cov._analyze(vy_path)
-        return dict(analysis.missing_branch_arcs())
+        yield cov._analyze(vy_path)
     finally:
         Env._coverage_enabled = saved_coverage
         os.unlink(vy_path)
 
 
-def _check_full_branch_coverage(vyper_source, calls_fn):
-    """Return (possible_arcs, executed_arcs, missing_arcs) for branch coverage.
+@contextlib.contextmanager
+def _coverage_session_multi(sources_dict, setup_fn):
+    """Set up coverage with multiple .vy files, yield (cov, paths_dict).
 
-    possible_arcs: set of (from_line, to_line) tuples
-    executed_arcs: dict {line: [target_lines]} for executed branch arcs
-    missing_arcs: dict {line: [target_lines]} for missing branch arcs
+    sources_dict: {name: vyper_source_string}
+    setup_fn: callable(paths_dict) that loads/exercises contracts
     """
     saved_coverage = Env._coverage_enabled
-    fd, vy_path = tempfile.mkstemp(suffix=".vy")
+    paths = {}
+    created_paths = []
     try:
-        with os.fdopen(fd, "w") as f:
-            f.write(vyper_source)
+        for name, src in sources_dict.items():
+            fd, path = tempfile.mkstemp(suffix=".vy")
+            created_paths.append(path)
+            with os.fdopen(fd, "w") as f:
+                f.write(src)
+            paths[name] = path
         cov = coverage.Coverage(branch=True, config_file=False, data_file=None)
         cov.set_option("run:plugins", ["boa.coverage"])
         cov.start()
         try:
-            c = boa.load(vy_path)
-            calls_fn(c)
+            setup_fn(paths)
         finally:
             cov.stop()
-        analysis = cov._analyze(vy_path)
+        yield cov, paths
+    finally:
+        Env._coverage_enabled = saved_coverage
+        for path in created_paths:
+            os.unlink(path)
+
+
+def _check_branch_coverage(vyper_source, calls_fn):
+    """Run branch coverage in-process and return missing_branch_arcs."""
+    with _coverage_session(vyper_source, calls_fn) as analysis:
+        return dict(analysis.missing_branch_arcs())
+
+
+def _check_full_branch_coverage(vyper_source, calls_fn):
+    """Return (possible_arcs, executed_arcs, missing_arcs) for branch coverage."""
+    with _coverage_session(vyper_source, calls_fn) as analysis:
         return (
             set(analysis.arc_possibilities()),
             dict(analysis.executed_branch_arcs()),
             dict(analysis.missing_branch_arcs()),
         )
-    finally:
-        Env._coverage_enabled = saved_coverage
-        os.unlink(vy_path)
 
 
 @contextlib.contextmanager

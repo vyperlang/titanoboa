@@ -29,6 +29,8 @@ def _collapse_cov_node(node):
     child = node
     parent = getattr(node, "_parent", None)
     while parent is not None:
+        # Vyper AST preserves node identity — test subtrees are never
+        # cloned, so `is` reliably identifies the original child.
         if isinstance(parent, vy_ast.If) and child is parent.test:
             return parent
         child = parent
@@ -414,6 +416,15 @@ class Env:
                     if node is None:
                         funcdef_gap_size += 1
                         continue
+                    # Handle file switches first, so current_nodes[-1]
+                    # always belongs to the same file as `node`.
+                    fname = node.module_node.resolved_path
+                    if fname != current_file:
+                        # New file segment — flush previous
+                        if current_nodes:
+                            segments.append((current_file, current_nodes))
+                        current_file = fname
+                        current_nodes = []
                     # Detect for-loop backedge: same line as previous
                     # node, large FunctionDef gap (loop iteration mgmt,
                     # not just intra-expression bytecode), and inside
@@ -426,13 +437,6 @@ class Env:
                     ):
                         current_nodes.append(node._parent)
                     funcdef_gap_size = 0
-                    fname = node.module_node.resolved_path
-                    if fname != current_file:
-                        # New file segment — flush previous
-                        if current_nodes:
-                            segments.append((current_file, current_nodes))
-                        current_file = fname
-                        current_nodes = []
                     current_nodes.append(node)
 
             if current_nodes:

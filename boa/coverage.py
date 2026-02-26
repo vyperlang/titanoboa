@@ -113,7 +113,9 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
         if node is None:
             return (-1, -1)
 
-        # Always (lineno, lineno) — never the full span.
+        # Always (lineno, lineno) — single-line spans. Multi-line constructs
+        # (e.g. multi-line if conditions) are collapsed to their start line
+        # by _collapse_cov_node, and coverage.py arc tracking operates per-line.
         return (node.lineno, node.lineno)
 
     # XXX: dynamic context. return function name or something

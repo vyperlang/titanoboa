@@ -3,9 +3,12 @@ import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
 import boa
-from boa.environment import Env
 
-from .conftest import _check_branch_coverage, _check_full_branch_coverage
+from .conftest import (
+    _check_branch_coverage,
+    _check_full_branch_coverage,
+    _coverage_session_multi,
+)
 
 
 @pytest.fixture(scope="module")
@@ -489,11 +492,6 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 def test_branch_cross_contract():
     """Arcs from a called contract are attributed to the callee's file."""
-    import os
-    import tempfile
-
-    import coverage
-
     callee_source = """\
 @external
 def bar(x: uint256) -> uint256:
@@ -502,7 +500,7 @@ def bar(x: uint256) -> uint256:
     else:
         return 0
 """
-    caller_source_template = """\
+    caller_source = """\
 interface Callee:
     def bar(x: uint256) -> uint256: nonpayable
 
@@ -516,32 +514,16 @@ def __init__(callee_addr: address):
 def call_bar(x: uint256) -> uint256:
     return extcall Callee(CALLEE).bar(x)
 """
-    saved_coverage = Env._coverage_enabled
-    fd1, callee_path = tempfile.mkstemp(suffix=".vy")
-    fd2, caller_path = tempfile.mkstemp(suffix=".vy")
-    try:
-        with os.fdopen(fd1, "w") as f:
-            f.write(callee_source)
-        with os.fdopen(fd2, "w") as f:
-            f.write(caller_source_template)
 
-        cov = coverage.Coverage(branch=True, config_file=False, data_file=None)
-        cov.set_option("run:plugins", ["boa.coverage"])
-        cov.start()
-        try:
-            callee = boa.load(callee_path)
-            caller = boa.load(caller_path, callee.address)
-            # Exercise both branches of callee through caller
-            caller.call_bar(10)
-            caller.call_bar(1)
-        finally:
-            cov.stop()
+    def setup(paths):
+        callee = boa.load(paths["callee"])
+        caller = boa.load(paths["caller"], callee.address)
+        caller.call_bar(10)
+        caller.call_bar(1)
 
-        # Callee's arcs should be fully covered
-        callee_analysis = cov._analyze(callee_path)
-        callee_missing = dict(callee_analysis.missing_branch_arcs())
-        assert callee_missing == {}, f"Callee missing branch arcs: {callee_missing}"
-    finally:
-        Env._coverage_enabled = saved_coverage
-        os.unlink(callee_path)
-        os.unlink(caller_path)
+    with _coverage_session_multi(
+        {"callee": callee_source, "caller": caller_source}, setup
+    ) as (cov, paths):
+        analysis = cov._analyze(paths["callee"])
+        missing = dict(analysis.missing_branch_arcs())
+        assert missing == {}, f"Callee missing branch arcs: {missing}"
