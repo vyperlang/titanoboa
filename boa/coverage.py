@@ -125,6 +125,25 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
 
 # helper function. null returns get optimized directly into a jump
 # to function cleanup which maps to the parent FunctionDef ast.
+# Operator-type AST nodes carry stale line numbers (all instances of the
+# same operator share the lineno of the first occurrence in the file).
+# They must be skipped when discarding continuation lines, or they'll
+# remove unrelated statement lines from the coverable set.
+_OPERATOR_TYPES = (
+    vy_ast.And,
+    vy_ast.Or,
+    vy_ast.Not,
+    vy_ast.Gt,
+    vy_ast.GtE,
+    vy_ast.Lt,
+    vy_ast.LtE,
+    vy_ast.Eq,
+    vy_ast.NotEq,
+    vy_ast.In,
+    vy_ast.NotIn,
+)
+
+
 def _is_null_return(ast_node):
     match ast_node:
         case vy_ast.Return(value=None):
@@ -150,6 +169,9 @@ def _false_arc(if_node, fn_node):
         return first_else.lineno
 
     # find the next sibling statement after the if
+    # Note: get_children() includes non-body nodes (args, return type),
+    # but the identity search (node is if_node) finds the correct body
+    # child regardless of ordering.
     children = if_node._parent.get_children()
     for node, next_ in zip(children, children[1:]):
         if node is if_node:
@@ -215,6 +237,8 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
         # uncovered.
         for if_node in self._ast.get_descendants(vy_ast.If):
             for node in if_node.test.get_descendants():
+                if isinstance(node, _OPERATOR_TYPES):
+                    continue
                 if node.lineno != if_node.lineno:
                     ret.discard(node.lineno)
             if if_node.test.lineno != if_node.lineno:

@@ -168,6 +168,65 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     ), f"Expected for-body line {for_body_line} in lines: {sorted(lines)}"
 
 
+def test_reporter_lines_multiline_if_does_not_discard_other_if_line():
+    """Regression: operator nodes (Gt, Lt, etc.) carry stale line numbers from
+    the first occurrence in the file. The exclusion loop must skip them or it
+    will discard unrelated statement lines.
+
+    Contract has a multi-line `if (x > 5 and y > 10):` on line 3-4, then
+    `if x > 20:` on line 6. The Gt inside If@6's test has lineno=3 (stale).
+    Without the fix, line 3 (the outer if) would be erroneously discarded.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if (x > 5 and
+        y > 10):
+        return 1
+    if x > 20:
+        return 2
+    return 0
+"""
+    with _reporter_for(source) as reporter:
+        lines = reporter.lines()
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    outer_if = if_nodes[0]  # line 3
+    inner_if = if_nodes[1]  # line 6
+    # Line 3 (outer If) must NOT be discarded
+    assert outer_if.lineno in lines, (
+        f"Outer if line {outer_if.lineno} was erroneously discarded from lines: "
+        f"{sorted(lines)}"
+    )
+    # Line 6 (second If) must NOT be discarded
+    assert inner_if.lineno in lines, (
+        f"Second if line {inner_if.lineno} was erroneously discarded from lines: "
+        f"{sorted(lines)}"
+    )
+    # Continuation line 4 (y > 10) SHOULD be excluded
+    for node in outer_if.test.get_descendants():
+        if node.lineno != outer_if.lineno and not isinstance(
+            node,
+            (
+                vy_ast.And,
+                vy_ast.Or,
+                vy_ast.Not,
+                vy_ast.Gt,
+                vy_ast.GtE,
+                vy_ast.Lt,
+                vy_ast.LtE,
+                vy_ast.Eq,
+                vy_ast.NotEq,
+                vy_ast.In,
+                vy_ast.NotIn,
+            ),
+        ):
+            assert node.lineno not in lines, (
+                f"Continuation line {node.lineno} should be excluded from "
+                f"lines: {sorted(lines)}"
+            )
+
+
 def test_reporter_lines_excludes_multiline_if_continuation():
     """Continuation lines of multi-line if conditions are excluded from lines().
 

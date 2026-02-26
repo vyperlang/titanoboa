@@ -149,6 +149,39 @@ def foo(x: uint256, y: uint256) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
+def test_branch_multiline_then_same_operator_no_missing_lines():
+    """Regression: multi-line if followed by another if using the same operator.
+
+    Operator AST nodes (Gt, Lt, etc.) carry stale linenos from the first
+    occurrence in the file. Without filtering them out, the second if's Gt
+    node (with stale lineno pointing to line 3) causes line 3 to disappear
+    from the coverable set, creating phantom uncovered lines.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if (x > 5 and
+        y > 10):
+        return 1
+    if x > 20:
+        return 2
+    return 0
+"""
+    with _coverage_session(
+        source,
+        lambda c: (
+            c.foo(10, 20),  # true branch of first if
+            c.foo(1, 1),  # false branch of first if
+            c.foo(25, 1),  # true branch of second if (false on first)
+            c.foo(1, 1),  # false branch of second if
+        ),
+    ) as analysis:
+        assert not analysis.missing, (
+            f"No lines should be missing when all branches are hit, "
+            f"got missing lines: {analysis.missing}"
+        )
+
+
 def test_branch_multiline_condition_no_missing_lines():
     """Multi-line if condition: continuation lines must not appear as uncovered.
 
