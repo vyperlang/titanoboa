@@ -34,9 +34,19 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
 
 
 class TitanoboaTracer(coverage.plugin.FileTracer):
+    # _trace_cov layout (see Env._trace_cov):
+    #   def _trace_cov(self, filename, nodes):   # +0
+    #       node = None                           # +1
+    #       for node in nodes:                    # +2
+    #           filename  # noqa: B018            # +3  <-- body line
+    #
+    # We only want line events from the body expression (+3) where
+    # `node` in f_locals holds the current loop value. The for-header
+    # (+2) fires with a stale `node` from the previous iteration which
+    # would produce spurious arcs.
+    _BODY_LINE_OFFSET = 3
+
     def __init__(self):
-        # The body line of _trace_cov's loop (the `filename` expression).
-        # Computed lazily on first use.
         self._body_line = None
 
     # coverage.py requires us to inspect the python call frame to
@@ -46,16 +56,22 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
     # from there.
 
     def _get_body_line(self):
-        """Get the Python source line of the body expression in _trace_cov."""
         if self._body_line is None:
             import dis
 
             code = Env._trace_cov.__code__
-            # Find the last line number in the bytecode — this is the
-            # body expression (`filename`) inside the for loop.
-            for instr in dis.get_instructions(code):
-                if instr.starts_line is not None:
-                    self._body_line = instr.starts_line
+            expected = code.co_firstlineno + self._BODY_LINE_OFFSET
+            lines = {
+                i.starts_line
+                for i in dis.get_instructions(code)
+                if i.starts_line is not None
+            }
+            if expected not in lines:
+                raise RuntimeError(
+                    f"_BODY_LINE_OFFSET={self._BODY_LINE_OFFSET} does not match "
+                    f"_trace_cov bytecode lines: {sorted(lines)}"
+                )
+            self._body_line = expected
         return self._body_line
 
     def _valid_frame(self, frame):
@@ -89,9 +105,7 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
             return (-1, -1)
 
         # Only report on the body line of _trace_cov's loop where
-        # 'node' in f_locals is the current (not stale) value.
-        # All other lines (for-header, init) return (-1, -1) so the
-        # CTracer skips them and preserves last_line for arc continuity.
+        # `node` in f_locals holds the current (not stale) value.
         if frame.f_lineno != self._get_body_line():
             return (-1, -1)
 
@@ -116,6 +130,44 @@ def _is_null_return(ast_node):
     return False
 
 
+def _true_arc(if_node, fn_node):
+    """Target line for the true (body) branch of an If node."""
+    first_body = if_node.body[0]
+    if _is_null_return(first_body):
+        return fn_node.lineno
+    return first_body.lineno
+
+
+def _false_arc(if_node, fn_node):
+    """Target line for the false (else/fallthrough) branch of an If node."""
+    # explicit else/elif
+    if if_node.orelse:
+        first_else = if_node.orelse[0]
+        if _is_null_return(first_else):
+            return fn_node.lineno
+        return first_else.lineno
+
+    # find the next sibling statement after the if
+    children = if_node._parent.get_children()
+    for node, next_ in zip(children, children[1:]):
+        if id(node) == id(if_node):
+            target = next_.lineno
+            # past end of function → implicit return
+            if target > fn_node.end_lineno:
+                return fn_node.lineno
+            return target
+
+    # if was the last statement in its scope (no next sibling found)
+    if isinstance(if_node._parent, vy_ast.For):
+        return if_node._parent.lineno  # loop back to for header
+
+    # fallthrough to next line after enclosing block
+    target = if_node._parent.end_lineno + 1
+    if target > fn_node.end_lineno:
+        return fn_node.lineno  # implicit return
+    return target
+
+
 class TitanoboaReporter(coverage.plugin.FileReporter):
     def __init__(self, filename, env=None):
         super().__init__(filename)
@@ -126,46 +178,10 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
 
     def arcs(self):
         ret = set()
-
-        for ast_node in self._ast.get_descendants(vy_ast.If):
-            fn_node = get_fn_ancestor_from_node(ast_node)
-
-            # one arc is directly into the body
-            arc_true = ast_node.body[0].lineno
-            if _is_null_return(ast_node.body[0]):
-                arc_true = fn_node.lineno
-            ret.add((ast_node.lineno, arc_true))
-
-            # the other arc is to the end of the if statement
-            # try hard to find the next executable line.
-            children = ast_node._parent.get_children()
-            for node, next_ in zip(children, children[1:]):
-                if id(node) == id(ast_node):
-                    arc_false = next_.lineno
-                    break
-            else:
-                # the if stmt was the last stmt in the enclosing scope.
-                if isinstance(ast_node._parent, vy_ast.For):
-                    # inside a for loop: false branch loops back
-                    arc_false = ast_node._parent.lineno
-                else:
-                    arc_false = ast_node._parent.end_lineno + 1
-
-            # unless there is an else or elif. then the other
-            # arc is to the else/elif statement.
-            if ast_node.orelse:
-                arc_false = ast_node.orelse[0].lineno
-
-            # return cases:
-            # if it's past the end of the fn it's an implicit return
-            if arc_false > fn_node.end_lineno:
-                arc_false = fn_node.lineno
-            # or it's an explicit return
-            if ast_node.orelse and _is_null_return(ast_node.orelse[0]):
-                arc_false = fn_node.lineno
-
-            ret.add((ast_node.lineno, arc_false))
-
+        for if_node in self._ast.get_descendants(vy_ast.If):
+            fn_node = get_fn_ancestor_from_node(if_node)
+            ret.add((if_node.lineno, _true_arc(if_node, fn_node)))
+            ret.add((if_node.lineno, _false_arc(if_node, fn_node)))
         return ret
 
     def exit_counts(self):

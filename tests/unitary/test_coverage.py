@@ -191,3 +191,36 @@ def foo(x: uint256, y: uint256) -> uint256:
 """
     missing = _check_branch_coverage(source, lambda c: (c.foo(10, 20), c.foo(1, 1)))
     assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_nested_if_last_in_block():
+    """Inner if (no else) last in outer if body — reporter must emit
+    the false arc to the line after the outer block, not the function def."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 10:
+        if x > 20:
+            return 3
+    return 0
+"""
+    from boa.coverage import TitanoboaReporter
+
+    fd, vy_path = tempfile.mkstemp(suffix=".vy")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(source)
+        reporter = TitanoboaReporter(vy_path)
+        arcs = reporter.arcs()
+    finally:
+        os.unlink(vy_path)
+
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    inner_if = next(n for n in if_nodes if n.lineno > if_nodes[0].lineno)
+    # inner if false should go to `return 0`, not fn def
+    return_0 = ast.get_descendants(vy_ast.Return)[-1]
+    assert (
+        inner_if.lineno,
+        return_0.lineno,
+    ) in arcs, f"Expected arc ({inner_if.lineno}, {return_0.lineno}) in {arcs}"

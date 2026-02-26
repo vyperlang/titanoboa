@@ -26,7 +26,6 @@ def _collapse_cov_node(node):
     - FunctionDef nodes → None (function-level bytecode for loop
       management, setup/teardown — invisible to coverage).
     """
-    # For If.test descendants: walk up to find If parent
     child = node
     parent = getattr(node, "_parent", None)
     while parent is not None:
@@ -398,10 +397,12 @@ class Env:
             current_file = None
             current_nodes = []
 
-            # Count consecutive FunctionDef PCs to distinguish real
-            # loop iteration boundaries (many FuncDef PCs for counter
-            # increment/bounds check) from intra-expression gaps
-            # (1-2 FuncDef PCs within the if-condition evaluation).
+            # Count consecutive FunctionDef PCs to detect loop backedges.
+            # Loop iteration management (counter increment, bounds check)
+            # produces 3+ consecutive FunctionDef PCs, whereas gaps from
+            # intra-expression bytecode (e.g. if-condition eval) produce
+            # only 1-2.
+            LOOP_BACKEDGE_GAP_MIN = 3
             funcdef_gap_size = 0
 
             for pc in computation.code._trace:
@@ -418,7 +419,7 @@ class Env:
                     # not just intra-expression bytecode), and inside
                     # a For loop body.
                     if (
-                        funcdef_gap_size > 2
+                        funcdef_gap_size >= LOOP_BACKEDGE_GAP_MIN
                         and current_nodes
                         and node.lineno == current_nodes[-1].lineno
                         and isinstance(getattr(node, "_parent", None), vy_ast.For)
