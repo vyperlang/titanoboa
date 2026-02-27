@@ -583,3 +583,143 @@ def call_bar(x: uint256) -> uint256:
         analysis = cov._analyze(paths["callee"])
         missing = dict(analysis.missing_branch_arcs())
         assert missing == {}, f"Callee missing branch arcs: {missing}"
+
+
+# --- if-in-for terminal iteration false branch ---
+
+
+def test_branch_if_in_for_loop_terminal_false():
+    """Terminal iteration false branch: true then false on last iteration.
+
+    foo([10, 1]) → first iteration true (10 > 5), second iteration false
+    (1 > 5). The false arc on the terminal iteration exits the loop to a
+    different line, so standard backedge detection misses it.
+    """
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 5:
+            total += val
+    return total
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo([10, 1]))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_in_for_loop_single_false():
+    """Single element, false only — the false arc must still be recorded.
+
+    foo([1]) → single iteration, false branch only. The false arc on loop
+    exit must be recorded.
+    """
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 5:
+            total += val
+    return total
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    for_node = if_node.get_ancestor(vy_ast.For)
+
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo([1])
+    )
+    # False arc (if_line → for_line) should be executed
+    assert (
+        if_node.lineno in executed
+    ), f"If-line {if_node.lineno} not in executed: {executed}"
+    assert (
+        for_node.lineno in executed[if_node.lineno]
+    ), f"False arc to for-header {for_node.lineno} not executed: {executed}"
+    # False arc must NOT appear in missing
+    assert for_node.lineno not in missing.get(
+        if_node.lineno, []
+    ), f"False arc to {for_node.lineno} should not be missing: {missing}"
+
+
+# --- if-without-else at function end ---
+
+
+def test_branch_if_without_else_at_function_end():
+    """if-without-else with trailing return — both arcs covered.
+
+    The false branch falls through to `return 0` (next sibling).
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_without_else_at_function_end_partial():
+    """Only true branch hit — false arc (to next sibling) must be missing."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo(10))
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # The false arc should target `return 0` (the next sibling)
+    return_0 = ast.get_descendants(vy_ast.Return)[-1]
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing: {missing}"
+    assert (
+        return_0.lineno in missing[if_node.lineno]
+    ), f"Expected false arc to {return_0.lineno}, got {missing}"
+
+
+def test_branch_void_function_if_last_statement():
+    """Void function where if is the last statement — false arc is implicit return.
+
+    Regression test for _false_arc using parent.body instead of
+    get_children() which would pick up decorator nodes.
+    """
+    source = """\
+x: public(uint256)
+
+@external
+def foo(val: uint256):
+    if val > 5:
+        self.x = val
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_void_function_if_last_statement_partial():
+    """Only true branch hit in void function — false arc (implicit return) missing."""
+    source = """\
+x: public(uint256)
+
+@external
+def foo(val: uint256):
+    if val > 5:
+        self.x = val
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo(10))
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
+    # False arc targets fn_node.lineno (implicit return)
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing: {missing}"
+    assert (
+        fn_node.lineno in missing[if_node.lineno]
+    ), f"Expected false arc to fn_line {fn_node.lineno}, got {missing}"

@@ -53,6 +53,54 @@ def _dedup_nodes(nodes):
     return result
 
 
+def _normalize_if_arcs(nodes, last_funcdef):
+    """Insert synthetic nodes so coverage.py sees correct branch arcs.
+
+    For each If node, check what follows to determine branch outcome:
+      - next node is same If (loop re-iteration) -> no action
+      - next node's lineno == body[0].lineno -> true branch, no action
+      - otherwise -> false branch, insert For-header if If is last-in-for
+      - unresolved If at segment end -> false at function exit
+
+    Must run before _dedup_nodes to preserve iteration boundaries.
+    """
+    result = []
+    for i, node in enumerate(nodes):
+        result.append(node)
+        if not isinstance(node, vy_ast.If):
+            continue
+
+        next_node = nodes[i + 1] if i + 1 < len(nodes) else None
+
+        # Loop re-iteration: same If node appearing again means the
+        # for-loop went around — not a branch outcome.
+        if next_node is node:
+            continue
+
+        # True branch: next node matches first body statement
+        if next_node is not None and next_node.lineno == node.body[0].lineno:
+            continue
+
+        # For-header already present (inserted by backedge detection
+        # in the PC loop) — no need to insert another one.
+        parent = getattr(node, "_parent", None)
+        if next_node is parent:
+            continue
+
+        # False branch: insert For-header if If is last statement in For body.
+        # This matches _false_arc() in coverage.py which returns for_node.lineno
+        # when isinstance(if_node._parent, vy_ast.For).
+        if isinstance(parent, vy_ast.For) and parent.body[-1] is node:
+            result.append(parent)
+
+    # Function exit: emit FunctionDef so coverage sees arc from
+    # last statement to implicit return line.
+    if last_funcdef is not None and result:
+        result.append(last_funcdef)
+
+    return result
+
+
 # make mypy happy
 _AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
 
@@ -390,55 +438,53 @@ class Env:
         if contract is not None and hasattr(contract, "source_map"):
             ast_map = contract.source_map["pc_raw_ast_map"]
 
-            # Build contiguous segments: [(filename, [node, ...]), ...]
-            # Note: we do NOT deduplicate PCs here — loops produce
-            # repeated PCs for different branches across iterations,
-            # and we need all of them for correct arc tracking.
-            # _dedup_nodes later removes only consecutive duplicates.
             segments = []
             current_file = None
             current_nodes = []
+            last_funcdef = None
 
-            # Count consecutive FunctionDef PCs to detect loop backedges.
-            # Loop iteration management (counter increment, bounds check)
-            # produces 3+ consecutive FunctionDef PCs, whereas gaps from
-            # intra-expression bytecode (e.g. if-condition eval) produce
-            # only 1-2.
+            # Count consecutive FunctionDef PCs to detect loop
+            # backedges.  Vyper's loop iteration management (counter
+            # increment, bounds check) produces 3+ FunctionDef PCs,
+            # whereas ghost DynArray iterations and intra-expression
+            # bytecode produce only 1-2.
             LOOP_BACKEDGE_GAP_MIN = 3
-            funcdef_gap_size = 0
+            funcdef_gap = 0
 
             for pc in computation.code._trace:
                 if (node := ast_map.get(pc)) is not None:
+                    raw_node = node
                     node = _collapse_cov_node(node)
-                    # None means FunctionDef (function-level bytecode
-                    # for loop mgmt, cleanup) — skip it, but count
-                    # the gap size.
                     if node is None:
-                        funcdef_gap_size += 1
+                        last_funcdef = raw_node
+                        funcdef_gap += 1
                         continue
-                    # Handle file switches first, so current_nodes[-1]
-                    # always belongs to the same file as `node`.
                     fname = node.module_node.resolved_path
                     if fname != current_file:
-                        # New file segment — flush previous
                         if current_nodes:
+                            current_nodes = _normalize_if_arcs(
+                                current_nodes, last_funcdef
+                            )
                             segments.append((current_file, current_nodes))
                         current_file = fname
                         current_nodes = []
-                    # Detect for-loop backedge: same line as previous
-                    # node, large FunctionDef gap (loop iteration mgmt,
-                    # not just intra-expression bytecode), and inside
-                    # a For loop body.
+                    last_funcdef = None
+                    # Detect for-loop backedge: large FunctionDef gap
+                    # (loop iteration management, not ghost DynArray
+                    # iterations) followed by the same node, inside a
+                    # For body.  Insert the For-header so coverage
+                    # sees the backedge arc.
                     if (
-                        funcdef_gap_size >= LOOP_BACKEDGE_GAP_MIN
+                        funcdef_gap >= LOOP_BACKEDGE_GAP_MIN
                         and current_nodes
-                        and node.lineno == current_nodes[-1].lineno
+                        and node is current_nodes[-1]
                         and isinstance(getattr(node, "_parent", None), vy_ast.For)
                     ):
                         current_nodes.append(node._parent)
-                    funcdef_gap_size = 0
+                    funcdef_gap = 0
                     current_nodes.append(node)
 
+            current_nodes = _normalize_if_arcs(current_nodes, last_funcdef)
             if current_nodes:
                 segments.append((current_file, current_nodes))
 

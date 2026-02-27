@@ -205,26 +205,48 @@ def foo(x: uint256, y: uint256) -> uint256:
     )
     # Continuation line 4 (y > 10) SHOULD be excluded
     for node in outer_if.test.get_descendants():
-        if node.lineno != outer_if.lineno and not isinstance(
-            node,
-            (
-                vy_ast.And,
-                vy_ast.Or,
-                vy_ast.Not,
-                vy_ast.Gt,
-                vy_ast.GtE,
-                vy_ast.Lt,
-                vy_ast.LtE,
-                vy_ast.Eq,
-                vy_ast.NotEq,
-                vy_ast.In,
-                vy_ast.NotIn,
-            ),
-        ):
+        if node.lineno != outer_if.lineno and not isinstance(node, vy_ast.Operator):
             assert node.lineno not in lines, (
                 f"Continuation line {node.lineno} should be excluded from "
                 f"lines: {sorted(lines)}"
             )
+
+
+def test_reporter_lines_multiline_if_arithmetic_operator():
+    """Regression: arithmetic operator nodes (Add, Sub, etc.) also carry stale
+    line numbers. The exclusion loop must use vy_ast.Operator (the base class)
+    to skip all operator types, not just comparison/boolean ones.
+
+    Contract has a multi-line `if (x + y > 10 and ...)` on lines 3-4, then
+    `if x + z > 20:` on line 6. The Add inside If@6's test has lineno=3 (stale).
+    Without the fix, line 3 (the outer if) would be erroneously discarded.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256, z: uint256) -> uint256:
+    if (x + y > 10 and
+        z > 5):
+        return 1
+    if x + z > 20:
+        return 2
+    return 0
+"""
+    with _reporter_for(source) as reporter:
+        lines = reporter.lines()
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    outer_if = if_nodes[0]  # line 3
+    inner_if = if_nodes[1]  # line 6
+    # Line 3 (outer If) must NOT be discarded
+    assert outer_if.lineno in lines, (
+        f"Outer if line {outer_if.lineno} was erroneously discarded from lines: "
+        f"{sorted(lines)}"
+    )
+    # Line 6 (second If) must NOT be discarded
+    assert inner_if.lineno in lines, (
+        f"Second if line {inner_if.lineno} was erroneously discarded from lines: "
+        f"{sorted(lines)}"
+    )
 
 
 def test_reporter_lines_excludes_multiline_if_continuation():
