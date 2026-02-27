@@ -1,3 +1,20 @@
+# Coverage data flow:
+#
+#   EVM execution (py-evm)
+#     → computation.code._trace  (list of PCs)
+#     → Env._trace_computation   (PC → AST node via source_map,
+#                                  collapse/normalize/dedup, group by file)
+#     → Env._trace_cov           (iterate nodes; dummy expression triggers
+#                                  coverage.py line events per node)
+#     → TitanoboaTracer           (coverage.py calls line_number_range and
+#                                  dynamic_source_filename on each line event;
+#                                  reads node/filename from f_locals)
+#     → TitanoboaReporter         (declares coverable lines, possible branch
+#                                  arcs, and exit_counts for each .vy file)
+#
+# See also: _collapse_cov_node, _normalize_if_arcs, _dedup_nodes in
+# boa/environment.py for the trace normalization pipeline.
+
 from functools import cached_property
 
 import coverage.plugin

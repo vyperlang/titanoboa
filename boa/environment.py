@@ -81,26 +81,42 @@ def _normalize_if_arcs(nodes, last_funcdef):
         if next_node is not None and next_node.lineno == node.body[0].lineno:
             continue
 
+        # False branch with explicit else: next node matches orelse
+        if (
+            node.orelse
+            and next_node is not None
+            and next_node.lineno == node.orelse[0].lineno
+        ):
+            continue
+
         # For-header already present (inserted by backedge detection
         # in the PC loop) — no need to insert another one.
         parent = getattr(node, "_parent", None)
         if next_node is parent:
             continue
 
-        # False branch: insert For-header if If is last statement in For body
-        # AND has no else clause.  When the If has an orelse, the false arc
-        # targets orelse[0] (which will appear naturally in the trace), not
-        # the for-header.
+        # False branch without else: insert For-header if If is last
+        # statement in For body.
         if (
-            isinstance(parent, vy_ast.For)
+            not node.orelse
+            and isinstance(parent, vy_ast.For)
             and parent.body[-1] is node
-            and not node.orelse
         ):
             result.append(parent)
+            continue
+
+        # Ghost If: loop-exit re-evaluation of the condition that
+        # doesn't lead to a real branch outcome.  Remove it so it
+        # doesn't create spurious arcs.
+        if node.orelse and next_node is not None:
+            result.pop()
 
     # Function exit: emit FunctionDef so coverage sees arc from
-    # last statement to implicit return line.
-    if last_funcdef is not None and result:
+    # unresolved If to implicit return line.  Only needed when the
+    # trace ends with an If (false branch fell through to function
+    # exit).  If the trace already ends with a non-If node, the
+    # natural control flow provides the correct arc.
+    if last_funcdef is not None and result and isinstance(result[-1], vy_ast.If):
         result.append(last_funcdef)
 
     return result
@@ -448,13 +464,13 @@ class Env:
             current_nodes = []
             last_funcdef = None
 
-            # Count consecutive FunctionDef PCs to detect loop
-            # backedges.  Vyper's loop iteration management (counter
-            # increment, bounds check) produces 3+ FunctionDef PCs,
-            # whereas ghost DynArray iterations and intra-expression
-            # bytecode produce only 1-2.
-            LOOP_BACKEDGE_GAP_MIN = 3
-            funcdef_gap = 0
+            # Track FunctionDef gaps to detect for-loop backedges.
+            # A backward PC jump during a FunctionDef gap means the
+            # EVM jumped back to the loop header (iteration boundary).
+            # Intra-expression FunctionDef PCs (e.g. If branch jumps)
+            # never involve a backward PC jump.
+            max_gap_pc = 0
+            gap_had_backward_jump = False
 
             for pc in computation.code._trace:
                 if (node := ast_map.get(pc)) is not None:
@@ -462,7 +478,9 @@ class Env:
                     node = _collapse_cov_node(node)
                     if node is None:
                         last_funcdef = raw_node
-                        funcdef_gap += 1
+                        if pc < max_gap_pc:
+                            gap_had_backward_jump = True
+                        max_gap_pc = max(max_gap_pc, pc)
                         continue
                     fname = node.module_node.resolved_path
                     if fname != current_file:
@@ -474,19 +492,19 @@ class Env:
                         current_file = fname
                         current_nodes = []
                     last_funcdef = None
-                    # Detect for-loop backedge: large FunctionDef gap
-                    # (loop iteration management, not ghost DynArray
-                    # iterations) followed by the same node, inside a
-                    # For body.  Insert the For-header so coverage
-                    # sees the backedge arc.
+                    # Detect for-loop backedge: a backward PC jump
+                    # during the FunctionDef gap means the EVM looped
+                    # back.  Insert the For-header so coverage sees
+                    # the backedge arc.
                     if (
-                        funcdef_gap >= LOOP_BACKEDGE_GAP_MIN
+                        gap_had_backward_jump
                         and current_nodes
                         and node is current_nodes[-1]
                         and isinstance(getattr(node, "_parent", None), vy_ast.For)
                     ):
                         current_nodes.append(node._parent)
-                    funcdef_gap = 0
+                    max_gap_pc = 0
+                    gap_had_backward_jump = False
                     current_nodes.append(node)
 
             current_nodes = _normalize_if_arcs(current_nodes, last_funcdef)
