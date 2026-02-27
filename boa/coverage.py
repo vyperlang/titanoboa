@@ -61,11 +61,20 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
 
             code = Env._trace_cov.__code__
             expected = code.co_firstlineno + self._BODY_LINE_OFFSET
-            lines = {
-                i.starts_line
-                for i in dis.get_instructions(code)
-                if i.starts_line is not None
-            }
+            # Python >=3.13 changed starts_line from int|None to bool
+            # and added line_number as the int|None attribute.
+            if hasattr(dis.Instruction, "line_number"):
+                lines = {
+                    i.line_number
+                    for i in dis.get_instructions(code)
+                    if i.line_number is not None
+                }
+            else:
+                lines = {
+                    i.starts_line
+                    for i in dis.get_instructions(code)
+                    if i.starts_line is not None
+                }
             if expected not in lines:
                 raise RuntimeError(
                     f"_BODY_LINE_OFFSET={self._BODY_LINE_OFFSET} does not match "
@@ -149,9 +158,14 @@ def _false_arc(if_node, fn_node):
             return fn_node.lineno
         return first_else.lineno
 
-    # find the next sibling statement after the if in the parent's body
-    body = if_node._parent.body
-    for node, next_ in zip(body, body[1:]):
+    # find the next sibling statement after the if
+    parent = if_node._parent
+    siblings = (
+        parent.orelse
+        if hasattr(parent, "orelse") and if_node in parent.orelse
+        else parent.body
+    )
+    for node, next_ in zip(siblings, siblings[1:]):
         if node is if_node:
             target = next_.lineno
             if _is_null_return(next_):

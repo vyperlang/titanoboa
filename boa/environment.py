@@ -87,10 +87,15 @@ def _normalize_if_arcs(nodes, last_funcdef):
         if next_node is parent:
             continue
 
-        # False branch: insert For-header if If is last statement in For body.
-        # This matches _false_arc() in coverage.py which returns for_node.lineno
-        # when isinstance(if_node._parent, vy_ast.For).
-        if isinstance(parent, vy_ast.For) and parent.body[-1] is node:
+        # False branch: insert For-header if If is last statement in For body
+        # AND has no else clause.  When the If has an orelse, the false arc
+        # targets orelse[0] (which will appear naturally in the trace), not
+        # the for-header.
+        if (
+            isinstance(parent, vy_ast.For)
+            and parent.body[-1] is node
+            and not node.orelse
+        ):
             result.append(parent)
 
     # Function exit: emit FunctionDef so coverage sees arc from

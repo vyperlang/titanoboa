@@ -723,3 +723,25 @@ def foo(val: uint256):
     assert (
         fn_node.lineno in missing[if_node.lineno]
     ), f"Expected false arc to fn_line {fn_node.lineno}, got {missing}"
+
+
+def test_branch_if_in_orelse_without_else():
+    """if inside an else block with no else of its own — both arcs covered.
+
+    Regression test for _false_arc sibling lookup: the inner if lives in
+    parent.orelse, not parent.body, so the sibling search must check both.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if x > 0:
+        return 1
+    else:
+        if y > 0:
+            return 2
+        return 3
+"""
+    missing = _check_branch_coverage(
+        source, lambda c: (c.foo(1, 0), c.foo(0, 1), c.foo(0, 0))
+    )
+    assert missing == {}, f"Missing branch arcs: {missing}"

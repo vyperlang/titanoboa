@@ -93,6 +93,31 @@ def foo(x: uint256) -> uint256:
     assert arcs == set(), f"Expected empty arcs, got {arcs}"
 
 
+def test_reporter_arcs_if_in_orelse():
+    """If inside an else block (orelse) — false arc targets next sibling in orelse."""
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if x > 0:
+        return 1
+    else:
+        if y > 0:
+            return 2
+        return 3
+"""
+    with _reporter_for(source) as reporter:
+        arcs = reporter.arcs()
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    inner_if = next(n for n in if_nodes if n.lineno > if_nodes[0].lineno)
+    # inner if false should go to `return 3` (next sibling in orelse)
+    return_3 = ast.get_descendants(vy_ast.Return)[-1]
+    assert (
+        inner_if.lineno,
+        return_3.lineno,
+    ) in arcs, f"Expected arc ({inner_if.lineno}, {return_3.lineno}) in {arcs}"
+
+
 def test_reporter_arcs_nested_for_if():
     """If last in for body → false arc targets the for header."""
     source = """\
