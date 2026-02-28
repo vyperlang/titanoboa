@@ -158,12 +158,27 @@ def _is_null_return(ast_node):
     return False
 
 
+def _bytecode_lineno(stmt):
+    """Return the line the tracer will report first for a statement.
+
+    For multi-line statements the compiler generates expression bytecode
+    before the store/return, so the first traced line is the value
+    expression's line — not the keyword line. For single-line statements
+    or statements without a value, return stmt.lineno unchanged.
+    """
+    if stmt.end_lineno is not None and stmt.end_lineno > stmt.lineno:
+        value = getattr(stmt, "value", None)
+        if value is not None and value.lineno != stmt.lineno:
+            return value.lineno
+    return stmt.lineno
+
+
 def _true_arc(if_node, fn_node):
     """Target line for the true (body) branch of an If node."""
     first_body = if_node.body[0]
     if _is_null_return(first_body):
         return fn_node.lineno
-    return first_body.lineno
+    return _bytecode_lineno(first_body)
 
 
 def _false_arc(if_node, fn_node):
@@ -173,7 +188,7 @@ def _false_arc(if_node, fn_node):
         first_else = if_node.orelse[0]
         if _is_null_return(first_else):
             return fn_node.lineno
-        return first_else.lineno
+        return _bytecode_lineno(first_else)
 
     # find the next sibling statement after the if
     parent = if_node._parent
@@ -184,10 +199,9 @@ def _false_arc(if_node, fn_node):
     )
     for node, next_ in zip(siblings, siblings[1:]):
         if node is if_node:
-            target = next_.lineno
             if _is_null_return(next_):
                 return fn_node.lineno
-            return target
+            return _bytecode_lineno(next_)
 
     # if was the last statement in its scope (no next sibling found)
     if isinstance(if_node._parent, vy_ast.For):

@@ -118,6 +118,43 @@ def foo(x: uint256, y: uint256) -> uint256:
     ) in arcs, f"Expected arc ({inner_if.lineno}, {return_3.lineno}) in {arcs}"
 
 
+def test_reporter_arcs_multiline_body_targets_value_line():
+    """Arc target for multiline body statement must be the value expression line.
+
+    For `y: uint256 = (\\n    x + 1\\n)`, the compiler generates expression
+    bytecode first, so the tracer reports the expression line — the arc
+    target must match.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        y: uint256 = (
+            x +
+            1
+        )
+        return y
+    else:
+        return 0
+"""
+    with _reporter_for(source) as reporter:
+        arcs = reporter.arcs()
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # True arc target should be the value expression line (x +), not AnnAssign line
+    value_line = if_node.body[0].value.lineno
+    assert (
+        if_node.lineno,
+        value_line,
+    ) in arcs, f"Expected true arc ({if_node.lineno}, {value_line}) in arcs: {arcs}"
+    # False arc should target the else body
+    else_line = if_node.orelse[0].lineno
+    assert (
+        if_node.lineno,
+        else_line,
+    ) in arcs, f"Expected false arc ({if_node.lineno}, {else_line}) in arcs: {arcs}"
+
+
 def test_reporter_arcs_nested_for_if():
     """If last in for body → false arc targets the for header."""
     source = """\

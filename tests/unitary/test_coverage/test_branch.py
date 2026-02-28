@@ -851,6 +851,92 @@ def bar(x: uint256) -> uint256:
         )
 
 
+def test_branch_multiline_body_statement():
+    """Multiline assignment in if-body: both branches hit, no missing arcs.
+
+    Regression: the reporter's arc target must match the line the tracer
+    reports first. For multi-line statements the compiler generates expression
+    bytecode before the store, so the first traced line is the value's line
+    — not the keyword/variable line.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        y: uint256 = (
+            x +
+            1
+        )
+        return y
+    else:
+        return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_multiline_body_statement_partial():
+    """Multiline assignment in if-body, only false branch hit."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        y: uint256 = (
+            x +
+            1
+        )
+        return y
+    else:
+        return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # True arc target is the value expression line (x +), not the AnnAssign line
+    value_line = if_node.body[0].value.lineno
+
+    missing = _check_branch_coverage(source, lambda c: c.foo(1))
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+    assert (
+        value_line in missing[if_node.lineno]
+    ), f"Expected true arc to value line {value_line}, got {missing}"
+
+
+def test_branch_multiline_return_in_body():
+    """Multiline return in if-body: both branches hit, no missing arcs.
+
+    Regression: `return (\\n    expr\\n)` — the return keyword line has no
+    bytecode, the tracer reports the expression line. Arc target must match.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return (
+            x + 1
+        )
+    else:
+        return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_multiline_return_in_else():
+    """Multiline return in else-body: both branches hit, no missing arcs."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        return (
+            x + 1
+        )
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
 def test_branch_if_else_in_for_loop_partial():
     """if/else in for loop, only true branch hit — else arc missing."""
     source = """\
