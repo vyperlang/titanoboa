@@ -252,6 +252,17 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
             if if_node.test.lineno != if_node.lineno:
                 ret.discard(if_node.test.lineno)
 
+        # Exclude keyword-only lines of multi-line statements.
+        # e.g. `return (\n    expr\n)` — the `return` line has no
+        # bytecode; the compiler only generates code for the expression.
+        # These lines would appear perpetually uncovered.
+        for f in functions:
+            for stmt in f.body:
+                if stmt.end_lineno is not None and stmt.end_lineno > stmt.lineno:
+                    desc_linenos = {n.lineno for n in stmt.get_descendants()}
+                    if stmt.lineno not in desc_linenos:
+                        ret.discard(stmt.lineno)
+
         return ret
 
     # OVERRIDES

@@ -745,3 +745,66 @@ def foo(x: uint256, y: uint256) -> uint256:
         source, lambda c: (c.foo(1, 0), c.foo(0, 1), c.foo(0, 0))
     )
     assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+# --- if-else inside for loop ---
+
+
+def test_branch_if_else_in_for_loop():
+    """if/else inside a for loop — both branches hit, no missing arcs.
+
+    Regression: ghost loop-exit If re-evaluations produced spurious arcs
+    (e.g. if_line -> post-loop return) that made executed_branch_arcs
+    inconsistent with reporter possibilities.
+    """
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 5:
+            total += val
+        else:
+            total += 1
+    return total
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0].lineno
+    false_target = if_node.orelse[0].lineno
+    expected_possible = {(if_node.lineno, true_target), (if_node.lineno, false_target)}
+
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo([10, 1])
+    )
+    assert possible == expected_possible, f"Possible: {possible}"
+    assert missing == {}, f"Missing: {missing}"
+    # No extraneous executed targets beyond what the reporter declares
+    executed_targets = set(executed.get(if_node.lineno, []))
+    assert executed_targets == {
+        true_target,
+        false_target,
+    }, f"Expected executed targets {{{true_target}, {false_target}}}, got {executed_targets}"
+
+
+def test_branch_if_else_in_for_loop_partial():
+    """if/else in for loop, only true branch hit — else arc missing."""
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 5:
+            total += val
+        else:
+            total += 1
+    return total
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    false_target = if_node.orelse[0].lineno
+
+    missing = _check_branch_coverage(source, lambda c: c.foo([10]))
+    assert missing == {
+        if_node.lineno: [false_target]
+    }, f"Unexpected missing arcs: {missing}"
