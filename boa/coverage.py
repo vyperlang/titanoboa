@@ -162,14 +162,17 @@ def _bytecode_lineno(stmt):
     """Return the line the tracer will report first for a statement.
 
     For multi-line statements the compiler generates expression bytecode
-    before the store/return, so the first traced line is the value
+    before the store/return, so the first traced line is the value/test/exc
     expression's line — not the keyword line. For single-line statements
-    or statements without a value, return stmt.lineno unchanged.
+    or statements without a child expression, return stmt.lineno unchanged.
     """
     if stmt.end_lineno is not None and stmt.end_lineno > stmt.lineno:
-        value = getattr(stmt, "value", None)
-        if value is not None and value.lineno != stmt.lineno:
-            return value.lineno
+        # Check value (Return, AnnAssign, Assign, AugAssign, Expr, Log),
+        # then test (Assert), then exc (Raise).
+        for attr in ("value", "test", "exc"):
+            child = getattr(stmt, attr, None)
+            if child is not None and child.lineno != stmt.lineno:
+                return child.lineno
     return stmt.lineno
 
 
@@ -270,8 +273,9 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
         # e.g. `return (\n    expr\n)` — the `return` line has no
         # bytecode; the compiler only generates code for the expression.
         # These lines would appear perpetually uncovered.
+        # Scan all statements including those nested in if/else/for.
         for f in functions:
-            for stmt in f.body:
+            for stmt in f.get_descendants(vy_ast.Stmt):
                 if stmt.end_lineno is not None and stmt.end_lineno > stmt.lineno:
                     desc_linenos = {n.lineno for n in stmt.get_descendants()}
                     if stmt.lineno not in desc_linenos:

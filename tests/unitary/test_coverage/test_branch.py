@@ -937,6 +937,68 @@ def foo(x: uint256) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
+def test_branch_multiline_assert_in_body():
+    """Multiline assert in if-body: both branches hit, no missing arcs.
+
+    Assert has `.test` not `.value` — _bytecode_lineno must check both.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        assert (
+            x < 100
+        )
+        return x
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_multiline_return_in_body_with_else():
+    """Regression: multiline return in true branch with explicit else.
+
+    The ghost-If heuristic in _normalize_if_arcs must not drop a
+    legitimate If when preamble alias nodes precede the body.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return (
+            x + 1
+        )
+    else:
+        return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_for_loop_if_no_else_both_orders():
+    """Regression: for-loop if (no else), false arc detected in both orders.
+
+    false-then-true ([1, 10]) and true-then-false ([10, 1]) must both
+    produce correct arcs. The backedge detection must handle both orderings.
+    """
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 5:
+            total += val
+    return total
+"""
+    # Each order alone should report the untaken branch
+    missing_ft = _check_branch_coverage(source, lambda c: c.foo([1, 10]))
+    assert missing_ft == {}, f"false-then-true missing arcs: {missing_ft}"
+
+    missing_tf = _check_branch_coverage(source, lambda c: c.foo([10, 1]))
+    assert missing_tf == {}, f"true-then-false missing arcs: {missing_tf}"
+
+
 def test_branch_if_else_in_for_loop_partial():
     """if/else in for loop, only true branch hit — else arc missing."""
     source = """\
