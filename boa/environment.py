@@ -13,12 +13,7 @@ import eth.constants as constants
 import vyper.ast as vy_ast
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
-from boa.coverage import (
-    _collapse_cov_node,
-    _dedup_nodes,
-    _normalize_if_arcs,
-    _normalize_multiline_entries,
-)
+from boa.coverage import _collapse_cov_node, _dedup_nodes, _normalize_if_arcs
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -429,7 +424,6 @@ class Env:
                 segments.append((current_file, current_nodes))
 
             for filename, nodes in segments:
-                nodes = _normalize_multiline_entries(nodes)
                 deduped = _dedup_nodes(nodes)
                 self._trace_cov(filename, deduped)
 

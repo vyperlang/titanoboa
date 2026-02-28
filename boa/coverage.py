@@ -55,244 +55,19 @@ def _dedup_nodes(nodes):
     return result
 
 
-def _resolve_if(node, next_node):
-    """Classify an If node's relationship with its successor in the trace."""
-    parent = getattr(node, "_parent", None)
-
-    if next_node is node:
-        return "loop_reiter"
-    if next_node is not None and next_node.lineno == node.body[0].lineno:
-        return "true"
-    if (
-        node.orelse
-        and next_node is not None
-        and next_node.lineno == node.orelse[0].lineno
-    ):
-        return "false"
-    if next_node is parent:
-        return "for_present"
-    if not node.orelse and isinstance(parent, vy_ast.For) and parent.body[-1] is node:
-        return "for_insert"
-    if node.orelse and next_node is not None:
-        return "ghost"
-    if next_node is None:
-        return "func_exit"
-    return "unresolved"
-
-
-def _strip_if_preambles(nodes):
-    """Remove preamble aliases from If evaluation runs.
-
-    Vyper compiles body/orelse setup bytecode inline with the If
-    condition evaluation.  These preamble nodes appear between
-    consecutive If evaluations of the same If and create spurious
-    branch arcs.
-
-    A preamble is any non-If, non-For node sandwiched between identical
-    If nodes.  For orelse Ifs, trailing preambles after the run are also
-    stripped when they belong to the wrong branch subtree.
-    """
-    if not nodes:
-        return nodes
-
-    result = []
-    i = 0
-    while i < len(nodes):
-        node = nodes[i]
-
-        if isinstance(node, vy_ast.If):
-            if_node = node
-
-            # Scan the If evaluation run: consecutive If(same) nodes
-            # interspersed with preamble aliases.  Preserve For nodes
-            # (backedge markers from _trace_computation).
-            j = i + 1
-            while j < len(nodes):
-                if nodes[j] is if_node:
-                    j += 1
-                elif (
-                    j + 1 < len(nodes)
-                    and nodes[j + 1] is if_node
-                    and not isinstance(nodes[j], vy_ast.For)
-                ):
-                    # Non-If, non-For node sandwiched: preamble. Skip.
-                    j += 1
-                else:
-                    break
-            # j now points past the run (first node not followed by
-            # if_node, or a For node).
-
-            # Keep If and For nodes from the run, discard preambles.
-            # Also discard body/orelse child Ifs — they appear as part
-            # of the parent If's condition evaluation bytecode and are
-            # not real branch entries.
-            for k in range(i, j):
-                if nodes[k] is if_node:
-                    result.append(nodes[k])
-                elif isinstance(nodes[k], vy_ast.For):
-                    result.append(nodes[k])
-                elif isinstance(nodes[k], vy_ast.If):
-                    # Keep only if NOT a body/orelse child of if_node
-                    if nodes[k]._parent is not if_node:
-                        result.append(nodes[k])
-
-            # Trailing preamble stripping (orelse Ifs only — no-else
-            # trailing aliases are handled by _normalize_multiline_entries).
-            if if_node.orelse and j < len(nodes) and j + 1 < len(nodes):
-                trail = nodes[j]
-                after = nodes[j + 1]
-                body0_stmt = if_node.body[0]
-                orelse0_stmt = if_node.orelse[0]
-                # Case 1: trail matches neither branch entry — clear
-                # preamble (sub-expression of a multiline body).
-                if (
-                    trail.lineno != body0_stmt.lineno
-                    and trail.lineno != orelse0_stmt.lineno
-                ):
-                    i = j + 1
-                    continue
-                # Case 2: trail matches orelse but after is in body
-                # range — an orelse setup before true body starts.
-                if (
-                    trail.lineno == orelse0_stmt.lineno
-                    and body0_stmt.lineno <= after.lineno <= body0_stmt.end_lineno
-                ):
-                    i = j + 1
-                    continue
-                # Case 3: trail belongs to one branch subtree but
-                # after belongs to the other — cross-branch alias.
-                trail_in_body = _is_descendant(trail, body0_stmt)
-                trail_in_else = _is_descendant(trail, orelse0_stmt)
-                after_in_body = _is_descendant(after, body0_stmt)
-                after_in_else = _is_descendant(after, orelse0_stmt)
-                if (trail_in_body and after_in_else) or (
-                    trail_in_else and after_in_body
-                ):
-                    i = j + 1
-                    continue
-            i = j
-        else:
-            result.append(node)
-            i += 1
-
-    return result
-
-
-def _strip_parent_if_reruns(nodes):
-    """Strip parent-If re-evaluations after nested-If false branches.
-
-    When an inner If (no orelse) is the last statement in a parent If's
-    body or orelse, the compiler re-evaluates the parent If as cleanup
-    after the inner If's false branch.  These re-evaluations produce
-    spurious arcs (inner → parent) and must be stripped.
-
-    The pattern in the node stream:
-      ..., If@inner, If@parent, [If@inner|If@parent]*, real_target, ...
-    becomes:
-      ..., If@inner, real_target, ...
-    """
-    if not nodes:
-        return nodes
-
-    result = []
-    i = 0
-    while i < len(nodes):
-        node = nodes[i]
-        result.append(node)
-
-        if isinstance(node, vy_ast.If) and not node.orelse:
-            parent = getattr(node, "_parent", None)
-            if isinstance(parent, vy_ast.If):
-                # Check if inner is the last stmt in parent's body/orelse
-                if hasattr(parent, "orelse") and node in parent.orelse:
-                    is_last = node is parent.orelse[-1]
-                else:
-                    is_last = node is parent.body[-1]
-
-                if is_last and i + 1 < len(nodes) and nodes[i + 1] is parent:
-                    # Skip all parent/inner re-evaluations
-                    j = i + 1
-                    while j < len(nodes) and (nodes[j] is parent or nodes[j] is node):
-                        j += 1
-                    i = j
-                    continue
-
-        i += 1
-
-    return result
-
-
-def _strip_post_body_if_reruns(nodes):
-    """Strip If re-evaluations that follow the If's own true body.
-
-    When an If (no orelse) has a next sibling (tail statement), the
-    compiler jumps back to the If condition bytecode after the true
-    body completes, before falling through to the tail.  This
-    re-evaluation appears as `..., body_desc, If@X, tail_desc, ...`
-    and would produce a spurious false arc (If → tail).
-
-    Strip If@X when the preceding node is inside the If's body subtree
-    and the If has no orelse.
-    """
-    if len(nodes) < 2:
-        return nodes
-
-    result = [nodes[0]]
-    for i in range(1, len(nodes)):
-        node = nodes[i]
-        if (
-            isinstance(node, vy_ast.If)
-            and not node.orelse
-            and any(_is_descendant(result[-1], stmt) for stmt in node.body)
-        ):
-            # This If is a post-body re-evaluation — skip it
-            continue
-        result.append(node)
-
-    return result
-
-
 def _normalize_if_arcs(nodes, last_funcdef):
-    """Insert synthetic nodes so coverage.py sees correct branch arcs.
-
-    First strips preamble aliases (compiler artifacts), then strips
-    parent-If re-evaluations from nested-If false branches, then
-    strips post-body If re-evaluations, then uses _resolve_if to
-    classify each If node's relationship with its successor.  Only
-    two tags require action: "for_insert" (append For-header) and
-    "ghost" (remove spurious loop-exit If).
+    """Resolve If branch arcs deterministically via AST subtree membership.
 
     Must run before _dedup_nodes to preserve iteration boundaries.
     """
-    nodes = _strip_if_preambles(nodes)
-    nodes = _strip_parent_if_reruns(nodes)
-    nodes = _strip_post_body_if_reruns(nodes)
-    result = []
-    for i, node in enumerate(nodes):
-        result.append(node)
-        if not isinstance(node, vy_ast.If):
-            continue
-
-        next_node = nodes[i + 1] if i + 1 < len(nodes) else None
-        tag = _resolve_if(node, next_node)
-
-        if tag == "for_insert":
-            result.append(node._parent)
-        elif tag == "ghost":
-            result.pop()
-
-    if last_funcdef is not None and result and isinstance(result[-1], vy_ast.If):
-        result.append(last_funcdef)
-
-    return result
-
-
-def _stmt_ancestor(node):
-    """Return the nearest vy_ast.Stmt ancestor (or the node itself if it is one)."""
-    cur = node
-    while cur is not None and not isinstance(cur, vy_ast.Stmt):
-        cur = getattr(cur, "_parent", None)
-    return cur
+    if not nodes:
+        return nodes
+    fn_node = get_fn_ancestor_from_node(nodes[0])
+    if fn_node is None:
+        fn_node = last_funcdef  # fallback
+    if fn_node is None:
+        return nodes
+    return _resolve_branches(nodes, fn_node)
 
 
 def _is_descendant(node, ancestor):
@@ -303,169 +78,6 @@ def _is_descendant(node, ancestor):
             return True
         cur = getattr(cur, "_parent", None)
     return False
-
-
-def _next_sibling_stmt(if_node):
-    """Return the next sibling Stmt after *if_node*, or None.
-
-    When if_node is the last statement in its scope (e.g. an elif at
-    the end of the outer If's orelse), walk up the ancestor chain to
-    find the next statement after the enclosing block.
-    """
-    parent = if_node._parent
-    siblings = (
-        parent.orelse
-        if hasattr(parent, "orelse") and if_node in parent.orelse
-        else parent.body
-    )
-    for node, next_ in zip(siblings, siblings[1:]):
-        if node is if_node:
-            return next_
-
-    # No next sibling — walk up to find the ancestor that is a
-    # direct child of the enclosing FunctionDef, then find its
-    # next sibling.  This mirrors _false_arc's fallthrough logic.
-    if isinstance(parent, vy_ast.Stmt) and not isinstance(parent, vy_ast.FunctionDef):
-        grandparent = getattr(parent, "_parent", None)
-        if grandparent is not None and isinstance(grandparent, vy_ast.FunctionDef):
-            for node, next_ in zip(grandparent.body, grandparent.body[1:]):
-                if node is parent:
-                    return next_
-
-    return None
-
-
-def _normalize_multiline_entries(nodes):
-    """Ensure the first node after an If has the parent statement's lineno.
-
-    When the compiler emits bytecode for a multiline branch-entry statement,
-    the first traced node may be a child expression (different lineno from
-    the parent Stmt).  Insert the parent Stmt node so that _dedup_nodes
-    produces stmt.lineno as the arc target, matching what the reporter
-    declares.
-
-    Branch-aware: skips preamble aliases (same-If re-evaluations and
-    trailing compiler setup nodes), determines which branch was taken
-    by scanning for the first body-descendant node, and inserts the
-    parent stmt before the real branch entry.
-    """
-    result = []
-    i = 0
-    while i < len(nodes):
-        node = nodes[i]
-        if isinstance(node, vy_ast.If):
-            if_node = node
-            result.append(node)
-            # Scan past the If evaluation run (same-If repeats and
-            # sandwiched preamble aliases).
-            j = i + 1
-            while j < len(nodes):
-                if nodes[j] is if_node:
-                    result.append(nodes[j])
-                    j += 1
-                    continue
-                if _is_preamble(nodes, j, if_node):
-                    result.append(nodes[j])
-                    j += 1
-                    continue
-                break
-            # j points to the first non-preamble, non-If node (or end).
-            # Determine which branch was taken by scanning forward for
-            # the first node inside body[0]'s subtree.  If found, the
-            # true branch was taken and any preceding nodes are trailing
-            # compiler aliases that should be dropped.  Otherwise the
-            # false branch was taken.
-            candidate, insert_at = _find_branch_entry(nodes, j, if_node)
-            entry_inserted = False
-            while j < len(nodes) and not isinstance(nodes[j], vy_ast.If):
-                if j < insert_at:
-                    # Trailing compiler alias before the real entry — drop.
-                    j += 1
-                    continue
-                if not entry_inserted and candidate is not None:
-                    result.append(candidate)
-                    entry_inserted = True
-                result.append(nodes[j])
-                j += 1
-            i = j
-        else:
-            result.append(node)
-            i += 1
-    return result
-
-
-def _find_branch_entry(nodes, start, if_node):
-    """Scan forward from *start* to find the real branch entry.
-
-    Returns (candidate_stmt, insert_index) where candidate_stmt is the
-    Stmt to insert (or None) and insert_index is where to insert it.
-    """
-    body0 = if_node.body[0]
-
-    # Scan for the first node inside body[0] subtree (true branch).
-    j = start
-    while j < len(nodes) and not isinstance(nodes[j], vy_ast.If):
-        if _is_descendant(nodes[j], body0):
-            if (
-                not isinstance(body0, (vy_ast.If, vy_ast.For))
-                and body0.lineno != nodes[j].lineno
-            ):
-                return body0, j
-            return None, j
-        j += 1
-
-    # No body[0] descendant found — false branch.  Use the first node.
-    if start < len(nodes) and not isinstance(nodes[start], vy_ast.If):
-        candidate = _branch_entry_candidate(if_node, nodes[start])
-        if (
-            candidate is not None
-            and not isinstance(candidate, (vy_ast.If, vy_ast.For))
-            and candidate.lineno != nodes[start].lineno
-        ):
-            return candidate, start
-
-    return None, start
-
-
-def _is_preamble(nodes, idx, if_node):
-    """Return True if nodes[idx] is a preamble alias.
-
-    A preamble node is immediately followed by the same If identity
-    (possibly with one intervening preamble node).  We check at most
-    2 positions ahead to avoid false positives from distant
-    re-evaluations.
-    """
-    k = idx + 1
-    if k < len(nodes) and nodes[k] is if_node:
-        return True
-    if k + 1 < len(nodes) and nodes[k + 1] is if_node:
-        return True
-    return False
-
-
-def _branch_entry_candidate(if_node, observed):
-    """Determine which branch-entry statement *observed* belongs to.
-
-    Returns the candidate Stmt (body[0], orelse[0], or next sibling)
-    if *observed* is inside its subtree, otherwise None.
-    """
-    # True branch: body[0]
-    body0 = if_node.body[0]
-    if _is_descendant(observed, body0):
-        return body0
-
-    # False branch with explicit else: orelse[0]
-    if if_node.orelse:
-        else0 = if_node.orelse[0]
-        if _is_descendant(observed, else0):
-            return else0
-
-    # False branch without else: next sibling statement
-    sibling = _next_sibling_stmt(if_node)
-    if sibling is not None and _is_descendant(observed, sibling):
-        return sibling
-
-    return None
 
 
 def coverage_init(registry, options):
@@ -612,24 +224,52 @@ def _is_null_return(ast_node):
     return False
 
 
-def _true_arc(if_node, fn_node):
-    """Target line for the true (body) branch of an If node."""
+def _branch_targets(if_node, fn_node):
+    """Compute branch target info for an If node.
+
+    Returns (true_line, false_line, true_entry_stmt, false_entry_stmt,
+             false_mode, loop_owner).
+    """
+    # --- True target ---
     first_body = if_node.body[0]
     if _is_null_return(first_body):
-        return fn_node.lineno
-    return first_body.lineno
+        true_line = fn_node.lineno
+        true_stmt = None
+    else:
+        true_line = first_body.lineno
+        true_stmt = first_body
 
-
-def _false_arc(if_node, fn_node):
-    """Target line for the false (else/fallthrough) branch of an If node."""
-    # explicit else/elif
+    # --- False target ---
     if if_node.orelse:
         first_else = if_node.orelse[0]
         if _is_null_return(first_else):
-            return fn_node.lineno
-        return first_else.lineno
+            false_line, false_stmt, false_mode, loop_owner = (
+                fn_node.lineno,
+                None,
+                "null_return",
+                None,
+            )
+        else:
+            false_line, false_stmt, false_mode, loop_owner = (
+                first_else.lineno,
+                first_else,
+                "explicit_else",
+                None,
+            )
+    else:
+        false_line, false_stmt, false_mode, loop_owner = _find_false_target(
+            if_node, fn_node
+        )
 
-    # find the next sibling statement after the if
+    return true_line, false_line, true_stmt, false_stmt, false_mode, loop_owner
+
+
+def _find_false_target(if_node, fn_node):
+    """Find the false-branch target for an If without orelse.
+
+    Returns (line, stmt_or_None, false_mode, loop_owner).
+    """
+    # Check immediate siblings first
     parent = if_node._parent
     siblings = (
         parent.orelse
@@ -639,22 +279,17 @@ def _false_arc(if_node, fn_node):
     for node, next_ in zip(siblings, siblings[1:]):
         if node is if_node:
             if _is_null_return(next_):
-                return fn_node.lineno
-            return next_.lineno
+                return fn_node.lineno, None, "null_return", None
+            return next_.lineno, next_, "lexical_fallthrough", None
 
-    # if was the last statement in its scope (no next sibling found).
-    # Walk up through enclosing blocks one level at a time, looking for
-    # the next sibling at each scope.  This handles nested Ifs inside
-    # For loops (the next sibling is in the For body, not the function).
+    # No sibling — walk up through enclosing blocks
     ancestor = if_node._parent
     while ancestor is not fn_node:
-        # If we've exhausted a For body, the false branch loops back.
         if isinstance(ancestor, vy_ast.For):
-            return ancestor.lineno
+            return ancestor.lineno, None, "loop_back", ancestor
         enclosing = ancestor._parent
         if enclosing is None:
             break
-        # Determine which child list ancestor belongs to
         if hasattr(enclosing, "orelse") and ancestor in enclosing.orelse:
             scope = enclosing.orelse
         elif hasattr(enclosing, "body"):
@@ -665,12 +300,262 @@ def _false_arc(if_node, fn_node):
         for node, next_ in zip(scope, scope[1:]):
             if node is ancestor:
                 if _is_null_return(next_):
-                    return fn_node.lineno
-                return next_.lineno
-        # No sibling at this level, keep walking up
+                    return fn_node.lineno, None, "null_return", None
+                return next_.lineno, next_, "lexical_fallthrough", None
         ancestor = enclosing
 
-    return fn_node.lineno  # implicit return
+    return fn_node.lineno, None, "fn_exit", None
+
+
+def _mark_preambles(nodes):
+    """Identify preamble node positions in the raw collapsed stream.
+
+    A preamble is a node sandwiched between same-identity If re-evaluations
+    as part of condition evaluation bytecode.  After the initial evaluation
+    run (consecutive same-If nodes), subsequent same-If appearances are
+    post-body re-evaluations and are also marked.
+
+    Returns a set of indices that are preamble positions.
+    """
+    preamble_indices = set()
+    i = 0
+    while i < len(nodes):
+        if not isinstance(nodes[i], vy_ast.If):
+            i += 1
+            continue
+
+        if_node = nodes[i]
+        body0 = if_node.body[0]
+
+        # Branch entries that are For nodes: the compiler emits the For
+        # iterator expression inline with If condition evaluation, so
+        # For-iterator descendants sandwiched between If re-evals are
+        # evidence, not preambles.
+        for_entries = []
+        if isinstance(body0, vy_ast.For):
+            for_entries.append(body0)
+        if if_node.orelse and isinstance(if_node.orelse[0], vy_ast.For):
+            for_entries.append(if_node.orelse[0])
+
+        # Phase 1: Consume the initial evaluation run.
+        # Consecutive same-If nodes with sandwiched non-If preambles.
+        j = i + 1
+        while j < len(nodes):
+            if nodes[j] is if_node:
+                # Same If re-evaluation — mark as preamble.
+                preamble_indices.add(j)
+                j += 1
+            elif (
+                not isinstance(nodes[j], vy_ast.For)
+                and j + 1 < len(nodes)
+                and nodes[j + 1] is if_node
+            ):
+                # Non-For node immediately followed by same If — preamble.
+                # But NOT if it's an unrelated If.
+                if isinstance(nodes[j], vy_ast.If) and nodes[j]._parent is not if_node:
+                    break
+                # NOT a preamble if it's a descendant of a For that is
+                # the branch entry — the compiler emits the For iterator
+                # inline with condition evaluation bytecode.
+                if any(_is_descendant(nodes[j], fe) for fe in for_entries):
+                    break
+                preamble_indices.add(j)
+                j += 1
+            else:
+                break
+
+        # j now points past the initial evaluation run.
+
+        # Phase 2: Trailing preamble detection.
+        # After the evaluation run, the compiler may emit orelse/sibling
+        # setup bytecode before the real evidence.  Scan ahead to find
+        # the first body-descendant (true evidence).  Non-body nodes
+        # before it are trailing preambles.
+        k = j
+        first_body_idx = None
+        while k < len(nodes) and not isinstance(nodes[k], vy_ast.If):
+            if _is_descendant(nodes[k], body0):
+                first_body_idx = k
+                break
+            k += 1
+        if first_body_idx is not None:
+            for k in range(j, first_body_idx):
+                if not isinstance(nodes[k], vy_ast.For):
+                    preamble_indices.add(k)
+
+        # Phase 3: Post-body re-evaluation detection.
+        # After the real evidence, the compiler may jump back to the
+        # If condition as a post-body re-evaluation.  Scan from j
+        # (or first_body_idx) forward for same-If appearances that
+        # follow body descendants — these are post-body re-evals.
+        # The resolved_this_epoch check in the engine handles this,
+        # so we only need to handle the case where body evidence
+        # precedes the re-eval.
+        scan_start = first_body_idx if first_body_idx is not None else j
+        k = scan_start
+        while k < len(nodes):
+            if nodes[k] is if_node:
+                preamble_indices.add(k)
+                k += 1
+            elif isinstance(nodes[k], vy_ast.If) and nodes[k]._parent is if_node:
+                # Child If between evidence and post-body re-eval
+                k += 1
+            elif not isinstance(nodes[k], vy_ast.For) and _is_descendant(
+                nodes[k], if_node
+            ):
+                # Node inside if_node's subtree (body or orelse descendant)
+                k += 1
+            else:
+                break
+
+        i = j if j > i + 1 else i + 1
+
+    return preamble_indices
+
+
+def _resolve_branches(nodes, fn_node):
+    """Resolve If branch outcomes deterministically via AST subtree membership.
+
+    Replaces all heuristic strip/normalize functions.
+
+    Phase 1: Collapse If-evaluation runs (preamble removal).
+    Phase 2: Decision engine resolves branch outcomes via subtree membership.
+
+    State:
+      pending:   list of (if_node, meta) awaiting resolution
+      resolved:  {id(if_node): if_node} resolved in current epoch
+      deferred:  nodes buffered while decisions are pending
+    """
+    # Phase 1: identify preamble positions
+    preamble_indices = _mark_preambles(nodes)
+
+    pending = []
+    resolved_this_epoch = {}  # {id(if_node): if_node}
+    deferred = []  # buffered nodes awaiting decision resolution
+    result = []
+
+    for idx, node in enumerate(nodes):
+        # Skip preamble nodes entirely — they are compiler artifacts
+        # (condition re-evaluations and branch setup bytecode) that
+        # would create spurious arcs if emitted.
+        if idx in preamble_indices:
+            continue
+
+        # --- For-marker: resolve loop-back Ifs, emit For, advance epoch ---
+        if isinstance(node, vy_ast.For):
+            # Resolve pending loop-back Ifs inside this For.
+            new_pending = []
+            any_resolved = False
+            for if_node, meta in pending:
+                *_, false_mode, loop_owner = meta
+                if false_mode == "loop_back" and loop_owner is node:
+                    resolved_this_epoch[id(if_node)] = if_node
+                    any_resolved = True
+                else:
+                    new_pending.append((if_node, meta))
+            pending = new_pending
+            if any_resolved or not pending:
+                # For resolved a loop-back or no pending: emit immediately
+                result.append(node)
+                if not pending:
+                    result.extend(deferred)
+                    deferred = []
+            else:
+                # For didn't resolve anything and decisions still pending:
+                # defer it to preserve arc chain (If → evidence).
+                deferred.append(node)
+            # Epoch reset: Ifs inside this For can re-resolve next iteration
+            resolved_this_epoch = {
+                k: v
+                for k, v in resolved_this_epoch.items()
+                if not _is_descendant(v, node)
+            }
+            continue
+
+        # --- Resolve ALL matching pending decisions FIRST ---
+        new_pending = []
+        any_resolved = False
+        for if_node, meta in reversed(pending):
+            true_line, false_line, true_stmt, false_stmt, false_mode, loop_owner = meta
+            if true_stmt is not None and _is_descendant(node, true_stmt):
+                # True branch taken.
+                if true_stmt.lineno != node.lineno:
+                    result.append(true_stmt)  # multiline entry fixup
+                resolved_this_epoch[id(if_node)] = if_node
+                any_resolved = True
+                continue  # pop from pending
+            if false_stmt is not None and _is_descendant(node, false_stmt):
+                # False branch taken (explicit else or lexical fallthrough).
+                if false_stmt.lineno != node.lineno:
+                    result.append(false_stmt)  # multiline entry fixup
+                resolved_this_epoch[id(if_node)] = if_node
+                any_resolved = True
+                continue  # pop from pending
+            # Terminal loop-back false: node is outside loop_owner subtree.
+            if (
+                false_mode == "loop_back"
+                and loop_owner is not None
+                and not _is_descendant(node, loop_owner)
+            ):
+                result.append(loop_owner)  # For node as false evidence
+                resolved_this_epoch[id(if_node)] = if_node
+                any_resolved = True
+                continue  # pop from pending
+            new_pending.append((if_node, meta))
+
+        pending = list(reversed(new_pending))
+
+        # --- If node: dedup AFTER resolution, then push or skip ---
+        if isinstance(node, vy_ast.If):
+            if any(node is p[0] for p in pending):
+                # Same If already pending — preamble re-evaluation.
+                continue
+            if id(node) in resolved_this_epoch:
+                # Same If already resolved this epoch — post-body
+                # re-evaluation.
+                continue
+            # New If decision — push and emit.
+            meta = _branch_targets(node, fn_node)
+            pending.append((node, meta))
+            result.append(node)
+        elif any_resolved:
+            # Node resolved a decision — emit it (evidence).
+            result.append(node)
+            # Flush deferred only when ALL pending decisions are resolved.
+            if not pending:
+                result.extend(deferred)
+                deferred = []
+        elif pending:
+            # Node didn't resolve any pending decision — defer it.
+            deferred.append(node)
+        else:
+            # No pending decisions — emit normally.
+            result.append(node)
+
+    # --- End-of-stream drain ---
+    for if_node, meta in pending:
+        *_, false_mode, loop_owner = meta
+        if false_mode == "loop_back" and loop_owner is not None:
+            result.append(loop_owner)
+        else:
+            result.append(fn_node)
+        resolved_this_epoch[id(if_node)] = if_node
+    pending = []
+
+    # Flush remaining deferred nodes (for statement coverage).
+    result.extend(deferred)
+
+    return result
+
+
+def _true_arc(if_node, fn_node):
+    """Target line for the true (body) branch of an If node."""
+    return _branch_targets(if_node, fn_node)[0]
+
+
+def _false_arc(if_node, fn_node):
+    """Target line for the false (else/fallthrough) branch of an If node."""
+    return _branch_targets(if_node, fn_node)[1]
 
 
 class TitanoboaReporter(coverage.plugin.FileReporter):

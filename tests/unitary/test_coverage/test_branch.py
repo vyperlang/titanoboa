@@ -1673,3 +1673,286 @@ def foo(arr: DynArray[uint256, 10]) -> uint256:
 """
     missing = _check_branch_coverage(source, lambda c: c.foo([25, 1]))
     assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+# --- invariant and decision engine tests ---
+
+
+def test_invariant_executed_subset_of_possible():
+    """For every scenario, executed branch arcs must be a subset of possible arcs."""
+    scenarios = [
+        # (source, calls_fn) covering various shapes
+        (
+            """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        return 0
+""",
+            lambda c: (c.foo(10), c.foo(1)),
+        ),
+        (
+            """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+""",
+            lambda c: (c.foo(10), c.foo(1)),
+        ),
+        (
+            """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 5:
+            total += val
+    return total
+""",
+            lambda c: c.foo([1, 10]),
+        ),
+        (
+            """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 5:
+            total += val
+        else:
+            total += 1
+    return total
+""",
+            lambda c: c.foo([10, 1]),
+        ),
+        (
+            """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 20:
+        return 3
+    elif x > 10:
+        return 2
+    return 0
+""",
+            lambda c: (c.foo(25), c.foo(15), c.foo(5)),
+        ),
+        (
+            """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 10:
+        if x > 20:
+            return 3
+    return 0
+""",
+            lambda c: (c.foo(25), c.foo(15), c.foo(5)),
+        ),
+        (
+            """\
+@external
+def foo(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        y += 1
+    y += 2
+    return y
+""",
+            lambda c: (c.foo(10), c.foo(1)),
+        ),
+        (
+            """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 100:
+            total += val
+        total += 1
+    return total
+""",
+            lambda c: c.foo([1, 2, 3]),
+        ),
+        # If branch target is a For (zero-iteration edge case)
+        (
+            """\
+@external
+def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    if flag:
+        for v: uint256 in data:
+            s += v
+    else:
+        s += 1
+    return s
+""",
+            lambda c: (c.foo(True, []), c.foo(False, [])),
+        ),
+        (
+            """\
+@external
+def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    if flag:
+        s += 1
+    else:
+        for v: uint256 in data:
+            s += v
+    return s
+""",
+            lambda c: (c.foo(True, []), c.foo(False, [])),
+        ),
+    ]
+    for source, calls_fn in scenarios:
+        possible, executed, missing = _check_full_branch_coverage(source, calls_fn)
+        for line, targets in executed.items():
+            arc_set = {(line, t) for t in targets}
+            assert (
+                arc_set <= possible
+            ), f"Executed arcs {arc_set} not subset of possible {possible}"
+
+
+def test_branch_if_true_branch_is_for_empty():
+    """If true branch is a For loop with zero iterations — both branches hit."""
+    source = """\
+@external
+def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    if flag:
+        for v: uint256 in data:
+            s += v
+    else:
+        s += 1
+    return s
+"""
+    missing = _check_branch_coverage(
+        source, lambda c: (c.foo(True, []), c.foo(False, []))
+    )
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_false_branch_is_for_empty():
+    """If false (else) branch is a For loop with zero iterations — both branches hit."""
+    source = """\
+@external
+def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    if flag:
+        s += 1
+    else:
+        for v: uint256 in data:
+            s += v
+    return s
+"""
+    missing = _check_branch_coverage(
+        source, lambda c: (c.foo(True, []), c.foo(False, []))
+    )
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_true_branch_is_for_nonempty():
+    """If true branch is a For loop with iterations — both branches hit."""
+    source = """\
+@external
+def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    if flag:
+        for v: uint256 in data:
+            s += v
+    else:
+        s += 1
+    return s
+"""
+    missing = _check_branch_coverage(
+        source, lambda c: (c.foo(True, [1, 2, 3]), c.foo(False, []))
+    )
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_true_branch_is_for_true_only():
+    """If true branch is a For — only true path taken, false must be missing."""
+    source = """\
+@external
+def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    if flag:
+        for v: uint256 in data:
+            s += v
+    else:
+        s += 1
+    return s
+"""
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(True, [1, 2])
+    )
+    # Invariant: executed ⊆ possible
+    for line, targets in executed.items():
+        arc_set = {(line, t) for t in targets}
+        assert (
+            arc_set <= possible
+        ), f"Executed arcs {arc_set} not subset of possible {possible}"
+    # False branch must be missing
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    false_target = if_node.orelse[0].lineno
+    assert if_node.lineno in missing, f"Expected if line {if_node.lineno} in missing"
+    assert (
+        false_target in missing[if_node.lineno]
+    ), f"Expected false target {false_target} missing from line {if_node.lineno}"
+
+
+def test_branch_nested_if_in_for_inner_false_only():
+    """Nested if in for body, only false (loop-back) path taken.
+    Must report true branch as missing, not false-positive full coverage."""
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 100:
+            total += val
+        total += 1
+    return total
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo([1, 2, 3]))
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0].lineno
+    # Only false path taken — true arc (if → body) must be missing
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if line {if_node.lineno} in missing: {missing}"
+    assert (
+        true_target in missing[if_node.lineno]
+    ), f"Expected true target {true_target} missing from line {if_node.lineno}: {missing}"
+
+
+def test_branch_nested_if_in_for_with_else_inner_false_only():
+    """Nested if/else in for body, only else (false) path taken.
+    Must report true branch as missing."""
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 100:
+            total += val
+        else:
+            total += 1
+    return total
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo([1, 2, 3]))
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0].lineno
+    # Only false (else) path taken — true arc must be missing
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if line {if_node.lineno} in missing: {missing}"
+    assert (
+        true_target in missing[if_node.lineno]
+    ), f"Expected true target {true_target} missing from line {if_node.lineno}: {missing}"
