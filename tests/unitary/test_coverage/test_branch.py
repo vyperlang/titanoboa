@@ -787,6 +787,70 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     }, f"Expected executed targets {{{true_target}, {false_target}}}, got {executed_targets}"
 
 
+def test_untaken_branch_lines_are_missing():
+    """Entering a function must not mark untaken branch body lines as covered.
+
+    Regression: old boa's FunctionDef span inflation marked every line in a
+    function as covered when the function was entered, regardless of which
+    branches were actually taken.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        return 0
+"""
+    with _coverage_session(source, lambda c: c.foo(10)) as analysis:
+        ast = parse_to_ast(source)
+        if_node = ast.get_descendants(vy_ast.If)[0]
+        else_line = if_node.orelse[0].lineno
+        # Only true branch hit — else body must be in missing
+        assert else_line in analysis.missing, (
+            f"Untaken else-body line {else_line} should be missing. "
+            f"Executed: {sorted(analysis.executed)}, Missing: {sorted(analysis.missing)}"
+        )
+
+
+def test_pass_only_function_lines():
+    """A pass-only function: `pass` is coverable but never hit at runtime.
+
+    Bytecode for `pass` maps to the FunctionDef node, which _collapse_cov_node
+    filters out. So even after calling foo(), the pass line is never traced.
+    """
+    source = """\
+@external
+def foo():
+    pass
+
+@external
+def bar(x: uint256) -> uint256:
+    return x
+"""
+    with _coverage_session(source, lambda c: (c.foo(), c.bar(42))) as analysis:
+        ast = parse_to_ast(source)
+        fn_bar = next(
+            f for f in ast.get_descendants(vy_ast.FunctionDef) if f.name == "bar"
+        )
+        bar_return_line = fn_bar.body[0].lineno
+        # bar's return line should be executed
+        assert bar_return_line in analysis.executed, (
+            f"bar's return line {bar_return_line} should be executed. "
+            f"Executed: {sorted(analysis.executed)}"
+        )
+
+        fn_foo = next(
+            f for f in ast.get_descendants(vy_ast.FunctionDef) if f.name == "foo"
+        )
+        pass_line = fn_foo.body[0].lineno
+        # pass compiles to FunctionDef bytecode which is filtered — it should be missing
+        assert pass_line in analysis.missing, (
+            f"pass line {pass_line} should be in missing (FunctionDef filtered). "
+            f"Executed: {sorted(analysis.executed)}, Missing: {sorted(analysis.missing)}"
+        )
+
+
 def test_branch_if_else_in_for_loop_partial():
     """if/else in for loop, only true branch hit — else arc missing."""
     source = """\

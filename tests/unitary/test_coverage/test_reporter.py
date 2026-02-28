@@ -274,6 +274,39 @@ def foo(x: uint256, y: uint256, z: uint256) -> uint256:
     )
 
 
+def test_reporter_lines_excludes_keyword_only_line():
+    """Keyword-only lines of multi-line statements are excluded from lines().
+
+    `return (\\n    expr\\n)` — the `return` keyword sits alone on its line
+    with no bytecode; only the expression line is compiled. The keyword-only
+    line must not appear in coverable lines.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> bool:
+    return (
+        x > 0 and y > 0
+    )
+"""
+    with _reporter_for(source) as reporter:
+        lines = reporter.lines()
+    ast = parse_to_ast(source)
+    return_node = ast.get_descendants(vy_ast.Return)[0]
+    desc_linenos = {n.lineno for n in return_node.get_descendants()}
+    # If the return keyword is alone on its line (no descendant shares it),
+    # it should be excluded from coverable lines.
+    if return_node.lineno not in desc_linenos:
+        assert return_node.lineno not in lines, (
+            f"Keyword-only line {return_node.lineno} should be excluded "
+            f"from lines: {sorted(lines)}"
+        )
+    # The expression line must still be coverable
+    expr_line = return_node.value.lineno
+    assert (
+        expr_line in lines
+    ), f"Expression line {expr_line} should be in lines: {sorted(lines)}"
+
+
 def test_reporter_lines_excludes_multiline_if_continuation():
     """Continuation lines of multi-line if conditions are excluded from lines().
 
