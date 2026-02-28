@@ -891,14 +891,14 @@ def foo(x: uint256) -> uint256:
 """
     ast = parse_to_ast(source)
     if_node = ast.get_descendants(vy_ast.If)[0]
-    # True arc target is the value expression line (x +), not the AnnAssign line
-    value_line = if_node.body[0].value.lineno
+    # True arc target is the statement line (AnnAssign line)
+    stmt_line = if_node.body[0].lineno
 
     missing = _check_branch_coverage(source, lambda c: c.foo(1))
     assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
     assert (
-        value_line in missing[if_node.lineno]
-    ), f"Expected true arc to value line {value_line}, got {missing}"
+        stmt_line in missing[if_node.lineno]
+    ), f"Expected true arc to stmt line {stmt_line}, got {missing}"
 
 
 def test_branch_multiline_return_in_body():
@@ -1020,3 +1020,656 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     assert missing == {
         if_node.lineno: [false_target]
     }, f"Unexpected missing arcs: {missing}"
+
+
+# --- correctness regression tests ---
+
+
+SOURCE_MULTILINE_RETURN_ELSE_FALLTHROUGH = """\
+@external
+def foo(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        return (
+            x + 1
+        )
+    else:
+        y = x
+    return y
+"""
+
+
+def test_correctness_multiline_return_else_fallthrough_both():
+    """P1 regression: multiline return in true body + else fallthrough.
+
+    The preamble stripping must not drop the true arc when the else arm
+    falls through (doesn't return).
+    """
+    missing = _check_branch_coverage(
+        SOURCE_MULTILINE_RETURN_ELSE_FALLTHROUGH, lambda c: (c.foo(10), c.foo(1))
+    )
+    assert missing == {}, f"Both branches hit, expected no missing arcs: {missing}"
+
+
+def test_correctness_multiline_return_else_fallthrough_true_only():
+    """True-only: true arc must be executed, false arc must be missing."""
+    ast = parse_to_ast(SOURCE_MULTILINE_RETURN_ELSE_FALLTHROUGH)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+
+    possible, executed, missing = _check_full_branch_coverage(
+        SOURCE_MULTILINE_RETURN_ELSE_FALLTHROUGH, lambda c: c.foo(10)
+    )
+    # True arc should be executed
+    assert (
+        if_node.lineno in executed
+    ), f"If-line {if_node.lineno} not in executed: {executed}"
+    # False arc should be missing
+    assert (
+        if_node.lineno in missing
+    ), f"If-line {if_node.lineno} not in missing: {missing}"
+
+
+def test_correctness_multiline_return_else_fallthrough_false_only():
+    """False-only: false arc must be executed, true arc must be missing."""
+    ast = parse_to_ast(SOURCE_MULTILINE_RETURN_ELSE_FALLTHROUGH)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+
+    possible, executed, missing = _check_full_branch_coverage(
+        SOURCE_MULTILINE_RETURN_ELSE_FALLTHROUGH, lambda c: c.foo(1)
+    )
+    orelse_line = if_node.orelse[0].lineno
+    assert (
+        if_node.lineno in executed
+    ), f"If-line {if_node.lineno} not in executed: {executed}"
+    assert (
+        orelse_line in executed[if_node.lineno]
+    ), f"False arc to {orelse_line} not in executed: {executed}"
+    assert (
+        if_node.lineno in missing
+    ), f"If-line {if_node.lineno} not in missing: {missing}"
+
+
+SOURCE_NESTED_LOOP_IF = """\
+@external
+def foo(a: DynArray[DynArray[uint256,4],4]) -> uint256:
+    s: uint256 = 0
+    for row: DynArray[uint256,4] in a:
+        for v: uint256 in row:
+            if v > 3:
+                s += v
+    return s
+"""
+
+
+def test_correctness_nested_loop_if_false_then_true():
+    """P1 regression: nested-loop if (no else) order-independent coverage.
+
+    foo([[1,5]]) exercises false-then-true. Both branches are hit, so
+    no arcs should be missing.
+    """
+    missing = _check_branch_coverage(SOURCE_NESTED_LOOP_IF, lambda c: c.foo([[1, 5]]))
+    assert missing == {}, f"false-then-true missing arcs: {missing}"
+
+
+def test_correctness_nested_loop_if_true_then_false():
+    """Same as above, true-then-false order. Must also have no missing arcs."""
+    missing = _check_branch_coverage(SOURCE_NESTED_LOOP_IF, lambda c: c.foo([[5, 1]]))
+    assert missing == {}, f"true-then-false missing arcs: {missing}"
+
+
+def test_correctness_nested_loop_if_order_parity():
+    """Both orderings must produce identical coverage results."""
+    source = SOURCE_NESTED_LOOP_IF
+    ft = _check_full_branch_coverage(source, lambda c: c.foo([[1, 5]]))
+    tf = _check_full_branch_coverage(source, lambda c: c.foo([[5, 1]]))
+    assert ft[0] == tf[0], f"Possible arcs differ: {ft[0]} vs {tf[0]}"
+    assert ft[1] == tf[1], f"Executed arcs differ: {ft[1]} vs {tf[1]}"
+    assert ft[2] == tf[2], f"Missing arcs differ: {ft[2]} vs {tf[2]}"
+
+
+def test_correctness_if_else_in_for_both():
+    """If/else in for loop, both branches hit — no spurious arcs.
+
+    The new preamble stripping eliminates a spurious arc to the For header
+    that the old implementation produced. Only true and false arcs should
+    be in the executed set.
+    """
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    total: uint256 = 0
+    for val: uint256 in data:
+        if val > 5:
+            total += val
+        else:
+            total += 1
+    return total
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0].lineno
+    false_target = if_node.orelse[0].lineno
+
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo([10, 1])
+    )
+    assert missing == {}, f"Both branches hit, expected no missing: {missing}"
+    executed_targets = set(executed.get(if_node.lineno, []))
+    assert executed_targets == {
+        true_target,
+        false_target,
+    }, f"Expected only true/false targets, got {executed_targets}"
+
+
+SOURCE_ELIF_NO_ELSE = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 20:
+        return 3
+    elif x > 10:
+        return 2
+    return 0
+"""
+
+
+def test_correctness_elif_no_else_all_branches():
+    """P1 regression: if/elif without explicit else, fallthrough tail.
+
+    When all three paths are exercised (outer true, inner true, both false),
+    no branches should be missing.  Previously the inner elif's false arc
+    was dropped because the compiler's outer-If re-evaluation was not
+    ghost-removed (ghost was restricted to For-loop parents).
+    """
+    missing = _check_branch_coverage(
+        SOURCE_ELIF_NO_ELSE, lambda c: (c.foo(25), c.foo(15), c.foo(5))
+    )
+    assert missing == {}, f"All branches hit, expected no missing: {missing}"
+
+
+def test_correctness_elif_no_else_inner_false():
+    """Inner elif false branch alone must produce the fallthrough arc."""
+    ast = parse_to_ast(SOURCE_ELIF_NO_ELSE)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    inner_if = if_nodes[1]  # the elif
+
+    possible, executed, missing = _check_full_branch_coverage(
+        SOURCE_ELIF_NO_ELSE, lambda c: c.foo(5)
+    )
+    # Inner elif must have its false arc (to return 0) executed
+    inner_targets = set(executed.get(inner_if.lineno, []))
+    # The false fallthrough target is `return 0` at inner_if.end_lineno + 1
+    assert (
+        len(inner_targets) > 0
+    ), f"Inner elif@L{inner_if.lineno} should have executed arcs: {executed}"
+
+
+def test_correctness_elif_no_else_multiline_tail():
+    """elif fallthrough to multiline return must target the statement line.
+
+    _false_arc uses stmt.lineno, and the tracer normalizes multiline entries
+    to match, so the reporter's possible arc matches the tracer's executed arc.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 20:
+        return 3
+    elif x > 10:
+        return 2
+    return (
+        x + 1
+    )
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(25), c.foo(15), c.foo(5)))
+    assert missing == {}, f"All branches hit, expected no missing: {missing}"
+
+
+def test_branch_multiline_augassign_in_else():
+    """Multiline AugAssign in else-body: both branches hit, no missing arcs.
+
+    Regression: AugAssign compiles with a target-variable load first,
+    so the tracer reports stmt.lineno, not value.lineno.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    s: uint256 = 0
+    if x > 5:
+        s += 1
+    else:
+        s += (
+            x +
+            1
+        )
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_multiline_return_in_for_loop():
+    """Multiline return in true-branch inside for loop: no missing arcs.
+
+    Regression: Return inside a for loop compiles with cleanup bytecode
+    first, so the tracer reports Return.lineno, not value.lineno.
+    """
+    source = """\
+@external
+def foo(data: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for v: uint256 in data:
+        if v > 5:
+            return (
+                v + 1
+            )
+        else:
+            s += 1
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo([10, 1]), c.foo([1])))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+# --- multiline no-else / elif-tail regression tests ---
+
+
+def test_branch_no_else_multiline_true_return_multiline_tail():
+    """If without else, multiline return in true body + multiline tail return.
+
+    Regression: compiler emits tail-statement setup bytecode as alias
+    nodes between the If condition evaluations.  The normalization must
+    identify these as trailing aliases and not attribute them as the
+    branch entry arc target.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return (
+            x + 1
+        )
+    return (
+        x + 2
+    )
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_no_else_multiline_true_return_multiline_tail_partial():
+    """Partial: only true branch hit — false arc (to tail) must be missing."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return (
+            x + 1
+        )
+    return (
+        x + 2
+    )
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    tail_return = ast.get_descendants(vy_ast.Return)[-1]
+
+    missing = _check_branch_coverage(source, lambda c: c.foo(10))
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+    assert (
+        tail_return.lineno in missing[if_node.lineno]
+    ), f"Expected false arc to tail return {tail_return.lineno}, got {missing}"
+
+
+def test_branch_no_else_multiline_assign_multiline_tail():
+    """If without else, multiline assign in true body + multiline tail return.
+
+    Regression: similar to the return case but with Assign instead of Return.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    s: uint256 = 0
+    if x > 5:
+        s = (
+            x + 1
+        )
+    return (
+        s + 1
+    )
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_elif_no_else_multiline_body_multiline_tail():
+    """if/elif without else, multiline elif body + multiline tail.
+
+    Regression: the inner elif's false arc targets the tail statement
+    after the outer block.  Both the elif true arc and the fallthrough
+    false arc must match the reporter's declared targets.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 20:
+        return 3
+    elif x > 10:
+        return (
+            x + 2
+        )
+    return (
+        x + 1
+    )
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(25), c.foo(15), c.foo(5)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_elif_no_else_multiline_tail_partial():
+    """Only outer-true hit — inner elif arcs must be missing."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 20:
+        return 3
+    elif x > 10:
+        return (
+            x + 2
+        )
+    return (
+        x + 1
+    )
+"""
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    inner_if = if_nodes[1]  # elif
+
+    missing = _check_branch_coverage(source, lambda c: c.foo(25))
+    assert (
+        inner_if.lineno in missing
+    ), f"Expected elif {inner_if.lineno} in missing: {missing}"
+    assert (
+        len(missing[inner_if.lineno]) == 2
+    ), f"Expected 2 missing arcs from elif, got {missing[inner_if.lineno]}"
+
+
+# --- nested if without outer else ---
+
+
+def test_branch_nested_if_no_outer_else():
+    """Inner if (no else) last in outer if body (no outer else).
+
+    Regression: compiler re-evaluates the outer If after the inner If's
+    false branch, producing spurious arcs (inner → outer) and losing
+    the inner false arc (inner → return 0).
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 10:
+        if x > 20:
+            return 3
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(25), c.foo(15), c.foo(5)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_nested_if_no_outer_else_exact_arcs():
+    """Verify exact executed arcs for nested if without outer else."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 10:
+        if x > 20:
+            return 3
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    outer_if = if_nodes[0]
+    inner_if = if_nodes[1]
+
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: (c.foo(25), c.foo(15), c.foo(5))
+    )
+    assert missing == {}, f"Missing: {missing}"
+    # Outer if: true → inner if line, false → return 0
+    outer_targets = set(executed.get(outer_if.lineno, []))
+    assert outer_targets == {
+        inner_if.lineno,
+        6,
+    }, f"Outer executed targets: {outer_targets}"
+    # Inner if: true → return 3, false → return 0
+    inner_targets = set(executed.get(inner_if.lineno, []))
+    assert inner_targets == {5, 6}, f"Inner executed targets: {inner_targets}"
+
+
+def test_branch_nested_if_no_outer_else_partial():
+    """Only inner-true hit — outer-false and inner-false must be missing."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 10:
+        if x > 20:
+            return 3
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    outer_if = if_nodes[0]
+    inner_if = if_nodes[1]
+    tail = ast.get_descendants(vy_ast.Return)[-1]
+
+    missing = _check_branch_coverage(source, lambda c: c.foo(25))
+    # Outer false arc (to return 0) should be missing
+    assert outer_if.lineno in missing, f"Outer if should be in missing: {missing}"
+    assert (
+        tail.lineno in missing[outer_if.lineno]
+    ), f"Expected outer false arc to {tail.lineno}: {missing}"
+    # Inner false arc (to return 0) should be missing
+    assert inner_if.lineno in missing, f"Inner if should be in missing: {missing}"
+    assert (
+        tail.lineno in missing[inner_if.lineno]
+    ), f"Expected inner false arc to {tail.lineno}: {missing}"
+
+
+def test_branch_if_in_orelse_no_inner_else_exact_arcs():
+    """If inside else block (orelse), no inner else — no extra synthetic arcs.
+
+    Regression: executed_branch_arcs showed extra arc to outer if line
+    (inner → outer) in addition to logical targets.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if x > 0:
+        return 1
+    else:
+        if y > 0:
+            return 2
+    return 3
+"""
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    inner_if = if_nodes[1]
+
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: (c.foo(1, 0), c.foo(0, 1), c.foo(0, 0))
+    )
+    assert missing == {}, f"Missing: {missing}"
+    # Inner if should have exactly {return 2, return 3} — no extra arcs
+    inner_targets = set(executed.get(inner_if.lineno, []))
+    expected_inner = {inner_if.body[0].lineno, 8}  # return 2, return 3
+    assert (
+        inner_targets == expected_inner
+    ), f"Inner if executed targets: {inner_targets}, expected {expected_inner}"
+
+
+# --- nested if inside for body ---
+
+
+def test_branch_nested_if_in_for_body_with_tail():
+    """Nested if (no else) inside for body, followed by a tail statement.
+
+    Regression: _false_arc walked up to the function level, skipping the
+    for-body sibling.  Inner false arc should target the tail (s += 1),
+    not the function return.
+    """
+    source = """\
+@external
+def foo(arr: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in arr:
+        if x > 10:
+            if x > 20:
+                s += 3
+        s += 1
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo([25, 15, 5]))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_nested_if_in_for_body_with_else_and_tail():
+    """Nested if (no inner else) inside outer if/else in for body, with tail.
+
+    Regression: same _false_arc walk-up issue — inner false should target
+    the for-body tail statement (s += 1), not the function return.
+    """
+    source = """\
+@external
+def foo(arr: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in arr:
+        if x > 10:
+            if x > 20:
+                s += 3
+        else:
+            s += 2
+        s += 1
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo([25, 15, 5]))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_nested_if_in_for_body_inner_false_arc_target():
+    """Verify exact inner false arc target is the for-body tail, not fn return."""
+    source = """\
+@external
+def foo(arr: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in arr:
+        if x > 10:
+            if x > 20:
+                s += 3
+        s += 1
+    return s
+"""
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    inner_if = if_nodes[1]  # if x > 20
+    tail_stmt = ast.get_descendants(vy_ast.For)[0].body[-1]  # s += 1
+
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo([25, 15, 5])
+    )
+    assert missing == {}, f"Missing: {missing}"
+    # Inner false arc should target tail_stmt (s += 1), not function return
+    assert (inner_if.lineno, tail_stmt.lineno) in possible, (
+        f"Expected possible arc ({inner_if.lineno}, {tail_stmt.lineno}), "
+        f"possible: {possible}"
+    )
+
+
+# --- if without else + tail statement (post-body re-evaluation) ---
+
+
+def test_branch_if_no_else_with_tail_true_only():
+    """True-only: false arc (to tail) must be missing.
+
+    Regression: compiler re-evaluates the If condition after the true
+    body as a jump target, producing a spurious false arc when only the
+    true branch was exercised.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        y += 1
+    y += 2
+    return y
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(10)
+    )
+    # True arc should be executed, false arc should be missing
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert set(executed[if_node.lineno]) == {
+        if_node.body[0].lineno
+    }, f"Only true arc should be executed: {executed}"
+    assert if_node.lineno in missing, f"If-line not in missing: {missing}"
+
+
+def test_branch_if_no_else_with_tail_both():
+    """Both branches hit — no missing arcs."""
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        y += 1
+    y += 2
+    return y
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_no_else_in_for_with_tail_true_only():
+    """True-only in loop: false arc must be missing.
+
+    Regression: same post-body re-evaluation inside a for loop body.
+    """
+    source = """\
+@external
+def foo(arr: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in arr:
+        if x > 10:
+            s += 3
+        s += 1
+    return s
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo([25])
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert set(executed[if_node.lineno]) == {
+        if_node.body[0].lineno
+    }, f"Only true arc should be executed: {executed}"
+    assert if_node.lineno in missing, f"If-line not in missing: {missing}"
+
+
+def test_branch_if_no_else_in_for_with_tail_both():
+    """Both branches hit in loop — no missing arcs."""
+    source = """\
+@external
+def foo(arr: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in arr:
+        if x > 10:
+            s += 3
+        s += 1
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo([25, 1]))
+    assert missing == {}, f"Missing branch arcs: {missing}"

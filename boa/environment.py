@@ -13,114 +13,16 @@ import eth.constants as constants
 import vyper.ast as vy_ast
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
+from boa.coverage import (
+    _collapse_cov_node,
+    _dedup_nodes,
+    _normalize_if_arcs,
+    _normalize_multiline_entries,
+)
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
 from boa.vm.py_evm import PyEVM
-
-
-def _collapse_cov_node(node):
-    """Collapse AST nodes for coverage line reporting.
-
-    - Nodes inside an If.test subtree → the If node itself.
-    - FunctionDef nodes → None (function-level bytecode for loop
-      management, setup/teardown — invisible to coverage).
-    """
-    child = node
-    parent = getattr(node, "_parent", None)
-    while parent is not None:
-        # Vyper AST preserves node identity — test subtrees are never
-        # cloned, so `is` reliably identifies the original child.
-        if isinstance(parent, vy_ast.If) and child is parent.test:
-            return parent
-        child = parent
-        parent = getattr(parent, "_parent", None)
-
-    if isinstance(node, vy_ast.FunctionDef):
-        return None
-
-    return node
-
-
-def _dedup_nodes(nodes):
-    """Remove consecutive nodes with the same lineno."""
-    result = []
-    last_lineno = None
-    for node in nodes:
-        if node.lineno != last_lineno:
-            result.append(node)
-            last_lineno = node.lineno
-    return result
-
-
-def _normalize_if_arcs(nodes, last_funcdef):
-    """Insert synthetic nodes so coverage.py sees correct branch arcs.
-
-    For each If node, check what follows to determine branch outcome:
-      - next node is same If (loop re-iteration) -> no action
-      - next node's lineno == body[0].lineno -> true branch, no action
-      - otherwise -> false branch, insert For-header if If is last-in-for
-      - unresolved If at segment end -> false at function exit
-
-    Must run before _dedup_nodes to preserve iteration boundaries.
-    """
-    result = []
-    for i, node in enumerate(nodes):
-        result.append(node)
-        if not isinstance(node, vy_ast.If):
-            continue
-
-        next_node = nodes[i + 1] if i + 1 < len(nodes) else None
-
-        # Loop re-iteration: same If node appearing again means the
-        # for-loop went around — not a branch outcome.
-        if next_node is node:
-            continue
-
-        # True branch: next node matches first body statement
-        if next_node is not None and next_node.lineno == node.body[0].lineno:
-            continue
-
-        # False branch with explicit else: next node matches orelse
-        if (
-            node.orelse
-            and next_node is not None
-            and next_node.lineno == node.orelse[0].lineno
-        ):
-            continue
-
-        # For-header already present (inserted by backedge detection
-        # in the PC loop) — no need to insert another one.
-        parent = getattr(node, "_parent", None)
-        if next_node is parent:
-            continue
-
-        # False branch without else: insert For-header if If is last
-        # statement in For body.
-        if (
-            not node.orelse
-            and isinstance(parent, vy_ast.For)
-            and parent.body[-1] is node
-        ):
-            result.append(parent)
-            continue
-
-        # Ghost If: loop-exit re-evaluation of the condition that
-        # doesn't lead to a real branch outcome.  Remove it so it
-        # doesn't create spurious arcs.
-        if node.orelse and next_node is not None:
-            result.pop()
-
-    # Function exit: emit FunctionDef so coverage sees arc from
-    # unresolved If to implicit return line.  Only needed when the
-    # trace ends with an If (false branch fell through to function
-    # exit).  If the trace already ends with a non-If node, the
-    # natural control flow provides the correct arc.
-    if last_funcdef is not None and result and isinstance(result[-1], vy_ast.If):
-        result.append(last_funcdef)
-
-    return result
-
 
 # make mypy happy
 _AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
@@ -472,6 +374,10 @@ class Env:
             max_gap_pc = 0
             gap_had_backward_jump = False
 
+            # Track max PC for non-FunctionDef nodes to detect
+            # inner-loop backedges that don't cross a FunctionDef gap.
+            max_node_pc = 0
+
             for pc in computation.code._trace:
                 if (node := ast_map.get(pc)) is not None:
                     raw_node = node
@@ -491,6 +397,7 @@ class Env:
                             segments.append((current_file, current_nodes))
                         current_file = fname
                         current_nodes = []
+                        max_node_pc = 0
                     last_funcdef = None
                     # Detect for-loop backedge: a backward PC jump
                     # during the FunctionDef gap means the EVM looped
@@ -503,8 +410,18 @@ class Env:
                         and isinstance(getattr(node, "_parent", None), vy_ast.For)
                     ):
                         current_nodes.append(node._parent)
+                    # Detect inner-loop backedge: same node at a lower
+                    # PC without a FunctionDef gap in between.
+                    elif (
+                        pc < max_node_pc
+                        and current_nodes
+                        and node is current_nodes[-1]
+                        and isinstance(getattr(node, "_parent", None), vy_ast.For)
+                    ):
+                        current_nodes.append(node._parent)
                     max_gap_pc = 0
                     gap_had_backward_jump = False
+                    max_node_pc = max(max_node_pc, pc)
                     current_nodes.append(node)
 
             current_nodes = _normalize_if_arcs(current_nodes, last_funcdef)
@@ -512,6 +429,7 @@ class Env:
                 segments.append((current_file, current_nodes))
 
             for filename, nodes in segments:
+                nodes = _normalize_multiline_entries(nodes)
                 deduped = _dedup_nodes(nodes)
                 self._trace_cov(filename, deduped)
 

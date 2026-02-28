@@ -1,7 +1,7 @@
 import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
-from boa.environment import _collapse_cov_node
+from boa.coverage import _collapse_cov_node
 
 from .conftest import _reporter_for
 
@@ -118,12 +118,11 @@ def foo(x: uint256, y: uint256) -> uint256:
     ) in arcs, f"Expected arc ({inner_if.lineno}, {return_3.lineno}) in {arcs}"
 
 
-def test_reporter_arcs_multiline_body_targets_value_line():
-    """Arc target for multiline body statement must be the value expression line.
+def test_reporter_arcs_multiline_body_targets_stmt_line():
+    """Arc target for multiline body statement must be the statement line.
 
-    For `y: uint256 = (\\n    x + 1\\n)`, the compiler generates expression
-    bytecode first, so the tracer reports the expression line — the arc
-    target must match.
+    For `y: uint256 = (\\n    x + 1\\n)`, the tracer normalizes multiline
+    entries to report stmt.lineno — the arc target must match.
     """
     source = """\
 @external
@@ -141,12 +140,12 @@ def foo(x: uint256) -> uint256:
         arcs = reporter.arcs()
     ast = parse_to_ast(source)
     if_node = ast.get_descendants(vy_ast.If)[0]
-    # True arc target should be the value expression line (x +), not AnnAssign line
-    value_line = if_node.body[0].value.lineno
+    # True arc target should be the AnnAssign line (stmt.lineno)
+    stmt_line = if_node.body[0].lineno
     assert (
         if_node.lineno,
-        value_line,
-    ) in arcs, f"Expected true arc ({if_node.lineno}, {value_line}) in arcs: {arcs}"
+        stmt_line,
+    ) in arcs, f"Expected true arc ({if_node.lineno}, {stmt_line}) in arcs: {arcs}"
     # False arc should target the else body
     else_line = if_node.orelse[0].lineno
     assert (
@@ -175,6 +174,43 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
         if_node.lineno,
         for_node.lineno,
     ) in arcs, f"Expected false arc to for-header {for_node.lineno}, arcs: {arcs}"
+
+
+def test_reporter_arcs_elif_no_else_targets_stmt_lines():
+    """if/elif without else: arc targets are statement lines, not expression lines.
+
+    Guards the contract between reporter and tracer normalization.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 20:
+        return 3
+    elif x > 10:
+        return (
+            x + 2
+        )
+    return (
+        x + 1
+    )
+"""
+    with _reporter_for(source) as reporter:
+        arcs = reporter.arcs()
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    inner_if = if_nodes[1]  # elif
+    # True arc: elif body (Return@L6)
+    true_target = inner_if.body[0].lineno
+    assert (
+        inner_if.lineno,
+        true_target,
+    ) in arcs, f"Expected true arc ({inner_if.lineno}, {true_target}) in {arcs}"
+    # False arc: tail statement after outer block (Return@L9)
+    tail_return = ast.get_descendants(vy_ast.Return)[-1]
+    assert (
+        inner_if.lineno,
+        tail_return.lineno,
+    ) in arcs, f"Expected false arc ({inner_if.lineno}, {tail_return.lineno}) in {arcs}"
 
 
 # --- reporter lines ---
