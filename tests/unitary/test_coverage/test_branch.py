@@ -138,6 +138,50 @@ def foo(val: uint256):
     assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
 
 
+def test_branch_bare_return_compound_condition():
+    """Bare return with compound condition (and) — decision JUMPI unmapped.
+
+    Regression: short-circuit JUMPI from `and` was selected instead of
+    the actual decision JUMPI for the bare return.
+    """
+    source = """\
+y: public(uint256)
+
+@external
+def f(x: uint256):
+    if (x != 2) and (x >= 25):
+        return
+    self.y = 1
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(25), c.f(0)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_both_null_return_degenerate():
+    """if/else where both branches are bare return — arcs collapse.
+
+    Both branches compile to the same target (fn_node.lineno), so
+    coverage.py cannot distinguish them.  Executing only one branch
+    still reports full coverage.  This is a known limitation: the
+    reporter declares two arcs with the same endpoints.
+    """
+    source = """\
+@external
+def foo(x: uint256):
+    if x > 5:
+        return
+    else:
+        return
+"""
+    # Only true branch hit — coverage still reports full because
+    # both arcs are (if_line, fn_line).
+    missing = _check_branch_coverage(source, lambda c: c.foo(10))
+    assert missing == {}, (
+        f"Both arcs target fn_line; partial execution should still "
+        f"show no missing (degenerate case), got: {missing}"
+    )
+
+
 # --- branch negative controls (partial coverage) ---
 
 

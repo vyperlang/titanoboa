@@ -160,6 +160,42 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     ), f"Expected if-line {if_node.lineno} in missing: {missing}"
 
 
+def test_branch_compound_condition_break():
+    """Compound condition (and) with break — decision JUMPI is unmapped.
+
+    Regression: _find_if_jumpi picked up the short-circuit JUMPI from
+    the `and` instead of the actual break-decision JUMPI.
+    """
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if (x != 2) and (x >= 25):
+            break
+        s += x
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f([25]), c.f([0])))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_compound_condition_continue():
+    """Compound condition (and) with continue — decision JUMPI is unmapped."""
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if (x != 2) and (x >= 25):
+            continue
+        s += x
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f([25]), c.f([0])))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
 def test_branch_if_in_for_loop_terminal_false():
     """Terminal iteration false branch: true then false on last iteration.
 

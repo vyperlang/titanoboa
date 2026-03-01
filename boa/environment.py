@@ -355,6 +355,8 @@ class Env:
         if contract is not None and hasattr(contract, "source_map"):
             ast_map = contract.source_map["pc_raw_ast_map"]
 
+            raw_trace = list(computation.code._trace)
+
             segments = []
             current_file = None
             current_events = []  # list of (pc, collapsed_node, raw_node)
@@ -371,7 +373,7 @@ class Env:
             # inner-loop backedges that don't cross a FunctionDef gap.
             max_node_pc = 0
 
-            for pc in computation.code._trace:
+            for pc in raw_trace:
                 if (node := ast_map.get(pc)) is not None:
                     raw_node = node
                     node = _collapse_cov_node(node)
@@ -400,6 +402,7 @@ class Env:
                         and isinstance(getattr(node, "_parent", None), vy_ast.For)
                     ):
                         current_events.append((None, node._parent, node._parent))
+                        max_node_pc = pc  # reset so condition PCs don't re-trigger
                     # Detect inner-loop backedge: same node at a lower
                     # PC without a FunctionDef gap in between.
                     elif (
@@ -409,6 +412,7 @@ class Env:
                         and isinstance(getattr(node, "_parent", None), vy_ast.For)
                     ):
                         current_events.append((None, node._parent, node._parent))
+                        max_node_pc = pc  # reset so condition PCs don't re-trigger
                     max_gap_pc = 0
                     gap_had_backward_jump = False
                     max_node_pc = max(max_node_pc, pc)
@@ -418,7 +422,6 @@ class Env:
                 segments.append((current_file, current_events))
 
             bytecode = computation.code._raw_code_bytes
-            raw_trace = list(computation.code._trace)
             trace_id = collector.next_trace_id()
             for filename, events in segments:
                 collector.record_segment(

@@ -354,7 +354,7 @@ class CoverageCollector:
         trace_id: unique integer identifying this computation's trace,
             allocated via next_trace_id().
         """
-        if not events:
+        if not events or filename is None or not filename.endswith(".vy"):
             return
 
         lines = self._lines_by_file.setdefault(filename, set())
@@ -389,27 +389,30 @@ class CoverageCollector:
                 meta = if_meta[id(if_node)]
                 true_line, false_line, true_stmt, false_stmt = meta
 
-                # Find the last JUMPI PC in this run of If events.
-                # Multi-condition (and/or) ifs have multiple JUMPIs;
-                # the last one is the actual branch decision.
+                # Find the decision JUMPI for this If.
+                #
+                # For break/continue/bare-return, the decision JUMPI
+                # may be unmapped (compound conditions produce mapped
+                # short-circuit JUMPIs but the final decision is after
+                # all mapped events).  Try forward scan first — it
+                # finds the JUMPI closest to the body, which is always
+                # the decision.  Fall back to backward event scan for
+                # normal bodies where the JUMPI is mapped.
                 jumpi_pc = None
-                scan = idx
-                while scan >= 0 and events[scan][1] is if_node:
-                    epc = events[scan][0]
-                    if epc is not None and bytecode[epc] == _JUMPI:
-                        jumpi_pc = epc
-                        break  # found the last (scanning backward)
-                    scan -= 1
-                # Fallback: for break/continue/bare-return, the JUMPI is
-                # unmapped in the ast_map because the compiler generates the
-                # branch jump as part of the control flow statement, not the
-                # condition. Scan forward from the last mapped condition PC.
-                if jumpi_pc is None and pc is not None:
-                    body0 = if_node.body[0]
-                    if isinstance(body0, (vy_ast.Break, vy_ast.Continue)) or (
-                        _is_null_return(body0)
-                    ):
-                        jumpi_pc = _find_if_jumpi(bytecode, pc)
+                body0 = if_node.body[0]
+                if pc is not None and (
+                    isinstance(body0, (vy_ast.Break, vy_ast.Continue))
+                    or _is_null_return(body0)
+                ):
+                    jumpi_pc = _find_if_jumpi(bytecode, pc)
+                if jumpi_pc is None:
+                    scan = idx
+                    while scan >= 0 and events[scan][1] is if_node:
+                        epc = events[scan][0]
+                        if epc is not None and bytecode[epc] == _JUMPI:
+                            jumpi_pc = epc
+                            break
+                        scan -= 1
 
                 if jumpi_pc is not None:
                     branch, raw_trace_pos = _classify_from_raw_trace(
@@ -548,8 +551,8 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
         # Scan all statements including those nested in if/else/for.
         for f in functions:
             for stmt in f.get_descendants(vy_ast.Stmt):
-                if isinstance(stmt, vy_ast.If):
-                    continue  # If lines are branch points, never exclude
+                if isinstance(stmt, (vy_ast.If, vy_ast.Assert)):
+                    continue  # these have bytecode on the keyword line
                 if stmt.end_lineno is not None and stmt.end_lineno > stmt.lineno:
                     desc_linenos = {n.lineno for n in stmt.get_descendants()}
                     if stmt.lineno not in desc_linenos:

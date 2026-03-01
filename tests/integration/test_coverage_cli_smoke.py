@@ -8,6 +8,8 @@ import pytest
 import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
+import boa
+from boa.environment import Env
 from tests.coverage_utils import _analyze
 
 # repo root so the subprocess always imports the local checkout
@@ -104,3 +106,40 @@ def test_coverage_cli_smoke(coverage_workspace):
         f"Expected line {if_line} (the if-statement) to have missing arcs, "
         f"got missing arcs at lines: {sorted(missing)}"
     )
+
+
+def test_loads_no_crash_on_report():
+    """boa.loads() must not crash coverage report.
+
+    Regression: source-string contracts resolve to <unknown>, which
+    was recorded as a measured file.  coverage.report() then raised
+    NoSource because no .vy file exists at that path.
+    """
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        return 0
+"""
+    saved = Env._coverage_enabled
+    try:
+        cov = coverage.Coverage(branch=True, config_file=False, data_file=None)
+        cov.set_option("run:plugins", ["boa.coverage"])
+        cov.start()
+        try:
+            c = boa.loads(source)
+            c.foo(10)
+            c.foo(1)
+        finally:
+            cov.stop()
+
+        data = cov.get_data()
+        unknown = [f for f in data.measured_files() if "unknown" in f]
+        assert unknown == [], f"<unknown> should not be measured: {unknown}"
+
+        # Must not raise NoSource
+        cov.report(file=open(os.devnull, "w"))
+    finally:
+        Env._coverage_enabled = saved
