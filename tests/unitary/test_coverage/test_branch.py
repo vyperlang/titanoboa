@@ -959,8 +959,8 @@ def foo(x: uint256) -> uint256:
 def test_branch_multiline_return_in_body_with_else():
     """Regression: multiline return in true branch with explicit else.
 
-    The ghost-If heuristic in _normalize_if_arcs must not drop a
-    legitimate If when preamble alias nodes precede the body.
+    Preamble filtering must not drop a legitimate If when preamble
+    alias nodes precede the body.
     """
     source = """\
 @external

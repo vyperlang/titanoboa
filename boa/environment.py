@@ -13,7 +13,8 @@ import eth.constants as constants
 import vyper.ast as vy_ast
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
-from boa.coverage import _collapse_cov_node, _dedup_nodes, _normalize_if_arcs
+from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
+from boa.coverage import CoverageCollector, _collapse_cov_node
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -250,7 +251,9 @@ class Env:
         )
 
         if self._coverage_enabled:
-            self._trace_computation(computation, contract)
+            collector = CoverageCollector()
+            self._trace_computation(computation, contract, collector)
+            collector.flush()
 
         if computation._gas_meter_class != NoGasMeter:
             self._update_gas_used(computation.get_gas_used())
@@ -339,26 +342,23 @@ class Env:
                 contract=contract,
             )
             if self._coverage_enabled:
-                self._trace_computation(ret, contract)
+                collector = CoverageCollector()
+                self._trace_computation(ret, contract, collector)
+                collector.flush()
 
             if ret._gas_meter_class != NoGasMeter:
                 self._update_gas_used(ret.get_gas_used())
 
             return ret
 
-    # trace pcs for coverage sake. dummy function which
-    # just issues the right calls to _trace_cov() to get picked
-    # up by coverage. bit ugly, but tracer only allows
-    # dynamic_source_filename to be set once per (python) function call,
-    # so we need to use this in case the pc trace covers multiple files
-    def _trace_computation(self, computation, contract=None):
+    def _trace_computation(self, computation, contract, collector):
         # perf: don't trace if contract is None
         if contract is not None and hasattr(contract, "source_map"):
             ast_map = contract.source_map["pc_raw_ast_map"]
 
             segments = []
             current_file = None
-            current_nodes = []
+            current_events = []  # list of (pc, collapsed_node, raw_node)
             last_funcdef = None
 
             # Track FunctionDef gaps to detect for-loop backedges.
@@ -385,13 +385,10 @@ class Env:
                         continue
                     fname = node.module_node.resolved_path
                     if fname != current_file:
-                        if current_nodes:
-                            current_nodes = _normalize_if_arcs(
-                                current_nodes, last_funcdef
-                            )
-                            segments.append((current_file, current_nodes))
+                        if current_events:
+                            segments.append((current_file, current_events))
                         current_file = fname
-                        current_nodes = []
+                        current_events = []
                         max_node_pc = 0
                     last_funcdef = None
                     # Detect for-loop backedge: a backward PC jump
@@ -400,43 +397,43 @@ class Env:
                     # the backedge arc.
                     if (
                         gap_had_backward_jump
-                        and current_nodes
-                        and node is current_nodes[-1]
+                        and current_events
+                        and node is current_events[-1][1]
                         and isinstance(getattr(node, "_parent", None), vy_ast.For)
                     ):
-                        current_nodes.append(node._parent)
+                        current_events.append((None, node._parent, node._parent))
                     # Detect inner-loop backedge: same node at a lower
                     # PC without a FunctionDef gap in between.
                     elif (
                         pc < max_node_pc
-                        and current_nodes
-                        and node is current_nodes[-1]
+                        and current_events
+                        and node is current_events[-1][1]
                         and isinstance(getattr(node, "_parent", None), vy_ast.For)
                     ):
-                        current_nodes.append(node._parent)
+                        current_events.append((None, node._parent, node._parent))
                     max_gap_pc = 0
                     gap_had_backward_jump = False
                     max_node_pc = max(max_node_pc, pc)
-                    current_nodes.append(node)
+                    current_events.append((pc, node, raw_node))
 
-            current_nodes = _normalize_if_arcs(current_nodes, last_funcdef)
-            if current_nodes:
-                segments.append((current_file, current_nodes))
+            if current_events:
+                segments.append((current_file, current_events))
 
-            for filename, nodes in segments:
-                deduped = _dedup_nodes(nodes)
-                self._trace_cov(filename, deduped)
+            bytecode = computation.code._raw_code_bytes
+            raw_trace = list(computation.code._trace)
+            for filename, events in segments:
+                fn_node = get_fn_ancestor_from_node(events[0][1]) if events else None
+                if fn_node is None:
+                    fn_node = last_funcdef
+                collector.record_segment(
+                    filename, events, fn_node, bytecode, raw_trace, ast_map
+                )
 
         for child in computation.children:
             if child.msg.code_address == b"":
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
-            self._trace_computation(child, child_contract)
-
-    def _trace_cov(self, filename, nodes):
-        node = None
-        for node in nodes:
-            filename  # noqa: B018 -- dummy expression; triggers a line event
+            self._trace_computation(child, child_contract, collector)
 
     def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))

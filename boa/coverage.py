@@ -3,22 +3,64 @@
 #   EVM execution (py-evm)
 #     → computation.code._trace  (list of PCs)
 #     → Env._trace_computation   (PC → AST node via source_map,
-#                                  collapse/normalize/dedup, group by file)
-#     → Env._trace_cov           (iterate nodes; dummy expression triggers
-#                                  coverage.py line events per node)
-#     → TitanoboaTracer           (coverage.py calls line_number_range and
-#                                  dynamic_source_filename on each line event;
-#                                  reads node/filename from f_locals)
+#                                  collapse nodes, group by file)
+#     → CoverageCollector         (extracts lines + branch arcs from AST
+#                                  nodes, writes directly to CoverageData)
 #     → TitanoboaReporter         (declares coverable lines, possible branch
 #                                  arcs, and exit_counts for each .vy file)
 
 from functools import cached_property
 
+import coverage
 import coverage.plugin
 import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
+
+_JUMPI = 0x57
+
+
+def _build_jumpi_table(bytecode):
+    """Map each JUMPI PC -> (taken_dest, fallthrough_pc).
+
+    Scans bytecode forward to correctly parse PUSH operands,
+    tracking the most recent PUSH value before each JUMPI.
+    """
+    table = {}
+    last_push_value = None
+    pc = 0
+    while pc < len(bytecode):
+        op = bytecode[pc]
+        if op == _JUMPI:
+            table[pc] = (last_push_value, pc + 1)
+        if 0x5F <= op <= 0x7F:
+            n = op - 0x5F
+            if n == 0:
+                last_push_value = 0
+            else:
+                last_push_value = int.from_bytes(bytecode[pc + 1 : pc + 1 + n], "big")
+            pc += n + 1
+        else:
+            if op != _JUMPI:
+                last_push_value = None
+            pc += 1
+    return table
+
+
+def _find_if_jumpi(bytecode, from_pc):
+    """Scan bytecode forward from from_pc to find the nearest JUMPI."""
+    scan = from_pc + 1
+    limit = min(from_pc + 20, len(bytecode))
+    while scan < limit:
+        if bytecode[scan] == _JUMPI:
+            return scan
+        op = bytecode[scan]
+        if 0x5F <= op <= 0x7F:
+            scan += op - 0x5F + 1
+        else:
+            scan += 1
+    return None
 
 
 def _collapse_cov_node(node):
@@ -42,32 +84,6 @@ def _collapse_cov_node(node):
         return None
 
     return node
-
-
-def _dedup_nodes(nodes):
-    """Remove consecutive nodes with the same lineno."""
-    result = []
-    last_lineno = None
-    for node in nodes:
-        if node.lineno != last_lineno:
-            result.append(node)
-            last_lineno = node.lineno
-    return result
-
-
-def _normalize_if_arcs(nodes, last_funcdef):
-    """Resolve If branch arcs deterministically via AST subtree membership.
-
-    Must run before _dedup_nodes to preserve iteration boundaries.
-    """
-    if not nodes:
-        return nodes
-    fn_node = get_fn_ancestor_from_node(nodes[0])
-    if fn_node is None:
-        fn_node = last_funcdef  # fallback
-    if fn_node is None:
-        return nodes
-    return _resolve_branches(nodes, fn_node)
 
 
 def _is_descendant(node, ancestor):
@@ -96,123 +112,14 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
         pass
 
     def configure(self, config):
-        config.get_option("run:source_pkgs").append("boa.environment")
+        pass
 
     def file_tracer(self, filename):
-        if filename.endswith("boa/environment.py"):
-            return TitanoboaTracer()
+        return None
 
     def file_reporter(self, filename):
         if filename.endswith(".vy"):
             return TitanoboaReporter(filename)
-
-
-class TitanoboaTracer(coverage.plugin.FileTracer):
-    # _trace_cov layout (see Env._trace_cov):
-    #   def _trace_cov(self, filename, nodes):   # +0
-    #       node = None                           # +1
-    #       for node in nodes:                    # +2
-    #           filename  # noqa: B018            # +3  <-- body line
-    #
-    # We only want line events from the body expression (+3) where
-    # `node` in f_locals holds the current loop value. The for-header
-    # (+2) fires with a stale `node` from the previous iteration which
-    # would produce spurious arcs.
-    _BODY_LINE_OFFSET = 3
-
-    def __init__(self):
-        self._body_line = None
-        self._env_cls = None
-
-    @property
-    def _Env(self):
-        if self._env_cls is None:
-            from boa.environment import Env
-
-            self._env_cls = Env
-        return self._env_cls
-
-    # coverage.py requires us to inspect the python call frame to
-    # see what line number to produce. we hook into specially crafted
-    # Env._trace_cov which is called for every unique pc if coverage is
-    # enabled, and then back out the contract and lineno information
-    # from there.
-
-    def _get_body_line(self):
-        if self._body_line is None:
-            import dis
-
-            code = self._Env._trace_cov.__code__
-            expected = code.co_firstlineno + self._BODY_LINE_OFFSET
-            # Python >=3.13 changed starts_line from int|None to bool
-            # and added line_number as the int|None attribute.
-            if hasattr(dis.Instruction, "line_number"):
-                lines = {
-                    i.line_number
-                    for i in dis.get_instructions(code)
-                    if i.line_number is not None
-                }
-            else:
-                lines = {
-                    i.starts_line
-                    for i in dis.get_instructions(code)
-                    if i.starts_line is not None
-                }
-            if expected not in lines:
-                raise RuntimeError(
-                    f"_BODY_LINE_OFFSET={self._BODY_LINE_OFFSET} does not match "
-                    f"_trace_cov bytecode lines: {sorted(lines)}"
-                )
-            self._body_line = expected
-        return self._body_line
-
-    def _valid_frame(self, frame):
-        if hasattr(frame.f_code, "co_qualname"):
-            # Python>=3.11
-            code_qualname = frame.f_code.co_qualname
-            return code_qualname == self._Env._trace_cov.__qualname__
-
-        else:
-            # in Python<3.11 we don't have co_qualname, so try hard to
-            # find a match anyways. (this might fail if for some reason
-            # the executing env has a monkey-patched _trace_cov
-            # or something)
-            env = self._Env.get_singleton()
-            return frame.f_code == env._trace_cov.__code__
-
-    def dynamic_source_filename(self, filename, frame):
-        if not self._valid_frame(frame):
-            return None
-        ret = frame.f_locals["filename"]
-        if ret is not None and not ret.endswith(".vy"):
-            return None
-        return ret
-
-    def has_dynamic_source_filename(self):
-        return True
-
-    # https://coverage.rtfd.io/en/stable/api_plugin.html#coverage.FileTracer.line_number_range
-    def line_number_range(self, frame):
-        if not self._valid_frame(frame):
-            return (-1, -1)
-
-        # Only report on the body line of _trace_cov's loop where
-        # `node` in f_locals holds the current (not stale) value.
-        if frame.f_lineno != self._get_body_line():
-            return (-1, -1)
-
-        node = frame.f_locals.get("node")
-        if node is None:
-            return (-1, -1)
-
-        # Always (lineno, lineno) — single-line spans. Multi-line constructs
-        # (e.g. multi-line if conditions) are collapsed to their start line
-        # by _collapse_cov_node, and coverage.py arc tracking operates per-line.
-        return (node.lineno, node.lineno)
-
-    # XXX: dynamic context. return function name or something
-    def dynamic_context(self, frame):
-        pass
 
 
 # helper function. null returns get optimized directly into a jump
@@ -307,245 +214,273 @@ def _find_false_target(if_node, fn_node):
     return fn_node.lineno, None, "fn_exit", None
 
 
-def _mark_preambles(nodes):
-    """Identify preamble node positions in the raw collapsed stream.
+def _classify_from_raw_trace(
+    jumpi_pc,
+    raw_trace,
+    raw_trace_start,
+    jumpi_table,
+    true_stmt,
+    false_stmt,
+    false_mode,
+    loop_owner,
+    if_node,
+    ast_map,
+):
+    """Classify branch direction by checking where the JUMPI goes.
 
-    A preamble is a node sandwiched between same-identity If re-evaluations
-    as part of condition evaluation bytecode.  After the initial evaluation
-    run (consecutive same-If nodes), subsequent same-If appearances are
-    post-body re-evaluations and are also marked.
+    Determines the JUMPI's taken destination, then checks which
+    direction (taken vs fallthrough) leads to the true body by
+    consulting the AST map.  Finally checks the raw trace to see
+    which direction was actually taken.
 
-    Returns a set of indices that are preamble positions.
+    raw_trace_start: index into raw_trace to begin searching for the JUMPI.
+    Returns (branch_result, new_raw_trace_position).
     """
-    preamble_indices = set()
-    i = 0
-    while i < len(nodes):
-        if not isinstance(nodes[i], vy_ast.If):
-            i += 1
-            continue
+    taken_dest, fallthrough = jumpi_table.get(jumpi_pc, (None, jumpi_pc + 1))
+    if taken_dest is None:
+        return "false", raw_trace_start
 
-        if_node = nodes[i]
-        body0 = if_node.body[0]
+    # Determine which direction is the true branch.
+    # Check if the taken destination maps to a true-body descendant.
+    taken_is_true = _resolve_jumpi_direction(
+        taken_dest,
+        fallthrough,
+        ast_map,
+        true_stmt,
+        false_stmt,
+        false_mode,
+        loop_owner,
+        if_node,
+    )
 
-        # Branch entries that are For nodes: the compiler emits the For
-        # iterator expression inline with If condition evaluation, so
-        # For-iterator descendants sandwiched between If re-evals are
-        # evidence, not preambles.
-        for_entries = []
-        if isinstance(body0, vy_ast.For):
-            for_entries.append(body0)
-        if if_node.orelse and isinstance(if_node.orelse[0], vy_ast.For):
-            for_entries.append(if_node.orelse[0])
-
-        # Phase 1: Consume the initial evaluation run.
-        # Consecutive same-If nodes with sandwiched non-If preambles.
-        j = i + 1
-        while j < len(nodes):
-            if nodes[j] is if_node:
-                # Same If re-evaluation — mark as preamble.
-                preamble_indices.add(j)
-                j += 1
-            elif (
-                not isinstance(nodes[j], vy_ast.For)
-                and j + 1 < len(nodes)
-                and nodes[j + 1] is if_node
-            ):
-                # Non-For node immediately followed by same If — preamble.
-                # But NOT if it's an unrelated If.
-                if isinstance(nodes[j], vy_ast.If) and nodes[j]._parent is not if_node:
-                    break
-                # NOT a preamble if it's a descendant of a For that is
-                # the branch entry — the compiler emits the For iterator
-                # inline with condition evaluation bytecode.
-                if any(_is_descendant(nodes[j], fe) for fe in for_entries):
-                    break
-                preamble_indices.add(j)
-                j += 1
-            else:
-                break
-
-        # j now points past the initial evaluation run.
-
-        # Phase 2: Trailing preamble detection.
-        # After the evaluation run, the compiler may emit orelse/sibling
-        # setup bytecode before the real evidence.  Scan ahead to find
-        # the first body-descendant (true evidence).  Non-body nodes
-        # before it are trailing preambles.
-        k = j
-        first_body_idx = None
-        while k < len(nodes) and not isinstance(nodes[k], vy_ast.If):
-            if _is_descendant(nodes[k], body0):
-                first_body_idx = k
-                break
-            k += 1
-        if first_body_idx is not None:
-            for k in range(j, first_body_idx):
-                if not isinstance(nodes[k], vy_ast.For):
-                    preamble_indices.add(k)
-
-        # Phase 3: Post-body re-evaluation detection.
-        # After the real evidence, the compiler may jump back to the
-        # If condition as a post-body re-evaluation.  Scan from j
-        # (or first_body_idx) forward for same-If appearances that
-        # follow body descendants — these are post-body re-evals.
-        # The resolved_this_epoch check in the engine handles this,
-        # so we only need to handle the case where body evidence
-        # precedes the re-eval.
-        scan_start = first_body_idx if first_body_idx is not None else j
-        k = scan_start
-        while k < len(nodes):
-            if nodes[k] is if_node:
-                preamble_indices.add(k)
-                k += 1
-            elif isinstance(nodes[k], vy_ast.If) and nodes[k]._parent is if_node:
-                # Child If between evidence and post-body re-eval
-                k += 1
-            elif not isinstance(nodes[k], vy_ast.For) and _is_descendant(
-                nodes[k], if_node
-            ):
-                # Node inside if_node's subtree (body or orelse descendant)
-                k += 1
-            else:
-                break
-
-        i = j if j > i + 1 else i + 1
-
-    return preamble_indices
-
-
-def _resolve_branches(nodes, fn_node):
-    """Resolve If branch outcomes deterministically via AST subtree membership.
-
-    Replaces all heuristic strip/normalize functions.
-
-    Phase 1: Collapse If-evaluation runs (preamble removal).
-    Phase 2: Decision engine resolves branch outcomes via subtree membership.
-
-    State:
-      pending:   list of (if_node, meta) awaiting resolution
-      resolved:  {id(if_node): if_node} resolved in current epoch
-      deferred:  nodes buffered while decisions are pending
-    """
-    # Phase 1: identify preamble positions
-    preamble_indices = _mark_preambles(nodes)
-
-    pending = []
-    resolved_this_epoch = {}  # {id(if_node): if_node}
-    deferred = []  # buffered nodes awaiting decision resolution
-    result = []
-
-    for idx, node in enumerate(nodes):
-        # Skip preamble nodes entirely — they are compiler artifacts
-        # (condition re-evaluations and branch setup bytecode) that
-        # would create spurious arcs if emitted.
-        if idx in preamble_indices:
-            continue
-
-        # --- For-marker: resolve loop-back Ifs, emit For, advance epoch ---
-        if isinstance(node, vy_ast.For):
-            # Resolve pending loop-back Ifs inside this For.
-            new_pending = []
-            any_resolved = False
-            for if_node, meta in pending:
-                *_, false_mode, loop_owner = meta
-                if false_mode == "loop_back" and loop_owner is node:
-                    resolved_this_epoch[id(if_node)] = if_node
-                    any_resolved = True
+    for i in range(raw_trace_start, len(raw_trace)):
+        if raw_trace[i] == jumpi_pc:
+            next_idx = i + 1
+            if next_idx < len(raw_trace):
+                actual_dest = raw_trace[next_idx]
+                was_taken = actual_dest == taken_dest
+                if was_taken == taken_is_true:
+                    return "true", next_idx
                 else:
-                    new_pending.append((if_node, meta))
-            pending = new_pending
-            if any_resolved or not pending:
-                # For resolved a loop-back or no pending: emit immediately
-                result.append(node)
-                if not pending:
-                    result.extend(deferred)
-                    deferred = []
-            else:
-                # For didn't resolve anything and decisions still pending:
-                # defer it to preserve arc chain (If → evidence).
-                deferred.append(node)
-            # Epoch reset: Ifs inside this For can re-resolve next iteration
-            resolved_this_epoch = {
-                k: v
-                for k, v in resolved_this_epoch.items()
-                if not _is_descendant(v, node)
-            }
-            continue
+                    return "false", next_idx
+            return "false", next_idx
+    return "false", len(raw_trace)
 
-        # --- Resolve ALL matching pending decisions FIRST ---
-        new_pending = []
-        any_resolved = False
-        for if_node, meta in reversed(pending):
-            true_line, false_line, true_stmt, false_stmt, false_mode, loop_owner = meta
+
+def _resolve_jumpi_direction(
+    taken_dest,
+    fallthrough,
+    ast_map,
+    true_stmt,
+    false_stmt,
+    false_mode,
+    loop_owner,
+    if_node,
+):
+    """Determine if JUMPI taken = true branch.
+
+    Walk PCs forward from taken_dest and fallthrough in the AST map
+    to find the first classifiable node, then check if it's in the
+    true or false subtree.  Returns True if taken = true branch.
+
+    The compiler may share calldataload instructions between branches,
+    so the first mapped node can be misleading.  We walk further to
+    find an unambiguous node (one that differs between the two paths).
+    """
+
+    def _classify_path(start_pc):
+        """Return "true"/"false"/"exit"/None for the path.
+
+        Scans PCs forward, collecting true/false/exit evidence.
+        The compiler may share initial instructions (e.g. calldataload)
+        between branches, so we scan enough PCs to find an unambiguous
+        classification.  If we see both true and false evidence, the
+        later (more specific) evidence wins.
+        """
+        result = None
+        for offset in range(30):
+            node = ast_map.get(start_pc + offset)
+            if node is None:
+                continue
+            collapsed = _collapse_cov_node(node)
+            if collapsed is None:
+                continue  # FunctionDef
+            if collapsed is if_node:
+                continue  # If-mapped JUMPDEST
+            if _is_descendant(node, if_node.test):
+                continue  # Condition node
             if true_stmt is not None and _is_descendant(node, true_stmt):
-                # True branch taken.
-                if true_stmt.lineno != node.lineno:
-                    result.append(true_stmt)  # multiline entry fixup
-                resolved_this_epoch[id(if_node)] = if_node
-                any_resolved = True
-                continue  # pop from pending
+                return "true"
             if false_stmt is not None and _is_descendant(node, false_stmt):
-                # False branch taken (explicit else or lexical fallthrough).
-                if false_stmt.lineno != node.lineno:
-                    result.append(false_stmt)  # multiline entry fixup
-                resolved_this_epoch[id(if_node)] = if_node
-                any_resolved = True
-                continue  # pop from pending
-            # Terminal loop-back false: node is outside loop_owner subtree.
-            if (
-                false_mode == "loop_back"
-                and loop_owner is not None
-                and not _is_descendant(node, loop_owner)
-            ):
-                result.append(loop_owner)  # For node as false evidence
-                resolved_this_epoch[id(if_node)] = if_node
-                any_resolved = True
-                continue  # pop from pending
-            new_pending.append((if_node, meta))
+                if result is None:
+                    result = "false"
+                continue  # Keep scanning in case a true node follows
+            if not _is_descendant(node, if_node):
+                return result or "exit"
+        return result
 
-        pending = list(reversed(new_pending))
+    taken_class = _classify_path(taken_dest)
+    fall_class = _classify_path(fallthrough)
 
-        # --- If node: dedup AFTER resolution, then push or skip ---
-        if isinstance(node, vy_ast.If):
-            if any(node is p[0] for p in pending):
-                # Same If already pending — preamble re-evaluation.
+    # If both paths classify differently, use the classification
+    if taken_class in ("true",) and fall_class in ("false", "exit"):
+        return True
+    if taken_class in ("false", "exit") and fall_class in ("true",):
+        return False
+    if taken_class == "true":
+        return True
+    if fall_class == "true":
+        return False
+    if taken_class in ("false", "exit"):
+        return False
+    if fall_class in ("false", "exit"):
+        return True
+
+    # Default: assume taken = true
+    return True
+
+
+class CoverageCollector:
+    """Collects coverage data via direct CoverageData writes."""
+
+    _PLUGIN_NAME = "boa.coverage.TitanoboaPlugin"
+
+    def __init__(self):
+        self._arcs_by_file: dict[str, set[tuple[int, int]]] = {}
+        self._lines_by_file: dict[str, set[int]] = {}
+        self._raw_trace_pos: dict[str, int] = {}
+
+    def record_segment(self, filename, events, fn_node, bytecode, raw_trace, ast_map):
+        """Process event tuples, extract lines and branch arcs.
+
+        events: list of (pc, collapsed_node, raw_node) tuples.
+        bytecode: the raw EVM bytecode for JUMPI detection.
+        raw_trace: list of PCs from computation.code._trace.
+        ast_map: PC → AST node mapping from source_map.
+        """
+        if not events or fn_node is None:
+            return
+
+        lines = self._lines_by_file.setdefault(filename, set())
+        arcs = self._arcs_by_file.setdefault(filename, set())
+
+        jumpi_table = _build_jumpi_table(bytecode)
+        if_meta = {}
+        resolved = {}
+        prev_lineno = None
+        # Track position in raw_trace so each JUMPI match advances.
+        # Persist across segments for the same file so that
+        # cross-module calls (A → B → A) don't re-match earlier JUMPIs.
+        raw_trace_pos = self._raw_trace_pos.get(filename, 0)
+
+        for idx, (pc, collapsed, raw) in enumerate(events):
+            lines.add(collapsed.lineno)
+
+            if isinstance(collapsed, vy_ast.If):
+                if_node = collapsed
+                # Only process at the last If event in a consecutive run.
+                # Skip if next event is also this If node.
+                if idx + 1 < len(events) and events[idx + 1][1] is if_node:
+                    continue
+                if id(if_node) in resolved:
+                    continue
+
+                if id(if_node) not in if_meta:
+                    if_meta[id(if_node)] = _branch_targets(if_node, fn_node)
+                meta = if_meta[id(if_node)]
+                true_line, false_line, true_stmt, false_stmt, fm, lo = meta
+
+                # Find the last JUMPI PC in this run of If events.
+                # Multi-condition (and/or) ifs have multiple JUMPIs;
+                # the last one is the actual branch decision.
+                jumpi_pc = None
+                scan = idx
+                while scan >= 0 and events[scan][1] is if_node:
+                    epc = events[scan][0]
+                    if epc is not None and bytecode[epc] == _JUMPI:
+                        jumpi_pc = epc
+                        break  # found the last (scanning backward)
+                    scan -= 1
+                # Fallback: for break/continue, the JUMPI is unmapped
+                # in the ast_map.  Detect this by checking if the
+                # true-branch body starts with Break or Continue.
+                if jumpi_pc is None and pc is not None:
+                    body0 = if_node.body[0]
+                    if isinstance(body0, (vy_ast.Break, vy_ast.Continue)):
+                        jumpi_pc = _find_if_jumpi(bytecode, pc)
+
+                if jumpi_pc is not None:
+                    branch, raw_trace_pos = _classify_from_raw_trace(
+                        jumpi_pc,
+                        raw_trace,
+                        raw_trace_pos,
+                        jumpi_table,
+                        true_stmt,
+                        false_stmt,
+                        fm,
+                        lo,
+                        if_node,
+                        ast_map,
+                    )
+                    if branch == "true":
+                        arcs.add((if_node.lineno, true_line))
+                    elif branch == "false":
+                        arcs.add((if_node.lineno, false_line))
+                    resolved[id(if_node)] = if_node
                 continue
-            if id(node) in resolved_this_epoch:
-                # Same If already resolved this epoch — post-body
-                # re-evaluation.
+
+            # For marker: reset resolved state for If nodes inside loop
+            if isinstance(collapsed, vy_ast.For):
+                resolved = {
+                    k: v
+                    for k, v in resolved.items()
+                    if not _is_descendant(v, collapsed)
+                }
+                prev_lineno = collapsed.lineno
                 continue
-            # New If decision — push and emit.
-            meta = _branch_targets(node, fn_node)
-            pending.append((node, meta))
-            result.append(node)
-        elif any_resolved:
-            # Node resolved a decision — emit it (evidence).
-            result.append(node)
-            # Flush deferred only when ALL pending decisions are resolved.
-            if not pending:
-                result.extend(deferred)
-                deferred = []
-        elif pending:
-            # Node didn't resolve any pending decision — defer it.
-            deferred.append(node)
+
+            # Sequential arc for line coverage in branch mode
+            if prev_lineno is not None and prev_lineno != collapsed.lineno:
+                arcs.add((prev_lineno, collapsed.lineno))
+
+            prev_lineno = collapsed.lineno
+
+        self._raw_trace_pos[filename] = raw_trace_pos
+
+    def flush(self):
+        """Write accumulated data to the active coverage instance."""
+        cov = coverage.Coverage.current()
+        if cov is None:
+            return
+
+        data = cov._data
+        if cov.config.branch:
+            # In branch mode, lines are derived from arc endpoints.
+            # Ensure every executed line appears in at least one arc
+            # by adding (-1, line) entry arcs for uncovered lines.
+            for filename, lines in self._lines_by_file.items():
+                arcs = self._arcs_by_file.setdefault(filename, set())
+                arc_lines = set()
+                for a, b in arcs:
+                    if a > 0:
+                        arc_lines.add(a)
+                    if b > 0:
+                        arc_lines.add(b)
+                for line in lines - arc_lines:
+                    arcs.add((-1, line))
+            if self._arcs_by_file:
+                data.add_arcs(self._arcs_by_file)
         else:
-            # No pending decisions — emit normally.
-            result.append(node)
+            if self._lines_by_file:
+                data.add_lines(self._lines_by_file)
 
-    # --- End-of-stream drain ---
-    for if_node, meta in pending:
-        *_, false_mode, loop_owner = meta
-        if false_mode == "loop_back" and loop_owner is not None:
-            result.append(loop_owner)
-        else:
-            result.append(fn_node)
-        resolved_this_epoch[id(if_node)] = if_node
-    pending = []
+        all_files = set(self._arcs_by_file) | set(self._lines_by_file)
+        tracers = {f: self._PLUGIN_NAME for f in all_files}
+        if tracers:
+            data.add_file_tracers(tracers)
 
-    # Flush remaining deferred nodes (for statement coverage).
-    result.extend(deferred)
-
-    return result
+        self._arcs_by_file.clear()
+        self._lines_by_file.clear()
 
 
 def _true_arc(if_node, fn_node):
