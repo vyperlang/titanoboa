@@ -74,6 +74,28 @@ def _coverage_session_multi(sources_dict, setup_fn):
             os.unlink(path)
 
 
+@contextlib.contextmanager
+def _coverage_session_lines(vyper_source, calls_fn):
+    """Set up statement-only coverage (branch=False), yield (cov, vy_path)."""
+    saved_coverage = Env._coverage_enabled
+    fd, vy_path = tempfile.mkstemp(suffix=".vy")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(vyper_source)
+        cov = coverage.Coverage(branch=False, config_file=False, data_file=None)
+        cov.set_option("run:plugins", ["boa.coverage"])
+        cov.start()
+        try:
+            c = boa.load(vy_path)
+            calls_fn(c)
+        finally:
+            cov.stop()
+        yield cov, vy_path
+    finally:
+        Env._coverage_enabled = saved_coverage
+        os.unlink(vy_path)
+
+
 def _check_branch_coverage(vyper_source, calls_fn):
     """Run branch coverage in-process and return missing_branch_arcs."""
     with _coverage_session(vyper_source, calls_fn) as analysis:

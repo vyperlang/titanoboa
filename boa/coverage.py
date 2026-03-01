@@ -10,6 +10,7 @@
 #                                  arcs, and exit_counts for each .vy file)
 
 from functools import cached_property
+from typing import Optional
 
 import coverage
 import coverage.plugin
@@ -20,15 +21,26 @@ from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
 
 _JUMPI = 0x57
 
+# Max bytecode bytes to scan forward when searching for a JUMPI
+# after a break/continue condition.  The compiler emits the JUMPI
+# within a few instructions of the condition PUSH.
+_JUMPI_SCAN_LIMIT = 20
 
-def _build_jumpi_table(bytecode):
+# Max consecutive PC addresses to probe in the AST map when
+# classifying which branch a JUMPI destination belongs to.
+# The AST map is sparse; 30 addresses covers the gap between
+# a JUMPDEST and the first mapped instruction in practice.
+_PATH_CLASSIFY_LIMIT = 30
+
+
+def _build_jumpi_table(bytecode: bytes) -> dict[int, tuple[int | None, int]]:
     """Map each JUMPI PC -> (taken_dest, fallthrough_pc).
 
     Scans bytecode forward to correctly parse PUSH operands,
     tracking the most recent PUSH value before each JUMPI.
     """
-    table = {}
-    last_push_value = None
+    table: dict[int, tuple[int | None, int]] = {}
+    last_push_value: int | None = None
     pc = 0
     while pc < len(bytecode):
         op = bytecode[pc]
@@ -48,10 +60,10 @@ def _build_jumpi_table(bytecode):
     return table
 
 
-def _find_if_jumpi(bytecode, from_pc):
+def _find_if_jumpi(bytecode: bytes, from_pc: int) -> Optional[int]:
     """Scan bytecode forward from from_pc to find the nearest JUMPI."""
     scan = from_pc + 1
-    limit = min(from_pc + 20, len(bytecode))
+    limit = min(from_pc + _JUMPI_SCAN_LIMIT, len(bytecode))
     while scan < limit:
         if bytecode[scan] == _JUMPI:
             return scan
@@ -63,7 +75,7 @@ def _find_if_jumpi(bytecode, from_pc):
     return None
 
 
-def _collapse_cov_node(node):
+def _collapse_cov_node(node: vy_ast.VyperNode) -> Optional[vy_ast.VyperNode]:
     """Collapse AST nodes for coverage line reporting.
 
     - Nodes inside an If.test subtree → the If node itself.
@@ -86,7 +98,7 @@ def _collapse_cov_node(node):
     return node
 
 
-def _is_descendant(node, ancestor):
+def _is_descendant(node: vy_ast.VyperNode, ancestor: vy_ast.VyperNode) -> bool:
     """Return True if *node* is *ancestor* or is inside its AST subtree."""
     cur = node
     while cur is not None:
@@ -101,7 +113,6 @@ def coverage_init(registry, options):
 
     plugin = TitanoboaPlugin(options)
     registry.add_file_tracer(plugin)
-    registry.add_configurer(plugin)
 
     # set on the class so that reset_env() doesn't disable tracing
     Env._coverage_enabled = True
@@ -109,9 +120,6 @@ def coverage_init(registry, options):
 
 class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
     def __init__(self, options):
-        pass
-
-    def configure(self, config):
         pass
 
     def file_tracer(self, filename):
@@ -124,18 +132,19 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
 
 # helper function. null returns get optimized directly into a jump
 # to function cleanup which maps to the parent FunctionDef ast.
-def _is_null_return(ast_node):
+def _is_null_return(ast_node: vy_ast.VyperNode) -> bool:
     match ast_node:
         case vy_ast.Return(value=None):
             return True
     return False
 
 
-def _branch_targets(if_node, fn_node):
+def _branch_targets(
+    if_node: vy_ast.If, fn_node: vy_ast.FunctionDef
+) -> tuple[int, int, Optional[vy_ast.VyperNode], Optional[vy_ast.VyperNode]]:
     """Compute branch target info for an If node.
 
-    Returns (true_line, false_line, true_entry_stmt, false_entry_stmt,
-             false_mode, loop_owner).
+    Returns (true_line, false_line, true_entry_stmt, false_entry_stmt).
     """
     # --- True target ---
     first_body = if_node.body[0]
@@ -150,31 +159,21 @@ def _branch_targets(if_node, fn_node):
     if if_node.orelse:
         first_else = if_node.orelse[0]
         if _is_null_return(first_else):
-            false_line, false_stmt, false_mode, loop_owner = (
-                fn_node.lineno,
-                None,
-                "null_return",
-                None,
-            )
+            false_line, false_stmt = fn_node.lineno, None
         else:
-            false_line, false_stmt, false_mode, loop_owner = (
-                first_else.lineno,
-                first_else,
-                "explicit_else",
-                None,
-            )
+            false_line, false_stmt = first_else.lineno, first_else
     else:
-        false_line, false_stmt, false_mode, loop_owner = _find_false_target(
-            if_node, fn_node
-        )
+        false_line, false_stmt = _find_false_target(if_node, fn_node)
 
-    return true_line, false_line, true_stmt, false_stmt, false_mode, loop_owner
+    return true_line, false_line, true_stmt, false_stmt
 
 
-def _find_false_target(if_node, fn_node):
+def _find_false_target(
+    if_node: vy_ast.If, fn_node: vy_ast.FunctionDef
+) -> tuple[int, Optional[vy_ast.VyperNode]]:
     """Find the false-branch target for an If without orelse.
 
-    Returns (line, stmt_or_None, false_mode, loop_owner).
+    Returns (line, stmt_or_None).
     """
     # Check immediate siblings first
     parent = if_node._parent
@@ -186,14 +185,14 @@ def _find_false_target(if_node, fn_node):
     for node, next_ in zip(siblings, siblings[1:]):
         if node is if_node:
             if _is_null_return(next_):
-                return fn_node.lineno, None, "null_return", None
-            return next_.lineno, next_, "lexical_fallthrough", None
+                return fn_node.lineno, None
+            return next_.lineno, next_
 
     # No sibling — walk up through enclosing blocks
     ancestor = if_node._parent
     while ancestor is not fn_node:
         if isinstance(ancestor, vy_ast.For):
-            return ancestor.lineno, None, "loop_back", ancestor
+            return ancestor.lineno, None
         enclosing = ancestor._parent
         if enclosing is None:
             break
@@ -207,25 +206,23 @@ def _find_false_target(if_node, fn_node):
         for node, next_ in zip(scope, scope[1:]):
             if node is ancestor:
                 if _is_null_return(next_):
-                    return fn_node.lineno, None, "null_return", None
-                return next_.lineno, next_, "lexical_fallthrough", None
+                    return fn_node.lineno, None
+                return next_.lineno, next_
         ancestor = enclosing
 
-    return fn_node.lineno, None, "fn_exit", None
+    return fn_node.lineno, None
 
 
 def _classify_from_raw_trace(
-    jumpi_pc,
-    raw_trace,
-    raw_trace_start,
-    jumpi_table,
-    true_stmt,
-    false_stmt,
-    false_mode,
-    loop_owner,
-    if_node,
-    ast_map,
-):
+    jumpi_pc: int,
+    raw_trace: list[int],
+    raw_trace_start: int,
+    jumpi_table: dict[int, tuple[int | None, int]],
+    true_stmt: Optional[vy_ast.VyperNode],
+    false_stmt: Optional[vy_ast.VyperNode],
+    if_node: vy_ast.If,
+    ast_map: dict[int, vy_ast.VyperNode],
+) -> tuple[str, int]:
     """Classify branch direction by checking where the JUMPI goes.
 
     Determines the JUMPI's taken destination, then checks which
@@ -240,17 +237,8 @@ def _classify_from_raw_trace(
     if taken_dest is None:
         return "false", raw_trace_start
 
-    # Determine which direction is the true branch.
-    # Check if the taken destination maps to a true-body descendant.
     taken_is_true = _resolve_jumpi_direction(
-        taken_dest,
-        fallthrough,
-        ast_map,
-        true_stmt,
-        false_stmt,
-        false_mode,
-        loop_owner,
-        if_node,
+        taken_dest, fallthrough, ast_map, true_stmt, false_stmt, if_node
     )
 
     for i in range(raw_trace_start, len(raw_trace)):
@@ -268,15 +256,13 @@ def _classify_from_raw_trace(
 
 
 def _resolve_jumpi_direction(
-    taken_dest,
-    fallthrough,
-    ast_map,
-    true_stmt,
-    false_stmt,
-    false_mode,
-    loop_owner,
-    if_node,
-):
+    taken_dest: int,
+    fallthrough: int,
+    ast_map: dict[int, vy_ast.VyperNode],
+    true_stmt: Optional[vy_ast.VyperNode],
+    false_stmt: Optional[vy_ast.VyperNode],
+    if_node: vy_ast.If,
+) -> bool:
     """Determine if JUMPI taken = true branch.
 
     Walk PCs forward from taken_dest and fallthrough in the AST map
@@ -298,7 +284,7 @@ def _resolve_jumpi_direction(
         later (more specific) evidence wins.
         """
         result = None
-        for offset in range(30):
+        for offset in range(_PATH_CLASSIFY_LIMIT):
             node = ast_map.get(start_pc + offset)
             if node is None:
                 continue
@@ -322,11 +308,6 @@ def _resolve_jumpi_direction(
     taken_class = _classify_path(taken_dest)
     fall_class = _classify_path(fallthrough)
 
-    # If both paths classify differently, use the classification
-    if taken_class in ("true",) and fall_class in ("false", "exit"):
-        return True
-    if taken_class in ("false", "exit") and fall_class in ("true",):
-        return False
     if taken_class == "true":
         return True
     if fall_class == "true":
@@ -336,7 +317,7 @@ def _resolve_jumpi_direction(
     if fall_class in ("false", "exit"):
         return True
 
-    # Default: assume taken = true
+    # Neither path classifiable — assume taken = true
     return True
 
 
@@ -348,32 +329,53 @@ class CoverageCollector:
     def __init__(self):
         self._arcs_by_file: dict[str, set[tuple[int, int]]] = {}
         self._lines_by_file: dict[str, set[int]] = {}
-        self._raw_trace_pos: dict[str, int] = {}
+        self._raw_trace_pos: dict[tuple[str, int], int] = {}
+        self._jumpi_tables: dict[bytes, dict] = {}  # bytecode → table
+        self._next_trace_id: int = 0
 
-    def record_segment(self, filename, events, fn_node, bytecode, raw_trace, ast_map):
+    def next_trace_id(self) -> int:
+        """Allocate a unique trace ID for a computation's raw_trace.
+
+        Each computation gets its own ID.  Cross-module segments
+        (A → B → A) within one computation share the same ID so
+        the raw_trace cursor is preserved across segments.
+        """
+        tid = self._next_trace_id
+        self._next_trace_id += 1
+        return tid
+
+    def record_segment(self, filename, events, bytecode, raw_trace, ast_map, trace_id):
         """Process event tuples, extract lines and branch arcs.
 
         events: list of (pc, collapsed_node, raw_node) tuples.
         bytecode: the raw EVM bytecode for JUMPI detection.
         raw_trace: list of PCs from computation.code._trace.
         ast_map: PC → AST node mapping from source_map.
+        trace_id: unique integer identifying this computation's trace,
+            allocated via next_trace_id().
         """
-        if not events or fn_node is None:
+        if not events:
             return
 
         lines = self._lines_by_file.setdefault(filename, set())
         arcs = self._arcs_by_file.setdefault(filename, set())
 
-        jumpi_table = _build_jumpi_table(bytecode)
+        if bytecode not in self._jumpi_tables:
+            self._jumpi_tables[bytecode] = _build_jumpi_table(bytecode)
+        jumpi_table = self._jumpi_tables[bytecode]
         if_meta = {}
         resolved = {}
         prev_lineno = None
         # Track position in raw_trace so each JUMPI match advances.
-        # Persist across segments for the same file so that
-        # cross-module calls (A → B → A) don't re-match earlier JUMPIs.
-        raw_trace_pos = self._raw_trace_pos.get(filename, 0)
+        # Key by (filename, trace_id) so that:
+        #  - cross-module segments (A → B → A) sharing the same trace
+        #    don't re-match earlier JUMPIs,
+        #  - child computations (e.g. extcall self) with a different
+        #    trace_id get an independent cursor.
+        trace_key = (filename, trace_id)
+        raw_trace_pos = self._raw_trace_pos.get(trace_key, 0)
 
-        for idx, (pc, collapsed, raw) in enumerate(events):
+        for idx, (pc, collapsed, _) in enumerate(events):
             lines.add(collapsed.lineno)
 
             if isinstance(collapsed, vy_ast.If):
@@ -386,9 +388,12 @@ class CoverageCollector:
                     continue
 
                 if id(if_node) not in if_meta:
+                    fn_node = get_fn_ancestor_from_node(if_node)
+                    if fn_node is None:
+                        continue
                     if_meta[id(if_node)] = _branch_targets(if_node, fn_node)
                 meta = if_meta[id(if_node)]
-                true_line, false_line, true_stmt, false_stmt, fm, lo = meta
+                true_line, false_line, true_stmt, false_stmt = meta
 
                 # Find the last JUMPI PC in this run of If events.
                 # Multi-condition (and/or) ifs have multiple JUMPIs;
@@ -417,8 +422,6 @@ class CoverageCollector:
                         jumpi_table,
                         true_stmt,
                         false_stmt,
-                        fm,
-                        lo,
                         if_node,
                         ast_map,
                     )
@@ -445,7 +448,7 @@ class CoverageCollector:
 
             prev_lineno = collapsed.lineno
 
-        self._raw_trace_pos[filename] = raw_trace_pos
+        self._raw_trace_pos[trace_key] = raw_trace_pos
 
     def flush(self):
         """Write accumulated data to the active coverage instance."""
@@ -453,8 +456,8 @@ class CoverageCollector:
         if cov is None:
             return
 
-        data = cov._data
-        if cov.config.branch:
+        data = cov.get_data()
+        if cov.get_option("run:branch"):
             # In branch mode, lines are derived from arc endpoints.
             # Ensure every executed line appears in at least one arc
             # by adding (-1, line) entry arcs for uncovered lines.
@@ -481,14 +484,17 @@ class CoverageCollector:
 
         self._arcs_by_file.clear()
         self._lines_by_file.clear()
+        self._raw_trace_pos.clear()
+        self._jumpi_tables.clear()
+        self._next_trace_id = 0
 
 
-def _true_arc(if_node, fn_node):
+def _true_arc(if_node: vy_ast.If, fn_node: vy_ast.FunctionDef) -> int:
     """Target line for the true (body) branch of an If node."""
     return _branch_targets(if_node, fn_node)[0]
 
 
-def _false_arc(if_node, fn_node):
+def _false_arc(if_node: vy_ast.If, fn_node: vy_ast.FunctionDef) -> int:
     """Target line for the false (else/fallthrough) branch of an If node."""
     return _branch_targets(if_node, fn_node)[1]
 
@@ -533,7 +539,7 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
                     ret.add(node.lineno)
 
         # Exclude continuation lines from multi-line If conditions.
-        # The tracer collapses If.test nodes to the If line, so any
+        # The collector collapses If.test nodes to the If line, so any
         # extra lines from the test subtree would appear perpetually
         # uncovered.
         for if_node in self._ast.get_descendants(vy_ast.If):

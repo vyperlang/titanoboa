@@ -13,7 +13,6 @@ import eth.constants as constants
 import vyper.ast as vy_ast
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
-from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
 from boa.coverage import CoverageCollector, _collapse_cov_node
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
@@ -359,7 +358,6 @@ class Env:
             segments = []
             current_file = None
             current_events = []  # list of (pc, collapsed_node, raw_node)
-            last_funcdef = None
 
             # Track FunctionDef gaps to detect for-loop backedges.
             # A backward PC jump during a FunctionDef gap means the
@@ -378,7 +376,6 @@ class Env:
                     raw_node = node
                     node = _collapse_cov_node(node)
                     if node is None:
-                        last_funcdef = raw_node
                         if pc < max_gap_pc:
                             gap_had_backward_jump = True
                         max_gap_pc = max(max_gap_pc, pc)
@@ -390,7 +387,6 @@ class Env:
                         current_file = fname
                         current_events = []
                         max_node_pc = 0
-                    last_funcdef = None
                     # Detect for-loop backedge: a backward PC jump
                     # during the FunctionDef gap means the EVM looped
                     # back.  Insert the For-header so coverage sees
@@ -421,12 +417,10 @@ class Env:
 
             bytecode = computation.code._raw_code_bytes
             raw_trace = list(computation.code._trace)
+            trace_id = collector.next_trace_id()
             for filename, events in segments:
-                fn_node = get_fn_ancestor_from_node(events[0][1]) if events else None
-                if fn_node is None:
-                    fn_node = last_funcdef
                 collector.record_segment(
-                    filename, events, fn_node, bytecode, raw_trace, ast_map
+                    filename, events, bytecode, raw_trace, ast_map, trace_id
                 )
 
         for child in computation.children:
