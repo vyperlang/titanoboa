@@ -908,6 +908,162 @@ def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
             ), f"Executed arcs {arc_set} not subset of possible {possible}"
 
 
+# --- no-op body (pass / assert True) ---
+
+
+def test_branch_if_pass_body_both():
+    """if with pass body — both branches hit.
+
+    Regression: pass generates no bytecode, so the JUMPI direction
+    classifier could not find the true branch anchor.  Both arcs
+    collapse to the same fallthrough target (degenerate case).
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        pass
+    y += 1
+    return y
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_assert_true_body_both():
+    """if with assert True body — both branches hit.
+
+    Regression: assert True is constant-folded away, producing no
+    bytecode, same root cause as pass.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        assert True
+    y += 1
+    return y
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_pass_body_degenerate():
+    """if with pass body — arcs collapse (both point to same line).
+
+    Like the double-null-return degenerate case: the pass body is a
+    no-op so both branches fall through to the same statement.
+    Executing only one branch still reports full coverage.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        pass
+    y += 1
+    return y
+"""
+    missing = _check_branch_coverage(source, lambda c: c.f(10))
+    assert missing == {}, (
+        "Both arcs target the same fallthrough line; partial execution "
+        f"should still show no missing (degenerate case), got: {missing}"
+    )
+
+
+def test_branch_else_pass_both():
+    """if/else where else is pass — both branches hit.
+
+    Regression: pass in the else branch generated no bytecode, causing
+    the decision JUMPI to be unmapped and the false branch to never be
+    recorded.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        pass
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_else_assert_true_both():
+    """if/else where else is assert True — both branches hit."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        assert True
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_else_pass_partial_true_only():
+    """if/else where else is pass — only true hit, false arc missing."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        pass
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f(10))
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+
+
+def test_branch_else_pass_partial_false_only():
+    """if/else where else is pass — only false hit, true arc missing."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        pass
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f(1))
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+
+
+def test_branch_internal_else_pass_both():
+    """Internal function with else pass — both branches hit.
+
+    Regression: same unmapped-JUMPI issue in internal function calls.
+    """
+    source = """\
+@internal
+def g(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        pass
+    return 0
+
+@external
+def f(x: uint256) -> uint256:
+    return self.g(x)
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
 # --- statement-only coverage ---
 
 

@@ -687,3 +687,87 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     assert (
         true_target in missing[if_node.lineno]
     ), f"Expected true target {true_target} missing from line {if_node.lineno}: {missing}"
+
+
+# --- no-op body (pass / assert True) in loops ---
+
+
+def test_branch_loop_else_pass_both():
+    """In-loop if/else where else is pass — both branches hit.
+
+    Regression: pass in else generated no bytecode, causing the
+    decision JUMPI to be unmapped and no branch arcs recorded.
+    """
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if x > 5:
+            s += 2
+        else:
+            pass
+        s += 1
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: c.f([10, 1]))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_loop_else_assert_true_both():
+    """In-loop if/else where else is assert True — both branches hit."""
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if x > 5:
+            s += 2
+        else:
+            assert True
+        s += 1
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: c.f([10, 1]))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_loop_else_pass_partial():
+    """In-loop if/else where else is pass — one branch only."""
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if x > 5:
+            s += 2
+        else:
+            pass
+        s += 1
+    return s
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f([10]))
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+
+
+def test_branch_loop_if_pass_both():
+    """In-loop if without else + pass body — both branches hit.
+
+    Regression: pass body generates no bytecode, direction
+    classifier could not find the true branch anchor.  Both arcs
+    collapse to the same target (degenerate case).
+    """
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if x > 5:
+            pass
+        s += 1
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: c.f([10, 1]))
+    assert missing == {}, f"Missing branch arcs: {missing}"
