@@ -356,6 +356,8 @@ class CoverageCollector:
         """
         if not events or filename is None or not filename.endswith(".vy"):
             return
+        if "site-packages" in filename:
+            return
 
         lines = self._lines_by_file.setdefault(filename, set())
         arcs = self._arcs_by_file.setdefault(filename, set())
