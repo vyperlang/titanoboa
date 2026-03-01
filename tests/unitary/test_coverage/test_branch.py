@@ -382,6 +382,197 @@ def foo(a: uint256, b: uint256, c: uint256) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
+# --- internal call in If.test (condition helpers) ---
+
+
+def test_branch_helper_condition_break_false_only():
+    """for + break + helper condition, false-only must not report full coverage.
+
+    Regression: internal call in If.test splits If events into two runs,
+    causing double classification that adds both arcs from one execution.
+    """
+    source = """\
+@internal
+def gt5(x: uint256) -> bool:
+    return x > 5
+
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if self.gt5(x):
+            break
+        s += x
+    return s
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f([1]))
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing (false only), got: {missing}"
+
+
+def test_branch_helper_compound_continue_true_only():
+    """for + continue + helper+and, true-only must not report full coverage.
+
+    Regression: compound condition with helpers causes double classification.
+    """
+    source = """\
+@internal
+def gt5(x: uint256) -> bool:
+    return x > 5
+@internal
+def lt20(x: uint256) -> bool:
+    return x < 20
+
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if (self.gt5(x)) and (self.lt20(x)):
+            continue
+        s += x
+    return s
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f([10]))
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing (true only), got: {missing}"
+
+
+def test_branch_helper_compound_if_else_true_only():
+    """top-level if/else + helper+and, true-only must not report full coverage.
+
+    Regression: helpers in condition cause double classification.
+    """
+    source = """\
+@internal
+def gt5(x: uint256) -> bool:
+    return x > 5
+@internal
+def lt20(x: uint256) -> bool:
+    return x < 20
+
+@external
+def f(x: uint256) -> uint256:
+    if (self.gt5(x)) and (self.lt20(x)):
+        return 1
+    else:
+        return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f(10))
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing (true only), got: {missing}"
+
+
+def test_branch_helper_triple_or_false_only():
+    """top-level if/else + helper short-circuit or, false-only must not report full.
+
+    Regression: complex compound condition with helpers causes double classification.
+    """
+    source = """\
+@internal
+def gt5(x: uint256) -> bool:
+    return x > 5
+@internal
+def lt20(x: uint256) -> bool:
+    return x < 20
+@internal
+def eq100(x: uint256) -> bool:
+    return x == 100
+
+@external
+def f(x: uint256) -> uint256:
+    if ((self.gt5(x)) and (self.lt20(x))) or (self.eq100(x)):
+        return 1
+    else:
+        return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f(25))
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing (false only), got: {missing}"
+
+
+def test_branch_helper_no_else_tail_false_only():
+    """if without else + tail + helper condition, false-only must not report full.
+
+    Regression: helpers in condition cause double classification.
+    """
+    source = """\
+@internal
+def gt5(x: uint256) -> bool:
+    return x > 5
+@internal
+def lt20(x: uint256) -> bool:
+    return x < 20
+
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if (self.gt5(x)) and (self.lt20(x)):
+        y = 1
+    return y
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f(25))
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing (false only), got: {missing}"
+
+
+def test_branch_helper_bare_return_false_only():
+    """bare-return body + helper condition, false-only must not report full.
+
+    Regression: helpers in condition cause double classification.
+    """
+    source = """\
+@internal
+def gt5(x: uint256) -> bool:
+    return x > 5
+
+y: uint256
+@external
+def f(x: uint256):
+    if self.gt5(x):
+        return
+    self.y = 1
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    missing = _check_branch_coverage(source, lambda c: c.f(1))
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing (false only), got: {missing}"
+
+
+def test_branch_helper_condition_both_branches():
+    """Helper condition with both branches hit — no missing arcs."""
+    source = """\
+@internal
+def gt5(x: uint256) -> bool:
+    return x > 5
+
+@external
+def f(x: uint256) -> uint256:
+    if self.gt5(x):
+        return 1
+    else:
+        return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
 # --- if-without-else at function end ---
 
 

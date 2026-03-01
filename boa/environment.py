@@ -415,7 +415,16 @@ class Env:
                         max_node_pc = pc  # reset so condition PCs don't re-trigger
                     max_gap_pc = 0
                     gap_had_backward_jump = False
-                    max_node_pc = max(max_node_pc, pc)
+                    # Only update max_node_pc for consecutive events of
+                    # the same collapsed node.  Internal function calls
+                    # interleave helper body nodes (at high PCs) between
+                    # runs of the same If node; inflating max_node_pc
+                    # across different nodes would cause false inner-loop
+                    # backedge detection on the return to lower PCs.
+                    if current_events and node is current_events[-1][1]:
+                        max_node_pc = max(max_node_pc, pc)
+                    else:
+                        max_node_pc = pc
                     current_events.append((pc, node, raw_node))
 
             if current_events:

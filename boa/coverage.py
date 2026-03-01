@@ -415,6 +415,36 @@ class CoverageCollector:
                         scan -= 1
 
                 if jumpi_pc is not None:
+                    # Guard: when If.test contains internal function calls,
+                    # helper body nodes split the If's condition events
+                    # into multiple runs.  Earlier runs may contain
+                    # short-circuit JUMPIs, not the decision JUMPI.
+                    # Detect an incomplete evaluation: the same If node
+                    # reappears later AND no body/orelse descendant events
+                    # sit between here and that reappearance (body events
+                    # would mean the first evaluation completed and the
+                    # If is being re-entered from a separate call).
+                    has_helper_gap = False
+                    saw_body = False
+                    for j in range(idx + 1, len(events)):
+                        ej = events[j][1]
+                        if isinstance(ej, vy_ast.For):
+                            break
+                        if ej is if_node:
+                            if not saw_body:
+                                has_helper_gap = True
+                            break
+                        # Check if this event is from the If's body/orelse
+                        for stmt_list in (if_node.body, getattr(if_node, "orelse", [])):
+                            for stmt in stmt_list:
+                                if _is_descendant(events[j][2], stmt):
+                                    saw_body = True
+                                    break
+                            if saw_body:
+                                break
+                    if has_helper_gap:
+                        continue
+
                     branch, raw_trace_pos = _classify_from_raw_trace(
                         jumpi_pc,
                         raw_trace,
