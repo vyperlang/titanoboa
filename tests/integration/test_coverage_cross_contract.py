@@ -12,7 +12,7 @@ import boa
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
 from boa.environment import Env
 from boa.interpret import _disk_cache, set_cache_dir
-from tests.unitary.test_coverage.conftest import _analyze
+from tests.coverage_utils import _analyze
 
 
 @pytest.fixture(autouse=True)

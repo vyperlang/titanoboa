@@ -9,6 +9,7 @@ import boa
 from boa.coverage import TitanoboaReporter
 from boa.environment import Env
 from boa.interpret import _disk_cache, set_cache_dir
+from tests.coverage_utils import _analyze  # noqa: F401 — re-exported for test imports
 
 
 @pytest.fixture(autouse=True)
@@ -110,11 +111,6 @@ def _check_full_branch_coverage(vyper_source, calls_fn):
             dict(analysis.executed_branch_arcs()),
             dict(analysis.missing_branch_arcs()),
         )
-
-
-def _analyze(cov, filename):
-    """Wrap coverage.py's private _analyze() so API drift is isolated."""
-    return cov._analyze(filename)
 
 
 @contextlib.contextmanager

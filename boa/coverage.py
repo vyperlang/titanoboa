@@ -362,7 +362,6 @@ class CoverageCollector:
 
         jumpi_table = _build_jumpi_table(bytecode)
         if_meta = {}
-        resolved = {}
         prev_lineno = None
         # Track position in raw_trace so each JUMPI match advances.
         # Key by (filename, trace_id) so that:
@@ -382,9 +381,6 @@ class CoverageCollector:
                 # Skip if next event is also this If node.
                 if idx + 1 < len(events) and events[idx + 1][1] is if_node:
                     continue
-                if id(if_node) in resolved:
-                    continue
-
                 if id(if_node) not in if_meta:
                     fn_node = get_fn_ancestor_from_node(if_node)
                     if fn_node is None:
@@ -430,16 +426,10 @@ class CoverageCollector:
                         arcs.add((if_node.lineno, true_line))
                     elif branch == "false":
                         arcs.add((if_node.lineno, false_line))
-                    resolved[id(if_node)] = if_node
                 continue
 
-            # For marker: reset resolved state for If nodes inside loop
+            # For marker: track loop boundaries for sequential arcs
             if isinstance(collapsed, vy_ast.For):
-                resolved = {
-                    k: v
-                    for k, v in resolved.items()
-                    if not _is_descendant(v, collapsed)
-                }
                 prev_lineno = collapsed.lineno
                 continue
 

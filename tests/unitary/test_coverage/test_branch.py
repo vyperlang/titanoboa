@@ -276,6 +276,68 @@ def call_bar(x: uint256) -> uint256:
         assert missing == {}, f"Callee missing branch arcs: {missing}"
 
 
+# --- internal function called multiple times in one transaction ---
+
+
+def test_branch_internal_call_both_directions():
+    """Internal function called twice with different inputs in one tx.
+
+    Regression: the resolved guard suppressed If processing after first
+    occurrence, so only the first branch direction was recorded.
+    """
+    source = """\
+@internal
+def _check(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+
+@external
+def foo(a: uint256, b: uint256) -> uint256:
+    return self._check(a) + self._check(b)
+"""
+    # a=10 hits true, b=1 hits false — single call covers both
+    missing = _check_branch_coverage(source, lambda c: c.foo(10, 1))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_internal_call_same_direction():
+    """Internal function called twice, same direction — partial coverage."""
+    source = """\
+@internal
+def _check(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+
+@external
+def foo(a: uint256, b: uint256) -> uint256:
+    return self._check(a) + self._check(b)
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # Both calls take true branch — false arc should be missing
+    missing = _check_branch_coverage(source, lambda c: c.foo(10, 20))
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+
+
+def test_branch_internal_call_three_times():
+    """Internal function called three times: true, false, true."""
+    source = """\
+@internal
+def _check(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+
+@external
+def foo(a: uint256, b: uint256, c: uint256) -> uint256:
+    return self._check(a) + self._check(b) + self._check(c)
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo(10, 1, 20))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
 # --- if-without-else at function end ---
 
 

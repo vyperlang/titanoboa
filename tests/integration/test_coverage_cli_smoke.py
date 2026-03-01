@@ -8,7 +8,7 @@ import pytest
 import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
-from tests.unitary.test_coverage.conftest import _analyze
+from tests.coverage_utils import _analyze
 
 # repo root so the subprocess always imports the local checkout
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
