@@ -8,6 +8,8 @@ import pytest
 import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
+from tests.unitary.test_coverage.conftest import _analyze
+
 # repo root so the subprocess always imports the local checkout
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -96,7 +98,7 @@ def test_coverage_cli_smoke(coverage_workspace):
     tree = parse_to_ast(CONTRACT_SOURCE)
     if_line = tree.get_descendants(vy_ast.If)[0].lineno
 
-    analysis = cov._analyze(vy_file)
+    analysis = _analyze(cov, vy_file)
     missing = dict(analysis.missing_branch_arcs())
     assert if_line in missing, (
         f"Expected line {if_line} (the if-statement) to have missing arcs, "

@@ -16,6 +16,7 @@ from vyper.ast.parse import parse_to_ast
 import boa
 
 from .conftest import (
+    _analyze,
     _check_branch_coverage,
     _check_full_branch_coverage,
     _coverage_session,
@@ -97,6 +98,44 @@ def foo(val: uint256):
 """
     missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
     assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_bare_return_in_if():
+    """if with bare return (no value) — JUMPI is unmapped in ast_map.
+
+    Regression: the null return compiles to a direct jump to function
+    cleanup (FunctionDef), so the condition's JUMPI is not mapped to
+    an If node.  Without the _find_if_jumpi fallback, both arcs are
+    dropped.
+    """
+    source = """\
+x: public(uint256)
+
+@external
+def foo(val: uint256):
+    if val > 5:
+        return
+    self.x = val
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_bare_return_in_if_partial():
+    """Bare return if, only true branch hit — false arc must be missing."""
+    source = """\
+x: public(uint256)
+
+@external
+def foo(val: uint256):
+    if val > 5:
+        return
+    self.x = val
+"""
+    missing = _check_branch_coverage(source, lambda c: c.foo(10))
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
 
 
 # --- branch negative controls (partial coverage) ---
@@ -232,7 +271,7 @@ def call_bar(x: uint256) -> uint256:
     with _coverage_session_multi(
         {"callee": callee_source, "caller": caller_source}, setup
     ) as (cov, paths):
-        analysis = cov._analyze(paths["callee"])
+        analysis = _analyze(cov, paths["callee"])
         missing = dict(analysis.missing_branch_arcs())
         assert missing == {}, f"Callee missing branch arcs: {missing}"
 

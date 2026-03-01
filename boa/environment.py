@@ -387,6 +387,8 @@ class Env:
                         current_file = fname
                         current_events = []
                         max_node_pc = 0
+                        max_gap_pc = 0
+                        gap_had_backward_jump = False
                     # Detect for-loop backedge: a backward PC jump
                     # during the FunctionDef gap means the EVM looped
                     # back.  Insert the For-header so coverage sees

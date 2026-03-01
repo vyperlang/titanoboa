@@ -12,6 +12,7 @@ import boa
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
 from boa.environment import Env
 from boa.interpret import _disk_cache, set_cache_dir
+from tests.unitary.test_coverage.conftest import _analyze
 
 
 @pytest.fixture(autouse=True)
@@ -71,7 +72,7 @@ def foo(xs: DynArray[uint256, 10]) -> uint256:
         finally:
             cov.stop()
 
-        analysis = cov._analyze(str(main_path))
+        analysis = _analyze(cov, str(main_path))
         executed = dict(analysis.executed_branch_arcs())
         missing = dict(analysis.missing_branch_arcs())
 
@@ -153,7 +154,7 @@ def outer(x: uint256) -> uint256:
         finally:
             cov.stop()
 
-        analysis = cov._analyze(str(vy_path))
+        analysis = _analyze(cov, str(vy_path))
         executed = dict(analysis.executed_branch_arcs())
         missing = dict(analysis.missing_branch_arcs())
 
@@ -239,7 +240,7 @@ def foo(x: uint256) -> uint256:
         finally:
             cov.stop()
 
-        analysis = cov._analyze(str(vy_path))
+        analysis = _analyze(cov, str(vy_path))
         executed = dict(analysis.executed_branch_arcs())
         missing = dict(analysis.missing_branch_arcs())
 

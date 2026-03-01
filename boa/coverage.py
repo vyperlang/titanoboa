@@ -9,7 +9,7 @@
 #     → TitanoboaReporter         (declares coverable lines, possible branch
 #                                  arcs, and exit_counts for each .vy file)
 
-from functools import cached_property
+from functools import cached_property, lru_cache
 from typing import Optional
 
 import coverage
@@ -33,6 +33,7 @@ _JUMPI_SCAN_LIMIT = 20
 _PATH_CLASSIFY_LIMIT = 30
 
 
+@lru_cache(maxsize=128)
 def _build_jumpi_table(bytecode: bytes) -> dict[int, tuple[int | None, int]]:
     """Map each JUMPI PC -> (taken_dest, fallthrough_pc).
 
@@ -330,7 +331,6 @@ class CoverageCollector:
         self._arcs_by_file: dict[str, set[tuple[int, int]]] = {}
         self._lines_by_file: dict[str, set[int]] = {}
         self._raw_trace_pos: dict[tuple[str, int], int] = {}
-        self._jumpi_tables: dict[bytes, dict] = {}  # bytecode → table
         self._next_trace_id: int = 0
 
     def next_trace_id(self) -> int:
@@ -360,9 +360,7 @@ class CoverageCollector:
         lines = self._lines_by_file.setdefault(filename, set())
         arcs = self._arcs_by_file.setdefault(filename, set())
 
-        if bytecode not in self._jumpi_tables:
-            self._jumpi_tables[bytecode] = _build_jumpi_table(bytecode)
-        jumpi_table = self._jumpi_tables[bytecode]
+        jumpi_table = _build_jumpi_table(bytecode)
         if_meta = {}
         resolved = {}
         prev_lineno = None
@@ -406,12 +404,15 @@ class CoverageCollector:
                         jumpi_pc = epc
                         break  # found the last (scanning backward)
                     scan -= 1
-                # Fallback: for break/continue, the JUMPI is unmapped
-                # in the ast_map.  Detect this by checking if the
-                # true-branch body starts with Break or Continue.
+                # Fallback: for break/continue/bare-return, the JUMPI is
+                # unmapped in the ast_map because the compiler generates the
+                # branch jump as part of the control flow statement, not the
+                # condition. Scan forward from the last mapped condition PC.
                 if jumpi_pc is None and pc is not None:
                     body0 = if_node.body[0]
-                    if isinstance(body0, (vy_ast.Break, vy_ast.Continue)):
+                    if isinstance(body0, (vy_ast.Break, vy_ast.Continue)) or (
+                        _is_null_return(body0)
+                    ):
                         jumpi_pc = _find_if_jumpi(bytecode, pc)
 
                 if jumpi_pc is not None:
@@ -478,14 +479,13 @@ class CoverageCollector:
                 data.add_lines(self._lines_by_file)
 
         all_files = set(self._arcs_by_file) | set(self._lines_by_file)
-        tracers = {f: self._PLUGIN_NAME for f in all_files}
+        tracers = {f: self._PLUGIN_NAME for f in all_files if f.endswith(".vy")}
         if tracers:
             data.add_file_tracers(tracers)
 
         self._arcs_by_file.clear()
         self._lines_by_file.clear()
         self._raw_trace_pos.clear()
-        self._jumpi_tables.clear()
         self._next_trace_id = 0
 
 
@@ -558,6 +558,8 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
         # Scan all statements including those nested in if/else/for.
         for f in functions:
             for stmt in f.get_descendants(vy_ast.Stmt):
+                if isinstance(stmt, vy_ast.If):
+                    continue  # If lines are branch points, never exclude
                 if stmt.end_lineno is not None and stmt.end_lineno > stmt.lineno:
                     desc_linenos = {n.lineno for n in stmt.get_descendants()}
                     if stmt.lineno not in desc_linenos:

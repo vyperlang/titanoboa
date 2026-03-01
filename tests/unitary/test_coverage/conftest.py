@@ -37,7 +37,7 @@ def _coverage_session(vyper_source, calls_fn):
             calls_fn(c)
         finally:
             cov.stop()
-        yield cov._analyze(vy_path)
+        yield _analyze(cov, vy_path)
     finally:
         Env._coverage_enabled = saved_coverage
         os.unlink(vy_path)
@@ -110,6 +110,11 @@ def _check_full_branch_coverage(vyper_source, calls_fn):
             dict(analysis.executed_branch_arcs()),
             dict(analysis.missing_branch_arcs()),
         )
+
+
+def _analyze(cov, filename):
+    """Wrap coverage.py's private _analyze() so API drift is isolated."""
+    return cov._analyze(filename)
 
 
 @contextlib.contextmanager
