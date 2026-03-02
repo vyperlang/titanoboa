@@ -267,14 +267,7 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 
 def test_reporter_lines_multiline_if_does_not_discard_other_if_line():
-    """Regression: operator nodes (Gt, Lt, etc.) carry stale line numbers from
-    the first occurrence in the file. The exclusion loop must skip them or it
-    will discard unrelated statement lines.
-
-    Contract has a multi-line `if (x > 5 and y > 10):` on line 3-4, then
-    `if x > 20:` on line 6. The Gt inside If@6's test has lineno=3 (stale).
-    Without the fix, line 3 (the outer if) would be erroneously discarded.
-    """
+    """Multi-line if + second if reusing same operator — neither line discarded."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> uint256:
@@ -311,14 +304,7 @@ def foo(x: uint256, y: uint256) -> uint256:
 
 
 def test_reporter_lines_multiline_if_arithmetic_operator():
-    """Regression: arithmetic operator nodes (Add, Sub, etc.) also carry stale
-    line numbers. The exclusion loop must use vy_ast.Operator (the base class)
-    to skip all operator types, not just comparison/boolean ones.
-
-    Contract has a multi-line `if (x + y > 10 and ...)` on lines 3-4, then
-    `if x + z > 20:` on line 6. The Add inside If@6's test has lineno=3 (stale).
-    Without the fix, line 3 (the outer if) would be erroneously discarded.
-    """
+    """Multi-line if with arithmetic operators + second if — neither line discarded."""
     source = """\
 @external
 def foo(x: uint256, y: uint256, z: uint256) -> uint256:

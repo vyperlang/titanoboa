@@ -170,13 +170,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_correctness_elif_no_else_all_branches():
-    """P1 regression: if/elif without explicit else, fallthrough tail.
-
-    When all three paths are exercised (outer true, inner true, both false),
-    no branches should be missing.  Previously the inner elif's false arc
-    was dropped because the compiler's outer-If re-evaluation was not
-    ghost-removed (ghost was restricted to For-loop parents).
-    """
+    """if/elif without explicit else — all three paths hit, no missing arcs."""
     missing = _check_branch_coverage(
         SOURCE_ELIF_NO_ELSE, lambda c: (c.foo(25), c.foo(15), c.foo(5))
     )
@@ -225,12 +219,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_nested_if_no_outer_else():
-    """Inner if (no else) last in outer if body (no outer else).
-
-    Regression: compiler re-evaluates the outer If after the inner If's
-    false branch, producing spurious arcs (inner → outer) and losing
-    the inner false arc (inner → return 0).
-    """
+    """Nested if without outer else — all branches covered."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -307,11 +296,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_if_in_orelse_no_inner_else_exact_arcs():
-    """If inside else block (orelse), no inner else — no extra synthetic arcs.
-
-    Regression: executed_branch_arcs showed extra arc to outer if line
-    (inner → outer) in addition to logical targets.
-    """
+    """If inside else block (orelse), no inner else — exact arcs, no extras."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> uint256:
@@ -340,12 +325,7 @@ def foo(x: uint256, y: uint256) -> uint256:
 
 
 def test_branch_elif_no_else_multiline_body_multiline_tail():
-    """if/elif without else, multiline elif body + multiline tail.
-
-    Regression: the inner elif's false arc targets the tail statement
-    after the outer block.  Both the elif true arc and the fallthrough
-    false arc must match the reporter's declared targets.
-    """
+    """if/elif without else, multiline elif body + multiline tail — all covered."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -395,13 +375,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_nested_noop_else_no_phantom():
-    """Nested if with noop else — outer-true-only must not credit inner branch.
-
-    Regression: the AST map shares a calldataload PC between inner and
-    outer If conditions.  When only the outer true branch executes, a
-    phantom inner-If event appears, and the noop-else fallback incorrectly
-    selects the outer If's JUMPI for the inner If, producing a phantom arc.
-    """
+    """Nested if with noop else — outer-true-only must not credit inner branch."""
     source = """\
 @external
 def f(x: uint256) -> uint256:

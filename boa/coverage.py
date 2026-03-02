@@ -382,7 +382,7 @@ def _resolve_jumpi_direction(
             return False
 
     if taken_class in ("false", "exit"):
-        return False
+        return True
     if fall_class in ("false", "exit"):
         return True
 

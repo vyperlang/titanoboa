@@ -163,11 +163,7 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 @pytest.mark.parametrize("keyword", ["break", "continue"])
 def test_branch_compound_condition_break_continue(keyword):
-    """Compound condition (and) with break/continue — decision JUMPI is unmapped.
-
-    Regression: _find_if_jumpi picked up the short-circuit JUMPI from
-    the `and` instead of the actual break/continue-decision JUMPI.
-    """
+    """Compound condition (and) with break/continue — both arcs covered."""
     source = f"""\
 @external
 def f(xs: DynArray[uint256, 10]) -> uint256:
@@ -184,17 +180,7 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
 
 @pytest.mark.parametrize("keyword", ["break", "continue"])
 def test_branch_compound_condition_break_continue_partial_false_only(keyword):
-    """Compound `and` + break/continue, false-only: true arc must NOT be recorded.
-
-    Mutation regression (if_run_skip_gate): when the skip-gate for
-    consecutive If events is disabled, intermediate condition events
-    find a short-circuit JUMPI and mis-classify the branch, spuriously
-    adding the true arc alongside the correct false arc.
-
-    With x=10: (x != 2) is True → short-circuit JUMPI not taken,
-    (x >= 25) is False → decision JUMPI not taken → false path.
-    Only the false arc should be reported.
-    """
+    """Compound `and` + break/continue, false-only: true arc must NOT be recorded."""
     source = f"""\
 @external
 def f(xs: DynArray[uint256, 10]) -> uint256:
@@ -218,12 +204,7 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_compound_break_wide_jumpi_gap():
-    """Compound condition + break where JUMPI is >8 bytes from last event PC.
-
-    Mutation regression (scan_limit): when _JUMPI_SCAN_LIMIT is reduced
-    from 20 to 8, _find_if_jumpi cannot reach the decision JUMPI for
-    compound conditions with longer bytecode sequences.
-    """
+    """Compound condition + break with wide bytecode gap — both arcs covered."""
     source = """\
 @external
 def f(xs: DynArray[uint256, 10], cutoff: uint256) -> uint256:
@@ -295,12 +276,7 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_if_else_in_for_loop():
-    """if/else inside a for loop — both branches hit, no missing arcs.
-
-    Regression: ghost loop-exit If re-evaluations produced spurious arcs
-    (e.g. if_line -> post-loop return) that made executed_branch_arcs
-    inconsistent with reporter possibilities.
-    """
+    """if/else inside a for loop — both branches hit, no missing arcs."""
     source = """\
 @external
 def foo(data: DynArray[uint256, 10]) -> uint256:
@@ -332,11 +308,7 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_for_loop_if_no_else_both_orders():
-    """Regression: for-loop if (no else), false arc detected in both orders.
-
-    false-then-true ([1, 10]) and true-then-false ([10, 1]) must both
-    produce correct arcs. The backedge detection must handle both orderings.
-    """
+    """for-loop if (no else) — both branch orderings produce correct arcs."""
     source = """\
 @external
 def foo(data: DynArray[uint256, 10]) -> uint256:
@@ -450,11 +422,7 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_multiline_return_in_for_loop():
-    """Multiline return in true-branch inside for loop: no missing arcs.
-
-    Regression: Return inside a for loop compiles with cleanup bytecode
-    first, so the tracer reports Return.lineno, not value.lineno.
-    """
+    """Multiline return in true-branch inside for loop — no missing arcs."""
     source = """\
 @external
 def foo(data: DynArray[uint256, 10]) -> uint256:
@@ -473,12 +441,7 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_nested_if_in_for_body_with_tail():
-    """Nested if (no else) inside for body, followed by a tail statement.
-
-    Regression: _false_arc walked up to the function level, skipping the
-    for-body sibling.  Inner false arc should target the tail (s += 1),
-    not the function return.
-    """
+    """Nested if (no else) inside for body, with tail — all branches covered."""
     source = """\
 @external
 def foo(arr: DynArray[uint256, 10]) -> uint256:
@@ -495,11 +458,7 @@ def foo(arr: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_nested_if_in_for_body_with_else_and_tail():
-    """Nested if (no inner else) inside outer if/else in for body, with tail.
-
-    Regression: same _false_arc walk-up issue — inner false should target
-    the for-body tail statement (s += 1), not the function return.
-    """
+    """Nested if in outer if/else in for body, with tail — all branches covered."""
     source = """\
 @external
 def foo(arr: DynArray[uint256, 10]) -> uint256:
@@ -547,10 +506,7 @@ def foo(arr: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_if_no_else_in_for_with_tail_true_only():
-    """True-only in loop: false arc must be missing.
-
-    Regression: same post-body re-evaluation inside a for loop body.
-    """
+    """if without else + tail in for loop, true-only: false arc must be missing."""
     source = """\
 @external
 def foo(arr: DynArray[uint256, 10]) -> uint256:
@@ -736,11 +692,7 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_loop_else_pass_both():
-    """In-loop if/else where else is pass — both branches hit.
-
-    Regression: pass in else generated no bytecode, causing the
-    decision JUMPI to be unmapped and no branch arcs recorded.
-    """
+    """In-loop if/else where else is pass — both branches hit."""
     source = """\
 @external
 def f(xs: DynArray[uint256, 10]) -> uint256:
@@ -796,12 +748,7 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_loop_if_pass_both():
-    """In-loop if without else + pass body — both branches hit.
-
-    Regression: pass body generates no bytecode, direction
-    classifier could not find the true branch anchor.  Both arcs
-    collapse to the same target (degenerate case).
-    """
+    """In-loop if without else + pass body — both branches hit (degenerate: arcs collapse)."""
     source = """\
 @external
 def f(xs: DynArray[uint256, 10]) -> uint256:
@@ -818,13 +765,7 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
 
 @pytest.mark.parametrize("keyword", ["break", "continue"])
 def test_branch_compound_triple_and_wide_gap(keyword):
-    """3-way compound ``and`` + break/continue — JUMPI >8 bytes from last event PC.
-
-    Mutation regression (scan_limit): when _JUMPI_SCAN_LIMIT is reduced
-    to 8, _find_if_jumpi fails because the 3-way ``and`` produces a
-    wider bytecode gap (~19 bytes) between the last condition event
-    and the decision JUMPI.
-    """
+    """3-way compound ``and`` + break/continue — both arcs and partial correct."""
     source = f"""\
 @external
 def f(xs: DynArray[uint256, 10], a: uint256, b: uint256, c: uint256) -> uint256:

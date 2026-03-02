@@ -31,13 +31,7 @@ def foo(x: uint256, y: uint256) -> uint256:
 
 
 def test_branch_multiline_then_same_operator_no_missing_lines():
-    """Regression: multi-line if followed by another if using the same operator.
-
-    Operator AST nodes (Gt, Lt, etc.) carry stale linenos from the first
-    occurrence in the file. Without filtering them out, the second if's Gt
-    node (with stale lineno pointing to line 3) causes line 3 to disappear
-    from the coverable set, creating phantom uncovered lines.
-    """
+    """Multi-line if followed by another if using the same operator — no phantom missing lines."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> uint256:
@@ -64,11 +58,7 @@ def foo(x: uint256, y: uint256) -> uint256:
 
 
 def test_branch_multiline_condition_no_missing_lines():
-    """Multi-line if condition: continuation lines must not appear as uncovered.
-
-    Regression test — the tracer collapses If.test nodes to the If line,
-    so the reporter must exclude continuation lines from statements.
-    """
+    """Multi-line if condition: continuation lines must not appear as uncovered."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> uint256:
@@ -106,13 +96,7 @@ def foo(x: uint256, y: uint256) -> uint256:
 
 
 def test_branch_multiline_body_statement():
-    """Multiline assignment in if-body: both branches hit, no missing arcs.
-
-    Regression: the reporter's arc target must match the line the tracer
-    reports first. For multi-line statements the compiler generates expression
-    bytecode before the store, so the first traced line is the value's line
-    — not the keyword/variable line.
-    """
+    """Multiline assignment in if-body: both branches hit, no missing arcs."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -156,11 +140,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_multiline_return_in_body():
-    """Multiline return in if-body: both branches hit, no missing arcs.
-
-    Regression: `return (\\n    expr\\n)` — the return keyword line has no
-    bytecode, the tracer reports the expression line. Arc target must match.
-    """
+    """Multiline return in if-body: both branches hit, no missing arcs."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -211,11 +191,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_multiline_return_in_body_with_else():
-    """Regression: multiline return in true branch with explicit else.
-
-    Preamble filtering must not drop a legitimate If when preamble
-    alias nodes precede the body.
-    """
+    """Multiline return in true branch with explicit else — both arcs covered."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -231,11 +207,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_multiline_augassign_in_else():
-    """Multiline AugAssign in else-body: both branches hit, no missing arcs.
-
-    Regression: AugAssign compiles with a target-variable load first,
-    so the tracer reports stmt.lineno, not value.lineno.
-    """
+    """Multiline AugAssign in else-body: both branches hit, no missing arcs."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -271,11 +243,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_correctness_multiline_return_else_fallthrough_both():
-    """P1 regression: multiline return in true body + else fallthrough.
-
-    The preamble stripping must not drop the true arc when the else arm
-    falls through (doesn't return).
-    """
+    """Multiline return in true body + else fallthrough — both arcs covered."""
     missing = _check_branch_coverage(
         SOURCE_MULTILINE_RETURN_ELSE_FALLTHROUGH, lambda c: (c.foo(10), c.foo(1))
     )
@@ -324,13 +292,7 @@ def test_correctness_multiline_return_else_fallthrough_false_only():
 
 
 def test_branch_no_else_multiline_true_return_multiline_tail():
-    """If without else, multiline return in true body + multiline tail return.
-
-    Regression: compiler emits tail-statement setup bytecode as alias
-    nodes between the If condition evaluations.  The normalization must
-    identify these as trailing aliases and not attribute them as the
-    branch entry arc target.
-    """
+    """If without else, multiline return in true body + multiline tail — both arcs covered."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -371,10 +333,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_no_else_multiline_assign_multiline_tail():
-    """If without else, multiline assign in true body + multiline tail return.
-
-    Regression: similar to the return case but with Assign instead of Return.
-    """
+    """If without else, multiline assign in true body + multiline tail — both arcs covered."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:

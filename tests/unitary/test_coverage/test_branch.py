@@ -101,13 +101,7 @@ def foo(val: uint256):
 
 
 def test_branch_bare_return_in_if():
-    """if with bare return (no value) — JUMPI is unmapped in ast_map.
-
-    Regression: the null return compiles to a direct jump to function
-    cleanup (FunctionDef), so the condition's JUMPI is not mapped to
-    an If node.  Without the _find_if_jumpi fallback, both arcs are
-    dropped.
-    """
+    """if with bare return (no value) — both arcs covered."""
     source = """\
 x: public(uint256)
 
@@ -157,11 +151,7 @@ def foo(val: uint256):
 
 
 def test_branch_bare_return_compound_condition():
-    """Bare return with compound condition (and) — decision JUMPI unmapped.
-
-    Regression: short-circuit JUMPI from `and` was selected instead of
-    the actual decision JUMPI for the bare return.
-    """
+    """Bare return with compound condition (and) — both arcs covered."""
     source = """\
 y: public(uint256)
 
@@ -342,11 +332,7 @@ def call_bar(x: uint256) -> uint256:
 
 
 def test_branch_internal_call_both_directions():
-    """Internal function called twice with different inputs in one tx.
-
-    Regression: the resolved guard suppressed If processing after first
-    occurrence, so only the first branch direction was recorded.
-    """
+    """Internal function called twice with different inputs in one tx — both arcs covered."""
     source = """\
 @internal
 def _check(x: uint256) -> uint256:
@@ -404,11 +390,7 @@ def foo(a: uint256, b: uint256, c: uint256) -> uint256:
 
 
 def test_branch_helper_condition_break_false_only():
-    """for + break + helper condition, false-only must not report full coverage.
-
-    Regression: internal call in If.test splits If events into two runs,
-    causing double classification that adds both arcs from one execution.
-    """
+    """for + break + helper condition, false-only must not report full coverage."""
     source = """\
 @internal
 def gt5(x: uint256) -> bool:
@@ -432,10 +414,7 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_helper_compound_continue_true_only():
-    """for + continue + helper+and, true-only must not report full coverage.
-
-    Regression: compound condition with helpers causes double classification.
-    """
+    """for + continue + helper+and, true-only must not report full coverage."""
     source = """\
 @internal
 def gt5(x: uint256) -> bool:
@@ -462,10 +441,7 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_helper_compound_if_else_true_only():
-    """top-level if/else + helper+and, true-only must not report full coverage.
-
-    Regression: helpers in condition cause double classification.
-    """
+    """top-level if/else + helper+and, true-only must not report full coverage."""
     source = """\
 @internal
 def gt5(x: uint256) -> bool:
@@ -490,10 +466,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_helper_triple_or_false_only():
-    """top-level if/else + helper short-circuit or, false-only must not report full.
-
-    Regression: complex compound condition with helpers causes double classification.
-    """
+    """top-level if/else + helper short-circuit or, false-only must not report full."""
     source = """\
 @internal
 def gt5(x: uint256) -> bool:
@@ -521,10 +494,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_helper_no_else_tail_false_only():
-    """if without else + tail + helper condition, false-only must not report full.
-
-    Regression: helpers in condition cause double classification.
-    """
+    """if without else + tail + helper condition, false-only must not report full."""
     source = """\
 @internal
 def gt5(x: uint256) -> bool:
@@ -549,10 +519,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_helper_bare_return_false_only():
-    """bare-return body + helper condition, false-only must not report full.
-
-    Regression: helpers in condition cause double classification.
-    """
+    """bare-return body + helper condition, false-only must not report full."""
     source = """\
 @internal
 def gt5(x: uint256) -> bool:
@@ -674,12 +641,7 @@ def foo(val: uint256):
 
 
 def test_untaken_branch_lines_are_missing():
-    """Entering a function must not mark untaken branch body lines as covered.
-
-    Regression: old boa's FunctionDef span inflation marked every line in a
-    function as covered when the function was entered, regardless of which
-    branches were actually taken.
-    """
+    """Entering a function must not mark untaken branch body lines as covered."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -741,12 +703,7 @@ def bar(x: uint256) -> uint256:
 
 
 def test_branch_if_no_else_with_tail_true_only():
-    """True-only: false arc (to tail) must be missing.
-
-    Regression: compiler re-evaluates the If condition after the true
-    body as a jump target, producing a spurious false arc when only the
-    true branch was exercised.
-    """
+    """if without else + tail statement, true-only: false arc must be missing."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -930,12 +887,7 @@ def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_if_pass_body_both():
-    """if with pass body — both branches hit.
-
-    Regression: pass generates no bytecode, so the JUMPI direction
-    classifier could not find the true branch anchor.  Both arcs
-    collapse to the same fallthrough target (degenerate case).
-    """
+    """if with pass body — both branches hit (degenerate: arcs collapse)."""
     source = """\
 @external
 def f(x: uint256) -> uint256:
@@ -950,11 +902,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_if_assert_true_body_both():
-    """if with assert True body — both branches hit.
-
-    Regression: assert True is constant-folded away, producing no
-    bytecode, same root cause as pass.
-    """
+    """if with assert True body (constant-folded to noop) — both branches hit."""
     source = """\
 @external
 def f(x: uint256) -> uint256:
@@ -992,12 +940,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_else_pass_both():
-    """if/else where else is pass — both branches hit.
-
-    Regression: pass in the else branch generated no bytecode, causing
-    the decision JUMPI to be unmapped and the false branch to never be
-    recorded.
-    """
+    """if/else where else is pass — both branches hit."""
     source = """\
 @external
 def f(x: uint256) -> uint256:
@@ -1061,10 +1004,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_internal_else_pass_both():
-    """Internal function with else pass — both branches hit.
-
-    Regression: same unmapped-JUMPI issue in internal function calls.
-    """
+    """Internal function with else pass — both branches hit."""
     source = """\
 @internal
 def g(x: uint256) -> uint256:
@@ -1083,11 +1023,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_if_assert_const_expr_body_both():
-    """if with assert <const-expr> body — both branches hit.
-
-    Regression: assert 1 == 1 is constant-folded away by the compiler
-    (no bytecode), but _is_noop only recognized literal assert True.
-    """
+    """if with assert <const-expr> body (constant-folded to noop) — both branches hit."""
     source = """\
 @external
 def f(x: uint256) -> uint256:
@@ -1123,12 +1059,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_else_pass_compound_condition_both():
-    """else pass + compound condition — both branches hit.
-
-    Regression: with compound conditions (and/or), the backward event
-    scan found a short-circuit JUMPI instead of the decision JUMPI,
-    causing wrong branch direction classification.
-    """
+    """else pass + compound condition — both branches hit."""
     missing = _check_branch_coverage(
         SOURCE_ELSE_PASS_COMPOUND_AND, lambda c: (c.f(10), c.f(30))
     )
@@ -1136,11 +1067,7 @@ def test_branch_else_pass_compound_condition_both():
 
 
 def test_branch_else_pass_compound_condition_partial():
-    """else pass + compound condition — single call classification correct.
-
-    Regression: f(30) (false path) was misclassified as true because the
-    short-circuit JUMPI was selected instead of the decision JUMPI.
-    """
+    """else pass + compound condition — false-only, true arc must be missing."""
     ast = parse_to_ast(SOURCE_ELSE_PASS_COMPOUND_AND)
     if_node = ast.get_descendants(vy_ast.If)[0]
     # f(30): x>5 True, x<20 False => false path
@@ -1149,13 +1076,7 @@ def test_branch_else_pass_compound_condition_partial():
 
 
 def test_branch_else_pass_complex_compound_or_and():
-    """else pass + complex compound condition ``(A and B) or C``.
-
-    Regression: _find_if_jumpi misread a PUSH2 operand byte (0x57) as
-    a JUMPI opcode when scanning forward from a PUSHn instruction,
-    selecting a phantom JUMPI inside the condition instead of the real
-    decision JUMPI.
-    """
+    """else pass + complex compound condition ``(A and B) or C`` — both arcs covered."""
     missing = _check_branch_coverage(
         SOURCE_ELSE_PASS_COMPLEX_OR_AND, lambda c: (c.f(3), c.f(1))
     )
@@ -1269,13 +1190,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_noop_true_body_elif_full():
-    """Noop true body with elif — all branches covered.
-
-    Regression: the compiler shares condition PCs between the outer if
-    and elif, causing interleaved If events.  Phantom outer-If events
-    in the elif code produced wrong arcs and consumed the raw_trace
-    cursor, preventing correct elif classification.
-    """
+    """Noop true body (pass) with elif — all branches covered."""
     source = """\
 @external
 def f(x: uint256) -> uint256:
@@ -1290,13 +1205,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_noop_true_body_elif_outer_true_only():
-    """Noop true body + elif — outer true only, no phantom dual arc.
-
-    Regression: the merge-point JUMPDEST (after the noop body) was
-    mapped to the outer If and triggered a second classification of
-    the same JUMPI, producing a phantom false arc alongside the
-    correct true arc.
-    """
+    """Noop true body + elif — outer true only, no phantom dual arc."""
     source = """\
 @external
 def f(x: uint256) -> uint256:
@@ -1318,11 +1227,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_noop_true_body_elif_inner_true():
-    """Noop true body + elif — elif true arc correctly credited.
-
-    Regression: duplicate outer-If JUMPI classification consumed the
-    raw_trace cursor, causing the elif JUMPI to be unmatched.
-    """
+    """Noop true body + elif — elif true arc correctly credited."""
     source = """\
 @external
 def f(x: uint256) -> uint256:
@@ -1343,12 +1248,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_noop_true_body_fallthrough_else_false_only():
-    """Noop true body with fallthrough (non-return) else — false only.
-
-    Regression: the merge-point JUMPDEST after the if/else body
-    triggered a forward scan that found an unrelated JUMPI, falsely
-    crediting the true arc on false-only runs.
-    """
+    """Noop true body with fallthrough (non-return) else — false only, true must be missing."""
     source = """\
 @external
 def f(x: uint256) -> uint256:
@@ -1391,13 +1291,7 @@ def f(x: uint256) -> uint256:
 
 
 def test_branch_noop_else_in_loop_order_independent():
-    """Noop else in loop — coverage must not depend on call order.
-
-    Regression: when the false branch executed first, the helper-gap
-    detection suppressed the first iteration's If classification
-    because it found the same If in the next iteration without
-    recognizing the sibling statement (s += x) as a scope boundary.
-    """
+    """Noop else in loop — coverage must not depend on call order."""
     source = """\
 @external
 def f(xs: DynArray[uint256, 10]) -> uint256:
@@ -1418,12 +1312,7 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
 
 
 def test_branch_noop_body_in_loop_false_only():
-    """Noop true body in loop — false-only should not credit true arc.
-
-    Regression: merge-point JUMPDEST triggered a forward scan in each
-    loop iteration, finding an unrelated JUMPI and falsely crediting
-    the true arc.
-    """
+    """Noop true body in loop — false-only should not credit true arc."""
     source = """\
 @external
 def f(xs: DynArray[uint256, 10]) -> uint256:
@@ -1464,17 +1353,8 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
-# --- mutation-testing regression: skip-gate, classify_path edge cases ---
-
-
 def test_branch_compound_and_skip_gate_false_only():
-    """Compound `and` condition, false-only: only the false arc should be reported.
-
-    Mutation regression (if_run_skip_gate): when the skip-gate that
-    deduplicates consecutive If events is disabled, intermediate condition
-    events find a short-circuit JUMPI instead of the decision JUMPI and
-    mis-classify the branch, spuriously adding the true arc.
-    """
+    """Compound `and` condition, false-only: only the false arc should be reported."""
     source = """\
 @external
 def f(x: uint256, y: uint256) -> uint256:
@@ -1502,12 +1382,7 @@ def f(x: uint256, y: uint256) -> uint256:
 
 
 def test_branch_internal_call_body_classify_path_fn_def():
-    """If body starts with an internal call — FunctionDef at JUMPI destination.
-
-    Mutation regression (classify_path_fn_def): if _classify_path returns
-    "exit" on the first FunctionDef node instead of skipping it, the
-    true-branch direction is misidentified as an exit and flipped.
-    """
+    """If body starts with an internal call — both arcs covered and partial correct."""
     source = """\
 @internal
 def _helper() -> uint256:
@@ -1541,12 +1416,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_internal_call_condition_classify_path_cond():
-    """Internal call in condition — condition node at JUMPI destination.
-
-    Mutation regression (classify_path_cond): if _classify_path returns
-    "false" on a condition node instead of skipping it, the branch
-    direction is misidentified and the wrong arc is recorded.
-    """
+    """Internal call in condition — true-only must show correct arcs."""
     source = """\
 @internal
 def _gt5(x: uint256) -> bool:
@@ -1576,16 +1446,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_unknown_default_direction():
-    """Neither path classifiable — verify the default direction is 'true'.
-
-    Mutation regression (unknown_default): when both _classify_path calls
-    return None (e.g. both branches are bare returns with sparse AST map),
-    _resolve_jumpi_direction defaults to True (taken = true branch).
-    Verify that flipping to False would change the executed arc label.
-
-    Both bare-return branches target fn_line, so we verify that the
-    classification yields a "true" arc by checking executed_branch_arcs.
-    """
+    """Both branches are bare returns (degenerate) — arcs still recorded."""
     source = """\
 @external
 def foo(x: uint256):
@@ -1623,17 +1484,8 @@ def foo(x: uint256):
     ), f"If-line {if_node.lineno} not in executed (false-only): {executed2}"
 
 
-# --- mutation-testing regression: classify_path and direction edge cases ---
-
-
 def test_branch_compound_and_true_only_no_spurious_false():
-    """Compound ``and`` condition — true-only must NOT report false arc.
-
-    Mutation regression (if_run_skip_gate): when the If-event
-    consecutive-run skip is weakened (continue → pass), the collector
-    processes intermediate events and may classify a short-circuit
-    JUMPI, adding a spurious false arc alongside the correct true arc.
-    """
+    """Compound ``and`` condition — true-only must NOT report false arc."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> uint256:
@@ -1668,11 +1520,7 @@ def foo(x: uint256, y: uint256) -> uint256:
 
 
 def test_branch_compound_or_false_only_no_spurious_true():
-    """Compound ``or`` condition — false-only must NOT report true arc.
-
-    Same skip-gate regression but for ``or`` conditions: processing
-    intermediate events may add a spurious true arc.
-    """
+    """Compound ``or`` condition — false-only must NOT report true arc."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> uint256:
@@ -1700,13 +1548,7 @@ def foo(x: uint256, y: uint256) -> uint256:
 
 
 def test_branch_if_return_with_storage_write_partial():
-    """If with return in true body + storage write in false body.
-
-    Mutation regression (taken_false_exit): the bytecode layout for
-    this pattern produces a decision JUMPI where _classify_path
-    returns "false" for the taken path. Flipping the direction return
-    for ``taken_class in ("false", "exit")`` swaps the arc labels.
-    """
+    """If with return + storage write in false body — partial coverage correct."""
     source = """\
 x: public(uint256)
 
@@ -1803,6 +1645,326 @@ def foo(val: uint256) -> uint256:
     # Both branches
     missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
     assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+# --- unit tests for internal helpers (mutation regression) ---
+
+
+def test_classify_path_skips_fn_def_node():
+    """_classify_path must skip FunctionDef nodes and continue scanning.
+
+    Mutation regression (classify_path_fn_def): if _classify_path returns
+    "exit" when it encounters a FunctionDef node (collapsed == None) instead
+    of continuing past it, _resolve_jumpi_direction may infer the wrong
+    branch direction when FunctionDef bytecode sits between the JUMPI
+    destination and the actual branch body in the AST map.
+
+    Uses _resolve_jumpi_direction directly with a synthetic AST map where
+    a FunctionDef node precedes the true_stmt descendant at the taken
+    destination.  With the mutation (return "exit"), taken_class becomes
+    "exit" and the direction is wrong.  With the correct code (continue),
+    the scan proceeds past the FunctionDef and finds the true body node.
+    """
+    from boa.coverage import _resolve_jumpi_direction
+
+    source = """\
+@internal
+def _helper() -> uint256:
+    return 42
+
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return self._helper()
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    fn_node = ast.get_descendants(vy_ast.FunctionDef, {"name": "foo"})[0]
+    helper_fn = ast.get_descendants(vy_ast.FunctionDef, {"name": "_helper"})[0]
+    true_stmt = if_node.body[0]  # Return(value=self._helper())
+    false_stmt_node = fn_node.body[-1]  # return 0
+
+    # Build a synthetic AST map where:
+    #   PC 100 (taken_dest) → FunctionDef node (should be skipped)
+    #   PC 102 → a node that is a descendant of true_stmt
+    #   PC 200 (fallthrough) → false_stmt descendant
+    # With the mutation, _classify_path(100) returns "exit" at PC 100.
+    # With correct code, it skips FunctionDef, finds true_stmt at PC 102.
+    true_body_node = true_stmt.value  # the self._helper() call expression
+    ast_map = {
+        100: helper_fn,  # FunctionDef — should be skipped
+        102: true_body_node,  # descendant of true_stmt
+        200: false_stmt_node,  # descendant of false_stmt
+    }
+
+    result = _resolve_jumpi_direction(
+        taken_dest=100,
+        fallthrough=200,
+        ast_map=ast_map,
+        true_stmt=true_stmt,
+        false_stmt=false_stmt_node,
+        if_node=if_node,
+    )
+    # taken path starts at FunctionDef then reaches true_stmt → taken IS true
+    assert (
+        result is True
+    ), f"Expected taken=true (FunctionDef skipped, true_stmt found), got {result}"
+
+
+def test_unknown_default_direction_distinct_arcs():
+    """Default direction must be True when both paths are unclassifiable.
+
+    Mutation regression (unknown_default): when _resolve_jumpi_direction
+    reaches the fallback ``return True`` (both _classify_path calls return
+    None), flipping to ``return False`` would swap the arc labels.
+
+    Uses _resolve_jumpi_direction directly with a synthetic AST map where
+    neither path contains classifiable nodes (only if_node-mapped and
+    unmapped PCs), but the true and false arcs point to different lines.
+    The fallback direction determines which arc is recorded, so flipping
+    it would record the wrong arc.
+    """
+    from boa.coverage import _resolve_jumpi_direction
+
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_stmt = if_node.body[0]
+    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
+    false_stmt_node = fn_node.body[-1]
+
+    # Build a synthetic AST map where both paths only contain if_node
+    # itself (which _classify_path skips) and unmapped PCs.
+    # This forces both _classify_path calls to return None, reaching
+    # the default ``return True`` fallback.
+    ast_map = {
+        100: if_node,  # taken_dest → skipped (is if_node)
+        200: if_node,  # fallthrough → skipped (is if_node)
+    }
+
+    result = _resolve_jumpi_direction(
+        taken_dest=100,
+        fallthrough=200,
+        ast_map=ast_map,
+        true_stmt=true_stmt,
+        false_stmt=false_stmt_node,
+        if_node=if_node,
+    )
+    # Both paths unclassifiable → default is True (taken = true branch)
+    assert result is True, f"Expected default direction True (taken=true), got {result}"
+
+
+def test_path_classify_limit_upper_bound():
+    """_PATH_CLASSIFY_LIMIT must not scan too far beyond the branch.
+
+    Mutation regression (path_classify_limit upper): increasing
+    _PATH_CLASSIFY_LIMIT from 30 to 60 would cause _classify_path to scan
+    past the branch body into unrelated code, potentially finding a node
+    from a different statement that overrides an earlier correct classification.
+
+    Uses _resolve_jumpi_direction with a synthetic AST map where:
+    - false_stmt sits at taken_dest + 5 (within any limit) → "false"
+    - true_stmt sits at taken_dest + 35 (beyond 30, within 60) → "true"
+    With limit=30, only false_stmt is found → taken="false" → correct.
+    With limit=60, true_stmt overrides → taken="true" → wrong direction.
+    """
+    from boa.coverage import _PATH_CLASSIFY_LIMIT, _resolve_jumpi_direction
+
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_stmt = if_node.body[0]
+    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
+    false_stmt_node = fn_node.body[-1]
+
+    ast_map = {
+        105: false_stmt_node,  # false body at taken_dest + 5
+        135: true_stmt,  # true body at taken_dest + 35 (beyond limit 30)
+    }
+
+    result = _resolve_jumpi_direction(
+        taken_dest=100,
+        fallthrough=200,
+        ast_map=ast_map,
+        true_stmt=true_stmt,
+        false_stmt=false_stmt_node,
+        if_node=if_node,
+    )
+    assert result is False, (
+        f"Expected taken=false (false_stmt at offset 5, true_stmt beyond "
+        f"_PATH_CLASSIFY_LIMIT={_PATH_CLASSIFY_LIMIT}), got {result}"
+    )
+
+
+def test_find_if_jumpi_scan_limit():
+    """_find_if_jumpi must not scan beyond _JUMPI_SCAN_LIMIT bytes.
+
+    Mutation regression (scan_limit): increasing _JUMPI_SCAN_LIMIT from
+    20 to 80 would cause _find_if_jumpi to find a JUMPI that's far from
+    the condition, potentially matching a JUMPI belonging to a different
+    branch.  Verify that a JUMPI placed beyond the limit is NOT found.
+    """
+    from boa.coverage import _JUMPI_SCAN_LIMIT, _find_if_jumpi
+
+    _JUMPI = 0x57
+    # Craft bytecode: single-byte instructions (e.g. POP = 0x50) with a
+    # JUMPI placed exactly at from_pc + _JUMPI_SCAN_LIMIT (just beyond).
+    # _find_if_jumpi starts scanning at from_pc + instruction_size(op).
+    # We put a PUSH1 (0x60, 2 bytes) at from_pc, so scanning starts at
+    # from_pc + 2.  Place JUMPI beyond the limit.
+    from_pc = 0
+    # bytecode: PUSH1 0x00 at PC 0, then filler, then JUMPI beyond limit
+    filler_len = _JUMPI_SCAN_LIMIT  # JUMPI at from_pc + JUMPI_SCAN_LIMIT
+    bytecode = bytes([0x60, 0x00])  # PUSH1 0x00 at PC 0 (2 bytes)
+    bytecode += bytes([0x50] * (filler_len - 2))  # POP filler
+    bytecode += bytes([_JUMPI])  # JUMPI at PC = _JUMPI_SCAN_LIMIT
+
+    # The JUMPI is at exactly from_pc + _JUMPI_SCAN_LIMIT, which is the
+    # limit boundary.  The scan goes up to min(from_pc + limit, len).
+    # Since range is [scan, limit), the JUMPI AT the limit is excluded.
+    result = _find_if_jumpi(bytecode, from_pc)
+    assert result is None, (
+        f"JUMPI at PC {_JUMPI_SCAN_LIMIT} (at limit boundary) should NOT be found, "
+        f"got PC {result}.  _JUMPI_SCAN_LIMIT={_JUMPI_SCAN_LIMIT}"
+    )
+
+    # Verify a JUMPI just inside the limit IS found.
+    bytecode_inside = bytes([0x60, 0x00])  # PUSH1 0x00 at PC 0
+    bytecode_inside += bytes([0x50] * (filler_len - 3))  # one less filler
+    bytecode_inside += bytes([_JUMPI])  # JUMPI at PC = _JUMPI_SCAN_LIMIT - 1
+
+    result_inside = _find_if_jumpi(bytecode_inside, from_pc)
+    assert result_inside == _JUMPI_SCAN_LIMIT - 1, (
+        f"JUMPI at PC {_JUMPI_SCAN_LIMIT - 1} (inside limit) should be found, "
+        f"got {result_inside}"
+    )
+
+
+def test_scan_limit_prevents_false_jumpi_match():
+    """Scan limit prevents matching a far-away JUMPI from another branch.
+
+    Mutation regression (scan_limit): with _JUMPI_SCAN_LIMIT = 80, a
+    contract with two sequential if-statements could have the second If's
+    JUMPI mistakenly found by a forward scan from the first If's event PC.
+    With the correct limit of 20, the second If's JUMPI is out of range.
+
+    Construct bytecode where a "wrong" JUMPI sits at PC 25 (within 80 but
+    beyond 20).  With limit=20, it must NOT be found.
+    """
+    from boa.coverage import _JUMPI_SCAN_LIMIT, _find_if_jumpi
+
+    _JUMPI = 0x57
+    from_pc = 0
+    bytecode = bytearray(100)
+    bytecode[0] = 0x60  # PUSH1 at PC 0 (2 bytes)
+    bytecode[1] = 0x00
+    for i in range(2, 100):
+        bytecode[i] = 0x50  # POP (single-byte)
+    # Only a far JUMPI at PC 25
+    bytecode[25] = _JUMPI
+    bytecode = bytes(bytecode)
+
+    result = _find_if_jumpi(bytecode, from_pc)
+    assert result is None, (
+        f"JUMPI at PC 25 is beyond _JUMPI_SCAN_LIMIT={_JUMPI_SCAN_LIMIT}, "
+        f"should return None, got {result}"
+    )
+
+
+def test_path_classify_limit_minimum():
+    """_PATH_CLASSIFY_LIMIT must be large enough to find branch body nodes.
+
+    Mutation regression (path_classify_limit): reducing _PATH_CLASSIFY_LIMIT
+    from 30 to 5 would prevent _classify_path from scanning far enough to
+    find the true/false body node when several unmapped PCs separate the
+    JUMPI destination from the first AST-mapped body instruction.
+
+    Uses _resolve_jumpi_direction directly with a synthetic AST map where
+    both body nodes sit at offset 10 from their respective destinations
+    (beyond limit=5, within limit=30).  The false body is on the taken
+    path and the true body on the fallthrough path, so the correct answer
+    is False (taken != true).  With limit=5, both _classify_path calls
+    return None → default True (wrong).
+    """
+    from boa.coverage import _PATH_CLASSIFY_LIMIT, _resolve_jumpi_direction
+
+    source = """\
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_stmt = if_node.body[0]  # Return(value=1)
+    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
+    false_stmt_node = fn_node.body[-1]  # return 0
+
+    # Place false_stmt on the taken path at offset 10, true_stmt on the
+    # fallthrough path at offset 10.  With limit >= 11, _classify_path
+    # correctly identifies taken=false and fall=true → return False.
+    # With limit = 5, both return None → default True (wrong direction).
+    ast_map = {
+        110: false_stmt_node,  # false body at taken_dest + 10
+        210: true_stmt,  # true body at fallthrough + 10
+    }
+
+    result = _resolve_jumpi_direction(
+        taken_dest=100,
+        fallthrough=200,
+        ast_map=ast_map,
+        true_stmt=true_stmt,
+        false_stmt=false_stmt_node,
+        if_node=if_node,
+    )
+    assert result is False, (
+        f"Expected taken=false (false_stmt at taken+10, true_stmt at fall+10, "
+        f"_PATH_CLASSIFY_LIMIT={_PATH_CLASSIFY_LIMIT}), got {result}"
+    )
+
+
+def test_jumpi_scan_limit_lower_bound():
+    """_JUMPI_SCAN_LIMIT must be at least ~10 to find compound condition JUMPIs.
+
+    Mutation regression (scan_limit lower bound): reducing _JUMPI_SCAN_LIMIT
+    from 20 to 8 would prevent _find_if_jumpi from finding a decision JUMPI
+    that's more than 8 bytes from the event PC.
+
+    Uses _find_if_jumpi directly with crafted bytecode where the JUMPI
+    sits at offset 10 from from_pc.  With limit=8, it's not found.
+    With limit=20, it's found.
+    """
+    from boa.coverage import _JUMPI_SCAN_LIMIT, _find_if_jumpi
+
+    _JUMPI = 0x57
+    from_pc = 0
+    # PUSH1 0x00 at PC 0 (2 bytes), then single-byte fillers, JUMPI at PC 10
+    bytecode = bytearray(30)
+    bytecode[0] = 0x60  # PUSH1
+    bytecode[1] = 0x00
+    for i in range(2, 30):
+        bytecode[i] = 0x50  # POP
+    bytecode[10] = _JUMPI  # decision JUMPI at offset 10
+
+    result = _find_if_jumpi(bytes(bytecode), from_pc)
+    assert result == 10, (
+        f"JUMPI at PC 10 should be found with _JUMPI_SCAN_LIMIT="
+        f"{_JUMPI_SCAN_LIMIT}, got {result}"
+    )
 
 
 # --- statement-only coverage ---
