@@ -183,6 +183,17 @@ def _is_noop(ast_node: vy_ast.VyperNode) -> bool:
     return False
 
 
+def _is_noop_branch(if_node: vy_ast.If) -> bool:
+    """Return True if the If is a no-op branch (body all noop, no else).
+
+    When the body is entirely no-op (pass / assert True) and there is
+    no else clause, the compiler eliminates the branch — both paths
+    produce identical bytecode.  Branch coverage cannot distinguish
+    the two directions, so these should not be declared as branches.
+    """
+    return all(_is_noop(s) for s in if_node.body) and not if_node.orelse
+
+
 def _branch_targets(
     if_node: vy_ast.If, fn_node: vy_ast.FunctionDef
 ) -> tuple[int, int, Optional[vy_ast.VyperNode], Optional[vy_ast.VyperNode]]:
@@ -198,9 +209,11 @@ def _branch_targets(
     elif all(_is_noop(s) for s in if_node.body):
         # Body is entirely no-op (pass / assert True) — no bytecode
         # generated, so the branch falls through to the same place as
-        # the false branch.  Use the fallthrough target but keep the
-        # reported line as the first no-op statement.
-        true_line, true_stmt = _find_false_target(if_node, fn_node)
+        # the false branch.  Use the fallthrough statement for JUMPI
+        # classification (true_stmt) but report the no-op statement
+        # line so the true arc is distinguishable from the false arc.
+        true_line = first_body.lineno
+        _, true_stmt = _find_false_target(if_node, fn_node)
     else:
         true_line = first_body.lineno
         true_stmt = first_body
@@ -211,7 +224,8 @@ def _branch_targets(
         if _is_null_return(first_else):
             false_line, false_stmt = fn_node.lineno, None
         elif all(_is_noop(s) for s in if_node.orelse):
-            false_line, false_stmt = _find_false_target(if_node, fn_node)
+            false_line = first_else.lineno
+            _, false_stmt = _find_false_target(if_node, fn_node)
         else:
             false_line, false_stmt = first_else.lineno, first_else
     else:
@@ -289,6 +303,15 @@ def _classify_from_raw_trace(
     taken_dest, fallthrough = jumpi_table.get(jumpi_pc, (None, jumpi_pc + 1))
     if taken_dest is None:
         return "false", raw_trace_start
+
+    # When taken and fallthrough converge (noop body compiled away),
+    # the JUMPI is a no-op — both directions hit the same PC.
+    # Report "both" so the caller records both arcs.
+    if taken_dest == fallthrough:
+        for i in range(raw_trace_start, len(raw_trace)):
+            if raw_trace[i] == jumpi_pc:
+                return "both", i + 1
+        return "both", raw_trace_start
 
     taken_is_true = _resolve_jumpi_direction(
         taken_dest, fallthrough, ast_map, true_stmt, false_stmt, if_node
@@ -555,6 +578,14 @@ class CoverageCollector:
                     while scan >= 0 and events[scan][1] is if_node:
                         epc = events[scan][0]
                         if epc is not None and bytecode[epc] == _JUMPI:
+                            # Skip short-circuit JUMPIs from compound
+                            # conditions (and/or).  These are mapped to
+                            # BoolOp, not If — they jump between
+                            # operands, not to the body/else.
+                            mapped = ast_map.get(epc)
+                            if isinstance(mapped, vy_ast.BoolOp):
+                                scan -= 1
+                                continue
                             jumpi_pc = epc
                             break
                         scan -= 1
@@ -619,7 +650,10 @@ class CoverageCollector:
                         if_node,
                         ast_map,
                     )
-                    if branch == "true":
+                    if branch == "both":
+                        arcs.add((if_node.lineno, true_line))
+                        arcs.add((if_node.lineno, false_line))
+                    elif branch == "true":
                         arcs.add((if_node.lineno, true_line))
                     elif branch == "false":
                         arcs.add((if_node.lineno, false_line))
@@ -697,6 +731,8 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
     def arcs(self):
         ret = set()
         for if_node in self._ast.get_descendants(vy_ast.If):
+            if _is_noop_branch(if_node):
+                continue
             fn_node = get_fn_ancestor_from_node(if_node)
             ret.add((if_node.lineno, _true_arc(if_node, fn_node)))
             ret.add((if_node.lineno, _false_arc(if_node, fn_node)))
@@ -704,8 +740,10 @@ class TitanoboaReporter(coverage.plugin.FileReporter):
 
     def exit_counts(self):
         ret = {}
-        for ast_node in self._ast.get_descendants(vy_ast.If):
-            ret[ast_node.lineno] = 2
+        for if_node in self._ast.get_descendants(vy_ast.If):
+            if _is_noop_branch(if_node):
+                continue
+            ret[if_node.lineno] = 2
         return ret
 
     @cached_property

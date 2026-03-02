@@ -1103,14 +1103,15 @@ def f(x: uint256) -> uint256:
 """
     ast = parse_to_ast(source)
     outer_if = ast.get_descendants(vy_ast.If)[0]
-    tail_return = ast.get_descendants(vy_ast.Return)[-1]  # return 0
-
     possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(25))
-    # Only the outer true arc should be executed — no phantom dual arc
+    # Only the outer true arc should be executed — no phantom dual arc.
+    # The true arc targets the noop statement (pass) line, not the
+    # fallthrough target.
+    noop_line = outer_if.body[0].lineno  # pass
     outer_targets = set(executed.get(outer_if.lineno, []))
     assert outer_targets == {
-        tail_return.lineno
-    }, f"Expected only outer true arc {{{tail_return.lineno}}}, got {outer_targets}"
+        noop_line
+    }, f"Expected only outer true arc {{{noop_line}}}, got {outer_targets}"
 
 
 def test_branch_noop_true_body_elif_inner_true():
@@ -1498,3 +1499,88 @@ def foo(x: uint256) -> uint256:
         # No arcs should be stored in statement-only mode
         arcs = data.arcs(vy_path)
         assert not arcs, f"Expected no arcs in branch=False mode, got {arcs}"
+
+
+# --- noop-branch / compound-condition regressions ---
+
+
+def test_branch_noop_body_no_else_not_a_branch():
+    """if cond: pass (no else) is not a branch — compiler eliminates it."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x == 2:
+        pass
+    y: uint256 = 1
+    return y
+"""
+    # The if has no behavioral branch — both paths execute the same code.
+    # The reporter should not declare arcs or exit_counts for it.
+    for val in [0, 2, 10]:
+        possible, executed, missing = _check_full_branch_coverage(
+            source, lambda c, v=val: c.f(v)
+        )
+        assert (
+            possible == set()
+        ), f"x={val}: noop-body no-else should have no possible arcs, got {possible}"
+
+
+def test_branch_compound_or_elif_no_phantom_dual_arc():
+    """(A or B) + elif: short-circuit path must not credit a phantom second arc."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if (x == 2) or (x > 9):
+        return 1
+    elif x == 3:
+        y = 2
+    else:
+        y = 3
+    return y
+"""
+    ast = parse_to_ast(source)
+    outer_if = ast.get_descendants(vy_ast.If)[0]
+
+    # x=10: or true via B — only true arc should fire
+    _, executed, _ = _check_full_branch_coverage(source, lambda c: c.f(10))
+    outer_targets = set(executed.get(outer_if.lineno, []))
+    assert outer_targets == {
+        outer_if.body[0].lineno
+    }, f"x=10: expected only true arc, got {outer_targets}"
+
+    # x=2: or true via A — same, only true arc
+    _, executed2, _ = _check_full_branch_coverage(source, lambda c: c.f(2))
+    outer_targets2 = set(executed2.get(outer_if.lineno, []))
+    assert outer_targets2 == {
+        outer_if.body[0].lineno
+    }, f"x=2: expected only true arc, got {outer_targets2}"
+
+
+def test_branch_compound_and_elif_no_phantom_dual_arc():
+    """(A and B) + elif: short-circuit path must not credit a phantom second arc."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if (x > 1) and (x > 9):
+        return 1
+    elif x == 3:
+        y = 2
+    else:
+        y = 3
+    return y
+"""
+    ast = parse_to_ast(source)
+    outer_if = ast.get_descendants(vy_ast.If)[0]
+    inner_if = ast.get_descendants(vy_ast.If)[1]  # elif
+
+    # x=2: A true, B false — falls to elif, only false arc on outer
+    _, executed, _ = _check_full_branch_coverage(source, lambda c: c.f(2))
+    outer_targets = set(executed.get(outer_if.lineno, []))
+    assert (
+        outer_if.body[0].lineno not in outer_targets
+    ), f"x=2: true arc should NOT be executed on outer if, got {outer_targets}"
+    assert (
+        inner_if.lineno in outer_targets
+    ), f"x=2: expected false arc to elif L{inner_if.lineno}, got {outer_targets}"
