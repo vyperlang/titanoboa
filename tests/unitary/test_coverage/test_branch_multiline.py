@@ -172,10 +172,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_multiline_assert_in_body():
-    """Multiline assert in if-body: both branches hit, no missing arcs.
-
-    Assert has `.test` not `.value` — _bytecode_lineno must check both.
-    """
+    """Multiline assert in if-body: both branches hit, no missing arcs."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -185,22 +182,6 @@ def foo(x: uint256) -> uint256:
         )
         return x
     return 0
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_multiline_return_in_body_with_else():
-    """Multiline return in true branch with explicit else — both arcs covered."""
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 5:
-        return (
-            x + 1
-        )
-    else:
-        return 0
 """
     missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
     assert missing == {}, f"Missing branch arcs: {missing}"

@@ -351,7 +351,7 @@ def _resolve_jumpi_direction(
             if collapsed is if_node:
                 continue  # If-mapped JUMPDEST
             if _is_descendant(node, if_node.test):
-                continue  # Condition node
+                return "false"  # Condition node
             if true_stmt is not None and _is_descendant(node, true_stmt):
                 return "true"
             if false_stmt is not None and _is_descendant(node, false_stmt):
@@ -381,13 +381,18 @@ def _resolve_jumpi_direction(
         if fall_class == "exit":
             return False
 
-    if taken_class in ("false", "exit"):
-        return True
-    if fall_class in ("false", "exit"):
+    if taken_class == "false":
+        return False
+    if fall_class == "false":
         return True
 
-    # Neither path classifiable — assume taken = true
-    return True
+    if taken_class == "exit":
+        return True
+    if fall_class == "exit":
+        return False
+
+    # Neither path classifiable — assume taken = false
+    return False
 
 
 class CoverageCollector:
@@ -511,18 +516,25 @@ class CoverageCollector:
                             if isinstance(mc, vy_ast.If) and mc is not if_node:
                                 found = None
                         jumpi_pc = found
-                # Noop-else forward-scan: when the else body is a
-                # no-op, the decision JUMPI may be unmapped.  For
-                # compound conditions (and/or), the backward scan
-                # below would find a short-circuit JUMPI instead of
-                # the decision.  Try this fallback FIRST to avoid
-                # that misselection.
-                if jumpi_pc is None and noop_else:
+                # Noop-branch forward-scan: when the body or else
+                # is a no-op, the decision JUMPI may be unmapped.
+                # For compound conditions (and/or), the backward
+                # scan below would find a short-circuit JUMPI
+                # instead of the decision.  Additionally, when the
+                # true branch is taken for a noop body, the last
+                # event PC may be a merge-point JUMPDEST (skipped
+                # above); scanning backward through earlier event
+                # PCs finds the JUMPI.  Try this fallback FIRST to
+                # avoid misselection.
+                if jumpi_pc is None and (noop_else or noop_body):
                     scan = idx
                     while scan >= 0 and events[scan][1] is if_node:
                         epc = events[scan][0]
                         if epc is not None and bytecode[epc] != 0x5B:
-                            found = _find_if_jumpi(bytecode, epc)
+                            if bytecode[epc] == _JUMPI:
+                                found = epc
+                            else:
+                                found = _find_if_jumpi(bytecode, epc)
                             if found is not None:
                                 # Validate: the found JUMPI must
                                 # belong to this If, not a parent

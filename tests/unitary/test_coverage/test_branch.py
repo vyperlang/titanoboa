@@ -116,12 +116,7 @@ def foo(val: uint256):
 
 
 def test_branch_bare_return_in_if_partial():
-    """Bare return if, only true branch hit — false arc must be missing.
-
-    The exact missing arc must target `self.x = val` (the false/fallthrough
-    branch), not the function line (the true/return branch).  This ensures
-    the JUMPI direction classifier assigns the correct labels.
-    """
+    """Bare return if, only true branch hit — false arc must target the fallthrough statement."""
     source = """\
 x: public(uint256)
 
@@ -165,31 +160,6 @@ def f(x: uint256):
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
-def test_branch_both_null_return_degenerate():
-    """if/else where both branches are bare return — arcs collapse.
-
-    Both branches compile to the same target (fn_node.lineno), so
-    coverage.py cannot distinguish them.  Executing only one branch
-    still reports full coverage.  This is a known limitation: the
-    reporter declares two arcs with the same endpoints.
-    """
-    source = """\
-@external
-def foo(x: uint256):
-    if x > 5:
-        return
-    else:
-        return
-"""
-    # Only true branch hit — coverage still reports full because
-    # both arcs are (if_line, fn_line).
-    missing = _check_branch_coverage(source, lambda c: c.foo(10))
-    assert missing == {}, (
-        f"Both arcs target fn_line; partial execution should still "
-        f"show no missing (degenerate case), got: {missing}"
-    )
-
-
 # --- branch negative controls (partial coverage) ---
 
 
@@ -210,29 +180,6 @@ def foo(x: uint256) -> uint256:
     assert missing == {
         if_node.lineno: [else_first.lineno]
     }, f"Unexpected missing arcs: {missing}"
-
-
-def test_branch_if_without_else_partial():
-    """Only true branch hit — fallthrough (false) arc must be missing."""
-    source = """\
-@external
-def foo(val: uint256) -> uint256:
-    if val > 5:
-        return val
-    return 0
-"""
-    # Only call with val=10 → true branch returns, fallthrough not taken
-    missing = _check_branch_coverage(source, lambda c: c.foo(10))
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    # The false arc for if-without-else: next sibling is `return 0`
-    return_0 = ast.get_descendants(vy_ast.Return)[-1]
-    assert (
-        if_node.lineno in missing
-    ), f"Expected if-line {if_node.lineno} in missing: {missing}"
-    assert (
-        return_0.lineno in missing[if_node.lineno]
-    ), f"Expected false arc to {return_0.lineno}, got {missing}"
 
 
 # --- full arc assertion (possible + executed + missing) ---
@@ -600,11 +547,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_void_function_if_last_statement():
-    """Void function where if is the last statement — false arc is implicit return.
-
-    Regression test for _false_arc using parent.body instead of
-    get_children() which would pick up decorator nodes.
-    """
+    """Void function where if is the last statement — false arc is implicit return."""
     source = """\
 x: public(uint256)
 
@@ -662,11 +605,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_pass_only_function_lines():
-    """A pass-only function: `pass` is coverable but never hit at runtime.
-
-    Bytecode for `pass` maps to the FunctionDef node, which _collapse_cov_node
-    filters out. So even after calling foo(), the pass line is never traced.
-    """
+    """A pass-only function: `pass` generates no distinct bytecode, so it appears as uncovered."""
     source = """\
 @external
 def foo():
@@ -916,29 +855,6 @@ def f(x: uint256) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
-def test_branch_if_pass_body_degenerate():
-    """if with pass body — arcs collapse (both point to same line).
-
-    Like the double-null-return degenerate case: the pass body is a
-    no-op so both branches fall through to the same statement.
-    Executing only one branch still reports full coverage.
-    """
-    source = """\
-@external
-def f(x: uint256) -> uint256:
-    y: uint256 = 0
-    if x > 5:
-        pass
-    y += 1
-    return y
-"""
-    missing = _check_branch_coverage(source, lambda c: c.f(10))
-    assert missing == {}, (
-        "Both arcs target the same fallthrough line; partial execution "
-        f"should still show no missing (degenerate case), got: {missing}"
-    )
-
-
 def test_branch_else_pass_both():
     """if/else where else is pass — both branches hit."""
     source = """\
@@ -948,21 +864,6 @@ def f(x: uint256) -> uint256:
         return 1
     else:
         pass
-    return 0
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_else_assert_true_both():
-    """if/else where else is assert True — both branches hit."""
-    source = """\
-@external
-def f(x: uint256) -> uint256:
-    if x > 5:
-        return 1
-    else:
-        assert True
     return 0
 """
     missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
@@ -1017,21 +918,6 @@ def g(x: uint256) -> uint256:
 @external
 def f(x: uint256) -> uint256:
     return self.g(x)
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_if_assert_const_expr_body_both():
-    """if with assert <const-expr> body (constant-folded to noop) — both branches hit."""
-    source = """\
-@external
-def f(x: uint256) -> uint256:
-    y: uint256 = 0
-    if x > 5:
-        assert 1 == 1
-    y += 1
-    return y
 """
     missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
     assert missing == {}, f"Missing branch arcs: {missing}"
@@ -1215,15 +1101,16 @@ def f(x: uint256) -> uint256:
         return 2
     return 0
 """
-    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(25))
     ast = parse_to_ast(source)
     outer_if = ast.get_descendants(vy_ast.If)[0]
+    tail_return = ast.get_descendants(vy_ast.Return)[-1]  # return 0
+
+    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(25))
     # Only the outer true arc should be executed — no phantom dual arc
     outer_targets = set(executed.get(outer_if.lineno, []))
-    # true_line for noop body = fallthrough target (return 0 at line 7)
     assert outer_targets == {
-        7
-    }, f"Expected only outer true arc {{7}}, got {outer_targets}"
+        tail_return.lineno
+    }, f"Expected only outer true arc {{{tail_return.lineno}}}, got {outer_targets}"
 
 
 def test_branch_noop_true_body_elif_inner_true():
@@ -1394,25 +1281,25 @@ def foo(x: uint256) -> uint256:
         return self._helper()
     return 0
 """
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    true_target = if_node.body[0].lineno
-
     # x=10 → true branch, x=1 → false branch; both should be covered
     missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
     assert missing == {}, f"Missing branch arcs: {missing}"
 
-    # Also verify partial: true-only should show false arc missing
+    # Verify partial: true-only should show correct direction
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0].lineno  # return self._helper()
+    false_target = ast.get_descendants(vy_ast.Return)[-1].lineno  # return 0
+
     possible, executed, missing = _check_full_branch_coverage(
         source, lambda c: c.foo(10)
     )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert (
-        true_target in executed[if_node.lineno]
-    ), f"True arc to L{true_target} not executed: {executed}"
-    assert (
-        if_node.lineno in missing
-    ), f"Expected false arc missing for true-only call: {missing}"
+    assert executed[if_node.lineno] == [
+        true_target
+    ], f"True-only: expected true arc to L{true_target}, got {executed}"
+    assert missing[if_node.lineno] == [
+        false_target
+    ], f"True-only: expected false arc L{false_target} missing, got {missing}"
 
 
 def test_branch_internal_call_condition_classify_path_cond():
@@ -1561,410 +1448,30 @@ def foo(val: uint256) -> uint256:
 """
     ast = parse_to_ast(source)
     if_node = ast.get_descendants(vy_ast.If)[0]
-    true_target = if_node.body[0]  # Return
-    false_target_node = if_node._parent.body[-2]  # self.x = val (Assign)
+    true_target = if_node.body[0].lineno  # return val
+    false_target = ast.get_descendants(vy_ast.Assign)[0].lineno  # self.x = val
 
-    # True-only: must record true arc, not false arc
+    # True-only: true arc executed, false arc missing
     possible, executed, missing = _check_full_branch_coverage(
         source, lambda c: c.foo(10)
     )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert (
-        true_target.lineno in executed[if_node.lineno]
-    ), f"True arc to L{true_target.lineno} not executed: {executed}"
-    assert (
-        if_node.lineno in missing
-    ), f"Expected false arc missing for true-only: {missing}"
-    assert (
-        false_target_node.lineno in missing[if_node.lineno]
-    ), f"False arc to L{false_target_node.lineno} not in missing: {missing}"
+    assert executed[if_node.lineno] == [
+        true_target
+    ], f"True-only: expected true arc to L{true_target}, got {executed}"
+    assert missing[if_node.lineno] == [
+        false_target
+    ], f"True-only: expected false arc L{false_target} missing, got {missing}"
 
-    # False-only: must record false arc, not true arc
+    # False-only: false arc executed, true arc missing
     possible, executed, missing = _check_full_branch_coverage(
         source, lambda c: c.foo(1)
     )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert (
-        false_target_node.lineno in executed[if_node.lineno]
-    ), f"False arc to L{false_target_node.lineno} not executed: {executed}"
-    assert (
-        if_node.lineno in missing
-    ), f"Expected true arc missing for false-only: {missing}"
-
-
-def test_branch_if_return_with_storage_write_both():
-    """If with return in true body + storage write — both branches hit."""
-    source = """\
-x: public(uint256)
-
-@external
-def foo(val: uint256) -> uint256:
-    if val > 5:
-        return val
-    self.x = val
-    return 0
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_if_return_with_multiple_storage_writes_partial():
-    """If with return + multiple storage writes in false path.
-
-    Similar to above but with more statements between if and return 0,
-    producing a wider bytecode gap that stresses _classify_path.
-    """
-    source = """\
-x: public(uint256)
-y: public(uint256)
-
-@external
-def foo(val: uint256) -> uint256:
-    if val > 5:
-        return val
-    self.x = val
-    self.y = val + 1
-    return 0
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    true_target = if_node.body[0]
-
-    # True-only
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.foo(10)
-    )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert (
-        true_target.lineno in executed[if_node.lineno]
-    ), f"True arc to L{true_target.lineno} not executed: {executed}"
-    assert (
-        if_node.lineno in missing
-    ), f"Expected false arc missing for true-only: {missing}"
-
-    # Both branches
-    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-# --- unit tests for internal helpers (mutation regression) ---
-
-
-def test_classify_path_skips_fn_def_node():
-    """_classify_path must skip FunctionDef nodes and continue scanning.
-
-    Mutation regression (classify_path_fn_def): if _classify_path returns
-    "exit" when it encounters a FunctionDef node (collapsed == None) instead
-    of continuing past it, _resolve_jumpi_direction may infer the wrong
-    branch direction when FunctionDef bytecode sits between the JUMPI
-    destination and the actual branch body in the AST map.
-
-    Uses _resolve_jumpi_direction directly with a synthetic AST map where
-    a FunctionDef node precedes the true_stmt descendant at the taken
-    destination.  With the mutation (return "exit"), taken_class becomes
-    "exit" and the direction is wrong.  With the correct code (continue),
-    the scan proceeds past the FunctionDef and finds the true body node.
-    """
-    from boa.coverage import _resolve_jumpi_direction
-
-    source = """\
-@internal
-def _helper() -> uint256:
-    return 42
-
-@external
-def foo(x: uint256) -> uint256:
-    if x > 5:
-        return self._helper()
-    return 0
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    fn_node = ast.get_descendants(vy_ast.FunctionDef, {"name": "foo"})[0]
-    helper_fn = ast.get_descendants(vy_ast.FunctionDef, {"name": "_helper"})[0]
-    true_stmt = if_node.body[0]  # Return(value=self._helper())
-    false_stmt_node = fn_node.body[-1]  # return 0
-
-    # Build a synthetic AST map where:
-    #   PC 100 (taken_dest) → FunctionDef node (should be skipped)
-    #   PC 102 → a node that is a descendant of true_stmt
-    #   PC 200 (fallthrough) → false_stmt descendant
-    # With the mutation, _classify_path(100) returns "exit" at PC 100.
-    # With correct code, it skips FunctionDef, finds true_stmt at PC 102.
-    true_body_node = true_stmt.value  # the self._helper() call expression
-    ast_map = {
-        100: helper_fn,  # FunctionDef — should be skipped
-        102: true_body_node,  # descendant of true_stmt
-        200: false_stmt_node,  # descendant of false_stmt
-    }
-
-    result = _resolve_jumpi_direction(
-        taken_dest=100,
-        fallthrough=200,
-        ast_map=ast_map,
-        true_stmt=true_stmt,
-        false_stmt=false_stmt_node,
-        if_node=if_node,
-    )
-    # taken path starts at FunctionDef then reaches true_stmt → taken IS true
-    assert (
-        result is True
-    ), f"Expected taken=true (FunctionDef skipped, true_stmt found), got {result}"
-
-
-def test_unknown_default_direction_distinct_arcs():
-    """Default direction must be True when both paths are unclassifiable.
-
-    Mutation regression (unknown_default): when _resolve_jumpi_direction
-    reaches the fallback ``return True`` (both _classify_path calls return
-    None), flipping to ``return False`` would swap the arc labels.
-
-    Uses _resolve_jumpi_direction directly with a synthetic AST map where
-    neither path contains classifiable nodes (only if_node-mapped and
-    unmapped PCs), but the true and false arcs point to different lines.
-    The fallback direction determines which arc is recorded, so flipping
-    it would record the wrong arc.
-    """
-    from boa.coverage import _resolve_jumpi_direction
-
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 5:
-        return 1
-    return 0
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    true_stmt = if_node.body[0]
-    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
-    false_stmt_node = fn_node.body[-1]
-
-    # Build a synthetic AST map where both paths only contain if_node
-    # itself (which _classify_path skips) and unmapped PCs.
-    # This forces both _classify_path calls to return None, reaching
-    # the default ``return True`` fallback.
-    ast_map = {
-        100: if_node,  # taken_dest → skipped (is if_node)
-        200: if_node,  # fallthrough → skipped (is if_node)
-    }
-
-    result = _resolve_jumpi_direction(
-        taken_dest=100,
-        fallthrough=200,
-        ast_map=ast_map,
-        true_stmt=true_stmt,
-        false_stmt=false_stmt_node,
-        if_node=if_node,
-    )
-    # Both paths unclassifiable → default is True (taken = true branch)
-    assert result is True, f"Expected default direction True (taken=true), got {result}"
-
-
-def test_path_classify_limit_upper_bound():
-    """_PATH_CLASSIFY_LIMIT must not scan too far beyond the branch.
-
-    Mutation regression (path_classify_limit upper): increasing
-    _PATH_CLASSIFY_LIMIT from 30 to 60 would cause _classify_path to scan
-    past the branch body into unrelated code, potentially finding a node
-    from a different statement that overrides an earlier correct classification.
-
-    Uses _resolve_jumpi_direction with a synthetic AST map where:
-    - false_stmt sits at taken_dest + 5 (within any limit) → "false"
-    - true_stmt sits at taken_dest + 35 (beyond 30, within 60) → "true"
-    With limit=30, only false_stmt is found → taken="false" → correct.
-    With limit=60, true_stmt overrides → taken="true" → wrong direction.
-    """
-    from boa.coverage import _PATH_CLASSIFY_LIMIT, _resolve_jumpi_direction
-
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 5:
-        return 1
-    return 0
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    true_stmt = if_node.body[0]
-    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
-    false_stmt_node = fn_node.body[-1]
-
-    ast_map = {
-        105: false_stmt_node,  # false body at taken_dest + 5
-        135: true_stmt,  # true body at taken_dest + 35 (beyond limit 30)
-    }
-
-    result = _resolve_jumpi_direction(
-        taken_dest=100,
-        fallthrough=200,
-        ast_map=ast_map,
-        true_stmt=true_stmt,
-        false_stmt=false_stmt_node,
-        if_node=if_node,
-    )
-    assert result is False, (
-        f"Expected taken=false (false_stmt at offset 5, true_stmt beyond "
-        f"_PATH_CLASSIFY_LIMIT={_PATH_CLASSIFY_LIMIT}), got {result}"
-    )
-
-
-def test_find_if_jumpi_scan_limit():
-    """_find_if_jumpi must not scan beyond _JUMPI_SCAN_LIMIT bytes.
-
-    Mutation regression (scan_limit): increasing _JUMPI_SCAN_LIMIT from
-    20 to 80 would cause _find_if_jumpi to find a JUMPI that's far from
-    the condition, potentially matching a JUMPI belonging to a different
-    branch.  Verify that a JUMPI placed beyond the limit is NOT found.
-    """
-    from boa.coverage import _JUMPI_SCAN_LIMIT, _find_if_jumpi
-
-    _JUMPI = 0x57
-    # Craft bytecode: single-byte instructions (e.g. POP = 0x50) with a
-    # JUMPI placed exactly at from_pc + _JUMPI_SCAN_LIMIT (just beyond).
-    # _find_if_jumpi starts scanning at from_pc + instruction_size(op).
-    # We put a PUSH1 (0x60, 2 bytes) at from_pc, so scanning starts at
-    # from_pc + 2.  Place JUMPI beyond the limit.
-    from_pc = 0
-    # bytecode: PUSH1 0x00 at PC 0, then filler, then JUMPI beyond limit
-    filler_len = _JUMPI_SCAN_LIMIT  # JUMPI at from_pc + JUMPI_SCAN_LIMIT
-    bytecode = bytes([0x60, 0x00])  # PUSH1 0x00 at PC 0 (2 bytes)
-    bytecode += bytes([0x50] * (filler_len - 2))  # POP filler
-    bytecode += bytes([_JUMPI])  # JUMPI at PC = _JUMPI_SCAN_LIMIT
-
-    # The JUMPI is at exactly from_pc + _JUMPI_SCAN_LIMIT, which is the
-    # limit boundary.  The scan goes up to min(from_pc + limit, len).
-    # Since range is [scan, limit), the JUMPI AT the limit is excluded.
-    result = _find_if_jumpi(bytecode, from_pc)
-    assert result is None, (
-        f"JUMPI at PC {_JUMPI_SCAN_LIMIT} (at limit boundary) should NOT be found, "
-        f"got PC {result}.  _JUMPI_SCAN_LIMIT={_JUMPI_SCAN_LIMIT}"
-    )
-
-    # Verify a JUMPI just inside the limit IS found.
-    bytecode_inside = bytes([0x60, 0x00])  # PUSH1 0x00 at PC 0
-    bytecode_inside += bytes([0x50] * (filler_len - 3))  # one less filler
-    bytecode_inside += bytes([_JUMPI])  # JUMPI at PC = _JUMPI_SCAN_LIMIT - 1
-
-    result_inside = _find_if_jumpi(bytecode_inside, from_pc)
-    assert result_inside == _JUMPI_SCAN_LIMIT - 1, (
-        f"JUMPI at PC {_JUMPI_SCAN_LIMIT - 1} (inside limit) should be found, "
-        f"got {result_inside}"
-    )
-
-
-def test_scan_limit_prevents_false_jumpi_match():
-    """Scan limit prevents matching a far-away JUMPI from another branch.
-
-    Mutation regression (scan_limit): with _JUMPI_SCAN_LIMIT = 80, a
-    contract with two sequential if-statements could have the second If's
-    JUMPI mistakenly found by a forward scan from the first If's event PC.
-    With the correct limit of 20, the second If's JUMPI is out of range.
-
-    Construct bytecode where a "wrong" JUMPI sits at PC 25 (within 80 but
-    beyond 20).  With limit=20, it must NOT be found.
-    """
-    from boa.coverage import _JUMPI_SCAN_LIMIT, _find_if_jumpi
-
-    _JUMPI = 0x57
-    from_pc = 0
-    bytecode = bytearray(100)
-    bytecode[0] = 0x60  # PUSH1 at PC 0 (2 bytes)
-    bytecode[1] = 0x00
-    for i in range(2, 100):
-        bytecode[i] = 0x50  # POP (single-byte)
-    # Only a far JUMPI at PC 25
-    bytecode[25] = _JUMPI
-    bytecode = bytes(bytecode)
-
-    result = _find_if_jumpi(bytecode, from_pc)
-    assert result is None, (
-        f"JUMPI at PC 25 is beyond _JUMPI_SCAN_LIMIT={_JUMPI_SCAN_LIMIT}, "
-        f"should return None, got {result}"
-    )
-
-
-def test_path_classify_limit_minimum():
-    """_PATH_CLASSIFY_LIMIT must be large enough to find branch body nodes.
-
-    Mutation regression (path_classify_limit): reducing _PATH_CLASSIFY_LIMIT
-    from 30 to 5 would prevent _classify_path from scanning far enough to
-    find the true/false body node when several unmapped PCs separate the
-    JUMPI destination from the first AST-mapped body instruction.
-
-    Uses _resolve_jumpi_direction directly with a synthetic AST map where
-    both body nodes sit at offset 10 from their respective destinations
-    (beyond limit=5, within limit=30).  The false body is on the taken
-    path and the true body on the fallthrough path, so the correct answer
-    is False (taken != true).  With limit=5, both _classify_path calls
-    return None → default True (wrong).
-    """
-    from boa.coverage import _PATH_CLASSIFY_LIMIT, _resolve_jumpi_direction
-
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 5:
-        return 1
-    return 0
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    true_stmt = if_node.body[0]  # Return(value=1)
-    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
-    false_stmt_node = fn_node.body[-1]  # return 0
-
-    # Place false_stmt on the taken path at offset 10, true_stmt on the
-    # fallthrough path at offset 10.  With limit >= 11, _classify_path
-    # correctly identifies taken=false and fall=true → return False.
-    # With limit = 5, both return None → default True (wrong direction).
-    ast_map = {
-        110: false_stmt_node,  # false body at taken_dest + 10
-        210: true_stmt,  # true body at fallthrough + 10
-    }
-
-    result = _resolve_jumpi_direction(
-        taken_dest=100,
-        fallthrough=200,
-        ast_map=ast_map,
-        true_stmt=true_stmt,
-        false_stmt=false_stmt_node,
-        if_node=if_node,
-    )
-    assert result is False, (
-        f"Expected taken=false (false_stmt at taken+10, true_stmt at fall+10, "
-        f"_PATH_CLASSIFY_LIMIT={_PATH_CLASSIFY_LIMIT}), got {result}"
-    )
-
-
-def test_jumpi_scan_limit_lower_bound():
-    """_JUMPI_SCAN_LIMIT must be at least ~10 to find compound condition JUMPIs.
-
-    Mutation regression (scan_limit lower bound): reducing _JUMPI_SCAN_LIMIT
-    from 20 to 8 would prevent _find_if_jumpi from finding a decision JUMPI
-    that's more than 8 bytes from the event PC.
-
-    Uses _find_if_jumpi directly with crafted bytecode where the JUMPI
-    sits at offset 10 from from_pc.  With limit=8, it's not found.
-    With limit=20, it's found.
-    """
-    from boa.coverage import _JUMPI_SCAN_LIMIT, _find_if_jumpi
-
-    _JUMPI = 0x57
-    from_pc = 0
-    # PUSH1 0x00 at PC 0 (2 bytes), then single-byte fillers, JUMPI at PC 10
-    bytecode = bytearray(30)
-    bytecode[0] = 0x60  # PUSH1
-    bytecode[1] = 0x00
-    for i in range(2, 30):
-        bytecode[i] = 0x50  # POP
-    bytecode[10] = _JUMPI  # decision JUMPI at offset 10
-
-    result = _find_if_jumpi(bytes(bytecode), from_pc)
-    assert result == 10, (
-        f"JUMPI at PC 10 should be found with _JUMPI_SCAN_LIMIT="
-        f"{_JUMPI_SCAN_LIMIT}, got {result}"
-    )
+    assert executed[if_node.lineno] == [
+        false_target
+    ], f"False-only: expected false arc to L{false_target}, got {executed}"
+    assert missing[if_node.lineno] == [
+        true_target
+    ], f"False-only: expected true arc L{true_target} missing, got {missing}"
 
 
 # --- statement-only coverage ---

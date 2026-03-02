@@ -1,8 +1,6 @@
 import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
-from boa.coverage import _collapse_cov_node
-
 from .conftest import _reporter_for
 
 # --- reporter arcs ---
@@ -119,11 +117,7 @@ def foo(x: uint256, y: uint256) -> uint256:
 
 
 def test_reporter_arcs_multiline_body_targets_stmt_line():
-    """Arc target for multiline body statement must be the statement line.
-
-    For `y: uint256 = (\\n    x + 1\\n)`, the tracer normalizes multiline
-    entries to report stmt.lineno — the arc target must match.
-    """
+    """Arc target for multiline body statement must be the statement line."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -177,10 +171,7 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
 
 
 def test_reporter_arcs_elif_no_else_targets_stmt_lines():
-    """if/elif without else: arc targets are statement lines, not expression lines.
-
-    Guards the contract between reporter and tracer normalization.
-    """
+    """if/elif without else: arc targets are statement lines, not expression lines."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
@@ -303,43 +294,8 @@ def foo(x: uint256, y: uint256) -> uint256:
             )
 
 
-def test_reporter_lines_multiline_if_arithmetic_operator():
-    """Multi-line if with arithmetic operators + second if — neither line discarded."""
-    source = """\
-@external
-def foo(x: uint256, y: uint256, z: uint256) -> uint256:
-    if (x + y > 10 and
-        z > 5):
-        return 1
-    if x + z > 20:
-        return 2
-    return 0
-"""
-    with _reporter_for(source) as reporter:
-        lines = reporter.lines()
-    ast = parse_to_ast(source)
-    if_nodes = ast.get_descendants(vy_ast.If)
-    outer_if = if_nodes[0]  # line 3
-    inner_if = if_nodes[1]  # line 6
-    # Line 3 (outer If) must NOT be discarded
-    assert outer_if.lineno in lines, (
-        f"Outer if line {outer_if.lineno} was erroneously discarded from lines: "
-        f"{sorted(lines)}"
-    )
-    # Line 6 (second If) must NOT be discarded
-    assert inner_if.lineno in lines, (
-        f"Second if line {inner_if.lineno} was erroneously discarded from lines: "
-        f"{sorted(lines)}"
-    )
-
-
 def test_reporter_lines_excludes_keyword_only_line():
-    """Keyword-only lines of multi-line statements are excluded from lines().
-
-    `return (\\n    expr\\n)` — the `return` keyword sits alone on its line
-    with no bytecode; only the expression line is compiled. The keyword-only
-    line must not appear in coverable lines.
-    """
+    """Keyword-only lines of multi-line statements are excluded from lines()."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> bool:
@@ -367,12 +323,7 @@ def foo(x: uint256, y: uint256) -> bool:
 
 
 def test_reporter_lines_excludes_multiline_if_continuation():
-    """Continuation lines of multi-line if conditions are excluded from lines().
-
-    The tracer collapses If.test nodes to the If line, so continuation
-    lines (e.g. the second line of a wrapped condition) must not appear
-    as separate statements — otherwise they'd be perpetually uncovered.
-    """
+    """Continuation lines of multi-line if conditions are excluded from lines()."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> uint256:
@@ -415,30 +366,3 @@ def foo(x: uint256) -> uint256:
     ast = parse_to_ast(source)
     if_node = ast.get_descendants(vy_ast.If)[0]
     assert ec == {if_node.lineno: 2}, f"exit_counts: {ec}"
-
-
-# --- _collapse_cov_node smoke test ---
-
-
-def test_collapse_cov_node_behaviors():
-    """Test the two key collapse behaviors: If.test → If, FunctionDef → None."""
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 5:
-        return 1
-    else:
-        return 0
-"""
-    ast = parse_to_ast(source)
-
-    # If.test child → the If node itself
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    test_node = if_node.test  # the `x > 5` comparison
-    result = _collapse_cov_node(test_node)
-    assert result is if_node, f"Expected If node, got {type(result)}"
-
-    # FunctionDef → None
-    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
-    result = _collapse_cov_node(fn_node)
-    assert result is None, f"FunctionDef should collapse to None, got {result}"

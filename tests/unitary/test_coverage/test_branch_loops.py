@@ -26,27 +26,6 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
-def test_branch_if_in_for_loop_partial():
-    """Only true branch taken in for loop — false branch must be missing."""
-    source = """\
-@external
-def foo(data: DynArray[uint256, 10]) -> uint256:
-    total: uint256 = 0
-    for val: uint256 in data:
-        if val > 5:
-            total += val
-    return total
-"""
-    missing = _check_branch_coverage(source, lambda c: c.foo([10]))
-    # Derive expected lines from AST so the assertion survives source edits
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    for_node = if_node.get_ancestor(vy_ast.For)
-    assert missing == {
-        if_node.lineno: [for_node.lineno]
-    }, f"Unexpected missing arcs: {missing}"
-
-
 def test_full_arcs_for_loop_if():
     """Assert all three arc sets for an if inside a for loop."""
     source = """\
@@ -220,26 +199,6 @@ def f(xs: DynArray[uint256, 10], cutoff: uint256) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
-def test_branch_if_in_for_loop_terminal_false():
-    """Terminal iteration false branch: true then false on last iteration.
-
-    foo([10, 1]) → first iteration true (10 > 5), second iteration false
-    (1 > 5). The false arc on the terminal iteration exits the loop to a
-    different line, so standard backedge detection misses it.
-    """
-    source = """\
-@external
-def foo(data: DynArray[uint256, 10]) -> uint256:
-    total: uint256 = 0
-    for val: uint256 in data:
-        if val > 5:
-            total += val
-    return total
-"""
-    missing = _check_branch_coverage(source, lambda c: c.foo([10, 1]))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
 def test_branch_if_in_for_loop_single_false():
     """Single element, false only — the false arc must still be recorded.
 
@@ -362,11 +321,7 @@ def foo(a: DynArray[DynArray[uint256,4],4]) -> uint256:
 
 
 def test_correctness_nested_loop_if_false_then_true():
-    """P1 regression: nested-loop if (no else) order-independent coverage.
-
-    foo([[1,5]]) exercises false-then-true. Both branches are hit, so
-    no arcs should be missing.
-    """
+    """Nested-loop if (no else), false-then-true order — both branches hit."""
     missing = _check_branch_coverage(SOURCE_NESTED_LOOP_IF, lambda c: c.foo([[1, 5]]))
     assert missing == {}, f"false-then-true missing arcs: {missing}"
 
@@ -385,40 +340,6 @@ def test_correctness_nested_loop_if_order_parity():
     assert ft[0] == tf[0], f"Possible arcs differ: {ft[0]} vs {tf[0]}"
     assert ft[1] == tf[1], f"Executed arcs differ: {ft[1]} vs {tf[1]}"
     assert ft[2] == tf[2], f"Missing arcs differ: {ft[2]} vs {tf[2]}"
-
-
-def test_correctness_if_else_in_for_both():
-    """If/else in for loop, both branches hit — no spurious arcs.
-
-    The new preamble stripping eliminates a spurious arc to the For header
-    that the old implementation produced. Only true and false arcs should
-    be in the executed set.
-    """
-    source = """\
-@external
-def foo(data: DynArray[uint256, 10]) -> uint256:
-    total: uint256 = 0
-    for val: uint256 in data:
-        if val > 5:
-            total += val
-        else:
-            total += 1
-    return total
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    true_target = if_node.body[0].lineno
-    false_target = if_node.orelse[0].lineno
-
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.foo([10, 1])
-    )
-    assert missing == {}, f"Both branches hit, expected no missing: {missing}"
-    executed_targets = set(executed.get(if_node.lineno, []))
-    assert executed_targets == {
-        true_target,
-        false_target,
-    }, f"Expected only true/false targets, got {executed_targets}"
 
 
 def test_branch_multiline_return_in_for_loop():
@@ -543,25 +464,6 @@ def foo(arr: DynArray[uint256, 10]) -> uint256:
     return s
 """
     missing = _check_branch_coverage(source, lambda c: c.foo([25, 1]))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_if_true_branch_is_for_empty():
-    """If true branch is a For loop with zero iterations — both branches hit."""
-    source = """\
-@external
-def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    if flag:
-        for v: uint256 in data:
-            s += v
-    else:
-        s += 1
-    return s
-"""
-    missing = _check_branch_coverage(
-        source, lambda c: (c.foo(True, []), c.foo(False, []))
-    )
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 

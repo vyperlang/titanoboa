@@ -137,11 +137,7 @@ def foo(x: uint256) -> uint256:
 
 
 def test_branch_if_in_orelse_without_else():
-    """if inside an else block with no else of its own — both arcs covered.
-
-    Regression test for _false_arc sibling lookup: the inner if lives in
-    parent.orelse, not parent.body, so the sibling search must check both.
-    """
+    """If inside an else block with no else of its own — both arcs covered."""
     source = """\
 @external
 def foo(x: uint256, y: uint256) -> uint256:
@@ -195,11 +191,7 @@ def test_correctness_elif_no_else_inner_false():
 
 
 def test_correctness_elif_no_else_multiline_tail():
-    """elif fallthrough to multiline return must target the statement line.
-
-    _false_arc uses stmt.lineno, and the tracer normalizes multiline entries
-    to match, so the reporter's possible arc matches the tracer's executed arc.
-    """
+    """elif fallthrough to multiline return — all branches covered."""
     source = """\
 @external
 def foo(x: uint256) -> uint256:
