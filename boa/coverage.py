@@ -21,6 +21,14 @@ from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
 
 _JUMPI = 0x57
 
+
+def _instruction_size(op: int) -> int:
+    """Return byte-length of EVM instruction (1 for most, 1+n for PUSHn)."""
+    if 0x5F <= op <= 0x7F:
+        return (op - 0x5F) + 1
+    return 1
+
+
 # Max bytecode bytes to scan forward when searching for a JUMPI
 # after a break/continue condition.  The compiler emits the JUMPI
 # within a few instructions of the condition PUSH.
@@ -53,7 +61,7 @@ def _build_jumpi_table(bytecode: bytes) -> dict[int, tuple[int | None, int]]:
                 last_push_value = 0
             else:
                 last_push_value = int.from_bytes(bytecode[pc + 1 : pc + 1 + n], "big")
-            pc += n + 1
+            pc += _instruction_size(op)
         else:
             if op != _JUMPI:
                 last_push_value = None
@@ -63,25 +71,19 @@ def _build_jumpi_table(bytecode: bytes) -> dict[int, tuple[int | None, int]]:
 
 def _find_if_jumpi(bytecode: bytes, from_pc: int) -> Optional[int]:
     """Scan bytecode forward from from_pc to find the nearest JUMPI."""
+    if from_pc >= len(bytecode):
+        return None
     # Advance past the full instruction at from_pc.  PUSHn opcodes are
     # multi-byte: ``PUSH1 xx`` = 2 bytes, ``PUSH2 xx xx`` = 3 bytes, etc.
     # Starting at ``from_pc + 1`` would land inside the operand, causing
     # data bytes (e.g. 0x57 inside ``PUSH2 0x0057``) to be misread as a
     # JUMPI opcode.
-    op0 = bytecode[from_pc]
-    if 0x5F <= op0 <= 0x7F:
-        scan = from_pc + (op0 - 0x5F) + 1
-    else:
-        scan = from_pc + 1
+    scan = from_pc + _instruction_size(bytecode[from_pc])
     limit = min(from_pc + _JUMPI_SCAN_LIMIT, len(bytecode))
     while scan < limit:
         if bytecode[scan] == _JUMPI:
             return scan
-        op = bytecode[scan]
-        if 0x5F <= op <= 0x7F:
-            scan += op - 0x5F + 1
-        else:
-            scan += 1
+        scan += _instruction_size(bytecode[scan])
     return None
 
 
@@ -157,14 +159,12 @@ def _is_const_expr(node: vy_ast.VyperNode) -> bool:
     """
     if isinstance(node, (vy_ast.NameConstant, vy_ast.Int, vy_ast.Decimal, vy_ast.Str)):
         return True
-    if isinstance(node, vy_ast.Compare):
+    if isinstance(node, (vy_ast.Compare, vy_ast.BinOp)):
         return _is_const_expr(node.left) and _is_const_expr(node.right)
     if isinstance(node, vy_ast.BoolOp):
         return all(_is_const_expr(v) for v in node.values)
     if isinstance(node, vy_ast.UnaryOp):
         return _is_const_expr(node.operand)
-    if isinstance(node, vy_ast.BinOp):
-        return _is_const_expr(node.left) and _is_const_expr(node.right)
     return False
 
 
@@ -274,7 +274,7 @@ def _classify_from_raw_trace(
     false_stmt: Optional[vy_ast.VyperNode],
     if_node: vy_ast.If,
     ast_map: dict[int, vy_ast.VyperNode],
-) -> tuple[str, int]:
+) -> tuple[Optional[str], int]:
     """Classify branch direction by checking where the JUMPI goes.
 
     Determines the JUMPI's taken destination, then checks which
@@ -283,7 +283,8 @@ def _classify_from_raw_trace(
     which direction was actually taken.
 
     raw_trace_start: index into raw_trace to begin searching for the JUMPI.
-    Returns (branch_result, new_raw_trace_position).
+    Returns (branch_result, new_raw_trace_position).  Returns None as
+    branch_result when the JUMPI is not found (phantom event).
     """
     taken_dest, fallthrough = jumpi_table.get(jumpi_pc, (None, jumpi_pc + 1))
     if taken_dest is None:
@@ -304,7 +305,11 @@ def _classify_from_raw_trace(
                 else:
                     return "false", next_idx
             return "false", next_idx
-    return "false", len(raw_trace)
+    # JUMPI not found in raw_trace from current position — this
+    # If event is a phantom (e.g. merge-point JUMPDEST or shared
+    # condition PC re-mapped to this If).  Return None so the
+    # caller skips recording an arc and the cursor is unchanged.
+    return None, raw_trace_start
 
 
 def _resolve_jumpi_direction(
@@ -471,12 +476,41 @@ class CoverageCollector:
                 body0 = if_node.body[0]
                 orelse = getattr(if_node, "orelse", [])
                 noop_else = orelse and all(_is_noop(s) for s in orelse)
-                if pc is not None and (
-                    isinstance(body0, (vy_ast.Break, vy_ast.Continue))
-                    or _is_null_return(body0)
-                    or _is_noop(body0)
-                ):
-                    jumpi_pc = _find_if_jumpi(bytecode, pc)
+                noop_body = all(_is_noop(s) for s in if_node.body)
+                is_special_body = isinstance(
+                    body0, (vy_ast.Break, vy_ast.Continue)
+                ) or _is_null_return(body0)
+                # JUMPDEST (0x5B) at noop-body If events are merge
+                # points after body/else execution, not condition
+                # evaluations.  Skip forward scan for those.  But
+                # allow JUMPDEST for break/continue/bare-return —
+                # compound conditions place a JUMPDEST between
+                # short-circuit operands (landing pad), and the
+                # forward scan must proceed past it.
+                skip_fwd = (
+                    noop_body
+                    and not is_special_body
+                    and pc is not None
+                    and bytecode[pc] == 0x5B
+                )
+                if not skip_fwd and pc is not None and (is_special_body or noop_body):
+                    # The event PC may already BE the decision JUMPI
+                    # (e.g. noop true body: the last If condition
+                    # event lands on the JUMPI itself).
+                    if bytecode[pc] == _JUMPI:
+                        found = pc
+                    else:
+                        found = _find_if_jumpi(bytecode, pc)
+                    # Validate: the found JUMPI must belong to this
+                    # If, not a different one (e.g. an elif's JUMPI
+                    # found via forward scan from a shared PC).
+                    if found is not None:
+                        mapped = ast_map.get(found)
+                        if mapped is not None:
+                            mc = _collapse_cov_node(mapped)
+                            if isinstance(mc, vy_ast.If) and mc is not if_node:
+                                found = None
+                        jumpi_pc = found
                 # Noop-else forward-scan: when the else body is a
                 # no-op, the decision JUMPI may be unmapped.  For
                 # compound conditions (and/or), the backward scan
@@ -484,37 +518,26 @@ class CoverageCollector:
                 # the decision.  Try this fallback FIRST to avoid
                 # that misselection.
                 if jumpi_pc is None and noop_else:
-                    has_condition_event = False
                     scan = idx
                     while scan >= 0 and events[scan][1] is if_node:
                         epc = events[scan][0]
                         if epc is not None and bytecode[epc] != 0x5B:
-                            has_condition_event = True
+                            found = _find_if_jumpi(bytecode, epc)
+                            if found is not None:
+                                # Validate: the found JUMPI must
+                                # belong to this If, not a parent
+                                # or sibling.  If the AST map maps
+                                # the JUMPI PC to a different If,
+                                # it is a foreign JUMPI — skip it.
+                                mapped = ast_map.get(found)
+                                if mapped is not None:
+                                    mc = _collapse_cov_node(mapped)
+                                    if isinstance(mc, vy_ast.If) and mc is not if_node:
+                                        scan -= 1
+                                        continue
+                                jumpi_pc = found
+                                break
                         scan -= 1
-                    if has_condition_event:
-                        scan = idx
-                        while scan >= 0 and events[scan][1] is if_node:
-                            epc = events[scan][0]
-                            if epc is not None:
-                                found = _find_if_jumpi(bytecode, epc)
-                                if found is not None:
-                                    # Validate: the found JUMPI must
-                                    # belong to this If, not a parent
-                                    # or sibling.  If the AST map maps
-                                    # the JUMPI PC to a different If,
-                                    # it is a foreign JUMPI — skip it.
-                                    mapped = ast_map.get(found)
-                                    if mapped is not None:
-                                        mc = _collapse_cov_node(mapped)
-                                        if (
-                                            isinstance(mc, vy_ast.If)
-                                            and mc is not if_node
-                                        ):
-                                            scan -= 1
-                                            continue
-                                    jumpi_pc = found
-                                    break
-                            scan -= 1
                 if jumpi_pc is None:
                     scan = idx
                     while scan >= 0 and events[scan][1] is if_node:
@@ -536,6 +559,9 @@ class CoverageCollector:
                     # If is being re-entered from a separate call).
                     has_helper_gap = False
                     saw_body = False
+                    body_stmts = set(id(s) for s in if_node.body) | set(
+                        id(s) for s in getattr(if_node, "orelse", [])
+                    )
                     for j in range(idx + 1, len(events)):
                         ej = events[j][1]
                         if isinstance(ej, vy_ast.For):
@@ -544,13 +570,29 @@ class CoverageCollector:
                             if not saw_body:
                                 has_helper_gap = True
                             break
-                        # Check if this event is from the If's body/orelse
-                        for stmt_list in (if_node.body, getattr(if_node, "orelse", [])):
-                            for stmt in stmt_list:
-                                if _is_descendant(events[j][2], stmt):
-                                    saw_body = True
-                                    break
-                            if saw_body:
+                        # Walk up from the raw node to check if any
+                        # ancestor is a direct body/orelse statement.
+                        is_body = False
+                        cur = events[j][2]
+                        while cur is not None:
+                            if id(cur) in body_stmts:
+                                saw_body = True
+                                is_body = True
+                                break
+                            cur = getattr(cur, "_parent", None)
+                        # If this event is not inside the If's
+                        # body/orelse AND belongs to the same
+                        # function, it's a sibling statement
+                        # (e.g. code after the if/else in a loop).
+                        # The If evaluation is complete — stop.
+                        # Don't break for events from different
+                        # functions (internal helper calls) — those
+                        # are helper body events that split the
+                        # condition evaluation.
+                        if not is_body and not isinstance(ej, vy_ast.If):
+                            ej_fn = get_fn_ancestor_from_node(events[j][2])
+                            if_fn = get_fn_ancestor_from_node(if_node)
+                            if ej_fn is if_fn:
                                 break
                     if has_helper_gap:
                         continue

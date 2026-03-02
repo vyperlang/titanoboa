@@ -1101,14 +1101,7 @@ def f(x: uint256) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
-def test_branch_else_pass_compound_condition_both():
-    """else pass + compound condition — both branches hit.
-
-    Regression: with compound conditions (and/or), the backward event
-    scan found a short-circuit JUMPI instead of the decision JUMPI,
-    causing wrong branch direction classification.
-    """
-    source = """\
+SOURCE_ELSE_PASS_COMPOUND_AND = """\
 @external
 def f(x: uint256) -> uint256:
     if (x > 5) and (x < 20):
@@ -1117,7 +1110,28 @@ def f(x: uint256) -> uint256:
         pass
     return 0
 """
-    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(30)))
+
+SOURCE_ELSE_PASS_COMPLEX_OR_AND = """\
+@external
+def f(x: uint256) -> uint256:
+    if ((x == 2) and (x > 5)) or (x == 3):
+        return 1
+    else:
+        pass
+    return 0
+"""
+
+
+def test_branch_else_pass_compound_condition_both():
+    """else pass + compound condition — both branches hit.
+
+    Regression: with compound conditions (and/or), the backward event
+    scan found a short-circuit JUMPI instead of the decision JUMPI,
+    causing wrong branch direction classification.
+    """
+    missing = _check_branch_coverage(
+        SOURCE_ELSE_PASS_COMPOUND_AND, lambda c: (c.f(10), c.f(30))
+    )
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
@@ -1127,19 +1141,10 @@ def test_branch_else_pass_compound_condition_partial():
     Regression: f(30) (false path) was misclassified as true because the
     short-circuit JUMPI was selected instead of the decision JUMPI.
     """
-    source = """\
-@external
-def f(x: uint256) -> uint256:
-    if (x > 5) and (x < 20):
-        return 1
-    else:
-        pass
-    return 0
-"""
-    ast = parse_to_ast(source)
+    ast = parse_to_ast(SOURCE_ELSE_PASS_COMPOUND_AND)
     if_node = ast.get_descendants(vy_ast.If)[0]
     # f(30): x>5 True, x<20 False => false path
-    missing = _check_branch_coverage(source, lambda c: c.f(30))
+    missing = _check_branch_coverage(SOURCE_ELSE_PASS_COMPOUND_AND, lambda c: c.f(30))
     assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
 
 
@@ -1151,33 +1156,19 @@ def test_branch_else_pass_complex_compound_or_and():
     selecting a phantom JUMPI inside the condition instead of the real
     decision JUMPI.
     """
-    source = """\
-@external
-def f(x: uint256) -> uint256:
-    if ((x == 2) and (x > 5)) or (x == 3):
-        return 1
-    else:
-        pass
-    return 0
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.f(3), c.f(1)))
+    missing = _check_branch_coverage(
+        SOURCE_ELSE_PASS_COMPLEX_OR_AND, lambda c: (c.f(3), c.f(1))
+    )
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
 def test_branch_else_pass_complex_compound_or_and_partial():
     """else pass + complex compound ``(A and B) or C`` — true-only partial."""
-    source = """\
-@external
-def f(x: uint256) -> uint256:
-    if ((x == 2) and (x > 5)) or (x == 3):
-        return 1
-    else:
-        pass
-    return 0
-"""
-    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(3))
+    possible, executed, missing = _check_full_branch_coverage(
+        SOURCE_ELSE_PASS_COMPLEX_OR_AND, lambda c: c.f(3)
+    )
     # f(3) hits the true branch; false should be missing
-    ast = parse_to_ast(source)
+    ast = parse_to_ast(SOURCE_ELSE_PASS_COMPLEX_OR_AND)
     if_node = ast.get_descendants(vy_ast.If)[0]
     assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
     assert if_node.lineno in executed, f"Expected true arc executed: {executed}"
@@ -1186,6 +1177,291 @@ def f(x: uint256) -> uint256:
     assert (
         true_target in executed[if_node.lineno]
     ), f"Expected true arc to L{true_target}: {executed}"
+
+
+# --- noop true body (pass/assert True in if body, non-noop else) ---
+
+
+def test_branch_noop_true_body_full():
+    """Noop true body (pass) with non-noop else — all branches covered."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        pass
+    else:
+        y += 1
+        return y
+    return 1
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_noop_true_body_true_only():
+    """Noop true body — only true branch hit, false should be missing."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        pass
+    else:
+        y += 1
+        return y
+    return 1
+"""
+    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(10))
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # True arc should be executed
+    assert if_node.lineno in executed, f"Expected true arc: {executed}"
+    # False arc (else body) should be missing
+    assert if_node.lineno in missing, f"Expected missing false arc: {missing}"
+    false_target = if_node.orelse[0].lineno
+    assert (
+        false_target in missing[if_node.lineno]
+    ), f"Expected false arc to L{false_target}: {missing}"
+
+
+def test_branch_noop_true_body_false_only():
+    """Noop true body — only false branch hit, true should be missing."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        pass
+    else:
+        y += 1
+        return y
+    return 1
+"""
+    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(1))
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # False arc (else body) should be executed
+    false_target = if_node.orelse[0].lineno
+    assert if_node.lineno in executed, f"Expected false arc: {executed}"
+    assert (
+        false_target in executed[if_node.lineno]
+    ), f"Expected false arc to L{false_target}: {executed}"
+    # True arc should be missing
+    assert if_node.lineno in missing, f"Expected missing true arc: {missing}"
+
+
+def test_branch_noop_true_body_assert_true():
+    """assert True in if body (constant-folded away) with non-noop else."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        assert True
+    else:
+        y += 1
+        return y
+    return 1
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_noop_true_body_elif_full():
+    """Noop true body with elif — all branches covered.
+
+    Regression: the compiler shares condition PCs between the outer if
+    and elif, causing interleaved If events.  Phantom outer-If events
+    in the elif code produced wrong arcs and consumed the raw_trace
+    cursor, preventing correct elif classification.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 20:
+        pass
+    elif x > 10:
+        return 2
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(25), c.f(15), c.f(5)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_noop_true_body_elif_outer_true_only():
+    """Noop true body + elif — outer true only, no phantom dual arc.
+
+    Regression: the merge-point JUMPDEST (after the noop body) was
+    mapped to the outer If and triggered a second classification of
+    the same JUMPI, producing a phantom false arc alongside the
+    correct true arc.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 20:
+        pass
+    elif x > 10:
+        return 2
+    return 0
+"""
+    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(25))
+    ast = parse_to_ast(source)
+    outer_if = ast.get_descendants(vy_ast.If)[0]
+    # Only the outer true arc should be executed — no phantom dual arc
+    outer_targets = set(executed.get(outer_if.lineno, []))
+    # true_line for noop body = fallthrough target (return 0 at line 7)
+    assert outer_targets == {
+        7
+    }, f"Expected only outer true arc {{7}}, got {outer_targets}"
+
+
+def test_branch_noop_true_body_elif_inner_true():
+    """Noop true body + elif — elif true arc correctly credited.
+
+    Regression: duplicate outer-If JUMPI classification consumed the
+    raw_trace cursor, causing the elif JUMPI to be unmatched.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 20:
+        pass
+    elif x > 10:
+        return 2
+    return 0
+"""
+    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(15))
+    ast = parse_to_ast(source)
+    inner_if = ast.get_descendants(vy_ast.If)[1]  # elif
+    inner_targets = set(executed.get(inner_if.lineno, []))
+    # elif true arc should target `return 2` at line 6
+    assert (
+        inner_if.body[0].lineno in inner_targets
+    ), f"Expected elif true arc to L{inner_if.body[0].lineno}: {inner_targets}"
+
+
+def test_branch_noop_true_body_fallthrough_else_false_only():
+    """Noop true body with fallthrough (non-return) else — false only.
+
+    Regression: the merge-point JUMPDEST after the if/else body
+    triggered a forward scan that found an unrelated JUMPI, falsely
+    crediting the true arc on false-only runs.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        pass
+    else:
+        y += 1
+    y += 2
+    return y
+"""
+    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(1))
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # Only false arc should be executed
+    false_target = if_node.orelse[0].lineno
+    assert if_node.lineno in executed, f"Expected false arc: {executed}"
+    assert (
+        false_target in executed[if_node.lineno]
+    ), f"Expected false arc to L{false_target}: {executed}"
+    # True arc should be missing
+    assert if_node.lineno in missing, f"Expected missing true arc: {missing}"
+
+
+def test_branch_noop_true_body_fallthrough_else_full():
+    """Noop true body with fallthrough else — all branches covered."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        pass
+    else:
+        y += 1
+    y += 2
+    return y
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_noop_else_in_loop_order_independent():
+    """Noop else in loop — coverage must not depend on call order.
+
+    Regression: when the false branch executed first, the helper-gap
+    detection suppressed the first iteration's If classification
+    because it found the same If in the next iteration without
+    recognizing the sibling statement (s += x) as a scope boundary.
+    """
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if x > 5:
+            s += 1
+        else:
+            pass
+        s += x
+    return s
+"""
+    # Both orderings must produce the same result
+    missing_tf = _check_branch_coverage(source, lambda c: c.f([10, 1]))
+    assert missing_tf == {}, f"[10,1] missing: {missing_tf}"
+    missing_ft = _check_branch_coverage(source, lambda c: c.f([1, 10]))
+    assert missing_ft == {}, f"[1,10] missing: {missing_ft}"
+
+
+def test_branch_noop_body_in_loop_false_only():
+    """Noop true body in loop — false-only should not credit true arc.
+
+    Regression: merge-point JUMPDEST triggered a forward scan in each
+    loop iteration, finding an unrelated JUMPI and falsely crediting
+    the true arc.
+    """
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if x > 5:
+            pass
+        else:
+            s += 1
+        s += x
+    return s
+"""
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.f([1])
+    )
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # Only false arc should be executed
+    assert if_node.lineno in executed, f"Expected false arc: {executed}"
+    assert if_node.lineno in missing, f"Expected missing true arc: {missing}"
+
+
+def test_branch_noop_body_in_loop_full():
+    """Noop true body in loop — both branches covered."""
+    source = """\
+@external
+def f(xs: DynArray[uint256, 10]) -> uint256:
+    s: uint256 = 0
+    for x: uint256 in xs:
+        if x > 5:
+            pass
+        else:
+            s += 1
+        s += x
+    return s
+"""
+    missing = _check_branch_coverage(source, lambda c: c.f([10, 1]))
+    assert missing == {}, f"Missing branch arcs: {missing}"
 
 
 # --- mutation-testing regression: skip-gate, classify_path edge cases ---

@@ -4,6 +4,7 @@ Tests for break, continue, backedge detection, nested loops,
 terminal iteration, and loop-body tail statements.
 """
 
+import pytest
 import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
@@ -160,19 +161,20 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     ), f"Expected if-line {if_node.lineno} in missing: {missing}"
 
 
-def test_branch_compound_condition_break():
-    """Compound condition (and) with break — decision JUMPI is unmapped.
+@pytest.mark.parametrize("keyword", ["break", "continue"])
+def test_branch_compound_condition_break_continue(keyword):
+    """Compound condition (and) with break/continue — decision JUMPI is unmapped.
 
     Regression: _find_if_jumpi picked up the short-circuit JUMPI from
-    the `and` instead of the actual break-decision JUMPI.
+    the `and` instead of the actual break/continue-decision JUMPI.
     """
-    source = """\
+    source = f"""\
 @external
 def f(xs: DynArray[uint256, 10]) -> uint256:
     s: uint256 = 0
     for x: uint256 in xs:
         if (x != 2) and (x >= 25):
-            break
+            {keyword}
         s += x
     return s
 """
@@ -180,24 +182,9 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
-def test_branch_compound_condition_continue():
-    """Compound condition (and) with continue — decision JUMPI is unmapped."""
-    source = """\
-@external
-def f(xs: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if (x != 2) and (x >= 25):
-            continue
-        s += x
-    return s
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.f([25]), c.f([0])))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_compound_condition_break_partial_false_only():
-    """Compound `and` + break, false-only: true arc must NOT be recorded.
+@pytest.mark.parametrize("keyword", ["break", "continue"])
+def test_branch_compound_condition_break_continue_partial_false_only(keyword):
+    """Compound `and` + break/continue, false-only: true arc must NOT be recorded.
 
     Mutation regression (if_run_skip_gate): when the skip-gate for
     consecutive If events is disabled, intermediate condition events
@@ -208,43 +195,13 @@ def test_branch_compound_condition_break_partial_false_only():
     (x >= 25) is False → decision JUMPI not taken → false path.
     Only the false arc should be reported.
     """
-    source = """\
+    source = f"""\
 @external
 def f(xs: DynArray[uint256, 10]) -> uint256:
     s: uint256 = 0
     for x: uint256 in xs:
         if (x != 2) and (x >= 25):
-            break
-        s += x
-    return s
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    # For break in a for loop, the true arc target is the post-loop statement
-    # (or fn exit).  The false arc target is the for-loop header (backedge).
-
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.f([10])
-    )
-    # Only false branch taken — true arc must be missing
-    assert (
-        if_node.lineno in missing
-    ), f"Expected if-line {if_node.lineno} in missing (false-only): {missing}"
-
-
-def test_branch_compound_condition_continue_partial_false_only():
-    """Compound `and` + continue, false-only: true arc must NOT be recorded.
-
-    Same as test_branch_compound_condition_break_partial_false_only
-    but for continue instead of break.
-    """
-    source = """\
-@external
-def f(xs: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if (x != 2) and (x >= 25):
-            continue
+            {keyword}
         s += x
     return s
 """
@@ -859,21 +816,22 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
-def test_branch_compound_break_triple_and_wide_gap():
-    """3-way compound ``and`` + break — JUMPI >8 bytes from last event PC.
+@pytest.mark.parametrize("keyword", ["break", "continue"])
+def test_branch_compound_triple_and_wide_gap(keyword):
+    """3-way compound ``and`` + break/continue — JUMPI >8 bytes from last event PC.
 
     Mutation regression (scan_limit): when _JUMPI_SCAN_LIMIT is reduced
     to 8, _find_if_jumpi fails because the 3-way ``and`` produces a
     wider bytecode gap (~19 bytes) between the last condition event
     and the decision JUMPI.
     """
-    source = """\
+    source = f"""\
 @external
 def f(xs: DynArray[uint256, 10], a: uint256, b: uint256, c: uint256) -> uint256:
     s: uint256 = 0
     for x: uint256 in xs:
         if (x > a) and (x < b) and (x != c):
-            break
+            {keyword}
         s += x
     return s
 """
@@ -886,47 +844,6 @@ def f(xs: DynArray[uint256, 10], a: uint256, b: uint256, c: uint256) -> uint256:
     )
     assert missing == {}, f"Missing branch arcs: {missing}"
 
-    # Partial: true-only (break taken)
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.f([50], 10, 100, 0)
-    )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert (
-        if_node.lineno in missing
-    ), f"Expected false arc missing for true-only: {missing}"
-
-    # Partial: false-only (no break)
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.f([5], 10, 100, 0)
-    )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert (
-        if_node.lineno in missing
-    ), f"Expected true arc missing for false-only: {missing}"
-
-
-def test_branch_compound_continue_triple_and():
-    """3-way compound ``and`` + continue — wide JUMPI gap.
-
-    Same bytecode gap issue as break with 3-way ``and``.
-    """
-    source = """\
-@external
-def f(xs: DynArray[uint256, 10], a: uint256, b: uint256, c: uint256) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if (x > a) and (x < b) and (x != c):
-            continue
-        s += x
-    return s
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-
-    # Both branches
-    missing = _check_branch_coverage(source, lambda c: (c.f([50, 5], 10, 100, 0)))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
     # Partial: true-only
     possible, executed, missing = _check_full_branch_coverage(
         source, lambda c: c.f([50], 10, 100, 0)
@@ -935,3 +852,12 @@ def f(xs: DynArray[uint256, 10], a: uint256, b: uint256, c: uint256) -> uint256:
     assert (
         if_node.lineno in missing
     ), f"Expected false arc missing for true-only: {missing}"
+
+    # Partial: false-only
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.f([5], 10, 100, 0)
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        if_node.lineno in missing
+    ), f"Expected true arc missing for false-only: {missing}"
