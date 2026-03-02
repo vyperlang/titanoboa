@@ -107,7 +107,11 @@ def _check_full_branch_coverage(vyper_source, calls_fn):
     """Return (possible_arcs, executed_arcs, missing_arcs) for branch coverage."""
     with _coverage_session(vyper_source, calls_fn) as analysis:
         return (
-            set(analysis.arc_possibilities()),
+            set(
+                analysis.arc_possibilities()
+                if callable(analysis.arc_possibilities)
+                else analysis.arc_possibilities
+            ),
             dict(analysis.executed_branch_arcs()),
             dict(analysis.missing_branch_arcs()),
         )
