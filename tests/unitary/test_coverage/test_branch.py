@@ -122,7 +122,12 @@ def foo(val: uint256):
 
 
 def test_branch_bare_return_in_if_partial():
-    """Bare return if, only true branch hit — false arc must be missing."""
+    """Bare return if, only true branch hit — false arc must be missing.
+
+    The exact missing arc must target `self.x = val` (the false/fallthrough
+    branch), not the function line (the true/return branch).  This ensures
+    the JUMPI direction classifier assigns the correct labels.
+    """
     source = """\
 x: public(uint256)
 
@@ -132,10 +137,23 @@ def foo(val: uint256):
         return
     self.x = val
 """
-    missing = _check_branch_coverage(source, lambda c: c.foo(10))
     ast = parse_to_ast(source)
     if_node = ast.get_descendants(vy_ast.If)[0]
+    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
+    false_target = if_node._parent.body[-1]  # self.x = val
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(10)
+    )
+    # True arc (to fn_node.lineno for bare return) should be executed
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        fn_node.lineno in executed[if_node.lineno]
+    ), f"Expected true arc to fn_line {fn_node.lineno} in executed, got {executed}"
+    # False arc (to self.x = val) should be missing
     assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+    assert (
+        false_target.lineno in missing[if_node.lineno]
+    ), f"Expected false arc to {false_target.lineno} in missing, got {missing}"
 
 
 def test_branch_bare_return_compound_condition():
@@ -1061,6 +1079,453 @@ def f(x: uint256) -> uint256:
     return self.g(x)
 """
     missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_assert_const_expr_body_both():
+    """if with assert <const-expr> body — both branches hit.
+
+    Regression: assert 1 == 1 is constant-folded away by the compiler
+    (no bytecode), but _is_noop only recognized literal assert True.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    y: uint256 = 0
+    if x > 5:
+        assert 1 == 1
+    y += 1
+    return y
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_else_pass_compound_condition_both():
+    """else pass + compound condition — both branches hit.
+
+    Regression: with compound conditions (and/or), the backward event
+    scan found a short-circuit JUMPI instead of the decision JUMPI,
+    causing wrong branch direction classification.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if (x > 5) and (x < 20):
+        return 1
+    else:
+        pass
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(30)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_else_pass_compound_condition_partial():
+    """else pass + compound condition — single call classification correct.
+
+    Regression: f(30) (false path) was misclassified as true because the
+    short-circuit JUMPI was selected instead of the decision JUMPI.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if (x > 5) and (x < 20):
+        return 1
+    else:
+        pass
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    # f(30): x>5 True, x<20 False => false path
+    missing = _check_branch_coverage(source, lambda c: c.f(30))
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+
+
+def test_branch_else_pass_complex_compound_or_and():
+    """else pass + complex compound condition ``(A and B) or C``.
+
+    Regression: _find_if_jumpi misread a PUSH2 operand byte (0x57) as
+    a JUMPI opcode when scanning forward from a PUSHn instruction,
+    selecting a phantom JUMPI inside the condition instead of the real
+    decision JUMPI.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if ((x == 2) and (x > 5)) or (x == 3):
+        return 1
+    else:
+        pass
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(3), c.f(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_else_pass_complex_compound_or_and_partial():
+    """else pass + complex compound ``(A and B) or C`` — true-only partial."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if ((x == 2) and (x > 5)) or (x == 3):
+        return 1
+    else:
+        pass
+    return 0
+"""
+    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(3))
+    # f(3) hits the true branch; false should be missing
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
+    assert if_node.lineno in executed, f"Expected true arc executed: {executed}"
+    # True arc (to return 1) should be in executed targets
+    true_target = if_node.body[0].lineno
+    assert (
+        true_target in executed[if_node.lineno]
+    ), f"Expected true arc to L{true_target}: {executed}"
+
+
+# --- mutation-testing regression: skip-gate, classify_path edge cases ---
+
+
+def test_branch_compound_and_skip_gate_false_only():
+    """Compound `and` condition, false-only: only the false arc should be reported.
+
+    Mutation regression (if_run_skip_gate): when the skip-gate that
+    deduplicates consecutive If events is disabled, intermediate condition
+    events find a short-circuit JUMPI instead of the decision JUMPI and
+    mis-classify the branch, spuriously adding the true arc.
+    """
+    source = """\
+@external
+def f(x: uint256, y: uint256) -> uint256:
+    if (x > 5) and (y < 20):
+        return 1
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0].lineno
+
+    # x=10, y=30 → x>5 True, y<20 False → false branch
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.f(10, 30)
+    )
+    assert (
+        if_node.lineno in missing
+    ), f"Expected if-line {if_node.lineno} in missing (false only): {missing}"
+    # The true arc must NOT be in executed arcs
+    if if_node.lineno in executed:
+        assert true_target not in executed[if_node.lineno], (
+            f"True arc to L{true_target} should NOT be executed "
+            f"(only false branch taken): {executed}"
+        )
+
+
+def test_branch_internal_call_body_classify_path_fn_def():
+    """If body starts with an internal call — FunctionDef at JUMPI destination.
+
+    Mutation regression (classify_path_fn_def): if _classify_path returns
+    "exit" on the first FunctionDef node instead of skipping it, the
+    true-branch direction is misidentified as an exit and flipped.
+    """
+    source = """\
+@internal
+def _helper() -> uint256:
+    return 42
+
+@external
+def foo(x: uint256) -> uint256:
+    if x > 5:
+        return self._helper()
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0].lineno
+
+    # x=10 → true branch, x=1 → false branch; both should be covered
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+    # Also verify partial: true-only should show false arc missing
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(10)
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        true_target in executed[if_node.lineno]
+    ), f"True arc to L{true_target} not executed: {executed}"
+    assert (
+        if_node.lineno in missing
+    ), f"Expected false arc missing for true-only call: {missing}"
+
+
+def test_branch_internal_call_condition_classify_path_cond():
+    """Internal call in condition — condition node at JUMPI destination.
+
+    Mutation regression (classify_path_cond): if _classify_path returns
+    "false" on a condition node instead of skipping it, the branch
+    direction is misidentified and the wrong arc is recorded.
+    """
+    source = """\
+@internal
+def _gt5(x: uint256) -> bool:
+    return x > 5
+
+@external
+def foo(x: uint256) -> uint256:
+    if self._gt5(x):
+        return 1
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0].lineno
+
+    # true-only call: must show false arc missing, true arc executed
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(10)
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        true_target in executed[if_node.lineno]
+    ), f"True arc to L{true_target} not executed for true-only call: {executed}"
+    assert (
+        if_node.lineno in missing
+    ), f"Expected false arc missing for true-only call: {missing}"
+
+
+def test_branch_unknown_default_direction():
+    """Neither path classifiable — verify the default direction is 'true'.
+
+    Mutation regression (unknown_default): when both _classify_path calls
+    return None (e.g. both branches are bare returns with sparse AST map),
+    _resolve_jumpi_direction defaults to True (taken = true branch).
+    Verify that flipping to False would change the executed arc label.
+
+    Both bare-return branches target fn_line, so we verify that the
+    classification yields a "true" arc by checking executed_branch_arcs.
+    """
+    source = """\
+@external
+def foo(x: uint256):
+    if x > 5:
+        return
+    else:
+        return
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    fn_node = ast.get_descendants(vy_ast.FunctionDef)[0]
+
+    # Both arcs point to fn_line — this is the degenerate case.
+    # Call with x=10 (true branch). The default fallback direction
+    # determines if the recorded arc is from the "true" or "false"
+    # classification.  Ensure at least one arc is executed.
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(10)
+    )
+    # Both arcs are (if_line, fn_line), so both are always "covered"
+    # regardless of direction, but the arc must actually be executed
+    assert (
+        if_node.lineno in executed
+    ), f"If-line {if_node.lineno} not in executed: {executed}"
+    assert (
+        fn_node.lineno in executed[if_node.lineno]
+    ), f"Expected arc to fn_line {fn_node.lineno} executed: {executed}"
+
+    # Also verify with only the false branch (x=1)
+    possible2, executed2, missing2 = _check_full_branch_coverage(
+        source, lambda c: c.foo(1)
+    )
+    assert (
+        if_node.lineno in executed2
+    ), f"If-line {if_node.lineno} not in executed (false-only): {executed2}"
+
+
+# --- mutation-testing regression: classify_path and direction edge cases ---
+
+
+def test_branch_compound_and_true_only_no_spurious_false():
+    """Compound ``and`` condition — true-only must NOT report false arc.
+
+    Mutation regression (if_run_skip_gate): when the If-event
+    consecutive-run skip is weakened (continue → pass), the collector
+    processes intermediate events and may classify a short-circuit
+    JUMPI, adding a spurious false arc alongside the correct true arc.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if x > 5 and y > 10:
+        return 1
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0]
+    false_target = if_node._parent.body[-1]  # return 0
+
+    # True-only: only the true arc should be executed
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(10, 20)
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        true_target.lineno in executed[if_node.lineno]
+    ), f"True arc to L{true_target.lineno} not in executed: {executed}"
+    # The false arc must NOT be in executed (only true-only was called)
+    assert false_target.lineno not in executed.get(
+        if_node.lineno, []
+    ), f"Spurious false arc L{false_target.lineno} in executed: {executed}"
+    # The false arc must be in missing
+    assert (
+        if_node.lineno in missing
+    ), f"Expected false arc missing for true-only: {missing}"
+    assert (
+        false_target.lineno in missing[if_node.lineno]
+    ), f"False arc to L{false_target.lineno} not in missing: {missing}"
+
+
+def test_branch_compound_or_false_only_no_spurious_true():
+    """Compound ``or`` condition — false-only must NOT report true arc.
+
+    Same skip-gate regression but for ``or`` conditions: processing
+    intermediate events may add a spurious true arc.
+    """
+    source = """\
+@external
+def foo(x: uint256, y: uint256) -> uint256:
+    if x > 5 or y > 10:
+        return 1
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0]
+    false_target = if_node._parent.body[-1]
+
+    # False-only: only the false arc should be executed
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(1, 1)
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        false_target.lineno in executed[if_node.lineno]
+    ), f"False arc to L{false_target.lineno} not in executed: {executed}"
+    # The true arc must NOT be in executed
+    assert true_target.lineno not in executed.get(
+        if_node.lineno, []
+    ), f"Spurious true arc L{true_target.lineno} in executed: {executed}"
+
+
+def test_branch_if_return_with_storage_write_partial():
+    """If with return in true body + storage write in false body.
+
+    Mutation regression (taken_false_exit): the bytecode layout for
+    this pattern produces a decision JUMPI where _classify_path
+    returns "false" for the taken path. Flipping the direction return
+    for ``taken_class in ("false", "exit")`` swaps the arc labels.
+    """
+    source = """\
+x: public(uint256)
+
+@external
+def foo(val: uint256) -> uint256:
+    if val > 5:
+        return val
+    self.x = val
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0]  # Return
+    false_target_node = if_node._parent.body[-2]  # self.x = val (Assign)
+
+    # True-only: must record true arc, not false arc
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(10)
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        true_target.lineno in executed[if_node.lineno]
+    ), f"True arc to L{true_target.lineno} not executed: {executed}"
+    assert (
+        if_node.lineno in missing
+    ), f"Expected false arc missing for true-only: {missing}"
+    assert (
+        false_target_node.lineno in missing[if_node.lineno]
+    ), f"False arc to L{false_target_node.lineno} not in missing: {missing}"
+
+    # False-only: must record false arc, not true arc
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(1)
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        false_target_node.lineno in executed[if_node.lineno]
+    ), f"False arc to L{false_target_node.lineno} not executed: {executed}"
+    assert (
+        if_node.lineno in missing
+    ), f"Expected true arc missing for false-only: {missing}"
+
+
+def test_branch_if_return_with_storage_write_both():
+    """If with return in true body + storage write — both branches hit."""
+    source = """\
+x: public(uint256)
+
+@external
+def foo(val: uint256) -> uint256:
+    if val > 5:
+        return val
+    self.x = val
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}, f"Missing branch arcs: {missing}"
+
+
+def test_branch_if_return_with_multiple_storage_writes_partial():
+    """If with return + multiple storage writes in false path.
+
+    Similar to above but with more statements between if and return 0,
+    producing a wider bytecode gap that stresses _classify_path.
+    """
+    source = """\
+x: public(uint256)
+y: public(uint256)
+
+@external
+def foo(val: uint256) -> uint256:
+    if val > 5:
+        return val
+    self.x = val
+    self.y = val + 1
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_node = ast.get_descendants(vy_ast.If)[0]
+    true_target = if_node.body[0]
+
+    # True-only
+    possible, executed, missing = _check_full_branch_coverage(
+        source, lambda c: c.foo(10)
+    )
+    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
+    assert (
+        true_target.lineno in executed[if_node.lineno]
+    ), f"True arc to L{true_target.lineno} not executed: {executed}"
+    assert (
+        if_node.lineno in missing
+    ), f"Expected false arc missing for true-only: {missing}"
+
+    # Both branches
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 

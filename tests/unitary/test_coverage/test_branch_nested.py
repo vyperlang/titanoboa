@@ -389,3 +389,57 @@ def foo(x: uint256) -> uint256:
     assert (
         len(missing[inner_if.lineno]) == 2
     ), f"Expected 2 missing arcs from elif, got {missing[inner_if.lineno]}"
+
+
+# --- nested if with no-op else ---
+
+
+def test_branch_nested_noop_else_no_phantom():
+    """Nested if with noop else — outer-true-only must not credit inner branch.
+
+    Regression: the AST map shares a calldataload PC between inner and
+    outer If conditions.  When only the outer true branch executes, a
+    phantom inner-If event appears, and the noop-else fallback incorrectly
+    selects the outer If's JUMPI for the inner If, producing a phantom arc.
+    """
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        if x == 2:
+            return 2
+        else:
+            pass
+    return 0
+"""
+    ast = parse_to_ast(source)
+    if_nodes = ast.get_descendants(vy_ast.If)
+    inner_if = if_nodes[1]  # if x == 2
+
+    possible, executed, missing = _check_full_branch_coverage(source, lambda c: c.f(10))
+    # Only outer-true should be executed.  Inner if must have NO executed arcs.
+    inner_targets = set(executed.get(inner_if.lineno, []))
+    assert inner_targets == set(), (
+        f"Inner if@L{inner_if.lineno} should have no executed arcs "
+        f"(phantom), got: {inner_targets}"
+    )
+
+
+def test_branch_nested_noop_else_full():
+    """Nested if with noop else — all branches exercised."""
+    source = """\
+@external
+def f(x: uint256) -> uint256:
+    if x > 5:
+        return 1
+    else:
+        if x == 2:
+            return 2
+        else:
+            pass
+    return 0
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(2), c.f(0)))
+    assert missing == {}, f"Missing branch arcs: {missing}"

@@ -63,7 +63,16 @@ def _build_jumpi_table(bytecode: bytes) -> dict[int, tuple[int | None, int]]:
 
 def _find_if_jumpi(bytecode: bytes, from_pc: int) -> Optional[int]:
     """Scan bytecode forward from from_pc to find the nearest JUMPI."""
-    scan = from_pc + 1
+    # Advance past the full instruction at from_pc.  PUSHn opcodes are
+    # multi-byte: ``PUSH1 xx`` = 2 bytes, ``PUSH2 xx xx`` = 3 bytes, etc.
+    # Starting at ``from_pc + 1`` would land inside the operand, causing
+    # data bytes (e.g. 0x57 inside ``PUSH2 0x0057``) to be misread as a
+    # JUMPI opcode.
+    op0 = bytecode[from_pc]
+    if 0x5F <= op0 <= 0x7F:
+        scan = from_pc + (op0 - 0x5F) + 1
+    else:
+        scan = from_pc + 1
     limit = min(from_pc + _JUMPI_SCAN_LIMIT, len(bytecode))
     while scan < limit:
         if bytecode[scan] == _JUMPI:
@@ -140,6 +149,40 @@ def _is_null_return(ast_node: vy_ast.VyperNode) -> bool:
     return False
 
 
+def _is_const_expr(node: vy_ast.VyperNode) -> bool:
+    """Return True if *node* is a compile-time constant expression.
+
+    The Vyper compiler constant-folds expressions composed entirely of
+    literals and operators (e.g. ``1 == 1``, ``True and True``).
+    """
+    if isinstance(node, (vy_ast.NameConstant, vy_ast.Int, vy_ast.Decimal, vy_ast.Str)):
+        return True
+    if isinstance(node, vy_ast.Compare):
+        return _is_const_expr(node.left) and _is_const_expr(node.right)
+    if isinstance(node, vy_ast.BoolOp):
+        return all(_is_const_expr(v) for v in node.values)
+    if isinstance(node, vy_ast.UnaryOp):
+        return _is_const_expr(node.operand)
+    if isinstance(node, vy_ast.BinOp):
+        return _is_const_expr(node.left) and _is_const_expr(node.right)
+    return False
+
+
+def _is_noop(ast_node: vy_ast.VyperNode) -> bool:
+    """Return True if the statement generates no bytecode.
+
+    ``pass`` compiles to nothing.  ``assert <const-true-expr>`` (e.g.
+    ``assert True``, ``assert 1 == 1``) is constant-folded away by the
+    compiler.  Both are invisible in the AST source map, so they cannot
+    serve as branch-classification anchors.
+    """
+    if isinstance(ast_node, vy_ast.Pass):
+        return True
+    if isinstance(ast_node, vy_ast.Assert) and _is_const_expr(ast_node.test):
+        return True
+    return False
+
+
 def _branch_targets(
     if_node: vy_ast.If, fn_node: vy_ast.FunctionDef
 ) -> tuple[int, int, Optional[vy_ast.VyperNode], Optional[vy_ast.VyperNode]]:
@@ -152,6 +195,12 @@ def _branch_targets(
     if _is_null_return(first_body):
         true_line = fn_node.lineno
         true_stmt = None
+    elif all(_is_noop(s) for s in if_node.body):
+        # Body is entirely no-op (pass / assert True) — no bytecode
+        # generated, so the branch falls through to the same place as
+        # the false branch.  Use the fallthrough target but keep the
+        # reported line as the first no-op statement.
+        true_line, true_stmt = _find_false_target(if_node, fn_node)
     else:
         true_line = first_body.lineno
         true_stmt = first_body
@@ -161,6 +210,8 @@ def _branch_targets(
         first_else = if_node.orelse[0]
         if _is_null_return(first_else):
             false_line, false_stmt = fn_node.lineno, None
+        elif all(_is_noop(s) for s in if_node.orelse):
+            false_line, false_stmt = _find_false_target(if_node, fn_node)
         else:
             false_line, false_stmt = first_else.lineno, first_else
     else:
@@ -313,6 +364,18 @@ def _resolve_jumpi_direction(
         return True
     if fall_class == "true":
         return False
+
+    # When true_stmt is None (bare return / null return), the true
+    # branch exits the function.  _classify_path returns "exit" for
+    # such paths.  Distinguish "exit = true branch" from "exit =
+    # past the If" by checking true_stmt: if the true body has no
+    # classifiable statement, an exit path IS the true branch.
+    if true_stmt is None:
+        if taken_class == "exit":
+            return True
+        if fall_class == "exit":
+            return False
+
     if taken_class in ("false", "exit"):
         return False
     if fall_class in ("false", "exit"):
@@ -393,20 +456,65 @@ class CoverageCollector:
 
                 # Find the decision JUMPI for this If.
                 #
-                # For break/continue/bare-return, the decision JUMPI
-                # may be unmapped (compound conditions produce mapped
-                # short-circuit JUMPIs but the final decision is after
-                # all mapped events).  Try forward scan first — it
-                # finds the JUMPI closest to the body, which is always
-                # the decision.  Fall back to backward event scan for
-                # normal bodies where the JUMPI is mapped.
+                # For break/continue/bare-return/no-op bodies, the
+                # decision JUMPI may be unmapped (compound conditions
+                # produce mapped short-circuit JUMPIs but the final
+                # decision is after all mapped events).  Try forward
+                # scan first — it finds the JUMPI closest to the body,
+                # which is always the decision.  Fall back to backward
+                # event scan for normal bodies where the JUMPI is
+                # mapped, then try forward scan from each event PC as
+                # a last resort (handles no-op/pass else branches
+                # where the JUMPI sits in an unmapped gap between
+                # condition events and a merge-point JUMPDEST).
                 jumpi_pc = None
                 body0 = if_node.body[0]
+                orelse = getattr(if_node, "orelse", [])
+                noop_else = orelse and all(_is_noop(s) for s in orelse)
                 if pc is not None and (
                     isinstance(body0, (vy_ast.Break, vy_ast.Continue))
                     or _is_null_return(body0)
+                    or _is_noop(body0)
                 ):
                     jumpi_pc = _find_if_jumpi(bytecode, pc)
+                # Noop-else forward-scan: when the else body is a
+                # no-op, the decision JUMPI may be unmapped.  For
+                # compound conditions (and/or), the backward scan
+                # below would find a short-circuit JUMPI instead of
+                # the decision.  Try this fallback FIRST to avoid
+                # that misselection.
+                if jumpi_pc is None and noop_else:
+                    has_condition_event = False
+                    scan = idx
+                    while scan >= 0 and events[scan][1] is if_node:
+                        epc = events[scan][0]
+                        if epc is not None and bytecode[epc] != 0x5B:
+                            has_condition_event = True
+                        scan -= 1
+                    if has_condition_event:
+                        scan = idx
+                        while scan >= 0 and events[scan][1] is if_node:
+                            epc = events[scan][0]
+                            if epc is not None:
+                                found = _find_if_jumpi(bytecode, epc)
+                                if found is not None:
+                                    # Validate: the found JUMPI must
+                                    # belong to this If, not a parent
+                                    # or sibling.  If the AST map maps
+                                    # the JUMPI PC to a different If,
+                                    # it is a foreign JUMPI — skip it.
+                                    mapped = ast_map.get(found)
+                                    if mapped is not None:
+                                        mc = _collapse_cov_node(mapped)
+                                        if (
+                                            isinstance(mc, vy_ast.If)
+                                            and mc is not if_node
+                                        ):
+                                            scan -= 1
+                                            continue
+                                    jumpi_pc = found
+                                    break
+                            scan -= 1
                 if jumpi_pc is None:
                     scan = idx
                     while scan >= 0 and events[scan][1] is if_node:
