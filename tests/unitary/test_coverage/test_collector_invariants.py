@@ -1,4 +1,4 @@
-"""Invariant tests for CoverageCollector.
+"""Invariant tests for BranchCollector.
 
 Verify that executed arcs ⊆ possible arcs and that branch
 classification is correct across high-risk scenarios.
