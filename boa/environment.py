@@ -10,10 +10,9 @@ import warnings
 from typing import Any, Optional, TypeAlias
 
 import eth.constants as constants
-import vyper.ast as vy_ast
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
-from boa.coverage import CoverageCollector, _collapse_cov_node
+from boa.coverage import CoverageCollector, _build_coverage_events
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -354,82 +353,8 @@ class Env:
         # perf: don't trace if contract is None
         if contract is not None and hasattr(contract, "source_map"):
             ast_map = contract.source_map["pc_raw_ast_map"]
-
             raw_trace = list(computation.code._trace)
-
-            segments = []
-            current_file = None
-            current_events = []  # list of (pc, collapsed_node, raw_node)
-
-            # Track FunctionDef gaps to detect for-loop backedges.
-            # A backward PC jump during a FunctionDef gap means the
-            # EVM jumped back to the loop header (iteration boundary).
-            # Intra-expression FunctionDef PCs (e.g. If branch jumps)
-            # never involve a backward PC jump.
-            max_gap_pc = 0
-            gap_had_backward_jump = False
-
-            # Track max PC for non-FunctionDef nodes to detect
-            # inner-loop backedges that don't cross a FunctionDef gap.
-            max_node_pc = 0
-
-            for pc in raw_trace:
-                if (node := ast_map.get(pc)) is not None:
-                    raw_node = node
-                    node = _collapse_cov_node(node)
-                    if node is None:
-                        if pc < max_gap_pc:
-                            gap_had_backward_jump = True
-                        max_gap_pc = max(max_gap_pc, pc)
-                        continue
-                    fname = node.module_node.resolved_path
-                    if fname != current_file:
-                        if current_events:
-                            segments.append((current_file, current_events))
-                        current_file = fname
-                        current_events = []
-                        max_node_pc = 0
-                        max_gap_pc = 0
-                        gap_had_backward_jump = False
-                    # Detect for-loop backedge: a backward PC jump
-                    # during the FunctionDef gap means the EVM looped
-                    # back.  Insert the For-header so coverage sees
-                    # the backedge arc.
-                    if (
-                        gap_had_backward_jump
-                        and current_events
-                        and node is current_events[-1][1]
-                        and isinstance(getattr(node, "_parent", None), vy_ast.For)
-                    ):
-                        current_events.append((None, node._parent, node._parent))
-                        max_node_pc = pc  # reset so condition PCs don't re-trigger
-                    # Detect inner-loop backedge: same node at a lower
-                    # PC without a FunctionDef gap in between.
-                    elif (
-                        pc < max_node_pc
-                        and current_events
-                        and node is current_events[-1][1]
-                        and isinstance(getattr(node, "_parent", None), vy_ast.For)
-                    ):
-                        current_events.append((None, node._parent, node._parent))
-                        max_node_pc = pc  # reset so condition PCs don't re-trigger
-                    max_gap_pc = 0
-                    gap_had_backward_jump = False
-                    # Only update max_node_pc for consecutive events of
-                    # the same collapsed node.  Internal function calls
-                    # interleave helper body nodes (at high PCs) between
-                    # runs of the same If node; inflating max_node_pc
-                    # across different nodes would cause false inner-loop
-                    # backedge detection on the return to lower PCs.
-                    if current_events and node is current_events[-1][1]:
-                        max_node_pc = max(max_node_pc, pc)
-                    else:
-                        max_node_pc = pc
-                    current_events.append((pc, node, raw_node))
-
-            if current_events:
-                segments.append((current_file, current_events))
-
+            segments = _build_coverage_events(raw_trace, ast_map)
             bytecode = computation.code._raw_code_bytes
             trace_id = collector.next_trace_id()
             for filename, events in segments:

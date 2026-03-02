@@ -373,8 +373,6 @@ def _resolve_jumpi_direction(
                 continue  # FunctionDef
             if collapsed is if_node:
                 continue  # If-mapped JUMPDEST
-            if _is_descendant(node, if_node.test):
-                return "false"  # Condition node
             if true_stmt is not None and _is_descendant(node, true_stmt):
                 return "true"
             if false_stmt is not None and _is_descendant(node, false_stmt):
@@ -415,6 +413,211 @@ def _resolve_jumpi_direction(
         return False
 
     # Neither path classifiable — assume taken = false
+    return False
+
+
+def _build_coverage_events(raw_trace, ast_map):
+    """Build coverage event segments from a raw PC trace.
+
+    Returns list of (filename, events) tuples where events is
+    list of (pc, collapsed_node, raw_node).
+    """
+    segments = []
+    current_file = None
+    current_events = []  # list of (pc, collapsed_node, raw_node)
+
+    # Track FunctionDef gaps to detect for-loop backedges.
+    # A backward PC jump during a FunctionDef gap means the
+    # EVM jumped back to the loop header (iteration boundary).
+    # Intra-expression FunctionDef PCs (e.g. If branch jumps)
+    # never involve a backward PC jump.
+    max_gap_pc = 0
+    gap_had_backward_jump = False
+
+    # Track max PC for non-FunctionDef nodes to detect
+    # inner-loop backedges that don't cross a FunctionDef gap.
+    max_node_pc = 0
+
+    for pc in raw_trace:
+        if (node := ast_map.get(pc)) is not None:
+            raw_node = node
+            node = _collapse_cov_node(node)
+            if node is None:
+                if pc < max_gap_pc:
+                    gap_had_backward_jump = True
+                max_gap_pc = max(max_gap_pc, pc)
+                continue
+            fname = node.module_node.resolved_path
+            if fname != current_file:
+                if current_events:
+                    segments.append((current_file, current_events))
+                current_file = fname
+                current_events = []
+                max_node_pc = 0
+                max_gap_pc = 0
+                gap_had_backward_jump = False
+            # Detect for-loop backedge: a backward PC jump
+            # during the FunctionDef gap means the EVM looped
+            # back.  Insert the For-header so coverage sees
+            # the backedge arc.
+            if (
+                gap_had_backward_jump
+                and current_events
+                and node is current_events[-1][1]
+                and isinstance(getattr(node, "_parent", None), vy_ast.For)
+            ):
+                current_events.append((None, node._parent, node._parent))
+                max_node_pc = pc  # reset so condition PCs don't re-trigger
+            # Detect inner-loop backedge: same node at a lower
+            # PC without a FunctionDef gap in between.
+            elif (
+                pc < max_node_pc
+                and current_events
+                and node is current_events[-1][1]
+                and isinstance(getattr(node, "_parent", None), vy_ast.For)
+            ):
+                current_events.append((None, node._parent, node._parent))
+                max_node_pc = pc  # reset so condition PCs don't re-trigger
+            max_gap_pc = 0
+            gap_had_backward_jump = False
+            # Only update max_node_pc for consecutive events of
+            # the same collapsed node.  Internal function calls
+            # interleave helper body nodes (at high PCs) between
+            # runs of the same If node; inflating max_node_pc
+            # across different nodes would cause false inner-loop
+            # backedge detection on the return to lower PCs.
+            if current_events and node is current_events[-1][1]:
+                max_node_pc = max(max_node_pc, pc)
+            else:
+                max_node_pc = pc
+            current_events.append((pc, node, raw_node))
+
+    if current_events:
+        segments.append((current_file, current_events))
+
+    return segments
+
+
+def _find_jumpi_forward_scan(
+    bytecode, pc, if_node, ast_map, is_special_body, noop_body, skip_fwd
+):
+    """Forward scan from event PC for special/noop bodies.
+
+    For break/continue/bare-return/no-op bodies, the decision JUMPI
+    may be unmapped.  Forward scan finds the JUMPI closest to the body.
+    Returns JUMPI PC or None.
+    """
+    if skip_fwd or pc is None or not (is_special_body or noop_body):
+        return None
+    # The event PC may already BE the decision JUMPI
+    if bytecode[pc] == _JUMPI:
+        found = pc
+    else:
+        found = _find_if_jumpi(bytecode, pc)
+    # Validate: the found JUMPI must belong to this If, not a
+    # different one (e.g. an elif's JUMPI found via forward scan
+    # from a shared PC).
+    if found is not None:
+        mapped = ast_map.get(found)
+        if mapped is not None:
+            mc = _collapse_cov_node(mapped)
+            if isinstance(mc, vy_ast.If) and mc is not if_node:
+                found = None
+    return found
+
+
+def _find_jumpi_noop_backward(bytecode, events, idx, if_node, ast_map):
+    """Backward event scan for noop-else/noop-body branches.
+
+    When the body or else is a no-op, the decision JUMPI may be unmapped.
+    Scans backward through earlier event PCs to find the JUMPI.
+    Returns JUMPI PC or None.
+    """
+    scan = idx
+    while scan >= 0 and events[scan][1] is if_node:
+        epc = events[scan][0]
+        if epc is not None and bytecode[epc] != 0x5B:
+            if bytecode[epc] == _JUMPI:
+                found = epc
+            else:
+                found = _find_if_jumpi(bytecode, epc)
+            if found is not None:
+                # Validate: the found JUMPI must belong to this If,
+                # not a parent or sibling.
+                mapped = ast_map.get(found)
+                if mapped is not None:
+                    mc = _collapse_cov_node(mapped)
+                    if isinstance(mc, vy_ast.If) and mc is not if_node:
+                        scan -= 1
+                        continue
+                return found
+        scan -= 1
+    return None
+
+
+def _find_jumpi_backward(bytecode, events, idx, if_node, ast_map):
+    """General backward scan skipping BoolOp-mapped JUMPIs.
+
+    Scans backward through events mapped to this If, skipping
+    short-circuit JUMPIs from compound conditions (and/or) which
+    are mapped to BoolOp.  Returns JUMPI PC or None.
+    """
+    scan = idx
+    while scan >= 0 and events[scan][1] is if_node:
+        epc = events[scan][0]
+        if epc is not None and bytecode[epc] == _JUMPI:
+            # Skip short-circuit JUMPIs from compound conditions
+            # (and/or).  These are mapped to BoolOp, not If.
+            mapped = ast_map.get(epc)
+            if isinstance(mapped, vy_ast.BoolOp):
+                scan -= 1
+                continue
+            return epc
+        scan -= 1
+    return None
+
+
+def _has_helper_gap(events, idx, if_node):
+    """Detect helper-gap in If.test with internal function calls.
+
+    When If.test contains internal function calls, helper body nodes
+    split the If's condition events into multiple runs.  Earlier runs
+    may contain short-circuit JUMPIs, not the decision JUMPI.
+
+    Returns True when the same If node reappears later AND no
+    body/orelse descendant events sit between here and that
+    reappearance.
+    """
+    saw_body = False
+    body_stmts = set(id(s) for s in if_node.body) | set(
+        id(s) for s in getattr(if_node, "orelse", [])
+    )
+    for j in range(idx + 1, len(events)):
+        ej = events[j][1]
+        if isinstance(ej, vy_ast.For):
+            break
+        if ej is if_node:
+            if not saw_body:
+                return True
+            break
+        # Walk up from the raw node to check if any ancestor
+        # is a direct body/orelse statement.
+        is_body = False
+        cur = events[j][2]
+        while cur is not None:
+            if id(cur) in body_stmts:
+                saw_body = True
+                is_body = True
+                break
+            cur = getattr(cur, "_parent", None)
+        # If this event is not inside the If's body/orelse AND
+        # belongs to the same function, it's a sibling statement.
+        # The If evaluation is complete — stop.
+        if not is_body and not isinstance(ej, vy_ast.If):
+            ej_fn = get_fn_ancestor_from_node(events[j][2])
+            if_fn = get_fn_ancestor_from_node(if_node)
+            if ej_fn is if_fn:
+                break
     return False
 
 
@@ -487,20 +690,9 @@ class CoverageCollector:
                 meta = if_meta[id(if_node)]
                 true_line, false_line, true_stmt, false_stmt = meta
 
-                # Find the decision JUMPI for this If.
-                #
-                # For break/continue/bare-return/no-op bodies, the
-                # decision JUMPI may be unmapped (compound conditions
-                # produce mapped short-circuit JUMPIs but the final
-                # decision is after all mapped events).  Try forward
-                # scan first — it finds the JUMPI closest to the body,
-                # which is always the decision.  Fall back to backward
-                # event scan for normal bodies where the JUMPI is
-                # mapped, then try forward scan from each event PC as
-                # a last resort (handles no-op/pass else branches
-                # where the JUMPI sits in an unmapped gap between
-                # condition events and a merge-point JUMPDEST).
-                jumpi_pc = None
+                # Find the decision JUMPI for this If using three
+                # strategies: forward scan, noop backward scan, and
+                # general backward scan.
                 body0 = if_node.body[0]
                 orelse = getattr(if_node, "orelse", [])
                 noop_else = orelse and all(_is_noop(s) for s in orelse)
@@ -521,123 +713,20 @@ class CoverageCollector:
                     and pc is not None
                     and bytecode[pc] == 0x5B
                 )
-                if not skip_fwd and pc is not None and (is_special_body or noop_body):
-                    # The event PC may already BE the decision JUMPI
-                    # (e.g. noop true body: the last If condition
-                    # event lands on the JUMPI itself).
-                    if bytecode[pc] == _JUMPI:
-                        found = pc
-                    else:
-                        found = _find_if_jumpi(bytecode, pc)
-                    # Validate: the found JUMPI must belong to this
-                    # If, not a different one (e.g. an elif's JUMPI
-                    # found via forward scan from a shared PC).
-                    if found is not None:
-                        mapped = ast_map.get(found)
-                        if mapped is not None:
-                            mc = _collapse_cov_node(mapped)
-                            if isinstance(mc, vy_ast.If) and mc is not if_node:
-                                found = None
-                        jumpi_pc = found
-                # Noop-branch forward-scan: when the body or else
-                # is a no-op, the decision JUMPI may be unmapped.
-                # For compound conditions (and/or), the backward
-                # scan below would find a short-circuit JUMPI
-                # instead of the decision.  Additionally, when the
-                # true branch is taken for a noop body, the last
-                # event PC may be a merge-point JUMPDEST (skipped
-                # above); scanning backward through earlier event
-                # PCs finds the JUMPI.  Try this fallback FIRST to
-                # avoid misselection.
+                jumpi_pc = _find_jumpi_forward_scan(
+                    bytecode, pc, if_node, ast_map, is_special_body, noop_body, skip_fwd
+                )
                 if jumpi_pc is None and (noop_else or noop_body):
-                    scan = idx
-                    while scan >= 0 and events[scan][1] is if_node:
-                        epc = events[scan][0]
-                        if epc is not None and bytecode[epc] != 0x5B:
-                            if bytecode[epc] == _JUMPI:
-                                found = epc
-                            else:
-                                found = _find_if_jumpi(bytecode, epc)
-                            if found is not None:
-                                # Validate: the found JUMPI must
-                                # belong to this If, not a parent
-                                # or sibling.  If the AST map maps
-                                # the JUMPI PC to a different If,
-                                # it is a foreign JUMPI — skip it.
-                                mapped = ast_map.get(found)
-                                if mapped is not None:
-                                    mc = _collapse_cov_node(mapped)
-                                    if isinstance(mc, vy_ast.If) and mc is not if_node:
-                                        scan -= 1
-                                        continue
-                                jumpi_pc = found
-                                break
-                        scan -= 1
+                    jumpi_pc = _find_jumpi_noop_backward(
+                        bytecode, events, idx, if_node, ast_map
+                    )
                 if jumpi_pc is None:
-                    scan = idx
-                    while scan >= 0 and events[scan][1] is if_node:
-                        epc = events[scan][0]
-                        if epc is not None and bytecode[epc] == _JUMPI:
-                            # Skip short-circuit JUMPIs from compound
-                            # conditions (and/or).  These are mapped to
-                            # BoolOp, not If — they jump between
-                            # operands, not to the body/else.
-                            mapped = ast_map.get(epc)
-                            if isinstance(mapped, vy_ast.BoolOp):
-                                scan -= 1
-                                continue
-                            jumpi_pc = epc
-                            break
-                        scan -= 1
+                    jumpi_pc = _find_jumpi_backward(
+                        bytecode, events, idx, if_node, ast_map
+                    )
 
                 if jumpi_pc is not None:
-                    # Guard: when If.test contains internal function calls,
-                    # helper body nodes split the If's condition events
-                    # into multiple runs.  Earlier runs may contain
-                    # short-circuit JUMPIs, not the decision JUMPI.
-                    # Detect an incomplete evaluation: the same If node
-                    # reappears later AND no body/orelse descendant events
-                    # sit between here and that reappearance (body events
-                    # would mean the first evaluation completed and the
-                    # If is being re-entered from a separate call).
-                    has_helper_gap = False
-                    saw_body = False
-                    body_stmts = set(id(s) for s in if_node.body) | set(
-                        id(s) for s in getattr(if_node, "orelse", [])
-                    )
-                    for j in range(idx + 1, len(events)):
-                        ej = events[j][1]
-                        if isinstance(ej, vy_ast.For):
-                            break
-                        if ej is if_node:
-                            if not saw_body:
-                                has_helper_gap = True
-                            break
-                        # Walk up from the raw node to check if any
-                        # ancestor is a direct body/orelse statement.
-                        is_body = False
-                        cur = events[j][2]
-                        while cur is not None:
-                            if id(cur) in body_stmts:
-                                saw_body = True
-                                is_body = True
-                                break
-                            cur = getattr(cur, "_parent", None)
-                        # If this event is not inside the If's
-                        # body/orelse AND belongs to the same
-                        # function, it's a sibling statement
-                        # (e.g. code after the if/else in a loop).
-                        # The If evaluation is complete — stop.
-                        # Don't break for events from different
-                        # functions (internal helper calls) — those
-                        # are helper body events that split the
-                        # condition evaluation.
-                        if not is_body and not isinstance(ej, vy_ast.If):
-                            ej_fn = get_fn_ancestor_from_node(events[j][2])
-                            if_fn = get_fn_ancestor_from_node(if_node)
-                            if ej_fn is if_fn:
-                                break
-                    if has_helper_gap:
+                    if _has_helper_gap(events, idx, if_node):
                         continue
 
                     branch, raw_trace_pos = _classify_from_raw_trace(
