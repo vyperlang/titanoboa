@@ -12,7 +12,7 @@ from typing import Any, Optional, TypeAlias
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 
-from boa.coverage import CoverageCollector, _build_coverage_events
+from boa.coverage import BranchCollector
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -249,7 +249,7 @@ class Env:
         )
 
         if self._coverage_enabled:
-            collector = CoverageCollector()
+            collector = BranchCollector()
             self._trace_computation(computation, contract, collector)
             collector.flush()
 
@@ -340,7 +340,7 @@ class Env:
                 contract=contract,
             )
             if self._coverage_enabled:
-                collector = CoverageCollector()
+                collector = BranchCollector()
                 self._trace_computation(ret, contract, collector)
                 collector.flush()
 
@@ -353,14 +353,8 @@ class Env:
         # perf: don't trace if contract is None
         if contract is not None and hasattr(contract, "source_map"):
             ast_map = contract.source_map["pc_raw_ast_map"]
-            raw_trace = list(computation.code._trace)
-            segments = _build_coverage_events(raw_trace, ast_map)
             bytecode = computation.code._raw_code_bytes
-            trace_id = collector.next_trace_id()
-            for filename, events in segments:
-                collector.record_segment(
-                    filename, events, bytecode, raw_trace, ast_map, trace_id
-                )
+            collector.trace_computation(computation, ast_map, bytecode)
 
         for child in computation.children:
             if child.msg.code_address == b"":
