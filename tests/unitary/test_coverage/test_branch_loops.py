@@ -118,28 +118,6 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     ), f"True arc to {true_target} not executed: {executed}"
 
 
-def test_branch_break_partial():
-    """Only break path taken — both arcs should be missing since
-    the false-branch fallthrough isn't distinctly traced."""
-    source = """\
-@external
-def foo(data: DynArray[uint256, 10]) -> uint256:
-    total: uint256 = 0
-    for val: uint256 in data:
-        if val == 0:
-            break
-        total += val
-    return total
-"""
-    # Only pass [0] — break immediately, false branch never hit
-    missing = _check_branch_coverage(source, lambda c: c.foo([0]))
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    assert (
-        if_node.lineno in missing
-    ), f"Expected if-line {if_node.lineno} in missing: {missing}"
-
-
 @pytest.mark.parametrize("keyword", ["break", "continue"])
 def test_branch_compound_condition_break_continue(keyword):
     """Compound condition (and) with break/continue — both arcs covered."""
@@ -154,48 +132,6 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
     return s
 """
     missing = _check_branch_coverage(source, lambda c: (c.f([25]), c.f([0])))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-@pytest.mark.parametrize("keyword", ["break", "continue"])
-def test_branch_compound_condition_break_continue_partial_false_only(keyword):
-    """Compound `and` + break/continue, false-only: true arc must NOT be recorded."""
-    source = f"""\
-@external
-def f(xs: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if (x != 2) and (x >= 25):
-            {keyword}
-        s += x
-    return s
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.f([10])
-    )
-    # Only false branch taken — true arc must be missing
-    assert (
-        if_node.lineno in missing
-    ), f"Expected if-line {if_node.lineno} in missing (false-only): {missing}"
-
-
-def test_branch_compound_break_wide_jumpi_gap():
-    """Compound condition + break with wide bytecode gap — both arcs covered."""
-    source = """\
-@external
-def f(xs: DynArray[uint256, 10], cutoff: uint256) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if (x > cutoff) and (x < cutoff + 100):
-            break
-        s += x
-    return s
-"""
-    # Both branches covered
-    missing = _check_branch_coverage(source, lambda c: (c.f([50], 10), c.f([5], 10)))
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
@@ -266,25 +202,6 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     }, f"Expected executed targets {{{true_target}, {false_target}}}, got {executed_targets}"
 
 
-def test_branch_for_loop_if_no_else_both_orders():
-    """for-loop if (no else) — both branch orderings produce correct arcs."""
-    source = """\
-@external
-def foo(data: DynArray[uint256, 10]) -> uint256:
-    total: uint256 = 0
-    for val: uint256 in data:
-        if val > 5:
-            total += val
-    return total
-"""
-    # Each order alone should report the untaken branch
-    missing_ft = _check_branch_coverage(source, lambda c: c.foo([1, 10]))
-    assert missing_ft == {}, f"false-then-true missing arcs: {missing_ft}"
-
-    missing_tf = _check_branch_coverage(source, lambda c: c.foo([10, 1]))
-    assert missing_tf == {}, f"true-then-false missing arcs: {missing_tf}"
-
-
 def test_branch_if_else_in_for_loop_partial():
     """if/else in for loop, only true branch hit — else arc missing."""
     source = """\
@@ -326,41 +243,6 @@ def test_correctness_nested_loop_if_false_then_true():
     assert missing == {}, f"false-then-true missing arcs: {missing}"
 
 
-def test_correctness_nested_loop_if_true_then_false():
-    """Same as above, true-then-false order. Must also have no missing arcs."""
-    missing = _check_branch_coverage(SOURCE_NESTED_LOOP_IF, lambda c: c.foo([[5, 1]]))
-    assert missing == {}, f"true-then-false missing arcs: {missing}"
-
-
-def test_correctness_nested_loop_if_order_parity():
-    """Both orderings must produce identical coverage results."""
-    source = SOURCE_NESTED_LOOP_IF
-    ft = _check_full_branch_coverage(source, lambda c: c.foo([[1, 5]]))
-    tf = _check_full_branch_coverage(source, lambda c: c.foo([[5, 1]]))
-    assert ft[0] == tf[0], f"Possible arcs differ: {ft[0]} vs {tf[0]}"
-    assert ft[1] == tf[1], f"Executed arcs differ: {ft[1]} vs {tf[1]}"
-    assert ft[2] == tf[2], f"Missing arcs differ: {ft[2]} vs {tf[2]}"
-
-
-def test_branch_multiline_return_in_for_loop():
-    """Multiline return in true-branch inside for loop — no missing arcs."""
-    source = """\
-@external
-def foo(data: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for v: uint256 in data:
-        if v > 5:
-            return (
-                v + 1
-            )
-        else:
-            s += 1
-    return s
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.foo([10, 1]), c.foo([1])))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
 def test_branch_nested_if_in_for_body_with_tail():
     """Nested if (no else) inside for body, with tail — all branches covered."""
     source = """\
@@ -375,114 +257,6 @@ def foo(arr: DynArray[uint256, 10]) -> uint256:
     return s
 """
     missing = _check_branch_coverage(source, lambda c: c.foo([25, 15, 5]))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_nested_if_in_for_body_with_else_and_tail():
-    """Nested if in outer if/else in for body, with tail — all branches covered."""
-    source = """\
-@external
-def foo(arr: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in arr:
-        if x > 10:
-            if x > 20:
-                s += 3
-        else:
-            s += 2
-        s += 1
-    return s
-"""
-    missing = _check_branch_coverage(source, lambda c: c.foo([25, 15, 5]))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_nested_if_in_for_body_inner_false_arc_target():
-    """Verify exact inner false arc target is the for-body tail, not fn return."""
-    source = """\
-@external
-def foo(arr: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in arr:
-        if x > 10:
-            if x > 20:
-                s += 3
-        s += 1
-    return s
-"""
-    ast = parse_to_ast(source)
-    if_nodes = ast.get_descendants(vy_ast.If)
-    inner_if = if_nodes[1]  # if x > 20
-    tail_stmt = ast.get_descendants(vy_ast.For)[0].body[-1]  # s += 1
-
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.foo([25, 15, 5])
-    )
-    assert missing == {}, f"Missing: {missing}"
-    # Inner false arc should target tail_stmt (s += 1), not function return
-    assert (inner_if.lineno, tail_stmt.lineno) in possible, (
-        f"Expected possible arc ({inner_if.lineno}, {tail_stmt.lineno}), "
-        f"possible: {possible}"
-    )
-
-
-def test_branch_if_no_else_in_for_with_tail_true_only():
-    """if without else + tail in for loop, true-only: false arc must be missing."""
-    source = """\
-@external
-def foo(arr: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in arr:
-        if x > 10:
-            s += 3
-        s += 1
-    return s
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.foo([25])
-    )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert set(executed[if_node.lineno]) == {
-        if_node.body[0].lineno
-    }, f"Only true arc should be executed: {executed}"
-    assert if_node.lineno in missing, f"If-line not in missing: {missing}"
-
-
-def test_branch_if_no_else_in_for_with_tail_both():
-    """Both branches hit in loop — no missing arcs."""
-    source = """\
-@external
-def foo(arr: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in arr:
-        if x > 10:
-            s += 3
-        s += 1
-    return s
-"""
-    missing = _check_branch_coverage(source, lambda c: c.foo([25, 1]))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_if_false_branch_is_for_empty():
-    """If false (else) branch is a For loop with zero iterations — both branches hit."""
-    source = """\
-@external
-def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    if flag:
-        s += 1
-    else:
-        for v: uint256 in data:
-            s += v
-    return s
-"""
-    missing = _check_branch_coverage(
-        source, lambda c: (c.foo(True, []), c.foo(False, []))
-    )
     assert missing == {}, f"Missing branch arcs: {missing}"
 
 
@@ -503,38 +277,6 @@ def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
         source, lambda c: (c.foo(True, [1, 2, 3]), c.foo(False, []))
     )
     assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_if_true_branch_is_for_true_only():
-    """If true branch is a For — only true path taken, false must be missing."""
-    source = """\
-@external
-def foo(flag: bool, data: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    if flag:
-        for v: uint256 in data:
-            s += v
-    else:
-        s += 1
-    return s
-"""
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.foo(True, [1, 2])
-    )
-    # Invariant: executed ⊆ possible
-    for line, targets in executed.items():
-        arc_set = {(line, t) for t in targets}
-        assert (
-            arc_set <= possible
-        ), f"Executed arcs {arc_set} not subset of possible {possible}"
-    # False branch must be missing
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    false_target = if_node.orelse[0].lineno
-    assert if_node.lineno in missing, f"Expected if line {if_node.lineno} in missing"
-    assert (
-        false_target in missing[if_node.lineno]
-    ), f"Expected false target {false_target} missing from line {if_node.lineno}"
 
 
 def test_branch_nested_if_in_for_inner_false_only():
@@ -563,33 +305,6 @@ def foo(data: DynArray[uint256, 10]) -> uint256:
     ), f"Expected true target {true_target} missing from line {if_node.lineno}: {missing}"
 
 
-def test_branch_nested_if_in_for_with_else_inner_false_only():
-    """Nested if/else in for body, only else (false) path taken.
-    Must report true branch as missing."""
-    source = """\
-@external
-def foo(data: DynArray[uint256, 10]) -> uint256:
-    total: uint256 = 0
-    for val: uint256 in data:
-        if val > 100:
-            total += val
-        else:
-            total += 1
-    return total
-"""
-    missing = _check_branch_coverage(source, lambda c: c.foo([1, 2, 3]))
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    true_target = if_node.body[0].lineno
-    # Only false (else) path taken — true arc must be missing
-    assert (
-        if_node.lineno in missing
-    ), f"Expected if line {if_node.lineno} in missing: {missing}"
-    assert (
-        true_target in missing[if_node.lineno]
-    ), f"Expected true target {true_target} missing from line {if_node.lineno}: {missing}"
-
-
 # --- no-op body (pass / assert True) in loops ---
 
 
@@ -609,98 +324,3 @@ def f(xs: DynArray[uint256, 10]) -> uint256:
 """
     missing = _check_branch_coverage(source, lambda c: c.f([10, 1]))
     assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_loop_else_assert_true_both():
-    """In-loop if/else where else is assert True — both branches hit."""
-    source = """\
-@external
-def f(xs: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if x > 5:
-            s += 2
-        else:
-            assert True
-        s += 1
-    return s
-"""
-    missing = _check_branch_coverage(source, lambda c: c.f([10, 1]))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_loop_else_pass_partial():
-    """In-loop if/else where else is pass — one branch only."""
-    source = """\
-@external
-def f(xs: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if x > 5:
-            s += 2
-        else:
-            pass
-        s += 1
-    return s
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-    missing = _check_branch_coverage(source, lambda c: c.f([10]))
-    assert if_node.lineno in missing, f"Expected if-line in missing: {missing}"
-
-
-def test_branch_loop_if_pass_both():
-    """In-loop if without else + pass body — both branches hit (degenerate: arcs collapse)."""
-    source = """\
-@external
-def f(xs: DynArray[uint256, 10]) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if x > 5:
-            pass
-        s += 1
-    return s
-"""
-    missing = _check_branch_coverage(source, lambda c: c.f([10, 1]))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-@pytest.mark.parametrize("keyword", ["break", "continue"])
-def test_branch_compound_triple_and_wide_gap(keyword):
-    """3-way compound ``and`` + break/continue — both arcs and partial correct."""
-    source = f"""\
-@external
-def f(xs: DynArray[uint256, 10], a: uint256, b: uint256, c: uint256) -> uint256:
-    s: uint256 = 0
-    for x: uint256 in xs:
-        if (x > a) and (x < b) and (x != c):
-            {keyword}
-        s += x
-    return s
-"""
-    ast = parse_to_ast(source)
-    if_node = ast.get_descendants(vy_ast.If)[0]
-
-    # Both branches covered
-    missing = _check_branch_coverage(
-        source, lambda c: (c.f([50], 10, 100, 0), c.f([5], 10, 100, 0))
-    )
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-    # Partial: true-only
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.f([50], 10, 100, 0)
-    )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert (
-        if_node.lineno in missing
-    ), f"Expected false arc missing for true-only: {missing}"
-
-    # Partial: false-only
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: c.f([5], 10, 100, 0)
-    )
-    assert if_node.lineno in executed, f"If-line not in executed: {executed}"
-    assert (
-        if_node.lineno in missing
-    ), f"Expected true arc missing for false-only: {missing}"

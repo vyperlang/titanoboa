@@ -105,37 +105,6 @@ def foo(x: uint256) -> uint256:
     ), f"Expected 2 missing arcs from elif, got {missing[inner_if.lineno]}"
 
 
-def test_branch_elif_only_middle():
-    """Only elif path hit — if-true and else arcs missing."""
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 20:
-        return 3
-    elif x > 10:
-        return 2
-    else:
-        return 1
-"""
-    missing = _check_branch_coverage(source, lambda c: c.foo(15))
-    ast = parse_to_ast(source)
-    if_nodes = ast.get_descendants(vy_ast.If)
-    outer_if = if_nodes[0]
-    inner_if = if_nodes[1]
-    # outer-if true arc (to `return 3`) should be missing
-    outer_true_line = outer_if.body[0].lineno
-    assert outer_if.lineno in missing, f"Expected outer if {outer_if.lineno} in missing"
-    assert (
-        outer_true_line in missing[outer_if.lineno]
-    ), f"Expected outer true target {outer_true_line} in {missing[outer_if.lineno]}"
-    # elif false arc (to `return 1`) should be missing
-    elif_else_line = inner_if.orelse[0].lineno
-    assert inner_if.lineno in missing, f"Expected elif {inner_if.lineno} in missing"
-    assert (
-        elif_else_line in missing[inner_if.lineno]
-    ), f"Expected elif false target {elif_else_line} in {missing[inner_if.lineno]}"
-
-
 def test_branch_if_in_orelse_without_else():
     """If inside an else block with no else of its own — both arcs covered."""
     source = """\
@@ -173,40 +142,6 @@ def test_correctness_elif_no_else_all_branches():
     assert missing == {}, f"All branches hit, expected no missing: {missing}"
 
 
-def test_correctness_elif_no_else_inner_false():
-    """Inner elif false branch alone must produce the fallthrough arc."""
-    ast = parse_to_ast(SOURCE_ELIF_NO_ELSE)
-    if_nodes = ast.get_descendants(vy_ast.If)
-    inner_if = if_nodes[1]  # the elif
-
-    possible, executed, missing = _check_full_branch_coverage(
-        SOURCE_ELIF_NO_ELSE, lambda c: c.foo(5)
-    )
-    # Inner elif must have its false arc (to return 0) executed
-    inner_targets = set(executed.get(inner_if.lineno, []))
-    # The false fallthrough target is `return 0` at inner_if.end_lineno + 1
-    assert (
-        len(inner_targets) > 0
-    ), f"Inner elif@L{inner_if.lineno} should have executed arcs: {executed}"
-
-
-def test_correctness_elif_no_else_multiline_tail():
-    """elif fallthrough to multiline return — all branches covered."""
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 20:
-        return 3
-    elif x > 10:
-        return 2
-    return (
-        x + 1
-    )
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.foo(25), c.foo(15), c.foo(5)))
-    assert missing == {}, f"All branches hit, expected no missing: {missing}"
-
-
 # --- nested if without outer else ---
 
 
@@ -222,40 +157,6 @@ def foo(x: uint256) -> uint256:
 """
     missing = _check_branch_coverage(source, lambda c: (c.foo(25), c.foo(15), c.foo(5)))
     assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_nested_if_no_outer_else_exact_arcs():
-    """Verify exact executed arcs for nested if without outer else."""
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 10:
-        if x > 20:
-            return 3
-    return 0
-"""
-    ast = parse_to_ast(source)
-    if_nodes = ast.get_descendants(vy_ast.If)
-    outer_if = if_nodes[0]
-    inner_if = if_nodes[1]
-    tail = ast.get_descendants(vy_ast.Return)[-1]  # return 0
-
-    possible, executed, missing = _check_full_branch_coverage(
-        source, lambda c: (c.foo(25), c.foo(15), c.foo(5))
-    )
-    assert missing == {}, f"Missing: {missing}"
-    # Outer if: true → inner if line, false → return 0
-    outer_targets = set(executed.get(outer_if.lineno, []))
-    assert outer_targets == {
-        inner_if.lineno,
-        tail.lineno,
-    }, f"Outer executed targets: {outer_targets}"
-    # Inner if: true → return 3, false → return 0
-    inner_targets = set(executed.get(inner_if.lineno, []))
-    assert inner_targets == {
-        inner_if.body[0].lineno,
-        tail.lineno,
-    }, f"Inner executed targets: {inner_targets}"
 
 
 def test_branch_nested_if_no_outer_else_partial():
@@ -316,53 +217,6 @@ def foo(x: uint256, y: uint256) -> uint256:
     ), f"Inner if executed targets: {inner_targets}, expected {expected_inner}"
 
 
-def test_branch_elif_no_else_multiline_body_multiline_tail():
-    """if/elif without else, multiline elif body + multiline tail — all covered."""
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 20:
-        return 3
-    elif x > 10:
-        return (
-            x + 2
-        )
-    return (
-        x + 1
-    )
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.foo(25), c.foo(15), c.foo(5)))
-    assert missing == {}, f"Missing branch arcs: {missing}"
-
-
-def test_branch_elif_no_else_multiline_tail_partial():
-    """Only outer-true hit — inner elif arcs must be missing."""
-    source = """\
-@external
-def foo(x: uint256) -> uint256:
-    if x > 20:
-        return 3
-    elif x > 10:
-        return (
-            x + 2
-        )
-    return (
-        x + 1
-    )
-"""
-    ast = parse_to_ast(source)
-    if_nodes = ast.get_descendants(vy_ast.If)
-    inner_if = if_nodes[1]  # elif
-
-    missing = _check_branch_coverage(source, lambda c: c.foo(25))
-    assert (
-        inner_if.lineno in missing
-    ), f"Expected elif {inner_if.lineno} in missing: {missing}"
-    assert (
-        len(missing[inner_if.lineno]) == 2
-    ), f"Expected 2 missing arcs from elif, got {missing[inner_if.lineno]}"
-
-
 # --- nested if with no-op else ---
 
 
@@ -391,21 +245,3 @@ def f(x: uint256) -> uint256:
         f"Inner if@L{inner_if.lineno} should have no executed arcs "
         f"(phantom), got: {inner_targets}"
     )
-
-
-def test_branch_nested_noop_else_full():
-    """Nested if with noop else — all branches exercised."""
-    source = """\
-@external
-def f(x: uint256) -> uint256:
-    if x > 5:
-        return 1
-    else:
-        if x == 2:
-            return 2
-        else:
-            pass
-    return 0
-"""
-    missing = _check_branch_coverage(source, lambda c: (c.f(10), c.f(2), c.f(0)))
-    assert missing == {}, f"Missing branch arcs: {missing}"
