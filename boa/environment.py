@@ -9,6 +9,7 @@ import random
 import warnings
 from typing import Any, Optional, TypeAlias
 
+import coverage
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
 from vyper.compiler.settings import OptimizationLevel
@@ -352,8 +353,14 @@ class Env:
     # pytracer registers .vy files (dynamic_source_filename).
     # In line-only mode that pytracer path is the sole data source.
     def _trace_computation(self, computation, contract=None):
-        # perf: don't trace if contract is None
-        if contract is not None and hasattr(contract, "source_map"):
+        # _coverage_enabled is set permanently by the plugin, so also
+        # check that a coverage session is actually running.
+        should_trace = (
+            contract is not None
+            and hasattr(contract, "source_map")
+            and coverage.Coverage.current()
+        )
+        if should_trace:
             ast_map = contract.source_map["pc_raw_ast_map"]
 
             cov = _get_branch_cov()

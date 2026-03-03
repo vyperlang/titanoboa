@@ -177,6 +177,15 @@ def _record_coverage(bytecode, raw_trace, ast_map, skip_arcs=False):
     lines_by_file: dict[str, set] = {}
     arcs_by_file: dict[str, set] = {}
 
+    if skip_arcs:
+        for pc in raw_trace:
+            node = ast_map.get(pc)
+            if node is not None:
+                filename = node.module_node.resolved_path
+                if filename.endswith(".vy"):
+                    lines_by_file.setdefault(filename, set()).add(node.lineno)
+        return lines_by_file, arcs_by_file
+
     resolved: dict[int, tuple[str, int, int, int] | None] = {}
 
     for i, pc in enumerate(raw_trace):
@@ -186,7 +195,7 @@ def _record_coverage(bytecode, raw_trace, ast_map, skip_arcs=False):
             if filename.endswith(".vy"):
                 lines_by_file.setdefault(filename, set()).add(node.lineno)
 
-        if skip_arcs or bytecode[pc] != _JUMPI:
+        if bytecode[pc] != _JUMPI:
             continue
 
         if pc not in resolved:
