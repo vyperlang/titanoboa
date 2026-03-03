@@ -45,10 +45,14 @@ def active_branch_coverage(monkeypatch):
 
 
 def test_coverage_forces_no_optimization(active_branch_coverage):
-    """Default optimize becomes NONE when coverage is enabled."""
+    """Default optimize becomes NONE when coverage is enabled, with warning."""
     Env._coverage_enabled = True
-    data = compiler_data(SOURCE, "test", "test.vy")
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        data = compiler_data(SOURCE, "test", "test.vy")
     assert data.settings.optimize == OptimizationLevel.NONE
+    cov_warnings = [x for x in w if "optimize=NONE" in str(x.message)]
+    assert len(cov_warnings) == 1
 
 
 def test_coverage_explicit_optimize_warns(active_branch_coverage):

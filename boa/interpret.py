@@ -163,6 +163,11 @@ def compiler_data(
     if Env._coverage_enabled and _get_branch_cov() is not None:
         if settings.optimize is None:
             settings.optimize = OptimizationLevel.NONE
+            warnings.warn(
+                "branch coverage requires unoptimized bytecode; "
+                "compilation will use optimize=NONE",
+                stacklevel=2,
+            )
         elif settings.optimize != OptimizationLevel.NONE:
             warnings.warn(
                 "coverage is enabled but optimize is set to "
