@@ -4,25 +4,38 @@ import coverage
 import coverage.plugin
 import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
+from vyper.compiler.settings import OptimizationLevel
 
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
-
-# boa.environment imports from this module, so we can't import Env at
-# the top level.  import it lazily where needed to avoid the cycle.
-# (environment.py is the lower-level module; coverage.py is the plugin.)
+from boa.environment import Env
 
 _JUMPI = 0x57
 
 
-def coverage_init(registry, options):
-    from boa.environment import Env
+class CoverageTracer:
+    @staticmethod
+    def on_computation(computation, contract):
+        cov = _get_branch_cov()
+        if cov is None:
+            return
+        ast_map = contract.source_map["pc_raw_ast_map"]
+        bytecode = computation.code._raw_code_bytes
+        raw_trace = computation.code._trace
+        settings = getattr(getattr(contract, "compiler_data", None), "settings", None)
+        optimize = getattr(settings, "optimize", None)
+        skip_arcs = optimize != OptimizationLevel.NONE
+        lines, arcs = _record_coverage(bytecode, raw_trace, ast_map, skip_arcs)
+        _flush_coverage(cov, lines, arcs)
 
+
+def coverage_init(registry, options):
     plugin = TitanoboaPlugin(options)
     registry.add_file_tracer(plugin)
     registry.add_configurer(plugin)
 
     # set on the class so that reset_env() doesn't disable tracing
     Env._coverage_enabled = True
+    Env._coverage_tracer = CoverageTracer()
 
 
 class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
@@ -30,11 +43,8 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
         pass
 
     def configure(self, config):
-        # In branch mode line_number_range returns (-1,-1) to suppress
-        # pytracer arc generation, so boa.environment would show as
-        # "not measured" and trigger warnings.  Only register it for
-        # line-only mode where pytracer line hits are the data path.
-        if not config.get_option("run:branch"):
+        Env._branch_coverage_enabled = config.get_option("run:branch")
+        if not Env._branch_coverage_enabled:
             config.get_option("run:source_pkgs").append("boa.environment")
 
     def file_tracer(self, filename):
@@ -57,12 +67,9 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
     # from there.
 
     def _valid_frame(self, frame):
-        from boa.environment import Env
-
         if hasattr(frame.f_code, "co_qualname"):
             # Python>=3.11
-            code_qualname = frame.f_code.co_qualname
-            return code_qualname == Env._trace_cov.__qualname__
+            return frame.f_code.co_qualname == Env._trace_cov.__qualname__
 
         else:
             # in Python<3.11 we don't have co_qualname, so try hard to
@@ -90,7 +97,7 @@ class TitanoboaTracer(coverage.plugin.FileTracer):
 
         # when branch coverage is active, suppress the pytracer's arc
         # generation — we record branch arcs directly from the EVM trace.
-        if _get_branch_cov() is not None:
+        if Env._branch_coverage_enabled:
             return (-1, -1)
 
         ast_node = frame.f_locals["node"]
@@ -182,7 +189,7 @@ def _record_coverage(bytecode, raw_trace, ast_map, skip_arcs=False):
             node = ast_map.get(pc)
             if node is not None:
                 filename = node.module_node.resolved_path
-                if filename.endswith(".vy"):
+                if filename is not None and filename.endswith(".vy"):
                     lines_by_file.setdefault(filename, set()).add(node.lineno)
         return lines_by_file, arcs_by_file
 
@@ -192,7 +199,7 @@ def _record_coverage(bytecode, raw_trace, ast_map, skip_arcs=False):
         node = ast_map.get(pc)
         if node is not None:
             filename = node.module_node.resolved_path
-            if filename.endswith(".vy"):
+            if filename is not None and filename.endswith(".vy"):
                 lines_by_file.setdefault(filename, set()).add(node.lineno)
 
         if bytecode[pc] != _JUMPI:
@@ -207,7 +214,7 @@ def _record_coverage(bytecode, raw_trace, ast_map, skip_arcs=False):
                 resolved[pc] = None
                 continue
             filename = node.module_node.resolved_path
-            if not filename.endswith(".vy"):
+            if filename is None or not filename.endswith(".vy"):
                 resolved[pc] = None
                 continue
             arc_true, arc_false = _branch_arcs_for_if(node, fn_node)
@@ -246,7 +253,11 @@ def _flush_coverage(cov, lines_by_file, arcs_by_file):
     for filename, arcs in arcs_by_file.items():
         merged.setdefault(filename, set()).update(arcs)
     if merged:
-        cov.get_data().add_arcs(merged)
+        data = cov.get_data()
+        data.add_arcs(merged)
+        data.add_file_tracers(
+            {f: "boa.coverage.TitanoboaPlugin" for f in merged if f.endswith(".vy")}
+        )
 
 
 class TitanoboaReporter(coverage.plugin.FileReporter):

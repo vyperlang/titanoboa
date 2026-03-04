@@ -9,6 +9,7 @@ from vyper.compiler.settings import OptimizationLevel
 import boa
 from boa.environment import Env
 from boa.interpret import compiler_data, set_cache_dir
+from tests.coverage_utils import saved_coverage_state
 
 SOURCE = """\
 @external
@@ -25,28 +26,18 @@ def isolate(tmp_path):
     from boa.interpret import _disk_cache
 
     saved = _disk_cache.cache_dir
-    saved_cov = Env._coverage_enabled
     try:
         set_cache_dir(tmp_path)
-        yield
+        with saved_coverage_state():
+            yield
     finally:
         set_cache_dir(saved)
-        Env._coverage_enabled = saved_cov
 
 
-class _FakeCov:
-    class config:
-        branch = True
-
-
-@pytest.fixture
-def active_branch_coverage(monkeypatch):
-    monkeypatch.setattr(coverage.Coverage, "current", staticmethod(lambda: _FakeCov()))
-
-
-def test_coverage_forces_no_optimization(active_branch_coverage):
+def test_coverage_forces_no_optimization():
     """Default optimize becomes NONE when coverage is enabled, with warning."""
     Env._coverage_enabled = True
+    Env._branch_coverage_enabled = True
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         data = compiler_data(SOURCE, "test", "test.vy")
@@ -55,9 +46,10 @@ def test_coverage_forces_no_optimization(active_branch_coverage):
     assert len(cov_warnings) == 1
 
 
-def test_coverage_explicit_optimize_warns(active_branch_coverage):
+def test_coverage_explicit_optimize_warns():
     """Explicit non-NONE optimize emits a warning when coverage is on."""
     Env._coverage_enabled = True
+    Env._branch_coverage_enabled = True
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         data = compiler_data(SOURCE, "test", "test.vy", optimize=OptimizationLevel.GAS)
@@ -67,9 +59,10 @@ def test_coverage_explicit_optimize_warns(active_branch_coverage):
     assert data.settings.optimize == OptimizationLevel.GAS
 
 
-def test_coverage_explicit_none_no_warning(active_branch_coverage):
+def test_coverage_explicit_none_no_warning():
     """Explicit optimize=NONE with coverage emits no warning."""
     Env._coverage_enabled = True
+    Env._branch_coverage_enabled = True
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         compiler_data(SOURCE, "test", "test.vy", optimize=OptimizationLevel.NONE)
@@ -84,25 +77,10 @@ def test_no_coverage_no_forced_optimize():
     assert data.settings.optimize != OptimizationLevel.NONE
 
 
-def test_coverage_flag_without_active_session_does_not_force_optimize(monkeypatch):
-    """Coverage flag alone (after stop) must not force optimize=NONE."""
+def test_coverage_flag_without_branch_does_not_force_optimize():
+    """Coverage flag alone without branch must not force optimize=NONE."""
     Env._coverage_enabled = True
-    monkeypatch.setattr(coverage.Coverage, "current", staticmethod(lambda: None))
-    data = compiler_data(SOURCE, "test", "test.vy")
-    assert data.settings.optimize != OptimizationLevel.NONE
-
-
-def test_line_only_coverage_does_not_force_optimize(monkeypatch):
-    """Line-only coverage (no --branch) must not force optimize=NONE."""
-
-    class _LineOnlyCov:
-        class config:
-            branch = False
-
-    Env._coverage_enabled = True
-    monkeypatch.setattr(
-        coverage.Coverage, "current", staticmethod(lambda: _LineOnlyCov())
-    )
+    Env._branch_coverage_enabled = False
     data = compiler_data(SOURCE, "test", "test.vy")
     assert data.settings.optimize != OptimizationLevel.NONE
 

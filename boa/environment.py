@@ -9,12 +9,9 @@ import random
 import warnings
 from typing import Any, Optional, TypeAlias
 
-import coverage
 import eth.constants as constants
 from eth_typing import Address as PYEVM_Address  # it's just bytes.
-from vyper.compiler.settings import OptimizationLevel
 
-from boa.coverage import _flush_coverage, _get_branch_cov, _record_coverage
 from boa.rpc import RPC, EthereumRPC
 from boa.util.abi import Address
 from boa.vm.gas_meters import GasMeter, NoGasMeter, ProfilingGasMeter
@@ -29,6 +26,8 @@ class Env:
     _singleton = None
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
+    _branch_coverage_enabled = False
+    _coverage_tracer = None  # class-level — survives reset_env()
 
     def __init__(self, fork_try_prefetch_state=False, fast_mode_enabled=False):
         self._gas_price = None
@@ -347,42 +346,15 @@ class Env:
 
             return ret
 
-    # In branch mode, walk the raw trace to record branch arcs and
-    # line hits via _record_coverage/_flush_coverage.
-    # In all modes, call _trace_cov per unique pc so coverage.py's
-    # pytracer registers .vy files (dynamic_source_filename).
-    # In line-only mode that pytracer path is the sole data source.
     def _trace_computation(self, computation, contract=None):
-        # _coverage_enabled is set permanently by the plugin, so also
-        # check that a coverage session is actually running.
-        should_trace = (
-            contract is not None
-            and hasattr(contract, "source_map")
-            and coverage.Coverage.current()
-        )
-        if should_trace:
-            ast_map = contract.source_map["pc_raw_ast_map"]
-
-            cov = _get_branch_cov()
-            if cov is not None:
-                bytecode = computation.code._raw_code_bytes
-                raw_trace = computation.code._trace
-                # Skip arc resolution for optimized contracts
-                # (fallthrough JUMPI polarity only holds unoptimized).
-                settings = getattr(
-                    getattr(contract, "compiler_data", None), "settings", None
-                )
-                optimize = getattr(settings, "optimize", None)
-                skip_arcs = optimize != OptimizationLevel.NONE
-                lines, arcs = _record_coverage(bytecode, raw_trace, ast_map, skip_arcs)
-                _flush_coverage(cov, lines, arcs)
+        if contract is not None and hasattr(contract, "source_map"):
+            if self._coverage_tracer is not None:
+                self._coverage_tracer.on_computation(computation, contract)
 
             # _trace_cov feeds coverage.py's pytracer which registers
-            # .vy files via dynamic_source_filename.  In branch mode
-            # line_number_range returns (-1,-1) so no line data is
-            # recorded, but file registration is still required.
-            # In line-only mode this is the sole data path.
+            # .vy files via dynamic_source_filename.
             seen_pcs = set()
+            ast_map = contract.source_map["pc_raw_ast_map"]
             for pc in computation.code._trace:
                 if pc in seen_pcs:
                     continue

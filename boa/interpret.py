@@ -154,13 +154,10 @@ def compiler_data(
 
     settings = Settings(**kwargs)
 
-    # when a coverage session is actively running and optimize is unspecified,
+    # when branch coverage is enabled and optimize is unspecified,
     # force unoptimized compilation so pc_raw_ast_map remains branch-accurate.
     # if the user explicitly sets optimize, keep their choice and warn.
-    from boa.coverage import _get_branch_cov
-    from boa.environment import Env
-
-    if Env._coverage_enabled and _get_branch_cov() is not None:
+    if Env._coverage_enabled and Env._branch_coverage_enabled:
         if settings.optimize is None:
             settings.optimize = OptimizationLevel.NONE
             warnings.warn(

@@ -9,8 +9,7 @@ import vyper.ast as vy_ast
 from vyper.ast.parse import parse_to_ast
 
 import boa
-from boa.environment import Env
-from tests.coverage_utils import _analyze
+from tests.coverage_utils import _analyze, saved_coverage_state
 
 # repo root so the subprocess always imports the local checkout
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -123,8 +122,7 @@ def foo(x: uint256) -> uint256:
     else:
         return 0
 """
-    saved = Env._coverage_enabled
-    try:
+    with saved_coverage_state():
         cov = coverage.Coverage(branch=True, config_file=False, data_file=None)
         cov.set_option("run:plugins", ["boa.coverage"])
         cov.start()
@@ -144,5 +142,3 @@ def foo(x: uint256) -> uint256:
             cov.report(file=open(os.devnull, "w"))
         except coverage.exceptions.NoDataError:
             pass
-    finally:
-        Env._coverage_enabled = saved

@@ -10,9 +10,8 @@ import vyper.ast as vy_ast
 
 import boa
 from boa.contracts.vyper.ast_utils import get_fn_ancestor_from_node
-from boa.environment import Env
 from boa.interpret import _disk_cache, set_cache_dir
-from tests.coverage_utils import _analyze
+from tests.coverage_utils import _analyze, saved_coverage_state
 
 
 @pytest.fixture(autouse=True)
@@ -61,8 +60,7 @@ def foo(xs: DynArray[uint256, 10]) -> uint256:
     main_path.write_text(main_src)
     lib_path.write_text(module_src)
 
-    saved_coverage = Env._coverage_enabled
-    try:
+    with saved_coverage_state():
         cov = coverage_lib.Coverage(branch=True, config_file=False, data_file=None)
         cov.set_option("run:plugins", ["boa.coverage"])
         cov.start()
@@ -106,8 +104,6 @@ def foo(xs: DynArray[uint256, 10]) -> uint256:
             f"{executed_targets} for if@{if_line}"
         )
         assert missing == {}, f"Unexpected missing arcs: {missing}"
-    finally:
-        Env._coverage_enabled = saved_coverage
 
 
 def test_self_call_parent_and_child_both_branch(tmp_path):
@@ -138,8 +134,7 @@ def outer(x: uint256) -> uint256:
     vy_path = tmp_path / "self_call.vy"
     vy_path.write_text(source)
 
-    saved_coverage = Env._coverage_enabled
-    try:
+    with saved_coverage_state():
         cov = coverage_lib.Coverage(branch=True, config_file=False, data_file=None)
         cov.set_option("run:plugins", ["boa.coverage"])
         cov.start()
@@ -194,8 +189,6 @@ def outer(x: uint256) -> uint256:
             f"outer If line {outer_if_line} should have missing arcs "
             f"(true branch never taken)"
         )
-    finally:
-        Env._coverage_enabled = saved_coverage
 
 
 def test_internal_call_cross_function_branches(tmp_path):
@@ -224,8 +217,7 @@ def foo(x: uint256) -> uint256:
     vy_path = tmp_path / "internal_call.vy"
     vy_path.write_text(source)
 
-    saved_coverage = Env._coverage_enabled
-    try:
+    with saved_coverage_state():
         cov = coverage_lib.Coverage(branch=True, config_file=False, data_file=None)
         cov.set_option("run:plugins", ["boa.coverage"])
         cov.start()
@@ -280,5 +272,3 @@ def foo(x: uint256) -> uint256:
 
         # Both functions' branches should be fully covered
         assert missing == {}, f"Unexpected missing arcs: {missing}"
-    finally:
-        Env._coverage_enabled = saved_coverage
