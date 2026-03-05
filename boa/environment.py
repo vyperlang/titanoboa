@@ -26,7 +26,6 @@ class Env:
     _singleton = None
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
-    _branch_coverage_enabled = False
     _coverage_tracer = None  # class-level — survives reset_env()
 
     def __init__(self, fork_try_prefetch_state=False, fast_mode_enabled=False):
@@ -351,25 +350,11 @@ class Env:
             if self._coverage_tracer is not None:
                 self._coverage_tracer.on_computation(computation, contract)
 
-            # _trace_cov feeds coverage.py's pytracer which registers
-            # .vy files via dynamic_source_filename.
-            seen_pcs = set()
-            ast_map = contract.source_map["pc_raw_ast_map"]
-            for pc in computation.code._trace:
-                if pc in seen_pcs:
-                    continue
-                if (node := ast_map.get(pc)) is not None:
-                    self._trace_cov(node.module_node.resolved_path, node)
-                seen_pcs.add(pc)
-
         for child in computation.children:
             if child.msg.code_address == b"":
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._trace_computation(child, child_contract)
-
-    def _trace_cov(self, filename, node):
-        pass
 
     def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))

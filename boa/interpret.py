@@ -157,7 +157,12 @@ def compiler_data(
     # when branch coverage is enabled and optimize is unspecified,
     # force unoptimized compilation so pc_raw_ast_map remains branch-accurate.
     # if the user explicitly sets optimize, keep their choice and warn.
-    if Env._coverage_enabled and Env._branch_coverage_enabled:
+    _cov = None
+    if Env._coverage_enabled:
+        import coverage
+
+        _cov = coverage.Coverage.current()
+    if _cov is not None and _cov.config.branch:
         if settings.optimize is None:
             settings.optimize = OptimizationLevel.NONE
             warnings.warn(

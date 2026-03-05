@@ -15,12 +15,18 @@ _JUMPI = 0x57
 class CoverageTracer:
     @staticmethod
     def on_computation(computation, contract):
-        cov = _get_branch_cov()
+        cov = coverage.Coverage.current()
         if cov is None:
             return
         ast_map = contract.source_map["pc_raw_ast_map"]
-        bytecode = computation.code._raw_code_bytes
         raw_trace = computation.code._trace
+
+        if not cov.config.branch:
+            lines = _record_line_coverage(raw_trace, ast_map)
+            _flush_coverage(cov, lines, {})
+            return
+
+        bytecode = computation.code._raw_code_bytes
         settings = getattr(getattr(contract, "compiler_data", None), "settings", None)
         optimize = getattr(settings, "optimize", None)
         skip_arcs = optimize != OptimizationLevel.NONE
@@ -34,7 +40,6 @@ class CoverageTracer:
 def coverage_init(registry, options):
     plugin = TitanoboaPlugin(options)
     registry.add_file_tracer(plugin)
-    registry.add_configurer(plugin)
 
     # set on the class so that reset_env() doesn't disable tracing
     Env._coverage_enabled = True
@@ -54,75 +59,9 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
     def __init__(self, options):
         pass
 
-    def configure(self, config):
-        Env._branch_coverage_enabled = config.get_option("run:branch")
-        if not Env._branch_coverage_enabled:
-            config.get_option("run:source_pkgs").append("boa.environment")
-
-    def file_tracer(self, filename):
-        if filename.endswith("boa/environment.py"):
-            return TitanoboaTracer()
-
     def file_reporter(self, filename):
         if filename.endswith(".vy"):
             return TitanoboaReporter(filename)
-
-
-class TitanoboaTracer(coverage.plugin.FileTracer):
-    def __init__(self):
-        pass
-
-    # coverage.py requires us to inspect the python call frame to
-    # see what line number to produce. we hook into specially crafted
-    # Env._trace_cov which is called for every unique pc if coverage is
-    # enabled, and then back out the contract and lineno information
-    # from there.
-
-    def _valid_frame(self, frame):
-        if hasattr(frame.f_code, "co_qualname"):
-            # Python>=3.11
-            return frame.f_code.co_qualname == Env._trace_cov.__qualname__
-
-        else:
-            # in Python<3.11 we don't have co_qualname, so try hard to
-            # find a match anyways. (this might fail if for some reason
-            # the executing env has a monkey-patched _trace_cov
-            # or something)
-            env = Env.get_singleton()
-            return frame.f_code == env._trace_cov.__code__
-
-    def dynamic_source_filename(self, filename, frame):
-        if not self._valid_frame(frame):
-            return None
-        ret = frame.f_locals["filename"]
-        if ret is not None and not ret.endswith(".vy"):
-            return None
-        return ret
-
-    def has_dynamic_source_filename(self):
-        return True
-
-    # https://coverage.rtfd.io/en/stable/api_plugin.html#coverage.FileTracer.line_number_range
-    def line_number_range(self, frame):
-        if not self._valid_frame(frame):
-            return (-1, -1)
-
-        # when branch coverage is active, suppress the pytracer's arc
-        # generation — we record branch arcs directly from the EVM trace.
-        if Env._branch_coverage_enabled:
-            return (-1, -1)
-
-        ast_node = frame.f_locals["node"]
-
-        start_lineno = ast_node.lineno
-        end_lineno = ast_node.end_lineno
-        if end_lineno is None:
-            end_lineno = start_lineno
-        return start_lineno, end_lineno
-
-    # XXX: dynamic context. return function name or something
-    def dynamic_context(self, frame):
-        pass
 
 
 # helper function. null returns get optimized directly into a jump
@@ -188,6 +127,18 @@ def _is_noop_branch(if_node):
     return _is_noop_body(if_node.body)
 
 
+def _record_line_coverage(raw_trace, ast_map):
+    """Walk raw_trace and record line hits only (no branch work)."""
+    lines_by_file: dict[str, set] = {}
+    for pc in raw_trace:
+        node = ast_map.get(pc)
+        if node is not None:
+            filename = node.module_node.resolved_path
+            if filename is not None and filename.endswith(".vy"):
+                lines_by_file.setdefault(filename, set()).add(node.lineno)
+    return lines_by_file
+
+
 def _record_coverage(
     bytecode, raw_trace, ast_map, skip_arcs=False, jumpi_conditions=None
 ):
@@ -200,18 +151,12 @@ def _record_coverage(
     (Vyper emits ISZERO before JUMPI, inverting the source condition).
     Callers should set skip_arcs=True for optimized contracts.
     """
-    lines_by_file: dict[str, set] = {}
     arcs_by_file: dict[str, set] = {}
 
     if skip_arcs:
-        for pc in raw_trace:
-            node = ast_map.get(pc)
-            if node is not None:
-                filename = node.module_node.resolved_path
-                if filename is not None and filename.endswith(".vy"):
-                    lines_by_file.setdefault(filename, set()).add(node.lineno)
-        return lines_by_file, arcs_by_file
+        return _record_line_coverage(raw_trace, ast_map), arcs_by_file
 
+    lines_by_file: dict[str, set] = {}
     resolved: dict[int, tuple[str, int, int, int] | None] = {}
 
     for i, pc in enumerate(raw_trace):
@@ -256,27 +201,33 @@ def _record_coverage(
     return lines_by_file, arcs_by_file
 
 
-def _get_branch_cov():
-    """Return the active Coverage instance if branch mode is on, else None."""
-    cov = coverage.Coverage.current()
-    if cov is not None and cov.config.branch:
-        return cov
-    return None
-
-
 def _flush_coverage(cov, lines_by_file, arcs_by_file):
     """Write line and branch arcs to the active coverage instance."""
-    merged: dict[str, set] = {}
-    for filename, lines in lines_by_file.items():
-        merged.setdefault(filename, set()).update((-1, ln) for ln in lines)
-    for filename, arcs in arcs_by_file.items():
-        merged.setdefault(filename, set()).update(arcs)
-    if merged:
-        data = cov.get_data()
-        data.add_arcs(merged)
-        data.add_file_tracers(
-            {f: "boa.coverage.TitanoboaPlugin" for f in merged if f.endswith(".vy")}
-        )
+    is_branch = cov.config.branch
+
+    if is_branch:
+        merged: dict[str, set] = {}
+        for filename, lines in lines_by_file.items():
+            merged.setdefault(filename, set()).update((-1, ln) for ln in lines)
+        for filename, arcs in arcs_by_file.items():
+            merged.setdefault(filename, set()).update(arcs)
+        if merged:
+            data = cov.get_data()
+            data.add_arcs(merged)
+            data.add_file_tracers(
+                {f: "boa.coverage.TitanoboaPlugin" for f in merged if f.endswith(".vy")}
+            )
+    else:
+        if lines_by_file:
+            data = cov.get_data()
+            data.add_lines(lines_by_file)
+            data.add_file_tracers(
+                {
+                    f: "boa.coverage.TitanoboaPlugin"
+                    for f in lines_by_file
+                    if f.endswith(".vy")
+                }
+            )
 
 
 class TitanoboaReporter(coverage.plugin.FileReporter):
