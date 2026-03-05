@@ -198,8 +198,13 @@ def compiler_data(
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
-    # Use effective settings in the cache key so coverage-forced
-    # optimize=none artifacts cannot collide with optimized artifacts.
+    # Use effective settings (not raw kwargs) in the cache key so
+    # coverage-forced optimize=NONE artifacts cannot collide with
+    # optimized artifacts.  as_dict() uses dataclasses.asdict(),
+    # excludes compiler_version (pragma-derived, not user input),
+    # drops None values, and stringifies enums.  Dropping Nones is
+    # correct: None means "use default", so {optimize: None} and {}
+    # produce the same compiled output and should share a cache entry.
     cache_key = str(
         (contract_name, filename, fingerprint, settings.as_dict(), deployer_id)
     )
