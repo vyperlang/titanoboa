@@ -599,6 +599,23 @@ def foo(x: uint256):
     ), f"If-line {if_node.lineno} not in executed (false-only): {executed2}"
 
 
+def test_branch_else_bare_return_both():
+    """if ... else: return (bare return in void fn) — false branch targets fn entry."""
+    source = """
+result: public(uint256)
+
+@external
+def foo(x: uint256):
+    if x > 5:
+        self.result = x
+    else:
+        return
+    self.result += 1
+"""
+    missing = _check_branch_coverage(source, lambda c: (c.foo(10), c.foo(1)))
+    assert missing == {}
+
+
 def test_branch_compound_and_true_only_no_spurious_false():
     """Compound ``and`` condition — true-only must NOT report false arc."""
     source = """\

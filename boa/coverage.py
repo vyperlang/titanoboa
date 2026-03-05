@@ -134,32 +134,35 @@ def _is_null_return(ast_node):
     return False
 
 
+def _branch_target(stmts, fn_node):
+    stmt = stmts[0]
+    return fn_node.lineno if _is_null_return(stmt) else stmt.lineno
+
+
 def _branch_arcs_for_if(if_node, fn_node):
     """Compute (arc_true, arc_false) line targets for an If node."""
-    arc_true = if_node.body[0].lineno
-    if _is_null_return(if_node.body[0]):
-        arc_true = fn_node.lineno
+    arc_true = _branch_target(if_node.body, fn_node)
+
+    # else/elif path is direct, no sibling search needed.
+    if if_node.orelse:
+        return arc_true, _branch_target(if_node.orelse, fn_node)
 
     parent = if_node._parent
     if hasattr(parent, "orelse") and any(s is if_node for s in parent.orelse):
         siblings = parent.orelse
     else:
         siblings = parent.body
+
     for node, next_ in zip(siblings, siblings[1:]):
         if node is if_node:
             arc_false = next_.lineno
             break
     else:
-        if isinstance(parent, vy_ast.For):
-            arc_false = parent.lineno
-        else:
-            arc_false = parent.end_lineno + 1
+        arc_false = (
+            parent.lineno if isinstance(parent, vy_ast.For) else parent.end_lineno + 1
+        )
 
-    if if_node.orelse:
-        arc_false = if_node.orelse[0].lineno
     if arc_false > fn_node.end_lineno:
-        arc_false = fn_node.lineno
-    if if_node.orelse and _is_null_return(if_node.orelse[0]):
         arc_false = fn_node.lineno
 
     return arc_true, arc_false
