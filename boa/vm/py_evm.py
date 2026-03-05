@@ -164,6 +164,7 @@ class TracingCodeStream(CodeStream):
     def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._trace = []  # trace of opcodes that were run
+        self._jumpi_conditions = None  # set by JumpiTracer when coverage is active
         self.program_counter = start_pc  # configurable start PC
         self._fake_codesize = fake_codesize  # what CODESIZE returns
 
@@ -229,6 +230,24 @@ class SstoreTracer:
 
         # dispatch into py-evm
         self.sstore(computation)
+
+
+class JumpiTracer:
+    mnemonic = "JUMPI"
+
+    def __init__(self, jumpi_op):
+        self.jumpi = jumpi_op
+
+    def __call__(self, computation):
+        # JUMPI stack: [..., condition, dest] — dest is on top
+        condition = to_int(computation._stack.values[-2])
+        trace_idx = len(computation.code._trace) - 1
+        conditions = computation.code._jumpi_conditions
+        if conditions is None:
+            conditions = {}
+            computation.code._jumpi_conditions = conditions
+        conditions[trace_idx] = condition != 0
+        self.jumpi(computation)
 
 
 # ### End section: sha3 tracing
@@ -410,6 +429,9 @@ class PyEVM:
         # patch in tracing opcodes
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.env)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.env)
+
+        if self.env._coverage_enabled:
+            c.opcodes[0x57] = JumpiTracer(c.opcodes[0x57])
 
     def enable_fast_mode(self, flag: bool = True):
         if flag:

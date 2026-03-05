@@ -24,7 +24,10 @@ class CoverageTracer:
         settings = getattr(getattr(contract, "compiler_data", None), "settings", None)
         optimize = getattr(settings, "optimize", None)
         skip_arcs = optimize != OptimizationLevel.NONE
-        lines, arcs = _record_coverage(bytecode, raw_trace, ast_map, skip_arcs)
+        jumpi_conditions = computation.code._jumpi_conditions
+        lines, arcs = _record_coverage(
+            bytecode, raw_trace, ast_map, skip_arcs, jumpi_conditions=jumpi_conditions
+        )
         _flush_coverage(cov, lines, arcs)
 
 
@@ -36,6 +39,15 @@ def coverage_init(registry, options):
     # set on the class so that reset_env() doesn't disable tracing
     Env._coverage_enabled = True
     Env._coverage_tracer = CoverageTracer()
+
+    # install JUMPI tracer on the existing singleton (if any),
+    # since its _init_vm ran before _coverage_enabled was set.
+    from boa.vm.py_evm import JumpiTracer
+
+    if Env._singleton is not None:
+        c = Env._singleton.evm.vm.state.computation_class
+        if not isinstance(c.opcodes[_JUMPI], JumpiTracer):
+            c.opcodes[_JUMPI] = JumpiTracer(c.opcodes[_JUMPI])
 
 
 class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
@@ -173,12 +185,16 @@ def _is_noop_branch(if_node):
     return _is_noop_body(if_node.body)
 
 
-def _record_coverage(bytecode, raw_trace, ast_map, skip_arcs=False):
+def _record_coverage(
+    bytecode, raw_trace, ast_map, skip_arcs=False, jumpi_conditions=None
+):
     """Walk raw_trace, record line hits and branch arcs.
 
     Branch arc resolution requires unoptimized bytecode where every
-    JUMPI maps directly to its If node and polarity is always:
-    fallthrough (pc+1) = true branch, taken = false branch.
+    JUMPI maps directly to its If node.  Branch direction comes from
+    jumpi_conditions (populated by JumpiTracer); polarity is:
+    jump not taken = true branch, jump taken = false branch
+    (Vyper emits ISZERO before JUMPI, inverting the source condition).
     Callers should set skip_arcs=True for optimized contracts.
     """
     lines_by_file: dict[str, set] = {}
@@ -226,13 +242,13 @@ def _record_coverage(bytecode, raw_trace, ast_map, skip_arcs=False):
 
         filename, if_lineno, arc_true, arc_false = info
 
-        # fallthrough (pc+1) = true branch, taken = false branch
-        fell_through = i + 1 < len(raw_trace) and raw_trace[i + 1] == pc + 1
+        # fallthrough (jump_taken=False) = true branch, taken = false branch
+        jump_taken = jumpi_conditions[i]
         arcs = arcs_by_file.setdefault(filename, set())
-        if fell_through:
-            arcs.add((if_lineno, arc_true))
-        else:
+        if jump_taken:
             arcs.add((if_lineno, arc_false))
+        else:
+            arcs.add((if_lineno, arc_true))
 
     return lines_by_file, arcs_by_file
 
