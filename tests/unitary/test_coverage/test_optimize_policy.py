@@ -1,6 +1,5 @@
 """Tests that lock the coverage optimization policy in interpret.py."""
 
-import contextlib
 import warnings
 
 import coverage
@@ -22,17 +21,6 @@ def foo(x: uint256) -> uint256:
 """
 
 
-@contextlib.contextmanager
-def _branch_cov_session():
-    """Start a coverage session with branch=True so Coverage.current() works."""
-    cov = coverage.Coverage(branch=True, config_file=False, data_file=None)
-    cov.start()
-    try:
-        yield cov
-    finally:
-        cov.stop()
-
-
 @pytest.fixture(autouse=True)
 def isolate(tmp_path):
     from boa.interpret import _disk_cache
@@ -49,10 +37,10 @@ def isolate(tmp_path):
 def test_coverage_forces_no_optimization():
     """Default optimize becomes NONE when coverage is enabled, with warning."""
     Env._coverage_enabled = True
-    with _branch_cov_session():
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            data = compiler_data(SOURCE, "test", "test.vy")
+    Env._branch_coverage_enabled = True
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        data = compiler_data(SOURCE, "test", "test.vy")
     assert data.settings.optimize == OptimizationLevel.NONE
     cov_warnings = [x for x in w if "optimize=NONE" in str(x.message)]
     assert len(cov_warnings) == 1
@@ -61,12 +49,10 @@ def test_coverage_forces_no_optimization():
 def test_coverage_explicit_optimize_warns():
     """Explicit non-NONE optimize emits a warning when coverage is on."""
     Env._coverage_enabled = True
-    with _branch_cov_session():
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            data = compiler_data(
-                SOURCE, "test", "test.vy", optimize=OptimizationLevel.GAS
-            )
+    Env._branch_coverage_enabled = True
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        data = compiler_data(SOURCE, "test", "test.vy", optimize=OptimizationLevel.GAS)
     assert len(w) == 1
     assert "branch coverage may be inaccurate" in str(w[0].message)
     # user's choice is preserved
@@ -76,10 +62,10 @@ def test_coverage_explicit_optimize_warns():
 def test_coverage_explicit_none_no_warning():
     """Explicit optimize=NONE with coverage emits no warning."""
     Env._coverage_enabled = True
-    with _branch_cov_session():
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            compiler_data(SOURCE, "test", "test.vy", optimize=OptimizationLevel.NONE)
+    Env._branch_coverage_enabled = True
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        compiler_data(SOURCE, "test", "test.vy", optimize=OptimizationLevel.NONE)
     cov_warnings = [x for x in w if "coverage" in str(x.message).lower()]
     assert cov_warnings == []
 

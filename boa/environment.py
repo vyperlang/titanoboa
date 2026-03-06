@@ -26,6 +26,7 @@ class Env:
     _singleton = None
     _random = random.Random("titanoboa")  # something reproducible
     _coverage_enabled = False
+    _branch_coverage_enabled = False
     _coverage_tracer = None  # class-level — survives reset_env()
 
     def __init__(self, fork_try_prefetch_state=False, fast_mode_enabled=False):

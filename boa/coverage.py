@@ -40,6 +40,7 @@ class CoverageTracer:
 def coverage_init(registry, options):
     plugin = TitanoboaPlugin(options)
     registry.add_file_tracer(plugin)
+    registry.add_configurer(plugin)
 
     # set on the class so that reset_env() doesn't disable tracing
     Env._coverage_enabled = True
@@ -58,6 +59,9 @@ def coverage_init(registry, options):
 class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
     def __init__(self, options):
         pass
+
+    def configure(self, config):
+        Env._branch_coverage_enabled = config.get_option("run:branch")
 
     def file_reporter(self, filename):
         if filename.endswith(".vy"):
@@ -121,7 +125,7 @@ def _is_noop_body(body):
 
 
 def _is_noop_branch(if_node):
-    """``if cond: pass`` without else compiles away — not a real branch."""
+    """``if cond: pass`` without else produces no branch-worthy bytecode."""
     if if_node.orelse:
         return False
     return _is_noop_body(if_node.body)
