@@ -208,6 +208,10 @@ def _record_coverage(
 def _flush_coverage(cov, lines_by_file, arcs_by_file):
     """Write line and branch arcs to the active coverage instance."""
     is_branch = cov.config.branch
+    # Use cov._data directly instead of cov.get_data() to avoid
+    # triggering _post_save_work() mid-trace (which emits a spurious
+    # "no-data-collected" warning when source= restricts to .vy-only dirs).
+    data = cov._data
 
     if is_branch:
         merged: dict[str, set] = {}
@@ -216,14 +220,12 @@ def _flush_coverage(cov, lines_by_file, arcs_by_file):
         for filename, arcs in arcs_by_file.items():
             merged.setdefault(filename, set()).update(arcs)
         if merged:
-            data = cov.get_data()
             data.add_arcs(merged)
             data.add_file_tracers(
                 {f: "boa.coverage.TitanoboaPlugin" for f in merged if f.endswith(".vy")}
             )
     else:
         if lines_by_file:
-            data = cov.get_data()
             data.add_lines(lines_by_file)
             data.add_file_tracers(
                 {

@@ -107,6 +107,51 @@ def test_coverage_cli_smoke(coverage_workspace):
     )
 
 
+def test_line_mode_source_no_spurious_warnings(tmp_path):
+    """Line-mode coverage with source= must not emit 'no-data-collected'."""
+    # Create a .vy-only source directory
+    src_dir = tmp_path / "contracts"
+    src_dir.mkdir()
+    contract = src_dir / "contract.vy"
+    contract.write_text(CONTRACT_SOURCE)
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+
+    runner = tmp_path / "runner.py"
+    runner.write_text(
+        textwrap.dedent(
+            f"""\
+        import boa
+        from boa.interpret import set_cache_dir
+
+        set_cache_dir({repr(str(cache_dir))})
+        c = boa.load({repr(str(contract))})
+        c.foo(10)
+    """
+        )
+    )
+
+    rcfile = tmp_path / ".coveragerc"
+    rcfile.write_text(f"[run]\nplugins = boa.coverage\nsource = {src_dir}\n")
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "coverage", "run", "--rcfile=.coveragerc", "runner.py"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (
+        "no-data-collected" not in result.stderr
+    ), f"Spurious 'no-data-collected' warning emitted:\n{result.stderr}"
+
+
 def test_loads_no_crash_on_report():
     """boa.loads() must not crash coverage report.
 
