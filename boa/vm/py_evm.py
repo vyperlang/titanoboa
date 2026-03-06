@@ -429,9 +429,7 @@ class PyEVM:
         # patch in tracing opcodes
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.env)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.env)
-
-        if self.env._coverage_enabled:
-            c.opcodes[0x57] = JumpiTracer(c.opcodes[0x57])
+        c.opcodes[0x57] = JumpiTracer(c.opcodes[0x57])
 
     def enable_fast_mode(self, flag: bool = True):
         if flag:

@@ -46,15 +46,6 @@ def coverage_init(registry, options):
     Env._coverage_enabled = True
     Env._coverage_tracer = CoverageTracer()
 
-    # install JUMPI tracer on the existing singleton (if any),
-    # since its _init_vm ran before _coverage_enabled was set.
-    from boa.vm.py_evm import JumpiTracer
-
-    if Env._singleton is not None:
-        c = Env._singleton.evm.vm.state.computation_class
-        if not isinstance(c.opcodes[_JUMPI], JumpiTracer):
-            c.opcodes[_JUMPI] = JumpiTracer(c.opcodes[_JUMPI])
-
 
 class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
     def __init__(self, options):
