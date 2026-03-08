@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from functools import cached_property
 
 import coverage
@@ -37,14 +38,19 @@ class CoverageTracer:
         _flush_coverage(cov, lines, arcs)
 
 
+@dataclass
+class CoverageState:
+    tracer: CoverageTracer
+    branch_enabled: bool = False
+
+
 def coverage_init(registry, options):
     plugin = TitanoboaPlugin(options)
     registry.add_file_tracer(plugin)
     registry.add_configurer(plugin)
 
     # set on the class so that reset_env() doesn't disable tracing
-    Env._coverage_enabled = True
-    Env._coverage_tracer = CoverageTracer()
+    Env._coverage = CoverageState(tracer=CoverageTracer())
 
 
 class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
@@ -52,7 +58,7 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
         pass
 
     def configure(self, config):
-        Env._branch_coverage_enabled = config.get_option("run:branch")
+        Env._coverage.branch_enabled = config.get_option("run:branch")
 
     def file_reporter(self, filename):
         if filename.endswith(".vy"):

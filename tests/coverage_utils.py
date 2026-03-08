@@ -16,12 +16,8 @@ def _analyze(cov, filename):
 @contextlib.contextmanager
 def saved_coverage_state():
     """Save and restore Env coverage state around a block."""
-    saved_coverage = Env._coverage_enabled
-    saved_branch = Env._branch_coverage_enabled
-    saved_tracer = Env._coverage_tracer
+    saved = Env._coverage
     try:
         yield
     finally:
-        Env._coverage_enabled = saved_coverage
-        Env._branch_coverage_enabled = saved_branch
-        Env._coverage_tracer = saved_tracer
+        Env._coverage = saved

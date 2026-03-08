@@ -25,9 +25,7 @@ _AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
 class Env:
     _singleton = None
     _random = random.Random("titanoboa")  # something reproducible
-    _coverage_enabled = False
-    _branch_coverage_enabled = False
-    _coverage_tracer = None  # class-level — survives reset_env()
+    _coverage = None  # class-level CoverageState — survives reset_env()
 
     def __init__(self, fork_try_prefetch_state=False, fast_mode_enabled=False):
         self._gas_price = None
@@ -249,7 +247,7 @@ class Env:
             bytecode=bytecode,
         )
 
-        if self._coverage_enabled:
+        if self._coverage is not None:
             self._trace_computation(computation, contract)
 
         if computation._gas_meter_class != NoGasMeter:
@@ -338,7 +336,7 @@ class Env:
                 ir_executor=ir_executor,
                 contract=contract,
             )
-            if self._coverage_enabled:
+            if self._coverage is not None:
                 self._trace_computation(ret, contract)
 
             if ret._gas_meter_class != NoGasMeter:
@@ -348,8 +346,7 @@ class Env:
 
     def _trace_computation(self, computation, contract=None):
         if contract is not None and hasattr(contract, "source_map"):
-            if self._coverage_tracer is not None:
-                self._coverage_tracer.on_computation(computation, contract)
+            self._coverage.tracer.on_computation(computation, contract)
 
         for child in computation.children:
             if child.msg.code_address == b"":

@@ -58,14 +58,14 @@ def bar(b: uint256) -> uint256:
 
 
 def test_sub_computations(source_contract):
-    from boa.environment import Env
+    from boa.coverage import CoverageState, CoverageTracer
+    from tests.coverage_utils import saved_coverage_state
 
-    saved = Env._coverage_enabled
-    try:
-        Env._coverage_enabled = True
+    with saved_coverage_state():
+        from boa.environment import Env
+
+        Env._coverage = CoverageState(tracer=CoverageTracer())
         source_contract.bar(10)
-    finally:
-        Env._coverage_enabled = saved
 
 
 # --- branch coverage tests ---
