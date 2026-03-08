@@ -82,7 +82,7 @@ def _branch_arcs_for_if(if_node, fn_node):
         return arc_true, _branch_target(if_node.orelse, fn_node)
 
     parent = if_node._parent
-    if hasattr(parent, "orelse") and any(s is if_node for s in parent.orelse):
+    if isinstance(parent, vy_ast.If) and any(s is if_node for s in parent.orelse):
         siblings = parent.orelse
     else:
         siblings = parent.body
