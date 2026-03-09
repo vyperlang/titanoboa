@@ -407,6 +407,7 @@ class PyEVM:
         self.env = env
         self._fast_mode_enabled = fast_mode_enabled
         self._fork_try_prefetch_state = fork_try_prefetch_state
+        self._jumpi_tracer_installed = False
         self._init_vm()
 
     def _init_vm(self, account_db_class=AccountDB):
@@ -434,9 +435,11 @@ class PyEVM:
             self.install_jumpi_tracer()
 
     def install_jumpi_tracer(self):
+        if self._jumpi_tracer_installed:
+            return
         c = self.vm.state.computation_class
-        if not isinstance(c.opcodes[0x57], JumpiTracer):
-            c.opcodes[0x57] = JumpiTracer(c.opcodes[0x57])
+        c.opcodes[0x57] = JumpiTracer(c.opcodes[0x57])
+        self._jumpi_tracer_installed = True
 
     def enable_fast_mode(self, flag: bool = True):
         if flag:
