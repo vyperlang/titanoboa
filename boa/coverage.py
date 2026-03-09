@@ -28,8 +28,7 @@ class CoverageTracer:
             return
 
         bytecode = computation.code._raw_code_bytes
-        settings = getattr(getattr(contract, "compiler_data", None), "settings", None)
-        optimize = getattr(settings, "optimize", None)
+        optimize = contract.compiler_data.settings.optimize
         skip_arcs = optimize != OptimizationLevel.NONE
         jumpi_conditions = computation.code._jumpi_conditions
         lines, arcs = _record_coverage(
