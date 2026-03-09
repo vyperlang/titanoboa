@@ -435,7 +435,8 @@ class PyEVM:
 
     def install_jumpi_tracer(self):
         c = self.vm.state.computation_class
-        c.opcodes[0x57] = JumpiTracer(c.opcodes[0x57])
+        if not isinstance(c.opcodes[0x57], JumpiTracer):
+            c.opcodes[0x57] = JumpiTracer(c.opcodes[0x57])
 
     def enable_fast_mode(self, flag: bool = True):
         if flag:
