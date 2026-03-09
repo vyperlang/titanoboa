@@ -60,6 +60,9 @@ class TitanoboaPlugin(coverage.plugin.CoveragePlugin):
     def configure(self, config):
         Env._coverage.branch_enabled = config.get_option("run:branch")
 
+        if Env._coverage.branch_enabled and Env._singleton is not None:
+            Env._singleton.evm.install_jumpi_tracer()
+
     def file_reporter(self, filename):
         if filename.endswith(".vy"):
             return TitanoboaReporter(filename)
