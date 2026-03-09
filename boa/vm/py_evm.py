@@ -256,6 +256,10 @@ class titanoboa_computation:
     _gas_meter_class = GasMeter
     _base_jumpi = None
 
+    @property
+    def _trace_jumpi(self):
+        return self._base_jumpi is not None
+
     def __init__(self, *args, **kwargs):
         # super() hardcodes CodeStream into the ctor
         # so we have to override it here
@@ -265,7 +269,7 @@ class titanoboa_computation:
             self.code._raw_code_bytes,
             fake_codesize=getattr(self.msg, "_fake_codesize", None),
             start_pc=getattr(self.msg, "_start_pc", 0),
-            _trace_jumpi=self._base_jumpi is not None,
+            _trace_jumpi=self._trace_jumpi,
         )
         global _precompiles
         # copy so as not to mess with class state
