@@ -161,10 +161,10 @@ class TracingCodeStream(CodeStream):
         "program_counter",
     ]
 
-    def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, **kwargs):
+    def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, _trace_jumpi=False, **kwargs):
         super().__init__(*args, **kwargs)
         self._trace = []  # trace of opcodes that were run
-        self._jumpi_conditions = None  # set by JumpiTracer when coverage is active
+        self._jumpi_conditions = {} if _trace_jumpi else None
         self.program_counter = start_pc  # configurable start PC
         self._fake_codesize = fake_codesize  # what CODESIZE returns
 
@@ -242,11 +242,7 @@ class JumpiTracer:
         # JUMPI stack: [..., condition, dest] — dest is on top
         condition = to_int(computation._stack.values[-2])
         trace_idx = len(computation.code._trace) - 1
-        conditions = computation.code._jumpi_conditions
-        if conditions is None:
-            conditions = {}
-            computation.code._jumpi_conditions = conditions
-        conditions[trace_idx] = condition != 0
+        computation.code._jumpi_conditions[trace_idx] = condition != 0
         self.jumpi(computation)
 
 
@@ -258,6 +254,7 @@ class JumpiTracer:
 # `titanoboa_computation` is a class which can be constructed dynamically
 class titanoboa_computation:
     _gas_meter_class = GasMeter
+    _base_jumpi = None
 
     def __init__(self, *args, **kwargs):
         # super() hardcodes CodeStream into the ctor
@@ -268,6 +265,7 @@ class titanoboa_computation:
             self.code._raw_code_bytes,
             fake_codesize=getattr(self.msg, "_fake_codesize", None),
             start_pc=getattr(self.msg, "_start_pc", 0),
+            _trace_jumpi=self._base_jumpi is not None,
         )
         global _precompiles
         # copy so as not to mess with class state
@@ -407,7 +405,6 @@ class PyEVM:
         self.env = env
         self._fast_mode_enabled = fast_mode_enabled
         self._fork_try_prefetch_state = fork_try_prefetch_state
-        self._jumpi_tracer_installed = False
         self._init_vm()
 
     def _init_vm(self, account_db_class=AccountDB):
@@ -435,11 +432,10 @@ class PyEVM:
             self.install_jumpi_tracer()
 
     def install_jumpi_tracer(self):
-        if self._jumpi_tracer_installed:
-            return
         c = self.vm.state.computation_class
-        c.opcodes[0x57] = JumpiTracer(c.opcodes[0x57])
-        self._jumpi_tracer_installed = True
+        if c._base_jumpi is None:
+            c._base_jumpi = c.opcodes[0x57]
+        c.opcodes[0x57] = JumpiTracer(c._base_jumpi)
 
     def enable_fast_mode(self, flag: bool = True):
         if flag:
