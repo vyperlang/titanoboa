@@ -25,7 +25,7 @@ _AddressType: TypeAlias = Address | str | bytes | PYEVM_Address
 class Env:
     _singleton = None
     _random = random.Random("titanoboa")  # something reproducible
-    _coverage_enabled = False
+    _coverage = None  # class-level CoverageState — survives reset_env()
 
     def __init__(self, fork_try_prefetch_state=False, fast_mode_enabled=False):
         self._gas_price = None
@@ -247,7 +247,7 @@ class Env:
             bytecode=bytecode,
         )
 
-        if self._coverage_enabled:
+        if self._coverage is not None:
             self._trace_computation(computation, contract)
 
         if computation._gas_meter_class != NoGasMeter:
@@ -336,7 +336,7 @@ class Env:
                 ir_executor=ir_executor,
                 contract=contract,
             )
-            if self._coverage_enabled:
+            if self._coverage is not None:
                 self._trace_computation(ret, contract)
 
             if ret._gas_meter_class != NoGasMeter:
@@ -344,32 +344,15 @@ class Env:
 
             return ret
 
-    # trace pcs for coverage sake. dummy function which
-    # just issues the right calls to _trace_cov() to get picked
-    # up by coverage. bit ugly, but tracer only allows
-    # dynamic_source_filename to be set once per (python) function call,
-    # so we need to use this in case the pc trace covers multiple files
     def _trace_computation(self, computation, contract=None):
-        # perf: don't trace if contract is None
         if contract is not None and hasattr(contract, "source_map"):
-            ast_map = contract.source_map["pc_raw_ast_map"]
-            seen_pcs = set()
-            for pc in computation.code._trace:
-                if pc in seen_pcs:
-                    continue
-                if (node := ast_map.get(pc)) is not None:
-                    mod = node.module_node
-                    self._trace_cov(mod.resolved_path, node)
-                seen_pcs.add(pc)
+            self._coverage.tracer.on_computation(computation, contract)
 
         for child in computation.children:
             if child.msg.code_address == b"":
                 continue
             child_contract = self._lookup_contract_fast(child.msg.code_address)
             self._trace_computation(child, child_contract)
-
-    def _trace_cov(self, filename, node):
-        pass
 
     def get_code(self, address: _AddressType) -> bytes:
         return self.evm.get_code(Address(address))

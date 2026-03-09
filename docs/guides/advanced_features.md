@@ -436,8 +436,9 @@ contract = boa.loads(
 
 ```python
 # Enable coverage tracking
+from boa.coverage import CoverageState, CoverageTracer
 import boa
-boa.env._coverage_enabled = True
+boa.env._coverage = CoverageState(tracer=CoverageTracer())
 
 # Run your tests
 contract = boa.loads("MyContract.vy")

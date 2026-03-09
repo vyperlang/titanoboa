@@ -17,7 +17,7 @@ from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import CompilerInput, FileInput, FilesystemInputBundle
 from vyper.compiler.phases import CompilerData
-from vyper.compiler.settings import Settings, anchor_settings
+from vyper.compiler.settings import OptimizationLevel, Settings, anchor_settings
 from vyper.semantics.analysis.imports import resolve_imports
 from vyper.semantics.analysis.module import analyze_module
 from vyper.semantics.types.module import ModuleT
@@ -153,6 +153,25 @@ def compiler_data(
     input_bundle = FilesystemInputBundle(search_paths)
 
     settings = Settings(**kwargs)
+
+    # when branch coverage is enabled and optimize is unspecified,
+    # force unoptimized compilation so pc_raw_ast_map remains branch-accurate.
+    # if the user explicitly sets optimize, keep their choice and warn.
+    if Env._coverage is not None and Env._coverage.branch_enabled:
+        if settings.optimize is None:
+            settings.optimize = OptimizationLevel.NONE
+            warnings.warn(
+                "branch coverage requires unoptimized bytecode; "
+                "compilation will use optimize=NONE",
+                stacklevel=2,
+            )
+        elif settings.optimize != OptimizationLevel.NONE:
+            warnings.warn(
+                "coverage is enabled but optimize is set to "
+                f"'{settings.optimize.name}'; branch coverage may be inaccurate",
+                stacklevel=2,
+            )
+
     ret = CompilerData(file_input, input_bundle, settings)
     if _disk_cache is None:
         return ret
@@ -179,7 +198,16 @@ def compiler_data(
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
-    cache_key = str((contract_name, filename, fingerprint, kwargs, deployer_id))
+    # Use effective settings (not raw kwargs) in the cache key so
+    # coverage-forced optimize=NONE artifacts cannot collide with
+    # optimized artifacts.  as_dict() uses dataclasses.asdict(),
+    # excludes compiler_version (pragma-derived, not user input),
+    # drops None values, and stringifies enums.  Dropping Nones is
+    # correct: None means "use default", so {optimize: None} and {}
+    # produce the same compiled output and should share a cache entry.
+    cache_key = str(
+        (contract_name, filename, fingerprint, settings.as_dict(), deployer_id)
+    )
 
     ret = _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
