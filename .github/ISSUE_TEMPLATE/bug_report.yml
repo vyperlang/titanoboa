@@ -1,0 +1,55 @@
+name: Bug report
+description: Report unexpected behavior or a crash
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more detail you provide, the faster we can reproduce it.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong, in one or two sentences?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal code or commands that trigger the issue. Link to a gist or repo if needed.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include full traceback or error message if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Versions that matter for reproducing (Python, titanoboa, Vyper, OS, etc.).
+      placeholder: |
+        - Python:
+        - titanoboa:
+        - vyper:
+        - OS:
+    validations:
+      required: false
