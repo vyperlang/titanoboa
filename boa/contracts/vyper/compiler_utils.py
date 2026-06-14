@@ -1,3 +1,5 @@
+import copy
+import importlib
 import textwrap
 
 import vyper.ast as vy_ast
@@ -15,11 +17,10 @@ from vyper.semantics.analysis.constant_folding import ConstantFolder
 from vyper.semantics.analysis.utils import get_exact_type_from_node
 from vyper.venom import generate_assembly_experimental
 
-# TODO remove once vyper 0.4.4 is released
 try:
-    from vyper.venom import generate_venom
+    from vyper.venom import generate_ir as _legacy_ir_to_venom
 except ImportError:
-    from vyper.venom import generate_ir as generate_venom
+    _legacy_ir_to_venom = None
 
 from boa.contracts.vyper.ir_executor import executor_from_ir
 
@@ -37,6 +38,66 @@ def _swipe_constants(src_ast, dst_ast):
     s = ConstantFolder(src_ast)
     s._get_constants()
     s.visit(dst_ast)
+
+
+def _compile_assembly_with_legacy_venom(ir, settings):
+    assert _legacy_ir_to_venom is not None
+    venom_code = _legacy_ir_to_venom(ir, settings)
+    return generate_assembly_experimental(venom_code, optimize=settings.optimize)
+
+
+def _module_with_debug_function(module_t, func_t):
+    ret = copy.copy(module_t)
+    ret.exposed_functions = [*module_t.exposed_functions, func_t]
+    return ret
+
+
+def _compile_assembly_with_direct_venom(module_t, func_t, settings):
+    try:
+        codegen_venom = importlib.import_module("vyper.codegen_venom")
+    except ImportError as exc:
+        raise ImportError(
+            "This Vyper version does not expose a supported Venom codegen API"
+        ) from exc
+
+    debug_module_t = _module_with_debug_function(module_t, func_t)
+    venom_code = codegen_venom.generate_venom_runtime(debug_module_t, settings)
+    return generate_assembly_experimental(venom_code, optimize=settings.optimize)
+
+
+def _ensure_function_ids(contract, module_t, func_t):
+    for exposed_func_t in module_t.exposed_functions:
+        contract.ensure_id(exposed_func_t)
+        for internal_func_t in exposed_func_t.reachable_internal_functions:
+            contract.ensure_id(internal_func_t)
+
+    contract.ensure_id(func_t)
+    for internal_func_t in func_t.reachable_internal_functions:
+        contract.ensure_id(internal_func_t)
+
+
+def _build_legacy_debug_ir(contract, module_t, ast, func_t):
+    # use compiler's selector section which naturally handles edge cases
+    # (such as methods with default parameters)
+    selector_section = _selector_section_linear([ast], module_t)
+
+    # first mush it with the rest of the IR in the contract to ensure
+    # all labels are present, and then optimize all together
+    # (use unoptimized IR, ir_executor can't handle optimized selector tables)
+    _, contract_runtime = contract.unoptimized_ir
+    ir_list = ["seq", selector_section, contract_runtime]
+    reachable = func_t.reachable_internal_functions
+
+    already_compiled = _runtime_reachable_functions(module_t, contract)
+    missing_functions = reachable.difference(already_compiled)
+    # TODO: cache function compilations or something
+    for f in missing_functions:
+        assert f.ast_def is not None
+        contract.ensure_id(f)
+        func_ir = generate_ir_for_internal_function(f.ast_def, module_t, False).func_ir
+        ir_list.append(func_ir)
+
+    return IRnode.from_list(ir_list)
 
 
 def compile_vyper_function(vyper_function, contract):
@@ -61,49 +122,26 @@ def compile_vyper_function(vyper_function, contract):
 
         ast = ast.body[0]
         func_t = ast._metadata["func_type"]
+        _ensure_function_ids(contract, module_t, func_t)
 
-        contract.ensure_id(func_t)
-        # use compiler's selector section which naturally handles edge
-        # cases (such as methods with default parameters)
-        selector_section = _selector_section_linear([ast], module_t)
-
-        # first mush it with the rest of the IR in the contract to ensure
-        # all labels are present, and then optimize all together
-        # (use unoptimized IR, ir_executor can't handle optimized selector tables)
-        _, contract_runtime = contract.unoptimized_ir
-        ir_list = ["seq", selector_section, contract_runtime]
-        reachable = func_t.reachable_internal_functions
-
-        already_compiled = _runtime_reachable_functions(module_t, contract)
-        missing_functions = reachable.difference(already_compiled)
-        # TODO: cache function compilations or something
-        for f in missing_functions:
-            assert f.ast_def is not None
-            contract.ensure_id(f)
-            ir_list.append(
-                generate_ir_for_internal_function(f.ast_def, module_t, False).func_ir
-            )
-
-        ir = IRnode.from_list(ir_list)
         if settings.experimental_codegen:
-            venom_code = generate_venom(ir, settings)
-            assembly = generate_assembly_experimental(
-                venom_code, optimize=settings.optimize
-            )
-
+            if _legacy_ir_to_venom is not None:
+                ir = _build_legacy_debug_ir(contract, module_t, ast, func_t)
+                assembly = _compile_assembly_with_legacy_venom(ir, settings)
+            else:
+                assembly = _compile_assembly_with_direct_venom(
+                    module_t, func_t, settings
+                )
+            ir_executor = None
         else:
+            ir = _build_legacy_debug_ir(contract, module_t, ast, func_t)
             ir = optimizer.optimize(ir)
             assembly = compile_ir.compile_to_assembly(ir)
+            ir_executor = executor_from_ir(ir, compiler_data)
 
         bytecode, source_map = compile_ir.assembly_to_evm(assembly)
         bytecode += contract.data_section
         typ = func_t.return_type
-
-        # generate the IR executor
-        if settings.experimental_codegen:
-            ir_executor = None
-        else:
-            ir_executor = executor_from_ir(ir, compiler_data)
 
         return ast, ir_executor, bytecode, source_map, typ
 
