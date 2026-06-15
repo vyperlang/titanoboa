@@ -13,21 +13,12 @@ import vyper
 import vyper.ir.compile_ir as compile_ir
 from packaging.version import Version
 from vvm.utils.versioning import _pick_vyper_version, detect_version_specifier_set
-from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import CompilerInput, FileInput, FilesystemInputBundle
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import OptimizationLevel, Settings, anchor_settings
-from vyper.semantics.analysis.imports import resolve_imports
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
-
-try:
-    from vyper.semantics.analysis.module import analyze_module as _analyze_module_ast
-    _analyze_modules = None
-except ImportError:
-    _analyze_module_ast = None
-    from vyper.semantics.analysis.module import analyze_modules as _analyze_modules
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
 from boa.contracts.vvm.vvm_contract import VVMDeployer
@@ -44,12 +35,6 @@ from boa.util.disk_cache import DiskCache
 
 if TYPE_CHECKING:
     from vyper.semantics.analysis.base import ImportInfo
-
-
-def _analyze_module(ast, imports):
-    if _analyze_module_ast is not None:
-        return _analyze_module_ast(ast)
-    return _analyze_modules(imports)
 
 
 _Contract = Union[VyperContract, VyperBlueprint]
@@ -295,23 +280,22 @@ def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
 def loads_vyi(source_code: str, name: str = None, filename: str = None):
     global _search_path
 
-    ast = parse_to_ast(source_code, is_interface=True)
-
     if name is None:
         name = "VyperContract.vyi"
 
-    search_paths = get_search_paths(_search_path)
-    input_bundle = FilesystemInputBundle(search_paths)
+    filename_for_input = filename or name
+    path = Path(filename_for_input)
+    if path.suffix != ".vyi":
+        path = path.with_suffix(".vyi")
 
-    # cf. CompilerData._resolve_imports
-    if filename is not None:
-        ctx = input_bundle.search_path(Path(filename).parent)
-    else:
-        ctx = contextlib.nullcontext()
-    with ctx:
-        imports = resolve_imports(ast, input_bundle)
-
-    module_t = _analyze_module(ast, imports)
+    file_input = FileInput(
+        contents=source_code,
+        source_id=-1,
+        path=path,
+        resolved_path=path.resolve(strict=False),
+    )
+    input_bundle = FilesystemInputBundle(get_search_paths(_search_path))
+    module_t = CompilerData(file_input, input_bundle, Settings()).global_ctx
     abi = module_t.interface.to_toplevel_abi_dict()
     return ABIContractFactory(name, abi, filename=filename)
 
