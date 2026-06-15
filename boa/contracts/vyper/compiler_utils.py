@@ -11,10 +11,17 @@ from vyper.codegen.function_definitions import (
 from vyper.codegen.ir_node import IRnode
 from vyper.codegen.module import _runtime_reachable_functions, _selector_section_linear
 from vyper.compiler.settings import anchor_settings
-from vyper.exceptions import InvalidType
+from vyper.exceptions import InvalidType, VyperException
 from vyper.ir import compile_ir, optimizer
 from vyper.semantics.analysis.constant_folding import ConstantFolder
+from vyper.semantics.analysis.getters import generate_public_variable_getters
+from vyper.semantics.analysis.local import analyze_functions
+from vyper.semantics.analysis.module import ModuleAnalyzer, _analyze_call_graph
 from vyper.semantics.analysis.utils import get_exact_type_from_node
+from vyper.semantics.namespace import get_namespace
+from vyper.semantics.types.function import ContractFunctionT
+from vyper.semantics.types.module import ModuleT
+from vyper.utils import OrderedSet
 from vyper.venom import generate_assembly_experimental
 
 try:
@@ -38,6 +45,50 @@ def _swipe_constants(src_ast, dst_ast):
     s = ConstantFolder(src_ast)
     s._get_constants()
     s.visit(dst_ast)
+
+
+def _copy_namespace(namespace):
+    ret = namespace.__class__.__new__(namespace.__class__)
+    dict.update(ret, namespace)
+    ret._scopes = copy.deepcopy(namespace._scopes)
+    return ret
+
+
+def _analyze_debug_module(ast):
+    if hasattr(analysis, "analyze_module"):
+        analysis.analyze_module(ast)
+    else:
+        _analyze_debug_module_in_current_namespace(ast)
+
+
+def _analyze_debug_module_in_current_namespace(ast):
+    namespace = get_namespace()
+    with namespace.enter_scope():
+        analyzer = ModuleAnalyzer(ast, namespace)
+        analyzer.analyze_module_body()
+        ast._metadata["namespace"] = _copy_namespace(namespace)
+        generate_public_variable_getters(ast)
+        ast._metadata["type"] = ModuleT(ast)
+        analyze_functions(ast)
+        _build_debug_call_graph_edges(ast)
+        _analyze_call_graph(ast)
+
+
+def _build_debug_call_graph_edges(ast):
+    for func in ast.get_children(vy_ast.FunctionDef):
+        func_t = func._metadata["func_type"]
+        func_t.called_functions = OrderedSet()
+
+        for call in func.get_descendants(vy_ast.Call):
+            try:
+                call_t = get_exact_type_from_node(call.func)
+            except VyperException:
+                continue
+
+            if isinstance(call_t, ContractFunctionT) and (
+                call_t.is_internal or call_t.is_constructor
+            ):
+                func_t.called_functions.add(call_t.get_concrete_override())
 
 
 def _compile_assembly_with_legacy_venom(ir, settings):
@@ -118,7 +169,7 @@ def compile_vyper_function(vyper_function, contract):
         # override namespace and add wrapper code at the top
         with contract.override_vyper_namespace():
             _swipe_constants(compiler_data.annotated_vyper_module, ast)
-            analysis.analyze_module(ast)
+            _analyze_debug_module(ast)
 
         ast = ast.body[0]
         func_t = ast._metadata["func_type"]

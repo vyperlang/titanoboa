@@ -307,6 +307,13 @@ class ErrorDetail:
         return msg
 
 
+def _copy_vyper_namespace(namespace):
+    ret = namespace.__class__.__new__(namespace.__class__)
+    dict.update(ret, namespace)
+    ret._scopes = copy.deepcopy(namespace._scopes)
+    return ret
+
+
 # "pattern match" a BoaError. tries to match fields of the error
 # to the args/kwargs provided. raises if no match
 def check_boa_error_matches(error, *args, **kwargs):
@@ -794,9 +801,7 @@ class VyperContract(_BaseVyperContract):
     @cached_property
     def _vyper_namespace(self):
         module = self.compiler_data.annotated_vyper_module
-        # make a copy of the namespace, since we might modify it
-        ret = copy.copy(module._metadata["namespace"])
-        ret._scopes = copy.deepcopy(ret._scopes)
+        ret = _copy_vyper_namespace(module._metadata["namespace"])
         if len(ret._scopes) == 0:
             # funky behavior in Namespace.enter_scope()
             ret._scopes.append(set())
@@ -942,6 +947,12 @@ class VyperFunction:
     def func_t(self):
         return self.fn_ast._metadata["func_type"]
 
+    @property
+    def is_modifying(self):
+        if hasattr(self.func_t, "is_mutable"):
+            return self.func_t.is_mutable
+        return self.func_t.is_modifying
+
     # The function type used for ABI validation/encoding. Defaults to
     # the function's own type, but subclasses (e.g., internal wrappers)
     # can override this to use a generated external wrapper signature
@@ -1069,7 +1080,7 @@ class VyperFunction:
                 data=calldata_bytes,
                 value=value,
                 gas=gas,
-                is_modifying=self.func_t.is_mutable,
+                is_modifying=self.is_modifying,
                 simulate=simulate,
                 override_bytecode=override_bytecode,
                 ir_executor=ir_executor,
