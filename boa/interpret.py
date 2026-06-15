@@ -19,9 +19,15 @@ from vyper.compiler.input_bundle import CompilerInput, FileInput, FilesystemInpu
 from vyper.compiler.phases import CompilerData
 from vyper.compiler.settings import OptimizationLevel, Settings, anchor_settings
 from vyper.semantics.analysis.imports import resolve_imports
-from vyper.semantics.analysis.module import analyze_module
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
+
+try:
+    from vyper.semantics.analysis.module import analyze_module as _analyze_module_ast
+    _analyze_modules = None
+except ImportError:
+    _analyze_module_ast = None
+    from vyper.semantics.analysis.module import analyze_modules as _analyze_modules
 
 from boa.contracts.abi.abi_contract import ABIContractFactory
 from boa.contracts.vvm.vvm_contract import VVMDeployer
@@ -38,6 +44,13 @@ from boa.util.disk_cache import DiskCache
 
 if TYPE_CHECKING:
     from vyper.semantics.analysis.base import ImportInfo
+
+
+def _analyze_module(ast, imports):
+    if _analyze_module_ast is not None:
+        return _analyze_module_ast(ast)
+    return _analyze_modules(imports)
+
 
 _Contract = Union[VyperContract, VyperBlueprint]
 
@@ -296,9 +309,9 @@ def loads_vyi(source_code: str, name: str = None, filename: str = None):
     else:
         ctx = contextlib.nullcontext()
     with ctx:
-        _ = resolve_imports(ast, input_bundle)
+        imports = resolve_imports(ast, input_bundle)
 
-    module_t = analyze_module(ast)
+    module_t = _analyze_module(ast, imports)
     abi = module_t.interface.to_toplevel_abi_dict()
     return ABIContractFactory(name, abi, filename=filename)
 
