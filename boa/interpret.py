@@ -140,6 +140,9 @@ def _get_import_fingerprint(import_info, seen):
     module_t = _get_import_module(import_info)
     if module_t is not None:
         return get_module_fingerprint(module_t, seen)
+
+    # Interface imports (e.g. .vyi or ABI files) do not have nested module
+    # state to recurse into; fingerprint their source input directly.
     return hash_input(import_info.compiler_input)
 
 
