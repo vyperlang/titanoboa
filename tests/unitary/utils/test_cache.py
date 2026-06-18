@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -5,7 +6,13 @@ from packaging.version import Version
 from vyper.compiler import CompilerData
 
 from boa.contracts.vyper.vyper_contract import VyperDeployer
-from boa.interpret import _disk_cache, _loads_partial_vvm, compiler_data, set_cache_dir
+from boa.interpret import (
+    _disk_cache,
+    _loads_partial_vvm,
+    compiler_data,
+    get_module_fingerprint,
+    set_cache_dir,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -66,6 +73,46 @@ x: constant(int128) = 1000
     assert test1.abi == test2.abi == test3.abi
     assert test1.bytecode == test2.bytecode == test3.bytecode
     assert test1.filename == test2.filename
+
+
+def test_module_fingerprint_accepts_import_infos_metadata():
+    dependency = _module_for_fingerprint("dependency")
+    module_info = SimpleNamespace(module_t=dependency)
+    import_info = _import_info_for_fingerprint(module_info)
+    root = _module_for_fingerprint("root", _import_stmt(import_infos=[import_info]))
+
+    assert get_module_fingerprint(root) != get_module_fingerprint(
+        _module_for_fingerprint("root")
+    )
+
+
+def test_module_fingerprint_accepts_legacy_import_info_metadata():
+    import_info = _import_info_for_fingerprint(
+        typ=SimpleNamespace(), compiler_input_hash="dependency"
+    )
+    root = _module_for_fingerprint("root", _import_stmt(import_info=import_info))
+
+    assert get_module_fingerprint(root) != get_module_fingerprint(
+        _module_for_fingerprint("root")
+    )
+
+
+def _module_for_fingerprint(source_hash, *import_stmts):
+    return SimpleNamespace(
+        import_stmts=list(import_stmts),
+        _module=SimpleNamespace(source_sha256sum=source_hash),
+    )
+
+
+def _import_stmt(**metadata):
+    return SimpleNamespace(_metadata=metadata)
+
+
+def _import_info_for_fingerprint(typ, compiler_input_hash="unused"):
+    return SimpleNamespace(
+        typ=typ,
+        compiler_input=SimpleNamespace(sha256sum=compiler_input_hash),
+    )
 
 
 def _to_dict(data: CompilerData) -> dict:

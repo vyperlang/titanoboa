@@ -117,18 +117,32 @@ def get_module_fingerprint(
     seen = seen or {}
     fingerprints = []
     for stmt in module_t.import_stmts:
-        import_info = stmt._metadata["import_info"]
-        if id(import_info) not in seen:
-            if isinstance(import_info.typ, ModuleT):
-                fingerprint = get_module_fingerprint(import_info.typ, seen)
-            else:
-                fingerprint = hash_input(import_info.compiler_input)
-            seen[id(import_info)] = fingerprint
-        fingerprint = seen[id(import_info)]
-        fingerprints.append(fingerprint)
+        for import_info in _iter_import_infos(stmt):
+            if id(import_info) not in seen:
+                seen[id(import_info)] = _get_import_fingerprint(import_info, seen)
+            fingerprints.append(seen[id(import_info)])
     fingerprints.append(module_t._module.source_sha256sum)
 
     return sha256sum("".join(fingerprints))
+
+
+def _iter_import_infos(stmt):
+    if "import_infos" in stmt._metadata:
+        return stmt._metadata["import_infos"]
+    return (stmt._metadata["import_info"],)
+
+
+def _get_import_fingerprint(import_info, seen):
+    module_t = _get_import_module(import_info)
+    if module_t is not None:
+        return get_module_fingerprint(module_t, seen)
+    return hash_input(import_info.compiler_input)
+
+
+def _get_import_module(import_info):
+    if isinstance(import_info.typ, ModuleT):
+        return import_info.typ
+    return getattr(import_info.typ, "module_t", None)
 
 
 def compiler_data(
