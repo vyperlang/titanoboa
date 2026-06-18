@@ -127,9 +127,13 @@ def get_module_fingerprint(
 
 
 def _iter_import_infos(stmt):
-    if "import_infos" in stmt._metadata:
-        return stmt._metadata["import_infos"]
-    return (stmt._metadata["import_info"],)
+    metadata = stmt._metadata
+    if "import_infos" in metadata:
+        # Vyper 0.5+ stores one or more ImportInfo objects per import node.
+        return metadata["import_infos"]
+
+    # Vyper 0.4.x stored a single ImportInfo per import node.
+    return (metadata["import_info"],)
 
 
 def _get_import_fingerprint(import_info, seen):
@@ -141,7 +145,10 @@ def _get_import_fingerprint(import_info, seen):
 
 def _get_import_module(import_info):
     if isinstance(import_info.typ, ModuleT):
+        # Vyper 0.4.x stores imported modules directly as ModuleT.
         return import_info.typ
+
+    # Vyper 0.5+ wraps imported modules in ModuleInfo.
     return getattr(import_info.typ, "module_t", None)
 
 
