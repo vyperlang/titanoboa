@@ -229,8 +229,8 @@ Vyper files are searched in:
     **Parameters**
 
     - `filepath`: The contract source code file path.
-    - `*args`: Additional arguments.
     - `compiler_args`: Argument to be passed to the Vyper compiler (optional).
+    - `**kwargs`: Additional arguments like (`no_vvm`, `base_path`...).
 
     ---
 
@@ -363,6 +363,8 @@ Vyper files are searched in:
     - `name`: The name of the contract (optional).
     - `dedent`: If `True`, remove any common leading whitespace from every line in `source`.
     - `compiler_args`: Argument to be passed to the Vyper compiler (optional).
+    - `no_vvm`: If `True`, do not use the Vyper Virtual Machine. (optional)
+    - `base_path`: Path to the base directory for the contract (optional).
 
     ---
 
