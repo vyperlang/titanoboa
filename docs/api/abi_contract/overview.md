@@ -21,6 +21,8 @@ ABIContract provides a way to interact with any Ethereum contract using just its
 ### From ABI and Address
 
 ```python
+import json
+
 import boa
 
 # Load contract from ABI
@@ -44,8 +46,9 @@ abi = [
     }
 ]
 
-# Connect to deployed contract
-contract = boa.loads_abi(abi).at("0x...")
+# loads_abi accepts JSON and returns an ABIContractFactory
+Contract = boa.loads_abi(json.dumps(abi), name="Token")
+contract = Contract.at("0x1234567890123456789012345678901234567890")
 
 # Use the contract
 balance = contract.balanceOf(user_address)
@@ -58,7 +61,7 @@ contract.transfer(recipient, 100)
 # Automatically fetches ABI from Etherscan
 usdc = boa.from_etherscan("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", name="USDC")
 
-# The returned object is an ABIContract
+# from_etherscan returns an ABIContract already attached to the address
 print(type(usdc))  # <class 'boa.contracts.abi.abi_contract.ABIContract'>
 ```
 
@@ -88,7 +91,8 @@ ABIContract is designed for interacting with contracts that are already deployed
 
 ```python
 # Load an existing contract at a known address
-contract = boa.loads_abi(abi, at="0x...")
+factory = boa.loads_abi(json.dumps(abi), name="Token")
+contract = factory.at("0x1234567890123456789012345678901234567890")
 
 # For deploying new contracts, use boa.load() with Vyper source code instead
 ```
@@ -196,16 +200,16 @@ fn = contract.transfer
 data = fn.prepare_calldata(recipient, amount)
 
 # Execute raw call
-result = boa.env.raw_call(
+computation = boa.env.raw_call(
     contract.address,
     data=data,
     value=0,
     gas=100000
 )
 
-# Decode result using abi_decode
-from eth.codecs import abi
-success = abi.decode("(bool)", result)[0]
+# Decode the computation's return bytes
+from eth_abi import decode
+success = decode(["bool"], computation.output)[0]
 ```
 
 ---
@@ -220,7 +224,7 @@ boa.fork("https://eth-mainnet.g.alchemy.com/v2/YOUR-KEY")
 
 # Load any contract by ABI
 abi = fetch_abi_from_somewhere()
-contract = boa.loads_abi(abi).at("0x...")
+contract = boa.loads_abi(json.dumps(abi)).at("0x...")
 
 # Interact with forked state
 contract.someMethod()
@@ -243,7 +247,7 @@ erc20_abi = [
 
 # Create reusable token interface
 def get_token(address):
-    return boa.loads_abi(erc20_abi).at(address)
+    return boa.loads_abi(json.dumps(erc20_abi), name="ERC20").at(address)
 
 # Use with any ERC20 token
 usdc = get_token("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
@@ -258,7 +262,10 @@ implementation_abi = [...]
 
 # Connect to proxy address with implementation ABI
 proxy_address = "0x..."
-contract = boa.loads_abi(implementation_abi).at(proxy_address)
+contract = boa.loads_abi(
+    json.dumps(implementation_abi),
+    name="Implementation",
+).at(proxy_address)
 
 # Calls go through proxy to implementation
 contract.implementation_function()

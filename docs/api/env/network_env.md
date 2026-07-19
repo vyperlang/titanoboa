@@ -4,7 +4,9 @@ Inherits: [`Env`](env.md)
 
 ### Description
 
-NetworkEnv is a specialized environment for interacting with real or forked blockchain networks via RPC. It extends the base `Env` class with network-specific functionality including account management, transaction broadcasting, and state forking.
+`NetworkEnv` interacts with a live RPC. View and pure calls use `eth_call`; mutable calls and deployments are locally simulated against a fresh fork before they are signed and broadcast. Use [`boa.fork()`](singleton.md#fork) when you want local py-evm execution against remote state without broadcasting.
+
+Mutable calls require a sender registered with `add_account()`. Local simulation improves diagnostics but is not a guarantee: network state can change before mining, and missing `debug_traceTransaction` support reduces post-broadcast safety checks.
 
 ---
 
@@ -76,7 +78,9 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     - `has_push0`: Whether PUSH0 opcode is supported
     - `has_mcopy`: Whether MCOPY opcode is supported
     - `has_transient`: Whether transient storage (TLOAD/TSTORE) is supported
+    - `has_prague`: Whether the EIP-2935 history-storage contract expected for Prague is present
     - `describe_capabilities()`: Get a human-readable string describing the capabilities
+    - `check_evm_version(name)`: Check `shanghai`, `cancun`, or `prague`
 
     ---
 
@@ -86,22 +90,26 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     >>> import boa
     >>> boa.set_network_env("https://eth-mainnet.g.alchemy.com/v2/YOUR-KEY")
     >>>
-    >>> # Check if Cancun features are available
-    >>> if boa.env.capabilities.has_cancun:
-    ...     print("Cancun features are supported")
+    >>> # Narrow Prague probe: EIP-2935 history-storage contract only.
+    >>> if boa.env.capabilities.check_evm_version("prague"):
+    ...     print("Prague history-storage contract detected")
     ... else:
-    ...     print("Cancun features not available")
+    ...     print("Choose an older EVM target")
     ...
     >>> # Get human-readable description
     >>> print(boa.env.capabilities.describe_capabilities())
-    'cancun'  # or 'shanghai', 'paris', etc.
+    'prague'  # or 'cancun', 'shanghai', or 'pre-shanghai'
     ```
 
     ---
 
     **Note**
 
-    This is particularly useful when deploying contracts that use newer opcodes, as it prevents deployment failures on networks that don't support them yet.
+    `has_prague` only checks for the canonical EIP-2935 history-storage
+    contract bytecode; it is not a full Prague feature probe. The other flags
+    probe opcode support with `eth_call`. Capability checks describe the
+    connected node's latest state; they do not select a Vyper compiler target
+    automatically.
 
 ---
 
@@ -166,34 +174,16 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
 ---
 
-## `fork`
+## Simulation
 
-!!! function "`fork(url: str, block_identifier: Union[int, str] = "safe", **kwargs)`"
+Contract methods accept `simulate=True`. For a mutable method this performs local execution and then uses `eth_call`; it does not broadcast or persist state.
 
-    **Description**
+```python
+next_value = contract.increment(simulate=True)
+assert contract.counter() != next_value
+```
 
-    Fork the state from a remote network. This creates a local copy of the blockchain state that can be modified without affecting the real network.
-
-    ---
-
-    **Parameters**
-
-    - `url`: The RPC URL to fork from
-    - `block_identifier`: Block number or tag to fork from (default: "safe")
-    - `**kwargs`: Additional arguments passed to Web3 provider
-
-    ---
-
-    **Example**
-
-    ```python
-    >>> import boa
-    >>> # Fork mainnet at a specific block
-    >>> boa.fork("https://eth-mainnet.g.alchemy.com/v2/YOUR-API-KEY", block_identifier=18000000)
-    >>>
-    >>> # Now you can interact with mainnet contracts
-    >>> usdc = boa.from_etherscan("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "USDC")
-    ```
+Normal mutable calls are also simulated locally first, but are then broadcast. Deployments follow the same simulate-before-broadcast path.
 
 ---
 
@@ -203,7 +193,7 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Description**
 
-    Deploy contract bytecode to the network. Returns the deployed contract address.
+    Deploy contract bytecode to the network. Returns the deployed contract address and constructor return data.
 
     ---
 
@@ -321,16 +311,10 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     ---
 
-    **Example**
-
-    ```python
-    >>> import boa
-    >>> # Give an address 100 ETH
-    >>> boa.env.set_balance("0x...", 100 * 10**18)
-    ```
-
-    ---
-
     **Note**
 
-    This method raises `NotImplementedError` in NetworkEnv. To set balances in a test environment, use `boa.fork()` which returns a regular Env instance that supports balance manipulation.
+    This method raises `NotImplementedError` in `NetworkEnv`. `set_code` and `set_storage` are unavailable for the same reason. Use `boa.fork()` for local state mutation.
+
+## Live-network isolation
+
+`anchor()` requires nonstandard `evm_snapshot` and `evm_revert` RPC methods. Local development nodes commonly provide them; public networks generally do not. Without both methods, `anchor()` raises `RuntimeError`, and pytest tests must use `@pytest.mark.ignore_isolation`. That marker prevents snapshot errors but cannot revert transactions already broadcast.

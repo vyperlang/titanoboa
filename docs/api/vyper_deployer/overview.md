@@ -29,5 +29,5 @@ The `VyperDeployer` class is responsible for deploying Vyper contracts. It handl
 >>> deployer = boa.loads_partial(src, name="Foo")
 >>> contract = deployer.deploy()
 >>> type(contract)
-<class 'boa.vyper.contract.VyperContract'>
+<class 'boa.contracts.vyper.vyper_contract.VyperContract'>
 ```

@@ -36,5 +36,5 @@ Register a raw precompile function. This is the low-level interface for register
 ### See Also
 
 - [`deregister_raw_precompile`](./deregister_precompile.md) - Remove a registered precompile
-- [`@precompile` decorator](../../guides/advanced_features.md#precompiles) - Higher-level interface for creating precompiles
+- [`@precompile` decorator](../precompile.md) - Higher-level interface for creating precompiles
 - [`patch_opcode`](./patch_opcode.md) - Modify EVM opcodes

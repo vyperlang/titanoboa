@@ -1,22 +1,8 @@
 # `call_trace`
 
-<!-- TODO: Format this with !!!function syntax -->
+!!! function "`contract.call_trace() -> TraceFrame`"
 
-### Signature
-
-```python
-call_trace() -> TraceFrame
-```
-
-### Description
-
-Returns the call trace of the computation.
-
-- Returns: A `TraceFrame` instance.
-
-### Examples
-
-!!! python
+    Return the most recent computation as a nested `TraceFrame`.
 
     ```python
     >>> import boa
@@ -31,3 +17,7 @@ Returns the call trace of the computation.
     >>> contract.call_trace()
     <TraceFrame ...>
     ```
+
+    The trace is attached to the contract's most recent computation. Call the
+    contract function before requesting it. Child frames represent nested EVM
+    calls and use registered contract metadata when available.

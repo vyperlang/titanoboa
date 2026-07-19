@@ -22,5 +22,5 @@ The `_BaseVyperContract` class extends `_BaseEVMContract` and provides additiona
 >>> deployer = boa.loads_partial(src, name="Foo")
 >>> contract = deployer.deploy()
 >>> type(contract)
-<class 'boa.vyper.contract.VyperContract'>
+<class 'boa.contracts.vyper.vyper_contract.VyperContract'>
 ```

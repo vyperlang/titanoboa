@@ -18,10 +18,10 @@ Titanoboa automatically caches compiled contracts to disk, significantly speedin
 import boa
 
 # Set custom cache directory
-boa.set_cache_dir("~/.my_boa_cache")
+boa.interpret.set_cache_dir("~/.my_boa_cache")
 
-# Disable caching (not recommended for normal use)
-boa.disable_cache()
+# Disable compilation caching
+boa.interpret.disable_cache()
 ```
 
 ### Cache Performance Impact
@@ -43,7 +43,7 @@ print(f"Cached load: {time.time() - start:.2f}s")  # e.g., 0.05s
 
 ## Fast Mode
 
-Fast mode uses emulation to skip EVM execution for maximum speed during interactive development. **Warning**: Fast mode is less accurate than normal mode and should NOT be used in CI/CD or production testing.
+Fast mode lets known Vyper contracts use Titanoboa's IR executor for supported execution paths. Calls without a compatible contract object still use py-evm. It is an optional speed/fidelity tradeoff, not a feature-parity mode.
 
 ### Enabling Fast Mode
 
@@ -60,10 +60,10 @@ env = Env(fast_mode_enabled=True)
 
 ### What Fast Mode Does
 
-- Uses Python emulation instead of EVM execution
-- Skips gas calculations
-- May produce different results than actual EVM
-- Significantly faster for interactive testing
+- Enables the IR executor for eligible Vyper calls
+- Falls back to py-evm where the fast path is unavailable
+- Can differ from bytecode execution and gas behavior
+- Is incompatible with coverage
 
 ### When to Use Fast Mode
 
@@ -72,7 +72,7 @@ env = Env(fast_mode_enabled=True)
 - Rapid prototyping
 - Quick smoke tests during development
 
-❌ **Never use for:**
+❌ **Do not use for:**
 - CI/CD pipelines
 - Production testing
 - Gas optimization work
@@ -154,12 +154,10 @@ import boa
 # Fork with optimal block
 boa.fork("https://eth-mainnet.g.alchemy.com/v2/KEY", block_identifier="safe")
 
-# Repeated calls to same addresses are cached
+# Remote account data is cached by chain and block.
 usdc = boa.from_etherscan("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
-# First call: fetches from network
 balance1 = usdc.balanceOf(user)
-# Second call: uses cached state
-balance2 = usdc.balanceOf(user)  # Much faster
+balance2 = usdc.balanceOf(user)
 ```
 
 ## Testing Patterns
@@ -237,9 +235,10 @@ shutil.rmtree(boa.interpret._disk_cache.cache_dir)
 2. **Debugging compilation issues**
 ```python
 # Temporarily disable to ensure fresh compilation
-boa.disable_cache()
+boa.interpret.disable_cache()
 # Debug your issue
-# Re-enable when done
+# Re-enable the default cache when done
+boa.interpret.set_cache_dir()
 ```
 
 3. **Cache corruption (rare)**
@@ -305,17 +304,6 @@ for user in users:
 contract.add_users(users)
 ```
 
-## Performance Comparison
-
-Here's a typical performance improvement with optimizations:
-
-| Operation | Normal Mode | With Optimizations | Fast Mode (Dev Only) |
-|-----------|-------------|-------------------|---------------------|
-| Compilation (cached) | 5.2s | 0.05s | 0.05s |
-| 1000 simple calls | 12.3s | 8.1s (no gas) | 0.3s |
-| Fork state queries | 2.1s | 0.3s (cached) | 0.3s |
-| Test suite (100 tests) | 45s | 28s | 5s |
-
 ## CI/CD Best Practices
 
 ```yaml
@@ -343,27 +331,33 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e ".[test]"
+          pip install -e .
 
       - name: Run tests (accurate mode)
         run: |
           # Tests run in accurate mode by default
           # DO NOT enable fast mode in CI!
           pytest tests/ -v
-        env:
-          # Set consistent cache location
-          BOA_CACHE_DIR: ~/.cache/titanoboa
 ```
+
+Titanoboa does not read an environment variable to configure either cache, and
+there is no published `test` extra. Configure compilation caching explicitly
+with `boa.interpret.set_cache_dir(...)`; fork caching uses `cache_dir=` on
+`boa.fork(...)`.
 
 ## Troubleshooting
 
 ### Slow Compilation
 
 ```python
-# Check if caching is working
-import boa
-print(f"Cache dir: {boa.interpret._disk_cache.cache_dir}")
-print(f"Cache enabled: {boa.interpret._disk_cache is not None}")
+# Configure a known compilation-cache directory while troubleshooting.
+from pathlib import Path
+
+from boa.interpret import set_cache_dir
+
+cache_dir = Path.home() / ".cache" / "titanoboa"
+set_cache_dir(cache_dir)
+print(f"Cache dir: {cache_dir}")
 
 # Time compilation
 import time

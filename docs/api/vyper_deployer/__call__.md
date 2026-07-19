@@ -26,5 +26,5 @@ Deploys the Vyper contract and returns a `VyperContract` instance. This method i
 >>> deployer = boa.loads_partial(src, name="Foo")
 >>> contract = deployer()
 >>> type(contract)
-<class 'boa.vyper.contract.VyperContract'>
+<class 'boa.contracts.vyper.vyper_contract.VyperContract'>
 ```

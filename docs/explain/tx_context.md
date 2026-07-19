@@ -2,19 +2,29 @@
 
 ## Overview
 
-Transaction context refers to the execution environment during contract calls, including sender addresses, gas limits, and block information. Titanoboa's handling of transaction context differs from mainnet Ethereum in important ways.
+Transaction context includes sender/origin addresses, gas limits, value, and block information. The local py-evm `Env` and live `NetworkEnv` have different lifecycles.
 
 ## Current Limitations
 
-### No True Transaction Boundaries
+### Local execution
 
-In Titanoboa, contract calls execute sequentially within the same Python process rather than as separate blockchain transactions. This means:
+Calls in the default local `Env` execute synchronously without mining. This means:
 
 - No transaction hash generation
 - No transaction receipts in the traditional sense
 - State changes are immediate and don't require mining
-- Reverts only affect the current call, not a full transaction
-- Transient storage persists throughout the Python session (since there's only one "transaction")
+- A reverting top-level call rolls back that call's state
+- `simulate=True` snapshots and restores state even when execution succeeds
+
+`NetworkEnv` differs: it simulates mutable calls locally, then signs, broadcasts, and waits for a receipt. View calls and explicit `simulate=True` calls use `eth_call`.
+
+### Sender and origin
+
+`boa.env.eoa` is the default sender. A method's `sender=` argument overrides it for that call, while `with boa.env.sender(address):` (or its alias `prank`) changes the default within a scope.
+
+For local top-level calls and deployments, Titanoboa currently sets `tx.origin` equal to the selected sender. Origin cannot be configured independently. Internal contract-to-contract calls still change `msg.sender` according to EVM rules while retaining the top-level origin.
+
+In `NetworkEnv`, a mutable call's sender must be registered with `add_account`; choosing an arbitrary local address is not enough to sign a live transaction.
 
 ### Gas Profiling Considerations
 
@@ -61,10 +71,10 @@ Block variables are accessible but controlled by the environment:
 
 ```python
 # Set block timestamp
-boa.env.vm.patch.timestamp = 1234567890
+boa.env.timestamp = 1234567890
 
 # Set block number
-boa.env.vm.patch.block_number = 15000000
+boa.env.evm.patch.block_number = 15000000
 
 # Access in contract
 contract.get_block_timestamp()  # returns 1234567890
@@ -73,6 +83,6 @@ contract.get_block_timestamp()  # returns 1234567890
 ## Best Practices
 
 1. **Testing**: Be aware that gas costs in tests may differ from mainnet
-2. **Transient Storage**: Remember that transient storage persists throughout your session
-3. **Block variables**: Explicitly set block context when testing time-dependent logic
+2. **Sender/origin**: Do not use local tests to model a top-level sender and a different `tx.origin`
+3. **Block variables**: Prefer `boa.env.time_travel(...)` or documented environment properties when testing time-dependent logic
 4. **Gas Profiling**: Use `pytest --gas-profile` for automatic gas profiling in tests

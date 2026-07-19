@@ -8,9 +8,10 @@ Given a vyper module `foo.vy` in the same folder as your python code:
 x: uint256
 y: immutable(uint256)
 
+@deploy
 def __init__(y_initial: uint256):
     self.x = 42
-    self.y = y_initial
+    y = y_initial
 
 @internal
 @pure

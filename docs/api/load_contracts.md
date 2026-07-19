@@ -1,442 +1,246 @@
-<h1>Loading contracts</h1>
+# Loading contracts
 
-Boa offers multiple ways to load contracts from various sources. Either from [local files](#from-local-files), [strings](#from-strings) or directly [from block explorer sources](#from-block-explorer-sources).
+Titanoboa can compile Vyper source from files or strings, load ABI and Vyper
+interfaces, and fetch deployed contract ABIs from block explorers.
 
----
-
-## **From local files**
+## Vyper source
 
 ### `load`
-!!! function "`boa.load(filepath)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L171-L177" class="source-code-link" target="_blank" rel="noopener"></a>
 
-    **Description**
+!!! function "`boa.load(filename, *constructor_args, **kwargs)`"
 
-    The `load` function is designed to compile a Vyper contract from a file located on disk. It provides a straightforward way to deploy contracts by reading the source code from the specified file path.
+    Compile a Vyper file and deploy it.
 
-    ---
+    Common keyword arguments include:
 
-    **Parameters**
+    - `compiler_args: dict | None`: Vyper compiler settings.
+    - `as_blueprint: bool`: Deploy an EIP-5202 blueprint.
+    - `value: int`: Wei sent to the constructor.
+    - `name: str`: Override the contract name inferred from the filename.
+    - `no_vvm: bool`: Disable compilation through VVM for version-pinned source.
+    - deployment options such as `sender`, `gas`, `override_address`, and
+      `skip_initcode`.
 
-    - `filepath`: The contract source code file path.
-    - `*args`: Contract constructor arguments.
-    - `compiler_args: list = None`: Compiler arguments to be passed to the Vyper compiler.
-    - `filename: str = None`: The filename of the contract source code or a related file.
-    - `as_blueprint: bool = False`: Whether to deploy an [`eip-5202`](https://eips.ethereum.org/EIPS/eip-5202) blueprint of the compiled contract.
-    - `value: int = 0`: The amount of cryptocurrency to send with the transaction (default is 0).
-    - `env: Env = None`: The environment in which the contract is being deployed or executed.
-    - `override_address: Address = None`: A different address for the contract deployment or interaction.
-    - `skip_initcode: bool = False`: Whether to skip the execution of the contract's constructor code.
-    - `created_from: Address = None`: The address from which the contract is created.
-    - `gas: int = None`: The gas limit for the transaction.
-
-    ---
-
-    **Returns**
-
-    A [`VyperContract`](vyper_contract/overview.md), [`VyperBlueprint`](vyper_blueprint/overview.md), or [`ABIContract`](abi_contract/overview.md) instance.
-
-    If a legacy Vyper version is detected, an `ABIContract` may be returned due to VVM usage. See [Legacy Vyper Contracts](../explain/vvm_contracts.md) for more details.
-
-    ---
-
-    **Examples**
+    The result is a deployed `VyperContract` or `VyperBlueprint`. Source pinned
+    to a different supported Vyper version may use VVM and return its
+    ABI-backed contract type.
 
     ```python
-    >>> import boa
-    >>> # Basic contract loading
-    >>> contract = boa.load("contracts/Token.vy", "MyToken", "TKN", 18, 1000000)
-    >>>
-    >>> # Load with specific compiler settings
-    >>> contract = boa.load("contracts/Complex.vy", compiler_args={"optimize": "codesize"})
-    >>>
-    >>> # Load as blueprint
-    >>> blueprint = boa.load("contracts/Factory.vy", as_blueprint=True)
-    >>>
-    >>> # Load with value (payable constructor)
-    >>> contract = boa.load("contracts/Vault.vy", value=10**18)  # 1 ETH
-    >>>
-    >>> # Load at specific address (for testing upgrades)
-    >>> contract = boa.load("contracts/V2.vy", override_address="0x1234...")
+    import boa
+    from vyper.compiler.settings import OptimizationLevel
+
+    token = boa.load("contracts/Token.vy", "My Token", "TKN")
+    compact = boa.load(
+        "contracts/Compact.vy",
+        compiler_args={"optimize": OptimizationLevel.CODESIZE},
+    )
+    blueprint = boa.load("contracts/Factory.vy", as_blueprint=True)
     ```
-
----
-
-### `load_abi`
-!!! function "`boa.load_abi(filename)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L196-L201" class="source-code-link" target="_blank" rel="noopener"></a>
-
-    **Description**
-
-    The `load_abi` function allows you to load a contract's ABI from a JSON file.
-
-    ---
-
-    **Parameters**
-
-    - `filename`: The file containing the ABI as a JSON string (something like `my_abi.json`).
-    - `*args`: Additional arguments.
-    - `name`: The name of the contract (optional).
-
-    ---
-
-    **Returns**
-
-    An [`ABIContract`](abi_contract/overview.md) instance.
-
-    ---
-
-    **Examples**
-
-    ```python
-    >>> import boa
-    >>> # Fetch from Etherscan
-    >>> usdc = boa.from_etherscan("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", name="USDC")
-    >>>
-    >>> # Use custom API key
-    >>> contract = boa.from_etherscan(
-    ...     "0x1234...",
-    ...     api_key="YOUR_ETHERSCAN_API_KEY"
-    ... )
-    >>>
-    >>> # Fetch from other explorers
-    >>> contract = boa.from_etherscan(
-    ...     "0x5678...",
-    ...     uri="https://api.arbiscan.io/api",  # Arbitrum
-    ...     api_key="YOUR_ARBISCAN_API_KEY"
-    ... )
-    ```
-
----
-
-## **Cache Management**
-
-Titanoboa includes a disk caching system to speed up contract compilation. Compiled contracts are cached based on their content hash.
-
-### `set_cache_dir`
-!!! function "`boa.set_cache_dir(path)`"
-
-    **Description**
-
-    Set the directory for caching compiled contracts. By default, contracts are cached in a system-appropriate location.
-
-    ---
-
-    **Parameters**
-
-    - `path`: The directory path for storing cached contracts. Can be a string or Path object.
-
-    ---
-
-    **Examples**
-
-    ```python
-    >>> import boa
-    >>> # Set custom cache directory
-    >>> boa.set_cache_dir("~/.my_boa_cache")
-    >>>
-    >>> # Use Path object
-    >>> from pathlib import Path
-    >>> boa.set_cache_dir(Path.home() / ".cache" / "boa")
-    ```
-
----
-
-### `disable_cache`
-!!! function "`boa.disable_cache()`"
-
-    **Description**
-
-    Disable the contract compilation cache. This forces recompilation of all contracts.
-
-    ---
-
-    **Examples**
-
-    ```python
-    >>> import boa
-    >>> # Disable caching for debugging
-    >>> boa.disable_cache()
-    >>>
-    >>> # All subsequent loads will recompile
-    >>> contract = boa.load("MyContract.vy")  # Always recompiles
-    ```
-
-    ---
-
-    **Note**
-
-    Disabling cache can significantly slow down test suites and development workflows. Use sparingly.
-
----
-
-## **Module System**
-
-Titanoboa integrates with Python's import system, allowing you to import Vyper files directly.
-
-### Direct Import
-
-```python
-# Assuming you have token.vy in your project
-import token  # Imports token.vy
-
-# Deploy the contract
-deployed_token = token.deploy("MyToken", "TKN", 18, 1000000)
-```
-
-### Import with Custom Names
-
-```python
-# Import with alias
-import token as MyToken
-
-# Or use from import
-from contracts import token, vault
-
-# Deploy contracts
-token_contract = token.deploy()
-vault_contract = vault.deploy(token_contract.address)
-```
-
-### Module Search Path
-
-Vyper files are searched in:
-1. Current working directory
-2. Directories in `sys.path`
-3. Directories added via `boa.interpret.set_search_paths()`
-
-```python
->>> import boa.interpret
->>> # Add custom search paths
->>> boa.interpret.set_search_paths(["/path/to/my/contracts"])
->>>
->>> # Now you can import from that directory
->>> import my_contract
-```
-
----
-
-### `load_partial`
-!!! function "`boa.load_partial(filepath)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L261-L265" class="source-code-link" target="_blank" rel="noopener"></a>
-
-    **Description**
-
-    The `load_partial` function is used to compile a Vyper contract from a file and return a deployer instance.
-
-    ---
-
-    **Parameters**
-
-    - `filepath`: The contract source code file path.
-    - `*args`: Additional arguments.
-    - `compiler_args`: Argument to be passed to the Vyper compiler (optional).
-
-    ---
-
-    **Returns**
-
-    A [`VyperDeployer`](vyper_deployer/overview.md) or [`VVMDeployer`](vvm_deployer/overview.md) instance.
-
-    If a legacy Vyper version is detected, a `VVMDeployer` may be returned due to VVM usage. See [Legacy Vyper Contracts](../explain/vvm_contracts.md) for more details.
-
-    ---
-
-    **Examples**
-
-    SOON
-
----
-
-### `load_vyi`
-!!! function "`boa.load_vyi(filename)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L211-L215" class="source-code-link" target="_blank" rel="noopener"></a>
-
-    **Description**
-
-    The `load_vyi` function is designed to load a Vyper interface from a `.vyi` file.
-
-    ---
-
-    **Parameters**
-
-    - `filename`: The file containing the Vyper interface.
-    - `name`: The name of the contract (optional).
-
-    ---
-
-    **Returns**
-
-    An [`ABIContract`](abi_contract/overview.md) instance.
-
-    ---
-
-    **Examples**
-
-    SOON
-
----
-
-## **From strings**
 
 ### `loads`
-!!! function "`boa.loads(source)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L180-L193" class="source-code-link" target="_blank" rel="noopener"></a>
 
-    **Description**
+!!! function "`boa.loads(source_code, *constructor_args, **kwargs)`"
 
-    The `loads` function compiles Vyper source code provided as a string. This is useful for dynamic contract creation or testing scenarios where the source code is generated or modified at runtime.
+    Compile Vyper source from a string and deploy it. It accepts the same
+    compilation and deployment options as `load`, plus `filename`, which is
+    used for diagnostics and import resolution. The source is dedented before
+    compilation.
 
-    ---
+    ```python
+    import boa
+    from vyper.compiler.settings import OptimizationLevel
 
-    **Parameters**
+    counter = boa.loads(
+        """
+stored_value: public(uint256)
 
-    - `source`: The source code to compile and deploy.
-    - `*args`: Contract constructor arguments.
-    - `compiler_args: list = None`: Compiler arguments to be passed to the Vyper compiler.
-    - `as_blueprint: bool = False`: Whether to deploy an [`eip-5202`](https://eips.ethereum.org/EIPS/eip-5202) blueprint of the compiled contract.
-    - `value: int = 0`: The amount of cryptocurrency to send with the transaction (default is 0).
-    - `env: Env = None`: The environment in which the contract is being deployed or executed.
-    - `override_address: Address = None`: A different address for the contract deployment or interaction.
-    - `skip_initcode: bool = False`: Whether to skip the execution of the contract's constructor code.
-    - `created_from: Address = None`: The address from which the contract is created.
-    - `gas: int = None`: The gas limit for the transaction.
-    - `name`: The name of the contract.
+@deploy
+def __init__(initial_value: uint256):
+    self.stored_value = initial_value
+""",
+        42,
+        name="Counter",
+        compiler_args={"optimize": OptimizationLevel.GAS},
+    )
 
-    ---
+    assert counter.stored_value() == 42
+    ```
 
-    **Returns**
+## Undeployed Vyper contracts
 
-    A [`VyperContract`](vyper_contract/overview.md), [`VyperBlueprint`](vyper_blueprint/overview.md), or [`ABIContract`](abi_contract/overview.md) instance.
+### `load_partial`
 
-    If a legacy Vyper version is detected, an `ABIContract` may be returned due to VVM usage. See [Legacy Vyper Contracts](../explain/vvm_contracts.md) for more details.
+!!! function "`boa.load_partial(filename, compiler_args=None)`"
 
-    ---
+    Compile a Vyper file and return a `VyperDeployer` (or a `VVMDeployer` for
+    source requiring VVM) without deploying it.
 
-    **Examples**
+    ```python
+    import boa
 
-    SOON
+    Counter = boa.load_partial("contracts/Counter.vy")
+    first = Counter.deploy(1)
+    second = Counter.deploy(2)
+    ```
 
----
-
-### `loads_abi`
-!!! function "`boa.loads_abi(json_str)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L204-L205" class="source-code-link" target="_blank" rel="noopener"></a>
-
-    **Description**
-
-    The `loads_abi` function creates an `ABIContract` from a JSON string representing the contract's ABI.
-
-    ---
-
-    **Parameters**
-
-    - `json_str`: The ABI as a JSON string (something which can be passed to `json.loads()`).
-    - `*args`: Additional arguments.
-    - `name`: The name of the contract (optional).
-
-    ---
-
-    **Returns**
-
-    An [`ABIContract`](abi_contract/overview.md) instance.
-
-    **Examples**
-
-    SOON
-
----
+    A deployer is also callable, so `Counter(1)` is equivalent to
+    `Counter.deploy(1)`.
 
 ### `loads_partial`
-!!! function "`boa.loads_partial(source)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L235-L258" class="source-code-link" target="_blank" rel="noopener"></a>
 
-    **Description**
+!!! function "`boa.loads_partial(source_code, name=None, filename=None, dedent=True, compiler_args=None, no_vvm=False)`"
 
-    The `loads_partial` function compiles Vyper source code provided as a string and returns a deployer instance. This function is useful for preparing contracts for deployment in environments where the source code is dynamically generated or modified.
+    Compile Vyper source from a string and return an undeployed deployer.
 
-    ---
+    ```python
+    import boa
 
-    **Parameters**
+    Counter = boa.loads_partial(
+        """
+stored_value: public(uint256)
 
-    - `source`: The Vyper source code.
-    - `name`: The name of the contract (optional).
-    - `dedent`: If `True`, remove any common leading whitespace from every line in `source`.
-    - `compiler_args`: Argument to be passed to the Vyper compiler (optional).
+@deploy
+def __init__(initial_value: uint256):
+    self.stored_value = initial_value
+""",
+        name="Counter",
+    )
 
-    ---
+    counter = Counter.deploy(7)
+    assert counter.stored_value() == 7
+    ```
 
-    **Returns**
+## JSON ABIs
 
-    A [`VyperDeployer`](vyper_deployer/overview.md) or [`VVMDeployer`](vvm_deployer/overview.md) instance.
+`load_abi` and `loads_abi` return an `ABIContractFactory`, not a deployed
+contract. Couple the factory to an existing address with `.at(address)`.
 
-    If a legacy Vyper version is detected, a `VVMDeployer` may be returned due to VVM usage. See [Legacy Vyper Contracts](../explain/vvm_contracts.md) for more details.
+### `load_abi`
 
-    ---
+!!! function "`boa.load_abi(filename, name=None)`"
 
-    **Examples**
+    Read a JSON ABI from a file.
 
-    SOON
+    ```python
+    import boa
 
----
+    ERC20 = boa.load_abi("interfaces/ERC20.json", name="ERC20")
+    token = ERC20.at("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    ```
+
+### `loads_abi`
+
+!!! function "`boa.loads_abi(json_str, name=None)`"
+
+    Parse a JSON string containing an ABI. Pass serialized JSON, not a Python
+    list.
+
+    ```python
+    import json
+
+    import boa
+
+    abi = [
+        {
+            "type": "function",
+            "name": "balanceOf",
+            "stateMutability": "view",
+            "inputs": [{"name": "account", "type": "address"}],
+            "outputs": [{"name": "", "type": "uint256"}],
+        }
+    ]
+
+    ERC20 = boa.loads_abi(json.dumps(abi), name="ERC20")
+    token = ERC20.at("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    ```
+
+## Vyper interfaces
+
+Vyper interface loaders also return an `ABIContractFactory`.
+
+### `load_vyi`
+
+!!! function "`boa.load_vyi(filename, name=None)`"
+
+    Compile a `.vyi` file into an interface factory.
+
+    ```python
+    import boa
+
+    ERC20 = boa.load_vyi("interfaces/ERC20.vyi")
+    token = ERC20.at("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    ```
 
 ### `loads_vyi`
-!!! function "`boa.loads_vyi(source_code)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L218-L232" class="source-code-link" target="_blank" rel="noopener"></a>
 
-    **Description**
+!!! function "`boa.loads_vyi(source_code, name=None, filename=None)`"
 
-    The `loads_vyi` function loads a Vyper interface from a string. This is useful for defining and using contract interfaces directly in code without needing separate interface files.
+    Compile a Vyper interface from a string.
 
-    ---
+    ```python
+    import boa
 
-    **Parameters**
+    ERC20 = boa.loads_vyi(
+        """
+@external
+@view
+def balanceOf(account: address) -> uint256:
+    ...
+""",
+        name="ERC20",
+    )
 
-    - `source_code`: The Vyper interface source code as a string.
-    - `name`: The name of the contract (optional).
-    - `filename`: The filename for reference (optional).
+    token = ERC20.at("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    ```
 
-    ---
-
-    **Returns**
-
-    An [`ABIContract`](abi_contract/overview.md) instance.
-
-    ---
-
-    **Examples**
-
-    SOON
-
----
-
-## **From block explorer sources**
+## Block explorer ABIs
 
 ### `from_etherscan`
-!!! function "`boa.from_etherscan(address)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/interpret.py#L289-L300" class="source-code-link" target="_blank" rel="noopener"></a>
 
-    **Description**
+!!! function "`boa.from_etherscan(address, name=None, uri=None, api_key=None, chain_id=None)`"
 
-    The `from_etherscan` function fetches the ABI for a contract at a given address from Etherscan and returns an `ABIContract` instance. This is particularly useful for interacting with contracts deployed on the Ethereum network when you have the contract address but not the source code.
+    Fetch an ABI through an Etherscan-compatible API and return an
+    `ABIContract` attached to `address`.
 
-    ---
+    When `chain_id` is omitted, Titanoboa uses the active environment's chain
+    ID. The default explorer endpoint is Etherscan API v2. Configure explorer
+    defaults with `boa.set_etherscan(...)`, or pass `uri`, `api_key`, and
+    `chain_id` for a one-off request.
 
-    **Parameters**
+    ```python
+    import boa
 
-    - `address`: The address. Can be str, bytes or Address.
-    - `name`: The name of the contract (optional).
-    - `uri`: The API endpoint URI (default: "https://api.etherscan.io/api").
-    - `api_key`: The API key for Etherscan (optional).
+    with boa.set_etherscan(api_key="YOUR_ETHERSCAN_API_KEY"):
+        usdc = boa.from_etherscan(
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            name="USDC",
+            chain_id=1,
+        )
+    ```
 
-    ---
+    A custom Etherscan-compatible endpoint can be selected explicitly:
 
-    **Returns**
+    ```python
+    contract = boa.from_etherscan(
+        "0x1234567890123456789012345678901234567890",
+        uri="https://api.etherscan.io/v2/api",
+        api_key="YOUR_API_KEY",
+        chain_id=1,
+    )
+    ```
 
-    An [`ABIContract`](abi_contract/overview.md) instance.
+## Native Python imports
 
-    ---
+After `import boa` installs Titanoboa's importer, `.vy` files visible on
+Python's `sys.path` can be imported as deployer objects:
 
-    **Examples**
+```python
+import boa
+from contracts import token
 
-    SOON
+deployed_token = token.deploy("My Token", "TKN")
+```
+
+Use `boa.interpret.set_search_paths([...])` to configure Vyper compiler import
+paths. This setting affects Vyper import resolution; Python's native import
+mechanism continues to search `sys.path`.

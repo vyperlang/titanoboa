@@ -26,5 +26,5 @@ Deploys the Vyper contract as a blueprint and returns a `VyperBlueprint` instanc
 >>> deployer = boa.loads_partial(src, "Foo")
 >>> blueprint = deployer.deploy_as_blueprint()
 >>> type(blueprint)
-<class 'boa.vyper.contract.VyperBlueprint'>
+<class 'boa.contracts.vyper.vyper_contract.VyperBlueprint'>
 ```

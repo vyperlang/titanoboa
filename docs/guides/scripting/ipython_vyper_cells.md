@@ -1,39 +1,49 @@
-## ipython Vyper Cells
+# IPython and Vyper cells
 
-Titanoboa supports iPython Vyper "magic" cells with the `%%vyper` magic command.
-To enable the cell magic, add a `%load_ext boa.ipython` cell after installing boa.
+Load Titanoboa's IPython extension after installing the package:
 
-This means that you can write Vyper code in an iPython/Jupyter Notebook environment and execute it as if it was a Python cell (the contract will be compiled instead, and a `ContractFactory` will be returned).
+```python
+%load_ext boa.ipython
+import boa
+```
 
-You can use Jupyter to execute Titanoboa code in network mode from your browser using any wallet - using your wallet to sign transactions and call the RPC.
-To set up the environment, simply run [`boa.set_browser_env`](../../api/env/singleton.md#set_browser_env).
-For a full example, please see [this example Jupyter notebook](https://colab.research.google.com/drive/1d79XDUBXNhxNX67KSlNnWADyB0_ef7tN).
+The extension registers four magics:
 
-!!!python "iPython"
-    ```python
-    In [1]: import boa; boa.env.fork(url="<rpc server address>")
+- `%vyper <expression>` evaluates one Vyper expression through `boa.eval`.
+- `%eval <expression>` is an alias for `%vyper`.
+- `%%vyper [Name]` compiles the cell and returns a deployer. When `Name` is supplied, the deployer is also bound in the notebook namespace.
+- `%%contract [Name]` compiles and deploys the cell. When `Name` is supplied, the contract is bound in the notebook namespace.
 
-    In [2]: %load_ext boa.ipython
+```python
+In [1]: import boa; boa.fork("<rpc server address>")
 
-    In [3]: %%vyper Test
-       ...: interface HasName:
-       ...:     def name() -> String[32]: view
-       ...:
-       ...: @external
-       ...: def get_name_of(addr: HasName) -> String[32]:
-       ...:     return addr.name()
-    Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
+In [2]: %load_ext boa.ipython
 
-    In [4]: c = Test.deploy()
+In [3]: %%vyper Test
+   ...: interface HasName:
+   ...:     def name() -> String[32]: view
+   ...:
+   ...: @external
+   ...: def get_name_of(addr: HasName) -> String[32]:
+   ...:     return staticcall addr.name()
 
-    In [5]: c.get_name_of("0xD533a949740bb3306d119CC777fa900bA034cd52")
-    Out[5]: 'Curve DAO Token'
-    ```
+In [4]: c = Test.deploy()
+
+In [5]: c.get_name_of("0xD533a949740bb3306d119CC777fa900bA034cd52")
+Out[5]: 'Curve DAO Token'
+```
+
+`boa.fork()` creates a local py-evm fork. For wallet-backed network transactions in JupyterLab or Google Colab, use [`boa.set_browser_env()`](../../api/env/singleton.md#set_browser_env) instead. It relies on the Titanoboa Jupyter server extension and browser-side JavaScript, so it is not a generic terminal-IPython wallet workflow. It changes the singleton environment; use it in a `with` block if the previous environment must be restored.
 
 ### JupyterLab
 The Vyper team provides the website [try.vyperlang.org](https://try.vyperlang.org) where you can try Vyper code directly in your browser.
-To run your own instance of JupyterLab, please check the [try.vyperlang.org repository](https://github.com/vyperlang/try.vyperlang.org/blob/93751db5b/README.md#running-locally).
+Titanoboa exposes its callback handler as a Python Jupyter server extension, so no separate JupyterLab frontend-extension enable command is required. Install `titanoboa`, start JupyterLab, and load `boa.ipython` in the notebook.
 
 ### Google Colab
 Another convenient way to run Vyper code in the browser is by using [Google Colab](https://colab.research.google.com/).
-This is a free service that allows you to run notebooks in the cloud without any setup.
+Install the Colab extra, then load the extension:
+
+```python
+!pip install "titanoboa[colab]"
+%load_ext boa.ipython
+```

@@ -1,6 +1,6 @@
 <h1><strong>Installing Titanoboa</strong></h1>
 
-Titanoboa requires Python 3.9 or later to function properly.
+Titanoboa's source uses Python 3.10 syntax, and the release workflow builds with Python 3.11. CI currently runs unit tests on Python 3.10, 3.11, and 3.12. The package metadata does not yet declare `requires-python`, so treat 3.10–3.12 as the tested range rather than an officially packaged support guarantee.
 
 ## Install Using Moccasin
 
@@ -32,6 +32,24 @@ Titanoboa is available on PyPI, so you can install it using pip, poetry, or uv. 
     ```console
     uv add titanoboa
     ```
+
+---
+
+## Optional extras
+
+For faster fork and explorer requests, install the published `forking-recommended` extra:
+
+```console
+pip install "titanoboa[forking-recommended]"
+```
+
+For Google Colab, use:
+
+```console
+pip install "titanoboa[colab]"
+```
+
+There is no published `test` extra. Pytest, Hypothesis, and pytest-cov are currently regular package dependencies.
 
 ---
 

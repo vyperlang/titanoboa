@@ -59,7 +59,7 @@ def fork(
 
 - `url`: The RPC URL of the network to fork from
 - `block_identifier`: Block number or "safe"/"latest" to fork at (default: "safe")
-- `allow_dirty`: Whether to allow forking with uncommitted changes in current environment (default: False)
+- `allow_dirty`: Allow replacing an environment whose local EVM state has been modified (default: `False`)
 - `**kwargs`: Additional keyword arguments passed to the underlying fork method
 
 ### Returns
@@ -68,7 +68,7 @@ An `Open` context manager that manages the forked environment.
 
 ### Raises
 
-- `Exception`: If the current environment has dirty state and `allow_dirty` is False
+- `Exception`: If the current environment has dirty state and `allow_dirty` is `False`
 
 ### Usage
 
@@ -81,7 +81,12 @@ with boa.fork("https://eth.llamarpc.com"):
 # Fork at specific block
 with boa.fork("https://eth.llamarpc.com", block_identifier=17000000):
     pass
+
+# A normal call keeps the fork as the singleton.
+boa.fork("https://eth.llamarpc.com")
 ```
+
+`boa.fork()` always creates a new `Env`. If the current local state is dirty, the default error protects deployments, balance changes, and storage changes from being silently discarded. `allow_dirty=True` permits the replacement; it does not merge those changes into the fork.
 
 ## `set_browser_env`
 
@@ -95,7 +100,7 @@ def set_browser_env(address=None) -> Open
 
 ### Parameters
 
-- `address`: The account address to use (optional). If not provided, uses the connected wallet address.
+- `address`: A wallet account to select. If omitted, the first account returned by `eth_requestAccounts` is used. An address not exposed by the wallet raises `ValueError`.
 
 ### Returns
 
@@ -113,7 +118,7 @@ boa.set_browser_env("0x...")
 
 ### Note
 
-This function requires Jupyter to be installed and should be used in Jupyter/Colab notebooks.
+This function is intended for JupyterLab and Google Colab. It requests wallet accounts immediately, registers a `BrowserSigner`, and uses the selected account as `boa.env.eoa`. The browser wallet supplies both RPC calls and transaction sending.
 
 ## `set_network_env`
 
@@ -176,6 +181,6 @@ Unlike other environment functions, `reset_env()` does not return a context mana
 ## `swap_env` (Deprecated)
 
 !!! warning "Deprecated API"
-    `swap_env` is an older API that will likely be deprecated. Use `set_env` instead.
+    `swap_env` is retained for compatibility. Use `with boa.set_env(env):` instead.
 
 Context manager version of `set_env` that requires being used in a `with` statement.
