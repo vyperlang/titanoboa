@@ -1,6 +1,6 @@
 <h1><strong>Installing Titanoboa</strong></h1>
 
-Titanoboa's source uses Python 3.10 syntax, and the release workflow builds with Python 3.11. CI currently runs unit tests on Python 3.10, 3.11, and 3.12. The package metadata does not yet declare `requires-python`, so treat 3.10–3.12 as the tested range rather than an officially packaged support guarantee.
+Titanoboa works with Python versions above 3.9. In practice, use Python 3.10, 3.11, or 3.12 — those are the versions we test against.
 
 ## Install Using Moccasin
 

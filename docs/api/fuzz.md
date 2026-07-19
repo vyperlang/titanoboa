@@ -62,4 +62,5 @@ def identity(item: uint256) -> uint256:
     generated unless you override that).
 
 See the [fuzzing strategies guide](../guides/testing/fuzzing_strategies.md) for
-constraints, pytest isolation, and more examples.
+per-type examples, `@boa.fuzz`, composite and stateful testing, pytest
+isolation, and common patterns.
