@@ -20,11 +20,11 @@
 
     contract = boa.loads(
         """
-@external
-@view
-def run(number: uint256) -> uint256:
-    return double(number)
-"""
+    @external
+    @view
+    def run(number: uint256) -> uint256:
+        return double(number)
+    """
     )
 
     assert contract.run(21) == 42

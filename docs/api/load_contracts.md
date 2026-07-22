@@ -52,12 +52,12 @@ interfaces, and fetch deployed contract ABIs from block explorers.
 
     counter = boa.loads(
         """
-stored_value: public(uint256)
+    stored_value: public(uint256)
 
-@deploy
-def __init__(initial_value: uint256):
-    self.stored_value = initial_value
-""",
+    @deploy
+    def __init__(initial_value: uint256):
+        self.stored_value = initial_value
+    """,
         42,
         name="Counter",
         compiler_args={"optimize": OptimizationLevel.GAS},
@@ -97,12 +97,12 @@ def __init__(initial_value: uint256):
 
     Counter = boa.loads_partial(
         """
-stored_value: public(uint256)
+    stored_value: public(uint256)
 
-@deploy
-def __init__(initial_value: uint256):
-    self.stored_value = initial_value
-""",
+    @deploy
+    def __init__(initial_value: uint256):
+        self.stored_value = initial_value
+    """,
         name="Counter",
     )
 
@@ -182,11 +182,11 @@ Vyper interface loaders also return an `ABIContractFactory`.
 
     ERC20 = boa.loads_vyi(
         """
-@external
-@view
-def balanceOf(account: address) -> uint256:
-    ...
-""",
+    @external
+    @view
+    def balanceOf(account: address) -> uint256:
+        ...
+    """,
         name="ERC20",
     )
 

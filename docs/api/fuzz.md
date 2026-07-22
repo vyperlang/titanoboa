@@ -12,10 +12,10 @@
 
     contract = boa.loads(
         """
-@external
-def identity(item: uint256) -> uint256:
-    return item
-"""
+    @external
+    def identity(item: uint256) -> uint256:
+        return item
+    """
     )
 
 

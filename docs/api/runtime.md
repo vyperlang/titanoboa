@@ -13,11 +13,11 @@
     boa.enable_pyevm_verbose_logging()
     contract = boa.loads(
         """
-@external
-@pure
-def add(a: uint256, b: uint256) -> uint256:
-    return a + b
-"""
+    @external
+    @pure
+    def add(a: uint256, b: uint256) -> uint256:
+        return a + b
+    """
     )
     contract.add(1, 2)
     ```
