@@ -14,7 +14,7 @@ To set it as the singleton env, call [`boa.reset_env`](../api/env/singleton.md#r
 
 ### Forking
 
-The `Env` can be forked to a local chain using the [`fork`](../api/testing.md#fork) function.
+The `Env` can be backed by remote chain state using [`boa.fork`](../api/env/singleton.md#fork).
 That requires an RPC URL and (optionally) a block identifier.
 This will customize the environment's AccountDB to use the RPC as data source.
 
@@ -27,7 +27,9 @@ The [`NetworkEnv`](../api/env/network_env.md) is used to connect to a network vi
 This is used to connect to a real network and deploy contracts.
 To set it as the singleton env, call [`boa.set_network_env`](../api/env/singleton.md#set_network_env).
 
-To sign transactions, the `NetworkEnv` uses the `Account` object (from [eth_account](https://eth-account.readthedocs.io/en/stable/eth_account.html#module-eth_account.account)).
+Mutable calls are simulated against a fresh local fork before `NetworkEnv` broadcasts them. View/pure calls use `eth_call`. Simulation catches many failures early, but it cannot prevent the live state changing before a transaction is mined.
+
+To sign transactions, the `NetworkEnv` uses an `Account` or account-like object.
 That object can be created from a private key, mnemonic or a keystore file.
 It must be registered by calling [`add_account`](../api/env/network_env.md#add_account).
 
@@ -46,12 +48,12 @@ To set it as the singleton env, call [`boa.set_browser_env`](../api/env/singleto
 The browser environment injects JavaScript code into the notebook with the `display` iPython functionality.
 The injected code handles the communication between the wallet and the Python kernel.
 
-When running in JupyterLab, a Tornado [HTTP endpoint](https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/integrations/jupyter/handlers.py) is created to receive wallet callbacks.
-In Google Colab, the communication is done via the [`colab_eval_js` function](https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/integrations/jupyter/browser.py#L184-L187), which supports asynchronous code.
+When running in JupyterLab, a Tornado HTTP endpoint receives wallet callbacks. Titanoboa exposes this as a discoverable Python Jupyter server extension; a separate JupyterLab frontend-extension enable command is not required.
+In Google Colab, communication uses Colab's JavaScript evaluation bridge.
 
 ## Automatic context management
 
-Since version v0.2.4, all the `set_env` functions return an optional context manager.
+`set_env`, `fork`, `set_network_env`, and `set_browser_env` return an optional context manager.
 This allows you to use the environment in a `with` block, and it will automatically revert to the previous environment when the block exits.
 
 !!! python
@@ -65,8 +67,7 @@ This allows you to use the environment in a `with` block, and it will automatica
     # here the previous environment is restored
     ```
 
-However, it may be also called outside a context manager.
-In that case, the previous environment is lost.
+They may also be called outside a context manager. In that case the new environment remains the singleton. `reset_env()` is persistent and returns `None`.
 
 !!! python
     ```python
@@ -77,11 +78,10 @@ In that case, the previous environment is lost.
 
 ## Anchor & auto-revert
 
-All the `env` classes allow you to set an anchor.
+All environment classes expose `anchor()`, but the implementation differs.
 That means that anything that happens inside the `with` block, will be reverted in the end.
 
-When the `anchor` is set, the env will take a database snapshot.
-When the block exits, the database will be reverted to that snapshot.
+Local `Env` instances and RPC-backed local forks use py-evm snapshots. `NetworkEnv` and `BrowserEnv` call `evm_snapshot` and `evm_revert` on their RPC; if those nonstandard methods are unavailable, `anchor()` raises `RuntimeError`.
 
 For example:
 !!! python
@@ -97,3 +97,5 @@ For example:
 ### Test plugin
 Titanoboa provides a pytest plugin that will automatically call `anchor` for every test function, unless the `ignore_isolation` marker is provided.
 Read more in [testing with pytest](../tutorials/pytest.md#titanoboa-plugin).
+
+Fixture setup is anchored separately, and Hypothesis receives an anchor around every generated example. On a live RPC, `ignore_isolation` suppresses snapshot use but cannot roll back broadcast transactions.

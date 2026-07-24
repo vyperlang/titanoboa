@@ -8,24 +8,29 @@ decode_log(e) -> Event
 
 ### Description
 
-Decodes a log entry into an `Event` instance.
+Decodes a raw log entry into an `Event` instance.
 
-- `e`: The log entry to decode.
-- Returns: An `Event` instance.
+- `e`: A `RawLogEntry` (or compatible raw log tuple) to decode.
+- Returns: An `Event` instance (typically a namedtuple).
+
+[`get_logs`](get_logs.md) already decodes logs when possible. Use `decode_log`
+when you have a raw log entry and need to decode it yourself.
 
 ### Examples
 
 ```python
 >>> import boa
 >>> src = """
+... event MyEvent:
+...     value: uint256
+...
 ... @external
 ... def main():
-...     log MyEvent()
+...     log MyEvent(42)
 ... """
->>> deployer = boa.loads_partial(src, name="Foo")
->>> contract = deployer.deploy()
+>>> contract = boa.loads(src, name="Foo")
 >>> contract.main()
->>> log_entry = contract.get_logs()[0]
->>> contract.decode_log(log_entry)
-<Event ...>
+>>> # Prefer get_logs() for already-decoded events:
+>>> contract.get_logs()
+[MyEvent(value=42)]
 ```

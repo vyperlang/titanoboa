@@ -4,7 +4,7 @@ A [Vyper](https://github.com/vyperlang/vyper) interpreter with pretty tracebacks
 
 ## Architecture
 
-Titanoboa achieves feature parity with the vyper compiler while providing an interpreted experience. How does it do this? Internally, titanoboa uses vyper as a library to compile source code to bytecode, and then runs the bytecode using [py-evm](https://github.com/ethereum/py-evm), adding instrumenting hooks to provide introspection. The use of `py-evm` means that the entire experience is highly configurable, down to the ability to patch opcodes and precompiles at the EVM level.
+Titanoboa uses Vyper as a library to compile source code to bytecode, then runs that bytecode with [py-evm](https://github.com/ethereum/py-evm) and adds instrumentation for introspection. The py-evm backend is highly configurable, including opcode and precompile patching. Some optional modes trade EVM fidelity for speed; use the default mode for correctness-sensitive and gas-sensitive tests.
 
 ## Documentation
 
@@ -14,6 +14,8 @@ Usage and quickstart are [below](#usage-quick-start). For more detailed document
 ```
 pip install titanoboa
 ```
+
+Python packaging metadata currently does not declare a minimum Python version. Python 3.11 is used by the release workflow; verify compatibility with your project before choosing another version.
 
 For latest dev version:
 ```
@@ -28,9 +30,13 @@ pip install brownie
 pip install git+https://github.com/vyperlang/titanoboa
 ```
 
-Sometimes, using [pypy](https://www.pypy.org/download.html) can result in a substantial performance improvement for computation heavy contracts. `Pypy` can usually be used as a drop-in replacement for `CPython`.
+To get a performance boost for forking, install the `forking-recommended` extra:
 
-To get a performance boost for mainnet forking, install with the `forking-recommended` extra (`pip install "git+https://github.com/vyperlang/titanoboa#egg=titanoboa[forking-recommended]"`, or `pip install titanoboa[forking-recommended]`). This installs `requests-cache` to cache certain HTTP requests between sessions, and `ujson` which improves json performance.
+```bash
+pip install "titanoboa[forking-recommended]"
+```
+
+It installs `requests-cache` and `ujson`. The other published extra is `colab`, which installs a recent IPython kernel for Google Colab.
 
 If you are running titanoboa on a local [Vyper](https://github.com/vyperlang/vyper) project folder, you might need to run `python setup.py install` on your [Vyper](https://github.com/vyperlang/vyper) project if you encounter errors such as `ModuleNotFoundError: No module named 'vyper.version'`
 
@@ -64,8 +70,6 @@ def foo() -> uint256:
 >>> simple = boa.load("examples/simple.vy")
 >>> simple.foo()
     8
->>> simple.foo()._vyper_type
-    uint256
 ```
 
 
@@ -125,7 +129,7 @@ In [3]: %%vyper
    ...:
    ...: MY_IMMUTABLE: immutable(uint256)
    ...:
-   ...: @external
+   ...: @deploy
    ...: def __init__(some_number: uint256):
    ...:     MY_IMMUTABLE = some_number * 2
    ...:
@@ -133,7 +137,7 @@ In [3]: %%vyper
    ...: def foo() -> uint256:
    ...:     return MY_IMMUTABLE
    ...:
-Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
+Out[3]: <boa.contracts.vyper.vyper_contract.VyperDeployer object at 0x...>
 
 In [4]: d = _
 
@@ -166,9 +170,9 @@ Out[5]: 10
 Note that in `eval()` mode, titanoboa uses slightly different optimization settings, so gas usage may not be the same as using the external interface.
 
 ### Forking
-Create a fork of mainnet given rpc.
+Create a local py-evm fork backed by an RPC. `boa.fork()` replaces the singleton environment permanently when called normally, or restores the previous environment when used as a context manager. It rejects dirty local state unless `allow_dirty=True`; allowing dirty state discards that state because the fork uses a new environment.
 ```python
-In [1]: import boa; boa.env.fork(url="<rpc server address>")
+In [1]: import boa; boa.fork("<rpc server address>")
 
 In [2]: %load_ext boa.ipython
 
@@ -178,8 +182,8 @@ In [3]: %%vyper Test
    ...:
    ...: @external
    ...: def get_name_of(addr: HasName) -> String[32]:
-   ...:     return addr.name()
-Out[3]: <boa.vyper.contract.VyperDeployer at 0x7f3496187190>
+   ...:     return staticcall addr.name()
+Out[3]: <boa.contracts.vyper.vyper_contract.VyperDeployer object at 0x...>
 
 In [4]: c = Test.deploy()
 
@@ -189,7 +193,7 @@ Out[5]: 'Curve DAO Token'
 
 Cast current deployed addresses to vyper contract
 ```python
->>> import boa; boa.env.fork(url="<rpc server address>")
+>>> import boa; boa.fork("<rpc server address>")
 >>> c = boa.load_partial("examples/ERC20.vy").at("0xD533a949740bb3306d119CC777fa900bA034cd52")
 >>> c.name()
     'Curve DAO Token'
@@ -210,7 +214,7 @@ Cast current deployed addresses to vyper contract
 
 ### Jupyter Integration
 
-You can use Jupyter to execute titanoboa code in network mode from your browser using any wallet.
+You can use Jupyter to execute Titanoboa code in network mode from your browser using a wallet.
 We provide a `BrowserSigner` as a drop-in replacement for `eth_account.Account`.
 The `BrowserRPC` may be used to interact with the RPC server from the browser.
 
@@ -218,12 +222,10 @@ For a full example, please see [this example Jupyter notebook](examples/jupyter_
 
 #### JupyterLab
 
-Before being able to use the plugin, you need to install it.
-You can do this by running the following command in the terminal:
+Install Titanoboa and start JupyterLab normally. Titanoboa exposes a Jupyter server extension through Python package discovery; no manual frontend-extension activation is required.
 
 ```bash
 pip install titanoboa
-jupyter lab extension enable boa
 ```
 To activate our IPython extension, you need to run the following command in the notebook:
 ```jupyter
@@ -249,7 +251,7 @@ To do this, you need to install the plugin by running the following commands:
 
 #### IPython extensions
 
-This activates the `%%vyper`, `%%contract` and `%%eval` magics.
+This activates `%vyper`, `%%vyper`, `%%contract`, and `%eval`. `%vyper` and `%eval` evaluate one Vyper expression. `%%vyper Name` compiles a deployer and binds it to `Name`; `%%contract Name` compiles, deploys, and binds a contract instance.
 
 
 ### Basic tests

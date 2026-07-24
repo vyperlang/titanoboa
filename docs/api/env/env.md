@@ -14,7 +14,8 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
     Returns the internal pyevm timestamp. Should be equal to evaluating `block.timestamp`.
 
-    Uses the low level `boa.env.patch` object to ensure that changes to the are rolled back after exiting `boa.env.anchor()` blocks.
+    Uses the low-level `boa.env.evm.patch` object so timestamp changes are rolled
+    back after exiting `boa.env.anchor()` blocks.
 
 ## `alias`
 
@@ -39,7 +40,7 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
     **Description**
 
-    A context manager which snapshots the state and the vm, and reverts to the snapshot on exit. Properties in the low-level `boa.env.patch` object are also rolled back after exiting the context manager.
+    A context manager which snapshots the state and the vm, and reverts to the snapshot on exit. Properties in the low-level `boa.env.evm.patch` object are also rolled back after exiting the context manager.
 
     ---
 
@@ -48,17 +49,17 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
     ```python
     >>> import boa
     >>> src = """
-    ... value: public(uint256)
+    ... stored_value: public(uint256)
     ... """
     >>> contract = boa.loads(src)
-    >>> contract.value()
+    >>> contract.stored_value()
     0
     >>> with boa.env.anchor():
-    ...     contract.eval("self.value += 1")
-    ...     contract.value()
+    ...     contract.eval("self.stored_value += 1")
+    ...     contract.stored_value()
     ...
     1
-    >>> contract.value()
+    >>> contract.stored_value()
     0
     ```
 
@@ -66,29 +67,30 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ## `deploy_code`
 
-!!! function "`boa.env.deploy_code(bytecode) -> bytes`"
+!!! function "`boa.env.deploy_code(bytecode=..., **kwargs) -> tuple[Address, bytes]`"
 
     **Description**
 
-    Deploy bytecode at a specific account.
+    Execute deployment bytecode and return the created address and the
+    deployment output (normally the runtime bytecode).
 
     ---
 
     **Parameters**
 
-    - `at`: The account the deployment bytecode will run at.
     - `sender`: The account to set as `tx.origin` for the execution context and `msg.sender` for the top-level call.
     - `gas`: The gas limit provided for the execution (a.k.a. `msg.gas`).
     - `value`: The ether value to attach to the execution (a.k.a `msg.value`).
     - `bytecode`: The deployment bytecode.
-    - `data`: The data to attach to the execution (a.k.a. `msg.data`).
-    - `pc`: The program counter to start the execution at.
+    - `start_pc`: Accepted for API compatibility, but unused for deployments.
+    - `override_address`: Create the contract at this address instead of the
+      address derived from the sender and nonce.
 
     ---
 
     **Returns**
 
-    The return value from the top-level call (typically the runtime bytecode of a contract).
+    A `(created_address, output)` tuple.
 
     ---
 
@@ -97,9 +99,13 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
     ```python
     >>> import boa
     >>> code = bytes.fromhex("333452602034f3")  # simply returns the caller
-    >>> boa.env.deploy_code(bytecode=code, sender="0x0000000022D53366457F9d5E68Ec105046FC4383").hex()
+    >>> address, output = boa.env.deploy_code(
+    ...     bytecode=code,
+    ...     sender="0x0000000022D53366457F9d5E68Ec105046FC4383",
+    ... )
+    >>> output.hex()
     '0000000000000000000000000000000022d53366457f9d5e68ec105046fc4383'
-    >>> boa.env.vm.state.get_code(b"\x00" * 20).hex()
+    >>> boa.env.get_code(address).hex()
     '0000000000000000000000000000000022d53366457f9d5e68ec105046fc4383'
     ```
 
@@ -127,11 +133,12 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ## `enable_fast_mode`
 
-!!! function "`boa.env.enable_fast_mode() -> None`"
+!!! function "`boa.env.enable_fast_mode(flag=True) -> None`"
 
     **Description**
 
-    Enable or disable fast mode. This can be useful for speeding up tests.
+    Enable or disable fast mode. This can speed up tests by using alternative
+    execution paths.
 
     ---
 
@@ -169,7 +176,7 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ## `execute_code`
 
-!!! function "`boa.env.execute_code() -> ComputationAPI`"
+!!! function "`boa.env.execute_code(to_address=..., **kwargs) -> ComputationAPI`"
 
     **Description**
 
@@ -179,23 +186,26 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
     **Parameters**
 
-    - `at`: The account to target.
+    - `to_address`: The account to target.
     - `sender`: The account to set as `tx.origin` for the execution context and `msg.sender` for the top-level call.
     - `gas`: The gas limit provided for the execution (a.k.a. `msg.gas`).
     - `value`: The ether value to attach to the execution (a.k.a `msg.value`).
-    - `bytecode`: The runtime bytecode.
     - `data`: The data to attach to the execution (a.k.a. `msg.data`).
-    - `pc`: The program counter to start the execution at.
+    - `override_bytecode`: Runtime bytecode to execute instead of code stored at
+      `to_address`.
+    - `is_modifying`: If false, execute as a static call.
+    - `simulate`: If true, roll state back after execution.
+    - `start_pc`: The initial program counter.
 
     ---
 
     **Returns**
 
-    A `ComputationAPI` object containing the execution result. Key attributes include:
+    A `ComputationAPI` object containing the execution result. Key members include:
     - `output`: The return data as bytes
     - `is_error`: Boolean indicating if the execution failed
     - `error`: The exception if execution failed
-    - `gas_used`: Amount of gas consumed
+    - `get_gas_used()`: Amount of gas consumed
 
     ---
 
@@ -207,7 +217,7 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ## `gas_meter_class`
 
-!!! function "`boa.env.gas_meter_class()`"
+!!! function "`boa.env.gas_meter_class(cls)`"
 
     **Description**
 
@@ -555,11 +565,11 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
     **Returns**
 
-    A `ComputationAPI` object containing the execution result. Key attributes include:
+    A `ComputationAPI` object containing the execution result. Key members include:
     - `output`: The return data as bytes
     - `is_error`: Boolean indicating if the execution failed
     - `error`: The exception if execution failed
-    - `gas_used`: Amount of gas consumed
+    - `get_gas_used()`: Amount of gas consumed
 
     ---
 
@@ -599,8 +609,10 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
     ```python
     >>> import boa
-    >>> blueprint = boa.load_partial("path/to/blueprint.vy")
-    >>> boa.env.register_blueprint(blueprint.bytecode, blueprint)
+    >>> deployer = boa.load_partial("path/to/blueprint.vy")
+    >>> blueprint = deployer.deploy_as_blueprint()
+    >>> # deploy_as_blueprint registers automatically; for manual registration:
+    >>> boa.env.register_blueprint(deployer.compiler_data.bytecode, blueprint)
     ```
 
 ---
@@ -784,3 +796,90 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
     **Warning**
 
     This operation bypasses normal deployment procedures and should be used carefully.
+
+---
+
+## `deploy`
+
+!!! function "`boa.env.deploy(sender=None, gas=None, value=0, bytecode=b'', override_address=None, contract=None)`"
+
+    Execute deployment bytecode and return `(address, computation)`. Unlike
+    `deploy_code`, this lower-level method returns the computation even when
+    deployment fails, so callers can inspect `computation.is_error` and
+    `computation.error`.
+
+    `override_address` bypasses normal CREATE address derivation and is intended
+    for local testing. `contract` associates source metadata with tracing and
+    coverage.
+
+    ```python
+    address, computation = boa.env.deploy(bytecode=initcode)
+    if computation.is_error:
+        raise computation.error
+    ```
+
+---
+
+## `sender`
+
+!!! function "`boa.env.sender(address)`"
+
+    Temporarily set the environment's default EOA. Top-level calls and
+    deployments that omit `sender=` use this address for both `msg.sender` and
+    `tx.origin`. The previous EOA is restored when the context exits.
+    `boa.env.prank(address)` is an alias.
+
+    ```python
+    user = boa.env.generate_address("user")
+
+    with boa.env.sender(user):
+        contract.deposit(value=10**18)
+    ```
+
+    Nested contract calls still follow normal EVM semantics: `msg.sender`
+    becomes the calling contract while `tx.origin` remains the top-level EOA.
+
+---
+
+## `set_random_seed`
+
+!!! function "`boa.env.set_random_seed(seed=None)`"
+
+    Replace the deterministic random generator used by `generate_address`.
+    Reusing a seed reproduces the same generated-address sequence.
+
+    ```python
+    boa.env.set_random_seed("scenario-a")
+    first = boa.env.generate_address()
+
+    boa.env.set_random_seed("scenario-a")
+    assert boa.env.generate_address() == first
+    ```
+
+    This does not change EVM randomness (`block.prevrandao`) or cryptographic
+    randomness in contracts. Passing `None` uses Python's default seeding
+    behavior and is not reproducible.
+
+---
+
+## `time_travel`
+
+!!! function "`boa.env.time_travel(seconds=None, blocks=None, block_delta=12)`"
+
+    Advance local block time by exactly one of `seconds` or `blocks`.
+
+    - `seconds=N` adds `N` to the timestamp and `N // block_delta` to the block
+      number.
+    - `blocks=N` adds `N` to the block number and `N * block_delta` to the
+      timestamp.
+    - Supplying both arguments, or neither, raises `ValueError`.
+
+    ```python
+    start = boa.env.timestamp
+    boa.env.time_travel(seconds=3600)
+    assert boa.env.timestamp == start + 3600
+    ```
+
+    Changes inside `boa.env.anchor()` are reverted with the rest of the
+    environment patch state. This is a local py-evm cheat method; it does not
+    advance the remote chain used by `NetworkEnv`.

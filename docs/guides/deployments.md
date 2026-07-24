@@ -22,17 +22,17 @@ This data can be used later for contract verification on block explorers like Et
 To enable deployment logging, you must explicitly initialize a deployments database:
 
 ```python
-import boa
 from boa.deployments import DeploymentsDB, set_deployments_db
 
-# Enable with default in-memory database (data lost when program exits)
+# Enable an in-memory database (data is lost when the process exits)
 set_deployments_db(DeploymentsDB())
 
 # Enable with persistent database file
 set_deployments_db(DeploymentsDB("./deployments.db"))
 ```
 
-Note: The default database (when no path is provided) is `:memory:`, which creates an in-memory SQLite database.
+`DeploymentsDB()` defaults to SQLite's `:memory:` database. Import these APIs
+from `boa.deployments`; they are not exported from the top-level `boa` module.
 
 ## Usage Examples
 
@@ -133,7 +133,7 @@ deployment = next(db.get_deployments())
 contract_address = deployment.contract_address
 source_code = deployment.source_code  # Full source bundle
 abi = deployment.abi
-constructor_args = deployment.tx_dict["data"]  # Contains constructor arguments
+deployment_input = deployment.tx_dict["data"]  # Full initcode and constructor data
 ```
 
 ## Important Notes
@@ -147,6 +147,13 @@ constructor_args = deployment.tx_dict["data"]  # Contains constructor arguments
 4. **Session Tracking**: Each Python session gets a unique session ID, allowing you to group deployments from the same session.
 
 5. **Default Database**: When `DeploymentsDB()` is called without arguments, it creates an in-memory database (`:memory:`).
+
+6. **Failure handling**: If Titanoboa cannot construct a verification source
+   bundle, deployment continues and the record is saved with
+   `source_code=None`. SQLite insertion failures are not ignored.
+
+7. **Disable tracking**: Call `set_deployments_db(None)` to disable recording.
+   Use `get_deployments_db()` to inspect the currently configured database.
 
 ## Database Schema
 

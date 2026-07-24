@@ -1,6 +1,6 @@
-# Writing unit tests  pytest
+# Writing unit tests with pytest
 
-Titanoboa integrates natively with [pytest](https://docs.pytest.org/) and [hypothesis](https://hypothesis.readthedocs.io/en/latest/quickstart.html). Nothing special is needed to enable these, as the plugins for these packages will be loaded automatically. By default, isolation is enabled for tests - that is, any changes to the EVM state inside the test case will automatically be rolled back after the test case completes.
+Titanoboa integrates with [pytest](https://docs.pytest.org/) and [Hypothesis](https://hypothesis.readthedocs.io/en/latest/quickstart.html). Its pytest plugin is installed with Titanoboa and provides automatic EVM-state isolation.
 
 Since `titanoboa` is framework-agnostic any other testing framework should work as well.
 
@@ -59,24 +59,21 @@ We can run the test by calling `pytest`:
     ============================== 1 passed in 0.01s ===============================
     ```
 
-<!-- note this is just llm generated, but it's enough for now -->
-
 ## Titanoboa Plugin
 
-Titanoboa offers a pytest plugin that automatically resets the environment after each test.
-This is useful to isolate each test and avoid side effects between them.
-By using fixtures, pytest is able to correctly deploy the necessary contracts to run each specific test.
+The plugin anchors both fixture setup and each test call. Fixture state therefore follows pytest fixture scopes while modifications made by a dependent fixture or test are reverted when that fixture or test finishes. Parametrized test cases are isolated from one another.
 
-However, this can give errors when testing in network/fork mode.
-Most importantly, some RPCs will not support the `evm_snapshot` and `evm_revert` methods, which are used to reset the state after each test.
+Hypothesis gets an additional anchor around every generated example, including state-machine examples. A contract fixture can therefore be reused while every example starts from the fixture's original state.
 
-To disable the plugin, you may add the `ignore_isolation` marker.
+Local `Env` instances and RPC-backed py-evm forks can always snapshot locally. A live [`NetworkEnv`](../api/env/network_env.md) can isolate only when its RPC implements `evm_snapshot` and `evm_revert`; otherwise `anchor()` raises `RuntimeError`.
+
+Use `ignore_isolation` only for tests that intentionally cannot be snapshotted:
 
 !!! python
     ```python
     import pytest
 
-    # this will ignore the isolation for all tests in this file
+    # Disable isolation for every test and fixture setup in this module.
     pytestmark = pytest.mark.ignore_isolation
 
     # this will ignore the isolation for this specific test
@@ -86,4 +83,9 @@ To disable the plugin, you may add the `ignore_isolation` marker.
         assert example.foo() == 50
     ```
 
-See more details in the [environment explanation](../explain/singleton_env.md#anchor--auto-revert).
+!!! warning
+    On a live RPC without snapshot support, `ignore_isolation` avoids the error but cannot undo transactions. Broadcast state persists on the network. It also disables fixture-level anchors for the marked test, so do not rely on state leaking between tests unless that coupling is intentional.
+
+Gas profiling uses `@pytest.mark.gas_profile` or the `--gas-profile` option. The collection hook recognizes `ignore_gas_profiling`, while the runtime conflict check currently looks for `ignore_profiling`; this naming inconsistency is a known implementation issue.
+
+See more details in the [environment explanation](../explain/singleton_env.md#anchor-auto-revert).

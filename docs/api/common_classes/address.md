@@ -185,4 +185,4 @@ print(contract._storage.admins)  # Returns dict with Address keys
 
 - [Environment - generate_address](../env/env.md#generate_address) - Generate new addresses
 - [Common Classes - VyperContract](../common_classes/_BaseVyperContract.md) - Using addresses with contracts
-- [Testing - prank](../testing.md#prank) - Impersonate addresses in tests
+- [Environment - prank](../env/env.md#prank) - Impersonate addresses in tests

@@ -26,5 +26,5 @@ Returns a `VyperContract` instance at a given address.
 >>> contract = deployer.deploy()
 >>> contract_at_address = deployer.at(contract.address)
 >>> type(contract_at_address)
-<class 'boa.vyper.contract.VyperContract'>
+<class 'boa.contracts.vyper.vyper_contract.VyperContract'>
 ```

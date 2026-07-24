@@ -21,6 +21,6 @@ Provides access to the constants defined in the Vyper contract.
 ... x: constant(uint256) = 123
 ... """
 >>> deployer = boa.loads_partial(src)
->>> deployer._constants.MY_CONSTANT
+>>> deployer._constants.x
 123
 ```

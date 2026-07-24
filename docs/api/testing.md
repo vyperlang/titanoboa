@@ -10,7 +10,6 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
 ### `eval`
 !!! function "`boa.eval(statement)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/contracts/vyper/vyper_contract.py#L893-L920" class="source-code-link" target="_blank" rel="noopener"></a>
 
     **Description**
 
@@ -44,7 +43,6 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
 ### `fork`
 !!! function "`boa.fork(url)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/environment.py#L59-L69" class="source-code-link" target="_blank" rel="noopener"></a>
 
     **Description**
 
@@ -65,7 +63,10 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
     **Returns**
 
-    Sets the environment to the new forked state. To learn more about environments see [Titanoboa Environments](../explain/singleton_env.md).
+    Sets the environment to the new forked state. Calling `boa.fork(...)`
+    directly keeps that fork active. Using it as a context manager restores the
+    previous environment on exit. To learn more about environments see
+    [Titanoboa Environments](../explain/singleton_env.md).
 
     ---
 
@@ -85,7 +86,6 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
 ### `boa.deal`
 !!! function "`deal(token, receiver, amount)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/dealer.py#L91-L107" class="source-code-link" target="_blank" rel="noopener"></a>
 
     **Description**
 
@@ -102,6 +102,18 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
     ---
 
+    **Limitations**
+
+    `deal` finds storage by tracing `SLOAD` during `balanceOf(receiver)` and,
+    when `adjust_supply` is true, `totalSupply()`. It only works when those
+    values live in unpacked storage slots that mirror the returned integers.
+    Tokens that pack storage, compute balances on the fly, or omit a standard
+    `totalSupply` raise `ValueError`. Use `adjust_supply=False` for tokens
+    where supply tracking is unavailable or exotic (for example some WETH
+    layouts).
+
+    ---
+
     **Examples**
 
     === "Vanilla ERC20"
@@ -109,13 +121,19 @@ Boa provides various utilities to test vyper contracts and execute them in a for
         Let's modify the balance of `alice` for `usdc` to 100.
 
         ```python
-        boa.fork(os.getenv("ETH_RPC_URL"))
+        import os
 
-        usdc = ERC20.at("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", name="USDC")
+        import boa
 
+        boa.fork(os.environ["ETH_RPC_URL"])
+        usdc = boa.from_etherscan(
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            name="USDC",
+            chain_id=1,
+        )
         alice = boa.env.generate_address("alice")
 
-        deal(token, alice, 100 * 10 ** usdc.decimals())  # (1)!
+        boa.deal(usdc, alice, 100 * 10 ** usdc.decimals())  # (1)!
 
         usdc.balanceOf(alice) # returns 100 * 10 ** 6
         ```
@@ -123,9 +141,16 @@ Boa provides various utilities to test vyper contracts and execute them in a for
         1. We multiply the amount by `10 ** usdc.decimals()` to account for the token's decimals.
     === "WETH"
         ```python
-        boa.fork(os.getenv("ETH_RPC_URL"))
+        import os
 
-        weth = ERC20.at("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", name="WETH")
+        import boa
+
+        boa.fork(os.environ["ETH_RPC_URL"])
+        weth = boa.from_etherscan(
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            name="WETH",
+            chain_id=1,
+        )
         alice = boa.env.generate_address("alice")
 
         boa.deal(weth, alice, 10 * 10**18, adjust_supply=False)
@@ -136,8 +161,7 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 ---
 
 ### `boa.reverts`
-!!! function "`reverts(reason)`"
-    <a href="https://github.com/vyperlang/titanoboa/blob/v0.2.4/boa/__init__.py#L99-L106" class="source-code-link" target="_blank" rel="noopener"></a>
+!!! function "`reverts(*args, reason=None, compiler=None, vm_error=None, **dev_reasons)`"
 
     **Description**
 
@@ -147,9 +171,11 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
     **Parameters**
 
-    - `reason`: A string to match against the execution error.
+    - Positional string (or `reason=`): Match against the execution error / developer reason.
     - `compiler`: A string to match against the internal compiler revert reason.
     - `vm_error`: A string to match against the revert reason string.
+    - Other keyword arguments (for example `dev=`): Match a developer revert comment by
+      reason type. The keyword name is the `DevReason.reason_type` (commonly `dev`).
 
     ---
 

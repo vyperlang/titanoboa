@@ -25,10 +25,10 @@ def __init__():
 """
 contract = boa.loads(src)
 
-# Access storage variables directly
-print(contract._storage.owner)  # '0x00000000000000000000000000000000000000065'
-print(contract._storage.total_supply)  # 1000000
-print(contract._storage.balances)  # {Address('0x00...65'): 1000000}
+# Read storage variables through their storage accessors
+print(contract._storage.owner.get())
+print(contract._storage.total_supply.get())  # 1000000
+print(contract._storage.balances.get())
 
 # Dump all storage
 storage_snapshot = contract._storage.dump()
@@ -156,10 +156,10 @@ factory = boa.loads(factory_src)
 
 # Deploy child contract
 child_address = factory.deploy_child()
-child = boa.loads_partial(child_src).at(child_address)
+child = boa.env.lookup_contract(child_address)
 
 # Track creation relationship
-print(child.created_from)  # Factory contract address
+assert child.created_from == factory.address
 ```
 
 ## Advanced State Management
@@ -189,25 +189,25 @@ assert boa.env == original_env
 
 ```python
 contract = boa.loads("""
-value: uint256
+stored_value: uint256
 checkpoint: uint256
 """)
 
 # Nested state management
 with boa.env.anchor():
-    contract.eval("self.value = 100")
+    contract.eval("self.stored_value = 100")
 
     with boa.env.anchor():
-        contract.eval("self.value = 200")
-        contract.eval("self.checkpoint = self.value")
+        contract.eval("self.stored_value = 200")
+        contract.eval("self.checkpoint = self.stored_value")
         assert contract.eval("self.checkpoint") == 200
 
     # Inner anchor reverted
-    assert contract.eval("self.value") == 100
+    assert contract.eval("self.stored_value") == 100
     assert contract.eval("self.checkpoint") == 0
 
 # Outer anchor reverted
-assert contract.eval("self.value") == 0
+assert contract.eval("self.stored_value") == 0
 ```
 
 ## Advanced Account Management
@@ -280,16 +280,11 @@ boa.env.set_storage(
 
 assert contract.get_private() == 42
 
-# Manipulate mappings
-token = boa.loads("""
-balances: HashMap[address, uint256]
-""")
-
-# Calculate mapping slot
-# slot = keccak256(address + slot_number)
+# Mapping slots use Solidity/Vyper's hashed storage layout. Prefer the
+# contract's storage accessor when testing mapping state:
+token = boa.loads("balances: HashMap[address, uint256]")
 user = boa.env.generate_address()
-slot = boa.env.eval(f"keccak256(concat({user}, uint256(0)))")
-boa.env.set_storage(token.address, slot, 1000)
+print(token._storage.balances.get().get(user, 0))
 ```
 
 ## Debugging Features
@@ -306,14 +301,10 @@ def complex_function(x: uint256) -> uint256:
         return x + 50
 """)
 
-# Trace execution with source mapping
-try:
-    with boa.env.anchor():
-        result = contract.complex_function(150)
-        # Source maps track which lines were executed
-except Exception as e:
-    # Stack traces include Vyper source lines
-    print(contract.stack_trace(e))
+# Titanoboa uses the source map automatically when formatting a failed
+# contract call. Let the exception propagate (or inspect it in your test
+# runner) to see the Vyper source line in the stack trace.
+contract.complex_function(150)
 ```
 
 ### Call Traces
@@ -322,20 +313,20 @@ except Exception as e:
 # Enable call tracing
 contract_a = boa.loads("""
 interface B:
-    def callback(value: uint256): nonpayable
+    def callback(amount: uint256): nonpayable
 
 @external
-def call_b(b_address: address, value: uint256):
-    B(b_address).callback(value)
+def call_b(b_address: address, amount: uint256):
+    extcall B(b_address).callback(amount)
 """)
 
 contract_b = boa.loads("""
 event CallbackReceived:
-    value: uint256
+    amount: uint256
 
 @external
-def callback(value: uint256):
-    log CallbackReceived(value)
+def callback(amount: uint256):
+    log CallbackReceived(amount=amount)
 """)
 
 # Trace the call
@@ -396,37 +387,40 @@ set_search_paths(["/projects"])
 token = boa.load("/projects/contracts/Token.vy")
 ```
 
-#### Python Import System Integration
+#### Python import system integration
 
-Titanoboa automatically integrates with Python's import system for `.vy` files:
+Titanoboa also installs a Python importer for `.vy` files. It searches
+Python's `sys.path`, independently of the Vyper compiler search paths above:
 
 ```python
-# After setting search paths, you can import Vyper files directly
-set_search_paths(["/path/to/vyper/contracts"])
+import sys
 
-# Import as Python modules (loads the contract)
-import mytoken  # Loads /path/to/vyper/contracts/mytoken.vy
-import protocols.lending.vault  # Loads /path/to/vyper/contracts/protocols/lending/vault.vy
+import boa
 
-# Use the imported contracts
+sys.path.insert(0, "/path/to/vyper/contracts")
+
+# Import as a deployer
+import mytoken
+
 token_contract = mytoken.deploy()
 ```
 
 ### Compiler Control
 
 ```python
+from vyper.compiler.settings import OptimizationLevel
+
 # Fine control over compilation
 contract = boa.loads(
     source_code,
-    # Force specific compiler version
-    compiler_args={"optimize": "codesize"},
+    compiler_args={"optimize": OptimizationLevel.CODESIZE},
     # Skip VVM, use local compiler
-    no_vvm=True
+    no_vvm=True,
 )
 
 # Or with VVM for specific version
 contract = boa.loads(
-    f"# @version {vyper_version}\n{source_code}"
+    f"# pragma version {vyper_version}\n{source_code}"
 )
 ```
 
@@ -435,17 +429,8 @@ contract = boa.loads(
 ### Coverage Integration
 
 ```python
-# Enable coverage tracking
-from boa.coverage import CoverageState, CoverageTracer
-import boa
-boa.env._coverage = CoverageState(tracer=CoverageTracer())
-
-# Run your tests
-contract = boa.loads("MyContract.vy")
-contract.function()
-
-# Coverage data is automatically collected
-# Use with coverage.py for reports
+# Titanoboa installs its coverage.py plugin with the package:
+# pytest --cov
 ```
 
 ### Hypothesis Integration

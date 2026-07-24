@@ -147,8 +147,7 @@ Evaluate a Vyper statement in the context of the contract.
 
 ### Notes
 
-- The `eval` method compiles the provided Vyper code in the contract's context, giving access to all storage variables and internal functions
-- Expressions are evaluated with the same permissions as external calls (can't access private functions)
-- The code is executed in a transaction context, so state changes are possible
+- The `eval` method compiles the provided Vyper code in the contract's context, giving access to storage variables and `@internal` methods (for example via `self._helper()`)
+- Expressions still run as contract code in a transaction context, so state changes are possible
 - Complex Vyper expressions including loops, conditions, and function calls are supported
 - Useful for debugging, testing internal logic, and performing complex state queries

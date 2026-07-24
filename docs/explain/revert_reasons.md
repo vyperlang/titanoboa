@@ -7,7 +7,7 @@ Each of them may be used with [`boa.reverts`](../api/testing.md#boareverts) to t
 
 ## Compiler Revert Reasons
 
-These happen when the compiler generates the error message.
+These happen when Vyper inserts a runtime check.
 For example:
 - Range errors
 - Overflows
@@ -15,6 +15,13 @@ For example:
 - Re-entrancy locks
 
 Things like syntax errors will not be caught during the runtime, but the contract will fail to compile on the first place.
+
+Match these with the `compiler` keyword:
+
+```python
+with boa.reverts(compiler="safeadd"):
+    contract.add(max_value, 1)
+```
 
 ## User Revert Reasons
 
@@ -29,16 +36,29 @@ The user may provide a reason for the revert, which will be shown to the end use
 
 Note that this may happen directly on the contract being called, or any external contract that the contract interacts with.
 
+Pass a string positionally, or use `reason`/`vm_error`, to match an onchain revert string:
+
+```python
+with boa.reverts("x must be greater than 0"):
+    contract.foo(0)
+
+with boa.reverts(vm_error="x must be greater than 0"):
+    contract.foo(0)
+```
+
 ## Dev Revert Reasons
 
-Developer reverts are also raised by `assert` statements in the code.
-However, by adding a `# dev: <reason>` comment after the assert call, Titanoboa is able to verify the reason and provide a more detailed error message.
+Developer reasons are comments attached to a statement. The text before `:` is an arbitrary tag, not a fixed `dev` keyword. Titanoboa can recover the tag and reason from source information without adding the string to deployed bytecode.
 
 !!! vyper
     ```vyper
     @external
     def foo(x: uint256):
-        assert x > 0 # dev: "x must be greater than 0"
+        assert x > 0  # dev: x must be greater than 0
+
+    @external
+    def bar(x: uint256):
+        assert x < 10  # rekt: x must be less than 10
     ```
 
 These reasons are completely offchain and useful when the contract storage is limited (EIP 170).
@@ -55,4 +75,9 @@ This is particularly useful when testing contracts with [`boa.reverts`](../api/t
     ```python
     with boa.reverts(dev="x must be greater than 0"):
         contract.foo(0)
+
+    with boa.reverts(rekt="x must be less than 10"):
+        contract.bar(10)
     ```
+
+`reason`, `compiler`, and `vm_error` have special matching behavior. Any other keyword is treated as a developer tag, so its spelling must match the source comment. `boa.reverts()` with no arguments accepts any `BoaError`, while a mismatched reason raises `ValueError`.

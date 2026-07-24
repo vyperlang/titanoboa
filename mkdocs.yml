@@ -48,21 +48,26 @@ nav:
     - Performance Optimization: guides/performance_optimization.md
     - Forge Analogues: guides/forge.md
   - API Reference:
+    - API and Import Index: api/index.md
     - boa:
       - Loading Contracts: api/load_contracts.md
+      - Explorer Configuration: api/explorer.md
       - Testing and Forking: api/testing.md
+      - Fuzzing: api/fuzz.md
       - Verify Deployed Contracts:
         - get_verifier: api/verify/get_verifier.md
         - set_verifier: api/verify/set_verifier.md
         - verify: api/verify/verify.md
         - Overview: api/verify/overview.md
       - EVM and Precompiles:
+        - typed precompile: api/precompile.md
         - register_precompile: api/pyevm/register_precompile.md
         - deregister_precompile: api/pyevm/deregister_precompile.md
         - patch_opcode: api/pyevm/patch_opcode.md
       - Exceptions:
         - BoaError: api/exceptions/boa_error.md
       - Cache: api/cache.md
+      - Runtime Diagnostics: api/runtime.md
     - Environment:
       - Pick your environment: api/env/singleton.md
       - Env: api/env/env.md
@@ -86,7 +91,7 @@ nav:
       - deploy_as_blueprint: api/vyper_deployer/deploy_as_blueprint.md
       - stomp: api/vyper_deployer/stomp.md
       - at: api/vyper_deployer/at.md
-      - standard_json: api/vyper_deployer/standard_json.md
+      - solc_json: api/vyper_deployer/solc_json.md
       - _constants: api/vyper_deployer/_constants.md
       - __call__: api/vyper_deployer/__call__.md
     - VyperBlueprint: api/vyper_blueprint/overview.md
