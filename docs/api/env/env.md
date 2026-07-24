@@ -217,7 +217,7 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
 ## `gas_meter_class`
 
-!!! function "`boa.env.gas_meter_class()`"
+!!! function "`boa.env.gas_meter_class(cls)`"
 
     **Description**
 
@@ -609,8 +609,10 @@ A wrapper class around py-evm which provides a "contract-centric" API. More deta
 
     ```python
     >>> import boa
-    >>> blueprint = boa.load_partial("path/to/blueprint.vy")
-    >>> boa.env.register_blueprint(blueprint.bytecode, blueprint)
+    >>> deployer = boa.load_partial("path/to/blueprint.vy")
+    >>> blueprint = deployer.deploy_as_blueprint()
+    >>> # deploy_as_blueprint registers automatically; for manual registration:
+    >>> boa.env.register_blueprint(deployer.compiler_data.bytecode, blueprint)
     ```
 
 ---

@@ -141,9 +141,8 @@ def deploy_child() -> address:
     return child
 """)
 
-# Deploy child through factory
-tx = factory.deploy_child()
-child_address = tx.return_value
+# Deploy child through factory — calls return decoded values directly
+child_address = factory.deploy_child()
 
 # Connect to deployed child
 child_deployer = boa.load_partial("Child.vy")

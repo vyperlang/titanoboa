@@ -14,7 +14,7 @@ The `VyperDeployer` class is responsible for deploying Vyper contracts. It handl
 
 ### Properties
 
-- [standard_json](standard_json.md)
+- [solc_json](solc_json.md)
 - [_constants](_constants.md)
 
 ### Examples

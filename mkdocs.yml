@@ -91,7 +91,7 @@ nav:
       - deploy_as_blueprint: api/vyper_deployer/deploy_as_blueprint.md
       - stomp: api/vyper_deployer/stomp.md
       - at: api/vyper_deployer/at.md
-      - standard_json: api/vyper_deployer/standard_json.md
+      - solc_json: api/vyper_deployer/solc_json.md
       - _constants: api/vyper_deployer/_constants.md
       - __call__: api/vyper_deployer/__call__.md
     - VyperBlueprint: api/vyper_blueprint/overview.md

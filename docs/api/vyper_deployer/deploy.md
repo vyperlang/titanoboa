@@ -10,8 +10,8 @@ deploy(*args, **kwargs) -> VyperContract
 
 Deploys the Vyper contract and returns a `VyperContract` instance.
 
-- `*args`: Positional arguments to pass to the contract's constructor.
-- `**kwargs`: Keyword arguments to pass to the contract's constructor.
+- `*args`: Positional constructor arguments.
+- `**kwargs`: Deployment options such as `value`, `gas`, `sender`, `override_address`, and `skip_initcode` — not constructor keyword arguments.
 - Returns: A `VyperContract` instance.
 
 ### Examples

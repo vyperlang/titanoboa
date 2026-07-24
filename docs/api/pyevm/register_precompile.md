@@ -12,7 +12,8 @@ register_raw_precompile(address: str, fn: Callable[[eth.abc.ComputationAPI], Non
 
 Register a raw precompile function. This is the low-level interface for registering precompiles.
 
-**Note:** `register_precompile` has been renamed to `register_raw_precompile`. The old name is deprecated.
+**Note:** The old name `register_precompile` only emits a deprecation warning and
+does **not** register a precompile. Always call `register_raw_precompile`.
 
 **Important:** This function is not available directly from the `boa` module. You must import it from `boa.vm.py_evm`.
 

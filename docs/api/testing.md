@@ -161,7 +161,7 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 ---
 
 ### `boa.reverts`
-!!! function "`reverts(reason)`"
+!!! function "`reverts(*args, reason=None, compiler=None, vm_error=None, **dev_reasons)`"
 
     **Description**
 
@@ -171,9 +171,11 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
     **Parameters**
 
-    - `reason`: A string to match against the execution error.
+    - Positional string (or `reason=`): Match against the execution error / developer reason.
     - `compiler`: A string to match against the internal compiler revert reason.
     - `vm_error`: A string to match against the revert reason string.
+    - Other keyword arguments (for example `dev=`): Match a developer revert comment by
+      reason type. The keyword name is the `DevReason.reason_type` (commonly `dev`).
 
     ---
 

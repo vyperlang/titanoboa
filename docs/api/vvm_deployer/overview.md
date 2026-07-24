@@ -31,7 +31,7 @@ It includes methods for handling contract deployment, execution, and interaction
         self.foo = 42
         self.bar = bar
     """)
-    contract = deployer.deploy()
+    contract = deployer.deploy(7)
 
     >>> type(deployer)
     <class 'boa.contracts.vvm.vvm_contract.VVMDeployer'>

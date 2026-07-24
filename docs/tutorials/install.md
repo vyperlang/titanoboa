@@ -7,7 +7,7 @@ Titanoboa works with Python versions above 3.9. In practice, use Python 3.10, 3.
 !!!moccasin
     [Moccasin](https://github.com/cyfrin/moccasin) is a CLI tool that wraps Boa, providing a smoother and more feature-rich development experience. If you are accustomed to frameworks like Foundry, you’ll likely want to install Moccasin. Refer to the [Moccasin documentation](https://cyfrin.github.io/moccasin/) for more details.
 
-If you have installed Moccasin and used `mox init` to set up your project, Titanoboa is already included as a dependency.
+    If you have installed Moccasin and used `mox init` to set up your project, Titanoboa is already included as a dependency.
 
 ---
 

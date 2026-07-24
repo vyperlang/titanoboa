@@ -72,10 +72,10 @@ The standard deployer for Vyper contracts loaded from source.
 # Create VyperDeployer
 deployer = boa.load_partial("Contract.vy")
 
-# Access compiler output
-print(deployer.compiler_output)  # Full compiler output
-print(deployer.bytecode)  # Deployment bytecode
-print(deployer.abi)  # Contract ABI
+# Access compiler data (VyperDeployer does not expose compiler_output / bytecode attrs)
+print(deployer.compiler_data)  # vyper.compiler.CompilerData
+print(deployer.compiler_data.bytecode)  # Deployment bytecode
+print(deployer.solc_json)  # solc standard-JSON representation
 
 # Deploy multiple instances
 instance1 = deployer.deploy(100)
@@ -83,19 +83,33 @@ instance2 = deployer.deploy(200)
 instance3 = deployer.deploy(300)
 ```
 
+`VVMDeployer` (older Vyper via VVM) exposes `compiler_output` and `bytecode` directly; prefer those attrs only when working with VVM deployers.
+
 ---
 
-## ABIDeployer
+## ABI contract factory
 
-Deployer for contracts loaded from ABI and bytecode.
+`load_abi` / `loads_abi` return an `ABIContractFactory` for attaching to an
+existing address. They take serialized JSON (not a Python list) and do not
+accept bytecode or deploy new contracts.
 
 ```python
-# Load from ABI
-abi = [{"type": "constructor", "inputs": [{"name": "x", "type": "uint256"}]}]
-bytecode = "0x608060405234801561001057600080fd5b5..."
+import json
 
-deployer = boa.loads_abi(abi, bytecode=bytecode)
-contract = deployer.deploy(42)
+import boa
+
+abi = [
+    {
+        "type": "function",
+        "name": "balanceOf",
+        "stateMutability": "view",
+        "inputs": [{"name": "account", "type": "address"}],
+        "outputs": [{"name": "", "type": "uint256"}],
+    }
+]
+
+ERC20 = boa.loads_abi(json.dumps(abi), name="ERC20")
+token = ERC20.at("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
 ```
 
 ---
@@ -105,13 +119,26 @@ contract = deployer.deploy(42)
 Deploy contracts as [EIP-5202](https://eips.ethereum.org/EIPS/eip-5202) blueprints:
 
 ```python
-# Deploy as blueprint
+# Deploy the blueprint (registers itself with the environment)
 blueprint = boa.load_partial("MyContract.vy").deploy_as_blueprint()
+print(blueprint.address)
 
-# Create instances from blueprint
-from boa.contracts.vyper.vyper_contract import VyperBlueprint
-instance1 = VyperBlueprint(blueprint).deploy(arg1, arg2)
-instance2 = VyperBlueprint(blueprint).deploy(arg1, arg2)
+# Create instances on-chain with Vyper's create_from_blueprint
+factory = boa.loads(
+    """
+blueprint: public(address)
+
+@deploy
+def __init__(blueprint_address: address):
+    self.blueprint = blueprint_address
+
+@external
+def create_child(arg1: uint256) -> address:
+    return create_from_blueprint(self.blueprint, arg1, code_offset=3)
+""",
+    blueprint.address,
+)
+child_address = factory.create_child(42)
 ```
 
 ---
@@ -170,16 +197,13 @@ Deploy contracts on real networks:
 # Connect to network
 boa.set_network_env("https://eth-mainnet.g.alchemy.com/v2/YOUR-KEY")
 
-# Load deployer
+# Optional: tune TransactionSettings (base fee look-ahead, poll timeout, …)
+boa.env.tx_settings.base_fee_estimator_constant = 10
+boa.env.tx_settings.poll_timeout = 300.0
+
 deployer = boa.load_partial("MyContract.vy")
-
-# Deploy with network-specific settings
-from boa.network import NetworkEnv
-boa.env.tx_settings.gas_price = 30 * 10**9  # 30 gwei
-
 contract = deployer.deploy(constructor_arg)
 print(f"Deployed at: {contract.address}")
-print(f"Transaction: {contract.receipt.transactionHash.hex()}")
 ```
 
 ---

@@ -189,21 +189,24 @@ Normal mutable calls are also simulated locally first, but are then broadcast. D
 
 ## `deploy_code`
 
-!!! function "`deploy_code(bytecode: bytes, *args, value=0, gas=None, sender=None) -> tuple[Address, bytes]`"
+!!! function "`deploy_code(sender=None, gas=None, value=0, bytecode=b'', override_address=None, contract=None) -> tuple[Address, bytes]`"
 
     **Description**
 
     Deploy contract bytecode to the network. Returns the deployed contract address and constructor return data.
+    This inherits the same keyword arguments as `Env.deploy` / `Env.deploy_code` — pass options by name, not as
+    positional constructor arguments.
 
     ---
 
     **Parameters**
 
-    - `bytecode`: The deployment bytecode
-    - `*args`: Constructor arguments
+    - `bytecode`: The deployment bytecode (initcode), including any ABI-encoded constructor args
     - `value`: ETH value to send with deployment
     - `gas`: Gas limit (auto-estimated if None)
-    - `sender`: Sender address (uses env.eoa if None)
+    - `sender`: Sender address (uses `env.eoa` if None)
+    - `override_address`: Optional address to deploy to
+    - `contract`: Optional calling Vyper contract (used for coverage tracing)
 
     ---
 
@@ -220,7 +223,7 @@ Normal mutable calls are also simulated locally first, but are then broadcast. D
     ```python
     >>> import boa
     >>> bytecode = bytes.fromhex("608060...")
-    >>> address, runtime_bytecode = boa.env.deploy_code(bytecode)
+    >>> address, runtime_bytecode = boa.env.deploy_code(bytecode=bytecode)
     >>> print(f"Deployed at: {address}")
     ```
 
