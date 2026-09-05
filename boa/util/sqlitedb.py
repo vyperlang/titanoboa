@@ -99,7 +99,18 @@ class SqliteCache(BaseDB):
 
         # executescript does not work in multiprocess environment
         for cmd in self._PRAGMA_CMDS:
-            self._cursor.execute(cmd)
+            # Switching journal mode can contend with another worker before
+            # we can acquire a transaction lock. Keep retries bounded and
+            # propagate errors unrelated to contention.
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    self._cursor.execute(cmd)
+                    break
+                except sqlite3.OperationalError as e:
+                    if str(e) != "database is locked" or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(1e-4)
         with self.acquire_write_lock():
             for cmd in self._CREATE_CMDS:
                 self._cursor.execute(cmd)
