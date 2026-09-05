@@ -1,8 +1,12 @@
+import hashlib
+import ipaddress
 import os
 import pickle
+import socket
 import sys
 from pathlib import Path
 from typing import Any, Optional, Type
+from urllib.parse import urlparse
 
 import rlp
 from eth.db.account import AccountDB, keccak
@@ -18,6 +22,35 @@ from requests import HTTPError
 from boa.rpc import RPC, RPCError, fixup_dict, to_bytes, to_hex, to_int
 from boa.util.lrudict import lrudict
 from boa.util.sqlitedb import SqliteCache
+
+
+def _is_loopback(rpc_identifier: str) -> bool:
+    """
+    Check if an RPC identifier points to a loopback address.
+    Used to determine if cache should be isolated (local test chains)
+    or shared (production chains).
+    """
+    parsed = urlparse(rpc_identifier)
+    host = parsed.hostname
+
+    if not host:
+        return True  # no host = local (unix socket, etc.)
+
+    # Try as IP address first
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        pass
+
+    # Hostname - resolve it
+    try:
+        for *_, sockaddr in socket.getaddrinfo(host, None):
+            if ipaddress.ip_address(sockaddr[0]).is_loopback:
+                return True
+        return False
+    except OSError:
+        return False
+
 
 TIMEOUT = 60  # default timeout for http requests in seconds
 
@@ -73,12 +106,25 @@ class CachingRPC(RPC):
         self._init_db()
 
     @classmethod
-    def _cache_filepath(cls, cache_dir, chain_id):
-        return Path(cache_dir) / f"chainid_{hex(chain_id)}-sqlite.db"
+    def _cache_filepath(cls, cache_dir, chain_id, rpc_identifier):
+        """
+        Generate cache filepath. For loopback addresses (localhost, 127.0.0.1, etc.),
+        include a hash of the RPC identifier to isolate ephemeral test chains.
+        For remote RPCs, use only chain_id to share cache across providers.
+        """
+        if _is_loopback(rpc_identifier):
+            # Local RPCs (anvil, hardhat): isolate by identifier
+            rpc_hash = hashlib.sha256(rpc_identifier.encode()).hexdigest()[:16]
+            return Path(cache_dir) / f"chainid_{hex(chain_id)}-{rpc_hash}.sqlite.db"
+        else:
+            # Remote RPCs: share cache by chain_id only
+            return Path(cache_dir) / f"chainid_{hex(chain_id)}.sqlite.db"
 
     def _init_db(self):
         if self._cache_dir is not None:
-            cache_file = self._cache_filepath(self._cache_dir, self._chain_id)
+            cache_file = self._cache_filepath(
+                self._cache_dir, self._chain_id, self._rpc.identifier
+            )
             cache_file = os.path.expanduser(cache_file)
             sqlitedb = SqliteCache.create(cache_file)
             # use CacheDB as an additional layer over disk

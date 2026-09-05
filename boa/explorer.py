@@ -28,7 +28,8 @@ except ImportError:
 
     SESSION = Session()
 
-DEFAULT_ETHERSCAN_URI = "https://api.etherscan.io/api"
+DEFAULT_ETHERSCAN_URI = "https://api.etherscan.io/v2/api"  # Etherscan API v2
+DEFAULT_CHAIN_ID = 1  # Mainnet
 VERSION_RE = re.compile(r"v(\d+\.\d+\.\d+)(\+commit.*)?")
 
 
@@ -40,14 +41,21 @@ class Etherscan(ContractVerifier[str]):
     backoff_ms: int | float = 400.0
     backoff_factor: float = 1.1  # 1.1**10 ~= 2.59
     timeout = timedelta(minutes=2)
+    chain_id: Optional[int] = DEFAULT_CHAIN_ID
 
+    # Setter
+    def set_chain_id(self, value: Optional[int]):
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError("Chain ID must be a positive integer.")
+        self.chain_id = value
+
+    # Methods
     def verify(
         self,
         address: Address,
         contract_name: str,
         solc_json: dict,
         constructor_calldata: bytes,
-        chain_id: int,
         license_type: str = "1",
         wait: bool = False,
     ) -> Optional["VerificationResult[str]"]:
@@ -74,20 +82,20 @@ class Etherscan(ContractVerifier[str]):
             "module": "contract",
             "action": "verifysourcecode",
             "apikey": api_key,
-            "chainId": chain_id,
+            "chainid": self.chain_id,
             "codeformat": "vyper-json",
             "sourceCode": json.dumps(solc_json),
             "constructorArguments": constructor_calldata.hex(),
             "contractaddress": address,
             "contractname": f"{contract_file}:{contract_name}",
             "compilerversion": f"vyper:{version_match.group(1)}",
-            "licenseType": license_type,
             "optimizationUsed": "1",
+            "licenseType": license_type,
         }
 
         def verification_created():
             # we need to retry until the contract is found by Etherscan
-            response = SESSION.post(self.uri, data=data)
+            response = SESSION.post(f"{self.uri}?chainid={self.chain_id}", data=data)
             response.raise_for_status()
             response_json = response.json()
             if response_json.get("status") == "1":
@@ -98,7 +106,7 @@ class Etherscan(ContractVerifier[str]):
             ):
                 raise ValueError(f"Failed to verify: {response_json['result']}")
             print(
-                f'Verification could not be created yet: {response_json["result"]}. Retrying...'
+                f"Verification could not be created yet: {response_json['result']}. Retrying..."
             )
             return None
 
@@ -132,21 +140,25 @@ class Etherscan(ContractVerifier[str]):
     def is_verified(self, etherscan_guid: str) -> bool:
         api_key = self.api_key or ""
         url = f"{self.uri}?module=contract&action=checkverifystatus"
-        url += f"&guid={etherscan_guid}&apikey={api_key}"
+        url += f"&guid={etherscan_guid}&apikey={api_key}&chainid={self.chain_id}"
 
         response = SESSION.get(url)
         response.raise_for_status()
         response_json = response.json()
-        if (
-            response_json.get("message") == "NOTOK"
-            and "Pending in queue" not in response_json["result"]
-        ):
-            raise ValueError(f"Failed to verify: {response_json['result']}")
+        if response_json.get("message") == "NOTOK":
+            if "Already Verified" in response_json["result"]:
+                print("Contract already verified")
+                return True
+            if "Pending in queue" not in response_json["result"]:
+                raise ValueError(f"Failed to verify: {response_json['result']}")
         return response_json.get("status") == "1"
 
     def __post_init__(self):
         if self.uri is None:
             self.uri = DEFAULT_ETHERSCAN_URI
+
+        # call set_chain_id for validation
+        self.set_chain_id(self.chain_id)
 
     def _fetch(self, **params) -> dict:
         """
@@ -158,7 +170,7 @@ class Etherscan(ContractVerifier[str]):
         :param params: Additional query parameters
         :return: JSON response
         """
-        params = {**params, "apiKey": self.api_key}
+        params = {**params, "apiKey": self.api_key, "chainid": self.chain_id}
         for i in range(self.num_retries):
             res = SESSION.get(self.uri, params=params)
             res.raise_for_status()
@@ -187,7 +199,7 @@ class Etherscan(ContractVerifier[str]):
 
     # fetch the address of a contract; resolves at most one layer of
     # indirection if the address is a proxy contract.
-    def _resolve_implementation_address(self, address: str):
+    def _resolve_implementation_address(self, address: str) -> str:
         params = dict(module="contract", action="getsourcecode", address=address)
         data = self._fetch(**params)
         source_data = data["result"][0]

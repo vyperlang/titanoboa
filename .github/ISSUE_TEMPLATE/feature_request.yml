@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an idea or improvement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for enhancements. For bug reports, choose **Bug report** instead.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do? What is hard or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work (API shape, UX, docs, etc.)?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

@@ -319,3 +319,19 @@ def baz(x: uint256, _from: address, y: uint256) -> (MyStruct1, MyStruct2):
     assert type(v).__name__ == "MyStruct2"
     assert v._0 == addy
     assert v.x == 4
+
+
+def test_forward_sender_on_deploy_normal():
+    # Ensure sender kwarg during normal (non-VVM) deployment is forwarded
+    code = """
+creator: address
+
+@deploy
+def __init__():
+    self.creator = msg.sender
+"""
+
+    custom_sender = boa.env.generate_address()
+    c = boa.loads(code, sender=custom_sender)
+
+    assert c._storage.creator.get() == custom_sender

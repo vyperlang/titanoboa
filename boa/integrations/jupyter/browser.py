@@ -2,6 +2,7 @@
 This module implements the BrowserSigner class, which is used to sign transactions
 in IPython/JupyterLab/Google Colab.
 """
+
 import json
 import logging
 import os
@@ -14,6 +15,11 @@ from typing import Any
 
 import nest_asyncio
 from IPython.display import Javascript, display
+
+from eth_account import Account
+from eth_account.datastructures import SignedMessage
+from eth_account.messages import encode_typed_data, _hash_eip191_message
+from hexbytes import HexBytes
 
 from boa.integrations.jupyter.constants import (
     ADDRESS_TIMEOUT_MESSAGE,
@@ -136,6 +142,143 @@ class BrowserSigner:
             [self.address, full_message],
             TRANSACTION_TIMEOUT_MESSAGE,
         )
+
+    def sign_typed_data_eip712(
+        self,
+        domain_data: dict[str, Any] | None = None,
+        message_types: dict[str, Any] | None = None,
+        message_data: dict[str, Any] | None = None,
+        full_message: dict[str, Any] | None = None,
+    ) -> SignedMessage:
+        """
+        Sign EIP-712 typed data and return eth-account compatible SignedMessage.
+
+        This method provides full EIP-712 support compatible with eth-account library,
+        enabling use cases like x402 payments that require SignedMessage objects.
+
+        Supports both parameter styles:
+        1. Individual components: domain_data, message_types, message_data
+        2. Complete message: full_message
+
+        The signature is verified by recovering the signer address and comparing
+        it to the wallet address. If they don't match, a ValueError is raised.
+
+        :param domain_data: EIP-712 domain separator (name, version, chainId, verifyingContract)
+        :param message_types: Message type definitions (EIP712Domain is auto-injected)
+        :param message_data: The message to sign
+        :param full_message: Complete EIP-712 message (alternative to individual params)
+        :return: SignedMessage(messageHash, r, s, v, signature)
+        :raises TypeError: If neither full_message nor individual components are provided
+        :raises ValueError: If signature verification fails (recovered address != wallet address)
+
+        Example usage with individual components:
+            >>> signer = BrowserSigner()
+            >>> domain = {"name": "MyApp", "version": "1", "chainId": 1}
+            >>> types = {"Message": [{"name": "content", "type": "string"}]}
+            >>> message = {"content": "Hello, world!"}
+            >>> signed = signer.sign_typed_data_eip712(domain, types, message)
+            >>> signed.signature.hex()
+            '0x...'
+
+        Example usage with full_message:
+            >>> full = {
+            ...     "types": {"Message": [{"name": "content", "type": "string"}]},
+            ...     "primaryType": "Message",
+            ...     "domain": {"name": "MyApp", "version": "1", "chainId": 1},
+            ...     "message": {"content": "Hello, world!"}
+            ... }
+            >>> signed = signer.sign_typed_data_eip712(full_message=full)
+        """
+        # Build full_message if individual components provided
+        if full_message is None:
+            if domain_data is None or message_types is None or message_data is None:
+                raise TypeError(
+                    "Either full_message or all of (domain_data, message_types, "
+                    "message_data) must be provided"
+                )
+
+            # Use eth-account's encode_typed_data to build and validate the message
+            # This handles EIP712Domain injection automatically
+            signable = encode_typed_data(
+                domain_data=domain_data,
+                message_types=message_types,
+                message_data=message_data,
+            )
+
+            # Extract the full_message for the wallet
+            # Note: encode_typed_data returns a SignableMessage with the structured data
+            full_message = signable.body
+        else:
+            # Validate and encode the provided full_message
+            signable = encode_typed_data(full_message=full_message)
+
+        # Prepare message for wallet: serialize bytes as hex strings
+        # Some fields like nonce (bytes32) need to be hex strings for wallet compatibility
+        wallet_message = self._prepare_message_for_wallet(full_message)
+
+        # Request signature from browser wallet via eth_signTypedData_v4
+        sig_hex = self._rpc.fetch(
+            "eth_signTypedData_v4",
+            [self.address, wallet_message],
+            TRANSACTION_TIMEOUT_MESSAGE,
+        )
+
+        # Ensure signature is a hex string
+        if not isinstance(sig_hex, str):
+            raise TypeError(f"Wallet returned non-string signature: {type(sig_hex)}")
+        if not sig_hex.startswith("0x"):
+            sig_hex = "0x" + sig_hex
+
+        # Parse signature into components
+        sig_bytes = bytes.fromhex(sig_hex[2:])
+        if len(sig_bytes) != 65:
+            raise ValueError(
+                f"Invalid signature length: expected 65 bytes, got {len(sig_bytes)}"
+            )
+
+        # Extract r, s, v from signature
+        r = int.from_bytes(sig_bytes[0:32], "big")
+        s = int.from_bytes(sig_bytes[32:64], "big")
+        v = sig_bytes[64]
+
+        # Normalize v: some wallets return 0/1 instead of 27/28
+        if v in (0, 1):
+            v = v + 27
+            sig_bytes = sig_bytes[:64] + bytes([v])
+            sig_hex = "0x" + sig_bytes.hex()
+
+        # Verify signature by recovering signer address
+        recovered = Account.recover_message(signable, signature=HexBytes(sig_hex))
+        if recovered.lower() != self.address.lower():
+            raise ValueError(
+                f"Signature verification failed: recovered address {recovered} "
+                f"does not match wallet address {self.address}"
+            )
+
+        # Compute message hash for SignedMessage
+        message_hash = _hash_eip191_message(signable)
+
+        # Return eth-account compatible SignedMessage
+        return SignedMessage(message_hash, r, s, v, HexBytes(sig_bytes))
+
+    def _prepare_message_for_wallet(self, message: dict[str, Any]) -> dict[str, Any]:
+        """
+        Prepare EIP-712 message for wallet by serializing bytes as hex strings.
+
+        Wallets expect bytes32 and similar types as hex strings in JSON.
+        This recursively converts bytes/bytearray to hex strings.
+
+        :param message: The EIP-712 message structure
+        :return: Message with bytes serialized as hex strings
+        """
+        if isinstance(message, dict):
+            return {k: self._prepare_message_for_wallet(v) for k, v in message.items()}
+        elif isinstance(message, list):
+            return [self._prepare_message_for_wallet(item) for item in message]
+        elif isinstance(message, (bytes, bytearray)):
+            return "0x" + bytes(message).hex()
+        else:
+            return message
 
     def update_address(self):
         address = getattr(self._given_address, "address", self._given_address)

@@ -2,6 +2,7 @@
 import contextlib
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
 from math import ceil
@@ -63,6 +64,17 @@ class _EstimateGasFailed(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class PriorityFeeContext:
+    base_fee: int
+    base_fee_estimate: int
+    rpc_priority_fee: int
+    chain_id: int
+
+
+PriorityFeeStrategy = Callable[[PriorityFeeContext], int]
+
+
 @dataclass
 class TransactionSettings:
     # when calculating the base fee, the number of blocks N ahead
@@ -73,6 +85,11 @@ class TransactionSettings:
     # try increasing the constant.
     # do not recommend setting below 0.
     base_fee_estimator_constant: int = 5
+
+    # Optional strategy for EIP-1559 maxPriorityFeePerGas. Defaults to the RPC
+    # value from eth_maxPriorityFeePerGas. More context fields can be exposed
+    # in PriorityFeeContext as needed.
+    priority_fee_strategy: PriorityFeeStrategy | None = None
 
     # amount of time to wait, in seconds before giving up on a transaction
     poll_timeout: float = 240.0
@@ -267,23 +284,51 @@ class NetworkEnv(Env):
         return to_int(self._rpc.fetch("eth_gasPrice", []))
 
     def get_eip1559_fee(self) -> tuple[str, str, str, str]:
-        # returns: base_fee, max_fee, max_priority_fee
+        # returns: base_fee, max_priority_fee, max_fee, chain_id
         reqs = [
             ("eth_getBlockByNumber", ["latest", False]),
             ("eth_maxPriorityFeePerGas", []),
             ("eth_chainId", []),
         ]
-        block_info, max_priority_fee, chain_id = self._rpc.fetch_multi(reqs)
-        base_fee = block_info["baseFeePerGas"]
+        block_info, rpc_priority_fee, chain_id = self._rpc.fetch_multi(reqs)
+        base_fee = to_int(block_info["baseFeePerGas"])
 
         # Each block increases the base fee by 1/8 at most.
         # here we have the next block's base fee, compute a cap for the
         # next N blocks here.
         blocks_ahead = self.tx_settings.base_fee_estimator_constant
-        base_fee_estimate = ceil(to_int(base_fee) * (9 / 8) ** blocks_ahead)
+        base_fee_estimate = ceil(base_fee * (9 / 8) ** blocks_ahead)
 
-        max_fee = to_hex(base_fee_estimate + to_int(max_priority_fee))
-        return to_hex(base_fee_estimate), max_priority_fee, max_fee, chain_id
+        max_priority_fee = self._priority_fee(
+            base_fee=base_fee,
+            base_fee_estimate=base_fee_estimate,
+            rpc_priority_fee=to_int(rpc_priority_fee),
+            chain_id=to_int(chain_id),
+        )
+        max_fee = to_hex(base_fee_estimate + max_priority_fee)
+        return to_hex(base_fee_estimate), to_hex(max_priority_fee), max_fee, chain_id
+
+    def _priority_fee(
+        self,
+        base_fee: int,
+        base_fee_estimate: int,
+        rpc_priority_fee: int,
+        chain_id: int,
+    ) -> int:
+        strategy = self.tx_settings.priority_fee_strategy
+        if strategy is None:
+            return rpc_priority_fee
+
+        context = PriorityFeeContext(
+            base_fee=base_fee,
+            base_fee_estimate=base_fee_estimate,
+            rpc_priority_fee=rpc_priority_fee,
+            chain_id=chain_id,
+        )
+        priority_fee = strategy(context)
+        if not isinstance(priority_fee, int) or priority_fee < 0:
+            raise ValueError("priority_fee_strategy must return a non-negative int")
+        return priority_fee
 
     def get_static_fee(self) -> tuple[str, str]:
         # non eip-1559 transaction

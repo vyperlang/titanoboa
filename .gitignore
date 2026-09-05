@@ -7,8 +7,10 @@ dist/
 .idea/
 .hypothesis/
 .idea/
+.vscode/
 .pytest_cache
 venv/
+.venv/
 *.env
 .env
 .env.unsafe
@@ -16,4 +18,5 @@ venv/
 .coverage
 .coverage.*
 .DS_Store
-.claude
+
+uv.lock

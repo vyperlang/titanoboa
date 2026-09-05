@@ -14,13 +14,14 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
 
     **Description**
 
-    Access and modify transaction settings for network interactions. These settings control gas estimation, transaction timeouts, and base fee calculations.
+    Access and modify transaction settings for network interactions. These settings control gas estimation, transaction timeouts, base fee calculations, and priority fee calculation.
 
     ---
 
     **Attributes**
 
     - `base_fee_estimator_constant`: Number of blocks ahead to estimate base fee for (default: 5)
+    - `priority_fee_strategy`: Optional function for EIP-1559 priority fee calculation. Defaults to `None`, which uses `eth_maxPriorityFeePerGas`.
     - `poll_timeout`: Timeout in seconds for waiting for transaction receipts (default: 240.0)
     - `estimate_gas_block_identifier`: Block identifier for gas estimation (default: "pending")
 
@@ -36,6 +37,12 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     >>> # Increase timeout for slow networks
     >>> boa.env.tx_settings.poll_timeout = 300.0  # 5 minutes
     >>>
+    >>> # Set priority fee to at least 2% of the latest base fee
+    >>> boa.env.tx_settings.priority_fee_strategy = lambda ctx: max(
+    ...     ctx.rpc_priority_fee,
+    ...     ctx.base_fee // 50,
+    ... )
+    >>>
     >>> # Don't use block parameter for gas estimation (for certain RPC providers)
     >>> boa.env.tx_settings.estimate_gas_block_identifier = None
     ```
@@ -47,6 +54,8 @@ NetworkEnv is a specialized environment for interacting with real or forked bloc
     These settings are particularly useful when dealing with network congestion or RPC provider quirks.
 
     The `base_fee_estimator_constant` determines how many blocks ahead to calculate the base fee cap. Since EIP-1559 allows base fee to increase by at most 12.5% per block, the maximum base fee after n blocks is calculated as: `current_base_fee * (9/8)^n`. For example, with the default value of 5, the base fee cap would be `current_base_fee * 1.8` (approximately). If you encounter errors like "max fee per gas less than block base fee", try increasing this value.
+
+    The `priority_fee_strategy`, when set, receives a context with `base_fee`, `base_fee_estimate`, `rpc_priority_fee`, and `chain_id`, and must return the priority fee in wei as an `int`. More context fields may be exposed as needed.
 
 ---
 

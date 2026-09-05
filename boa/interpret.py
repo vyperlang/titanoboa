@@ -13,13 +13,10 @@ import vyper
 import vyper.ir.compile_ir as compile_ir
 from packaging.version import Version
 from vvm.utils.versioning import _pick_vyper_version, detect_version_specifier_set
-from vyper.ast.parse import parse_to_ast
 from vyper.cli.vyper_compile import get_search_paths
 from vyper.compiler.input_bundle import CompilerInput, FileInput, FilesystemInputBundle
 from vyper.compiler.phases import CompilerData
-from vyper.compiler.settings import Settings, anchor_settings
-from vyper.semantics.analysis.imports import resolve_imports
-from vyper.semantics.analysis.module import analyze_module
+from vyper.compiler.settings import OptimizationLevel, Settings, anchor_settings
 from vyper.semantics.types.module import ModuleT
 from vyper.utils import sha256sum
 
@@ -38,6 +35,7 @@ from boa.util.disk_cache import DiskCache
 
 if TYPE_CHECKING:
     from vyper.semantics.analysis.base import ImportInfo
+
 
 _Contract = Union[VyperContract, VyperBlueprint]
 
@@ -119,18 +117,42 @@ def get_module_fingerprint(
     seen = seen or {}
     fingerprints = []
     for stmt in module_t.import_stmts:
-        import_info = stmt._metadata["import_info"]
-        if id(import_info) not in seen:
-            if isinstance(import_info.typ, ModuleT):
-                fingerprint = get_module_fingerprint(import_info.typ, seen)
-            else:
-                fingerprint = hash_input(import_info.compiler_input)
-            seen[id(import_info)] = fingerprint
-        fingerprint = seen[id(import_info)]
-        fingerprints.append(fingerprint)
+        for import_info in _iter_import_infos(stmt):
+            if id(import_info) not in seen:
+                seen[id(import_info)] = _get_import_fingerprint(import_info, seen)
+            fingerprints.append(seen[id(import_info)])
     fingerprints.append(module_t._module.source_sha256sum)
 
     return sha256sum("".join(fingerprints))
+
+
+def _iter_import_infos(stmt):
+    metadata = stmt._metadata
+    if "import_infos" in metadata:
+        # Vyper 0.5+ stores one or more ImportInfo objects per import node.
+        return metadata["import_infos"]
+
+    # Vyper 0.4.x stored a single ImportInfo per import node.
+    return (metadata["import_info"],)
+
+
+def _get_import_fingerprint(import_info, seen):
+    module_t = _get_import_module(import_info)
+    if module_t is not None:
+        return get_module_fingerprint(module_t, seen)
+
+    # Interface imports (e.g. .vyi or ABI files) do not have nested module
+    # state to recurse into; fingerprint their source input directly.
+    return hash_input(import_info.compiler_input)
+
+
+def _get_import_module(import_info):
+    if isinstance(import_info.typ, ModuleT):
+        # Vyper 0.4.x stores imported modules directly as ModuleT.
+        return import_info.typ
+
+    # Vyper 0.5+ wraps imported modules in ModuleInfo.
+    return getattr(import_info.typ, "module_t", None)
 
 
 def compiler_data(
@@ -153,6 +175,25 @@ def compiler_data(
     input_bundle = FilesystemInputBundle(search_paths)
 
     settings = Settings(**kwargs)
+
+    # when branch coverage is enabled and optimize is unspecified,
+    # force unoptimized compilation so pc_raw_ast_map remains branch-accurate.
+    # if the user explicitly sets optimize, keep their choice and warn.
+    if Env._coverage is not None and Env._coverage.branch_enabled:
+        if settings.optimize is None:
+            settings.optimize = OptimizationLevel.NONE
+            warnings.warn(
+                "branch coverage requires unoptimized bytecode; "
+                "compilation will use optimize=NONE",
+                stacklevel=2,
+            )
+        elif settings.optimize != OptimizationLevel.NONE:
+            warnings.warn(
+                "coverage is enabled but optimize is set to "
+                f"'{settings.optimize.name}'; branch coverage may be inaccurate",
+                stacklevel=2,
+            )
+
     ret = CompilerData(file_input, input_bundle, settings)
     if _disk_cache is None:
         return ret
@@ -179,7 +220,16 @@ def compiler_data(
 
     assert isinstance(deployer, type) or deployer is None
     deployer_id = repr(deployer)  # a unique str identifying the deployer class
-    cache_key = str((contract_name, filename, fingerprint, kwargs, deployer_id))
+    # Use effective settings (not raw kwargs) in the cache key so
+    # coverage-forced optimize=NONE artifacts cannot collide with
+    # optimized artifacts.  as_dict() uses dataclasses.asdict(),
+    # excludes compiler_version (pragma-derived, not user input),
+    # drops None values, and stringifies enums.  Dropping Nones is
+    # correct: None means "use default", so {optimize: None} and {}
+    # produce the same compiled output and should share a cache entry.
+    cache_key = str(
+        (contract_name, filename, fingerprint, settings.as_dict(), deployer_id)
+    )
 
     ret = _disk_cache.caching_lookup(cache_key, get_compiler_data)
 
@@ -254,23 +304,22 @@ def load_vyi(filename: str, name: str = None) -> ABIContractFactory:
 def loads_vyi(source_code: str, name: str = None, filename: str = None):
     global _search_path
 
-    ast = parse_to_ast(source_code, is_interface=True)
-
     if name is None:
         name = "VyperContract.vyi"
 
-    search_paths = get_search_paths(_search_path)
-    input_bundle = FilesystemInputBundle(search_paths)
+    filename_for_input = filename or name
+    path = Path(filename_for_input)
+    if path.suffix != ".vyi":
+        path = path.with_suffix(".vyi")
 
-    # cf. CompilerData._resolve_imports
-    if filename is not None:
-        ctx = input_bundle.search_path(Path(filename).parent)
-    else:
-        ctx = contextlib.nullcontext()
-    with ctx:
-        _ = resolve_imports(ast, input_bundle)
-
-    module_t = analyze_module(ast)
+    file_input = FileInput(
+        contents=source_code,
+        source_id=-1,
+        path=path,
+        resolved_path=path.resolve(strict=False),
+    )
+    input_bundle = FilesystemInputBundle(get_search_paths(_search_path))
+    module_t = CompilerData(file_input, input_bundle, Settings()).global_ctx
     abi = module_t.interface.to_toplevel_abi_dict()
     return ABIContractFactory(name, abi, filename=filename)
 
@@ -337,7 +386,11 @@ def _loads_partial_vvm(
     def _handle_output(compiled_src):
         compiler_output = compiled_src["<stdin>"]
         return VVMDeployer.from_compiler_output(
-            compiler_output, name=name, filename=filename
+            compiler_output,
+            name=name,
+            filename=filename,
+            source_code=source_code,
+            vyper_version=version,
         )
 
     # Ensure the cache is initialized
@@ -360,7 +413,11 @@ def _loads_partial_vvm(
 
 
 def from_etherscan(
-    address: Any, name: str = None, uri: str = None, api_key: str = None
+    address: Any,
+    name: str = None,
+    uri: str = None,
+    api_key: str = None,
+    chain_id: int = None,
 ):
     addr = Address(address)
 
@@ -368,6 +425,13 @@ def from_etherscan(
         etherscan = Etherscan(uri, api_key)
     else:
         etherscan = get_etherscan()
+
+    if chain_id is None:
+        # default behavior: use the chain id of the global env
+        chain_id = Env.get_singleton().evm.patch.chain_id
+
+    # Set the chain ID for the Etherscan instance
+    etherscan.set_chain_id(chain_id)
 
     abi = etherscan.fetch_abi(addr)
     return ABIContractFactory.from_abi_dict(abi, name=name).at(addr)

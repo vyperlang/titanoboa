@@ -161,9 +161,10 @@ class TracingCodeStream(CodeStream):
         "program_counter",
     ]
 
-    def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, **kwargs):
+    def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, _trace_jumpi=False, **kwargs):
         super().__init__(*args, **kwargs)
         self._trace = []  # trace of opcodes that were run
+        self._jumpi_conditions = {} if _trace_jumpi else None
         self.program_counter = start_pc  # configurable start PC
         self._fake_codesize = fake_codesize  # what CODESIZE returns
 
@@ -231,6 +232,20 @@ class SstoreTracer:
         self.sstore(computation)
 
 
+class JumpiTracer:
+    mnemonic = "JUMPI"
+
+    def __init__(self, jumpi_op):
+        self.jumpi = jumpi_op
+
+    def __call__(self, computation):
+        # JUMPI stack: [..., condition, dest] — dest is on top
+        condition = to_int(computation._stack.values[-2])
+        trace_idx = len(computation.code._trace) - 1
+        computation.code._jumpi_conditions[trace_idx] = condition != 0
+        self.jumpi(computation)
+
+
 # ### End section: sha3 tracing
 
 
@@ -239,6 +254,11 @@ class SstoreTracer:
 # `titanoboa_computation` is a class which can be constructed dynamically
 class titanoboa_computation:
     _gas_meter_class = GasMeter
+    _base_jumpi = None
+
+    @property
+    def _trace_jumpi(self):
+        return self._base_jumpi is not None
 
     def __init__(self, *args, **kwargs):
         # super() hardcodes CodeStream into the ctor
@@ -249,6 +269,7 @@ class titanoboa_computation:
             self.code._raw_code_bytes,
             fake_codesize=getattr(self.msg, "_fake_codesize", None),
             start_pc=getattr(self.msg, "_start_pc", 0),
+            _trace_jumpi=self._trace_jumpi,
         )
         global _precompiles
         # copy so as not to mess with class state
@@ -410,6 +431,15 @@ class PyEVM:
         # patch in tracing opcodes
         c.opcodes[0x20] = Sha3PreimageTracer(c.opcodes[0x20], self.env)
         c.opcodes[0x55] = SstoreTracer(c.opcodes[0x55], self.env)
+
+        if self.env._coverage is not None and self.env._coverage.branch_enabled:
+            self.install_jumpi_tracer()
+
+    def install_jumpi_tracer(self):
+        c = self.vm.state.computation_class
+        if c._base_jumpi is None:
+            c._base_jumpi = c.opcodes[0x57]
+        c.opcodes[0x57] = JumpiTracer(c._base_jumpi)
 
     def enable_fast_mode(self, flag: bool = True):
         if flag:
