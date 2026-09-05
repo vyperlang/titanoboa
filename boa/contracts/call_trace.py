@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Optional
 
 from eth.abc import ComputationAPI
+from eth.exceptions import Revert
 
 from boa.rpc import json
-from boa.util.abi import Address, abi_decode
+from boa.util.abi import ABIError, Address, abi_decode
 
 
 class TraceSource:
@@ -28,11 +29,15 @@ class TraceSource:
         ]
         return f"({', '.join(args)})"
 
-    def _format_error(self, error_bytes: bytes):
+    @staticmethod
+    def _format_error(error_bytes: bytes):
         # b"\x08\xc3y\xa0" == method_id("Error(string)")
         if error_bytes.startswith(b"\x08\xc3y\xa0"):
-            (ret,) = abi_decode("(string)", error_bytes[4:])
-            return ret
+            try:
+                (ret,) = abi_decode("(string)", error_bytes[4:])
+                return ret
+            except ABIError:
+                pass  # preserve undecodable revert data below
 
         # TODO: handle other error types
         return "0x" + error_bytes.hex()
@@ -105,6 +110,12 @@ class TraceFrame:
             text = f"Unknown contract {self.address}"
             if self.computation.msg.data != b"":
                 text += ".0x" + self.selector.hex()
+            if self.is_error and isinstance(self.computation.error, Revert):
+                text += f" <{TraceSource._format_error(self.output)}>"
+
+        if self.is_error and not isinstance(self.computation.error, Revert):
+            error = self.computation.error
+            text += f" <{type(error).__name__}: {error}>"
 
         ret = f"[{self.gas_used}] {text}"
         if self.is_error:
