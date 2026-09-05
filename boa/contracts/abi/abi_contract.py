@@ -440,7 +440,10 @@ class ABITraceSource(TraceSource):
         self.function = function
 
     def __str__(self):
-        return f"{self.contract.contract_name}.{self.function.pretty_name}"
+        ret = f"{self.contract.contract_name}.{self.function.pretty_name}"
+        if not self.contract._bytecode:
+            ret += " (WARNING: no bytecode at this address!)"
+        return ret
 
     def __repr__(self):
         return repr(self.function)

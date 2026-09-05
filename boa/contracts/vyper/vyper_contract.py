@@ -86,9 +86,7 @@ class VyperError(BoaError):
             err = frame
 
         ret = f"{err}\n\n{self.stack_trace}"
-        call_tree = str(self.call_trace)
-        ledge = "=" * 72
-        return f"\n{ledge}\n{call_tree}\n{ledge}\n\n{ret}"
+        return f"{super().__str__()}\n{ret}"
 
 
 class VyperDeployer:
@@ -674,6 +672,7 @@ class VyperContract(_BaseVyperContract):
     def _immutables(self):
         return ImmutablesModel(self)
 
+    # is this actually useful?
     def at(self, address):
         return self.deployer.at(address)
 

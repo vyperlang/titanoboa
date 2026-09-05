@@ -5,13 +5,14 @@ Base method for error handling in EVM contracts.
 ## Signature
 
 ```python
-def handle_error(self, computation: ComputationAPI) -> None
+def handle_error(self, computation: ComputationAPI, error_type=BoaError) -> None
 ```
 
 ## Parameters
 
 - `self`: The contract instance
 - `computation`: The failed computation object containing execution state and error information
+- `error_type`: The `BoaError` subclass to raise. Native Vyper contracts pass `VyperError` to include source-level diagnostics.
 
 ## Description
 
