@@ -29,21 +29,21 @@ jobs:
           pip install .
 
       - name: Run Unit Tests
+        id: unit_tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-          # pass internals to pytest-cov, since we are testing a pytest plugin.
-          # See https://github.com/pytest-dev/pytest-cov/blob/2c9f2170/docs/plugins.rst
-          COV_CORE_SOURCE: boa
-          COV_CORE_CONFIG: .coveragerc
-          COV_CORE_DATAFILE: .coverage.eager
-        run: >-
-          pytest
-          --cov=boa
-          --cov-append
-          --cov-report term-missing:skip-covered
-          --cov-fail-under=78
-          -nauto
-          tests/unitary/
+        # Start coverage before pytest imports boa's plugin. pytest-cov then
+        # measures the xdist workers; combine both collectors before reporting.
+        run: |
+          coverage erase
+          coverage run --parallel-mode -m pytest \
+            --cov=boa --cov-append --cov-report= -nauto tests/unitary/
+
+      - name: Report Coverage
+        if: ${{ !cancelled() && steps.unit_tests.outcome != 'skipped' }}
+        run: |
+          coverage combine --append
+          coverage report --show-missing --skip-covered --fail-under=78
 
   anvil:
     name: "integration tests (anvil)"

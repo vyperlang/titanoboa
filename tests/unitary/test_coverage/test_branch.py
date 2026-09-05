@@ -11,6 +11,7 @@ Multiline tests are in test_branch_multiline.py.
 
 import pytest
 import vyper.ast as vy_ast
+from coverage.files import canonical_filename
 from vyper.ast.parse import parse_to_ast
 
 import boa
@@ -693,6 +694,7 @@ def foo(x: uint256) -> uint256:
         return 0
 """
     with _coverage_session_lines(source, lambda c: c.foo(10)) as (cov, vy_path):
+        vy_path = canonical_filename(vy_path)
         data = cov.get_data()
         measured = data.measured_files()
         assert vy_path in measured, f"{vy_path} not in measured files: {measured}"

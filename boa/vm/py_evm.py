@@ -161,7 +161,15 @@ class TracingCodeStream(CodeStream):
         "program_counter",
     ]
 
-    def __init__(self, *args, start_pc=0, fake_codesize=None, contract=None, _trace_jumpi=False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        start_pc=0,
+        fake_codesize=None,
+        contract=None,
+        _trace_jumpi=False,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self._trace = []  # trace of opcodes that were run
         self._jumpi_conditions = {} if _trace_jumpi else None
