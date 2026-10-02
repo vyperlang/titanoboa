@@ -124,10 +124,10 @@ def register_precompile(*args, **kwargs):
 
 def register_raw_precompile(address, fn, force=False):
     global _precompiles
-    address = Address(address)
+    address = Address(address).canonical_address
     if address in _precompiles and not force:
         raise ValueError(f"Already registered: {address}")
-    _precompiles[address.canonical_address] = fn
+    _precompiles[address] = fn
 
 
 def deregister_raw_precompile(address, force=True):
