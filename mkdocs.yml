@@ -41,6 +41,7 @@ nav:
     - Testing:
       - Accessing Private Members: guides/testing/private_members.md
       - Computing Test Coverage: guides/testing/coverage.md
+      - Pytest Plugin and Hypothesis: guides/testing/pytest_plugin.md
       - Stateful Testing with Hypothesis: guides/testing/fuzzing_strategies.md
       - Gas profiling: guides/testing/gas_profiling.md
     - Deployments Database: guides/deployments.md
