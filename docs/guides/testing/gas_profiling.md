@@ -176,6 +176,36 @@ def test_specific_profiling():
         print(get_line_profile_table())
 ```
 
+## Disabling Gas Metering (for Performance)
+
+Gas metering is enabled by default and runs on every single opcode. If you don't care about gas usage in a given test run, you can swap in a no-op meter for a runtime speedup of roughly 10%:
+
+```python
+import boa
+
+# Disable metering globally
+boa.env.disable_gas_metering()
+
+# ... run tests ...
+
+# Restore the default meter
+boa.env.reset_gas_metering_behavior()
+```
+
+To disable it only for a block of code, use the scoped context manager (the previous meter is restored on exit):
+
+```python
+from boa.vm.gas_meters import NoGasMeter
+
+with boa.env.gas_meter_class(NoGasMeter):
+    # heavy setup that you don't want to meter
+    contract.batch_setup(huge_input)
+
+# metering is back to whatever it was before the with block
+```
+
+Note that `get_gas_used()` still reports the gas of each computation even when metering is disabled. py-evm computes gas at the message level regardless of the meter class; what `NoGasMeter` skips is the per-opcode metering work inside the computation, which is where the time savings come from. If you need gas numbers in a test, keep the default meter and read `boa.env.get_gas_used()` as usual.
+
 ## Best Practices
 
 ### 1. Profile Representative Workloads
