@@ -23,7 +23,7 @@ Replaces the bytecode at a given address with the contract's runtime bytecode.
 ... def main():
 ...     pass
 ... """
->>> deployer = boa.loads_partial(src, "Foo")
+>>> deployer = boa.loads_partial(src, name="Foo")
 >>> contract = deployer.deploy()
->>> contract.stomp(contract.address)
+>>> deployer.stomp(contract.address)
 ```

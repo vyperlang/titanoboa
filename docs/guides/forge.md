@@ -191,10 +191,11 @@ token.transfer(to, amount);
 token.transfer(to, amount)
 logs = token.get_logs()
 assert len(logs) == 1
-assert logs[0].event_type.name == "Transfer"
-assert logs[0].args.sender == from
-assert logs[0].args.receiver == to
-assert logs[0].args.value == amount
+transfer = logs[0]
+assert type(transfer).__name__ == "Transfer"
+assert transfer.sender == sender
+assert transfer.receiver == to
+assert transfer.value == amount
 ```
 
 ## Gas Profiling
@@ -244,10 +245,13 @@ contract MockToken is ERC20 {
 ### Titanoboa
 ```python
 mock_token = boa.loads("""
+balances: HashMap[address, uint256]
+total_supply: public(uint256)
+
 @external
 def mint(to: address, amount: uint256):
     self.balances[to] += amount
-    self.totalSupply += amount
+    self.total_supply += amount
 
 @external
 def balanceOf(account: address) -> uint256:
@@ -320,10 +324,16 @@ forge verify-contract --chain-id 1 CONTRACT_ADDRESS MyContract
 
 ### Titanoboa
 ```python
-# After deployment
-boa.verify(contract, etherscan_api_key="YOUR_KEY")
-# Or set verifier globally
-boa.set_verifier("etherscan", api_key="YOUR_KEY")
+from boa.explorer import Etherscan
+
+verifier = Etherscan(api_key="YOUR_KEY", chain_id=1)
+
+# Verify one deployment
+result = boa.verify(contract, verifier)
+
+# Or temporarily select the default verifier
+with boa.set_verifier(verifier):
+    result = boa.verify(contract)
 ```
 
 ## Common Testing Patterns

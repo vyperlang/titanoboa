@@ -6,14 +6,13 @@ The `VVMDeployer` class provides functionality for deploying smart contracts for
 It includes methods for handling contract deployment, execution, and interaction.
 
 ### Methods
-<!-- TODO use the !!!function syntax for the functions -->
 
-- [\_\_init\_\_](\_\_init\_\_.md)
+- [`__init__`](__init__.md)
 - [from_compiler_output](from_compiler_output.md)
 - [factory](factory.md)
 - [constructor](constructor.md)
 - [deploy](deploy.md)
-- [\_\_call\_\_](\_\_call\_\_.md)
+- [`__call__`](__call__.md)
 - [at](at.md)
 
 ### Examples
@@ -32,7 +31,7 @@ It includes methods for handling contract deployment, execution, and interaction
         self.foo = 42
         self.bar = bar
     """)
-    contract = deployer.deploy()
+    contract = deployer.deploy(7)
 
     >>> type(deployer)
     <class 'boa.contracts.vvm.vvm_contract.VVMDeployer'>

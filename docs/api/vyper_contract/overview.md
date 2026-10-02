@@ -42,9 +42,9 @@ Internal and external contract functions are available as methods on `VyperContr
 ... """
 >>> contract = boa.loads_partial(src, name="Foo").deploy()
 >>> type(contract.main)
-<class 'boa.vyper.contract.VyperFunction'>
+<class 'boa.contracts.vyper.vyper_contract.VyperFunction'>
 >>> type(contract.internal.foo)
-<class 'boa.vyper.contract.VyperInternalFunction'>
+<class 'boa.contracts.vyper.vyper_contract.VyperInternalFunction'>
 >>> contract.internal.foo()
 123
 ```

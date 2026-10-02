@@ -38,8 +38,10 @@ class CreateTracer:
         self.trace.append("0x" + computation._stack.values[-1][-1].hex())
 
 if __name__ == "__main__":
-    create_tracer = CreateTracer(boa.env.vm.state.computation_class.opcodes[0xf0])
-    boa.patch_opcode(0xf0, create_tracer)
+    create_tracer = CreateTracer(
+        boa.env.evm.vm.state.computation_class.opcodes[0xF0]
+    )
+    boa.patch_opcode(0xF0, create_tracer)
 
     source = """
 @external

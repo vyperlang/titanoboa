@@ -39,7 +39,7 @@ If a test genuinely needs to opt out of isolation (rare, e.g. tests about the en
 
 ## Fuzzing with Hypothesis
 
-`boa.test.strategies.strategy()` builds a Hypothesis strategy for any Vyper type string. Combine it with `@given` to run the same test against dozens of generated inputs:
+`boa.test.strategies.strategy()` builds a Hypothesis strategy from a supported canonical ABI type string. Combine it with `@given` to run the same test against dozens of generated inputs:
 
 ```python
 from hypothesis import given, settings
@@ -69,7 +69,7 @@ Notes:
 
 - Each Hypothesis example is isolated just like a normal test, so fuzz runs cannot permanently mutate the chain.
 - Generated inputs respect Vyper semantics: a `uint256` strategy produces values in the valid unsigned range. If your function can revert for large inputs (like plain addition overflowing), bound the strategy with `max_value`/`min_value` or filter, otherwise Hypothesis will eventually find the reverting case and fail the test.
-- Supported type strings mirror Vyper's: `uint256`, `int128`, `address`, `bytes32`, `String[n]`, `DynArray[...]`, and more (see `boa/test/strategies.py` for the full set).
+- Use canonical ABI type strings such as `uint256`, `int128`, `address`, `bytes32`, `string`, and `uint256[]`. Vyper spellings such as `String[n]` and `DynArray[...]` are not accepted. Configure string sizes and dynamic-array lengths with strategy kwargs; see the [fuzzing strategies guide](fuzzing_strategies.md).
 
 ## Gas Profiling Markers
 

@@ -44,6 +44,8 @@ def test_not_profiled():
     pass
 ```
 
+`ignore_gas_profiling` is consulted only while `--gas-profile` adds markers during collection. The runtime hook currently checks `ignore_profiling` for conflicts with an explicit `gas_profile` marker. Until those names are unified, use `ignore_gas_profiling` to opt out of the command-line flag and do not combine either ignore marker with `@pytest.mark.gas_profile`.
+
 ### Method 3: Programmatic control
 
 Enable profiling within your code:
@@ -122,7 +124,11 @@ Shows gas consumption for each line of code within functions:
 ### Accessing Profile Data Programmatically
 
 ```python
-from boa.profiling import get_line_profile_table, get_call_profile_table, global_profile
+from boa.profiling import (
+    get_call_profile_table,
+    get_line_profile_table,
+    global_profile,
+)
 
 @pytest.mark.gas_profile
 def test_analyze_gas():
@@ -132,16 +138,24 @@ def test_analyze_gas():
     for i in range(10):
         contract.process(i)
 
-    # Access raw profile data
-    call_profiles = global_profile().call_profiles
-    line_profiles = global_profile().line_profiles
+    # Render the same Rich tables printed at the end of the pytest session.
+    print(get_call_profile_table())
+    print(get_line_profile_table())
 
-    # Get specific function's gas usage
-    for (contract_addr, fn_name), profile in call_profiles.items():
-        if fn_name == "process":
-            print(f"Process function - Mean gas: {profile.mean}")
-            print(f"Process function - Max gas: {profile.max}")
+    # Raw data is available for custom reporting.
+    profile = global_profile()
+    for function, gas_data in profile.call_profiles.items():
+        if function.fn_name == "process":
+            gas_data.compute_stats()
+            stats = gas_data.net_gas_stats
+            print(f"Process median gas: {stats.median_gas}")
+            print(f"Process max gas: {stats.max_gas}")
 ```
+
+`global_profile().call_profiles` maps `ContractMethodInfo` values to
+`CallGasStats`; `line_profiles` maps `LineInfo` values to per-call
+`Datum` lists. These structures are lower-level than the table helpers and may
+change as profiling evolves.
 
 ### Profiling Complex Scenarios
 
@@ -204,7 +218,7 @@ with boa.env.gas_meter_class(NoGasMeter):
 # metering is back to whatever it was before the with block
 ```
 
-Note that `get_gas_used()` still reports the gas of each computation even when metering is disabled. py-evm computes gas at the message level regardless of the meter class; what `NoGasMeter` skips is the per-opcode metering work inside the computation, which is where the time savings come from. If you need gas numbers in a test, keep the default meter and read `boa.env.get_gas_used()` as usual.
+Gas totals are not meaningful with `NoGasMeter`: computation totals can be zero, and `boa.env.get_gas_used()` does not accumulate calls made while metering is disabled. Keep the default meter or `ProfilingGasMeter` when measuring gas.
 
 ## Best Practices
 
@@ -310,8 +324,8 @@ If you don't see profiling output:
 from boa.profiling import global_profile
 print(f"Has profiles: {len(global_profile().call_profiles) > 0}")
 
-# Ensure the test has the correct marker
-# Use @pytest.mark.gas_profile, not @pytest.mark.profile
+# Use @pytest.mark.gas_profile, not @pytest.mark.profile.
+# With --gas-profile, opt out with @pytest.mark.ignore_gas_profiling.
 ```
 
 ### Inconsistent Results

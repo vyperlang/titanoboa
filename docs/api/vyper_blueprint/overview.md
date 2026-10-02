@@ -6,8 +6,17 @@ The `VyperBlueprint` class represents a blueprint of a Vyper contract. It is use
 
 ### Methods
 
-<!-- - [Common Classes](../common_classes/overview.md) -->
-TODO mention common classes
+`VyperBlueprint` shares the base EVM-contract tracing, address, and error
+handling APIs:
+
+- [`address`](../common_classes/address.md)
+- [`stack_trace`](../common_classes/stack_trace.md)
+- [`call_trace`](../common_classes/call_trace.md)
+- [`handle_error`](../common_classes/handle_error.md)
+
+Use the originating deployer's
+[`deploy_as_blueprint`](../vyper_deployer/deploy_as_blueprint.md) method to
+create a blueprint.
 
 ### Examples
 
@@ -20,6 +29,6 @@ TODO mention common classes
 ... """
 >>> deployer = boa.loads_partial(src, name="Foo")
 >>> blueprint = deployer.deploy_as_blueprint()
->>> type(blueprint)
-<class 'boa.vyper.contract.VyperBlueprint'>
+>>> blueprint.address
+'0x...'
 ```

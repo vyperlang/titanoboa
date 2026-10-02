@@ -12,13 +12,16 @@ VyperContract provides powerful introspection capabilities for examining contrac
 
     **Description**
 
-    Access storage variables as Python objects with automatic decoding. This property provides a view into all storage variables defined in the contract, including complex types like mappings and arrays.
+    Access storage variables as `StorageVar` objects. Each attribute on
+    `_storage` is a `StorageVar`; decode values with `.get()`, or dump
+    everything with `.dump()`.
 
     ---
 
     **Attributes**
 
-    - Individual storage variables are accessible as attributes
+    - Individual storage variables are accessible as attributes (`StorageVar`)
+    - `StorageVar.get()`: Decode and return the current value
     - `dump()`: Returns a dictionary of all storage variables and their values
 
     ---
@@ -39,15 +42,15 @@ VyperContract provides powerful introspection capabilities for examining contrac
     ... """
     >>> contract = boa.loads(src)
     >>>
-    >>> # Access individual storage variables
-    >>> contract._storage.owner
+    >>> # Decode individual storage variables
+    >>> contract._storage.owner.get()
     '0x0000000000000000000000000000000000000065'
-    >>> contract._storage.total_supply
+    >>> contract._storage.total_supply.get()
     1000000
     >>>
-    >>> # Access mapping contents
-    >>> contract._storage.balances
-    {}  # Empty mapping
+    >>> # Mapping contents via .get()
+    >>> contract._storage.balances.get()
+    {}
     >>>
     >>> # Dump all storage variables
     >>> contract._storage.dump()
@@ -58,7 +61,13 @@ VyperContract provides powerful introspection capabilities for examining contrac
 
     **Note**
 
-    Storage variables are read directly from the EVM state and automatically decoded according to their Vyper types.
+    Storage values are read from the EVM state and decoded according to their Vyper types when you call `.get()` or `.dump()`.
+
+    Mapping decoding uses keys recovered from locally traced storage writes
+    (`SSTORE`); it cannot enumerate all keys already present on a forked chain.
+    An empty mapping dump does not prove the onchain mapping is empty. Entries
+    whose decoded value is zero are omitted. For a known key, use a public
+    mapping getter or `contract.eval(...)` to read it directly.
 
 ---
 
@@ -164,13 +173,13 @@ When debugging contracts with complex storage layouts, introspection can be inva
 >>> contract.add_user(user2, 2000, 172800)
 >>>
 >>> # Inspect storage
->>> contract._storage.users
+>>> contract._storage.users.get()
 {
     '0x...': {'balance': 1000, 'locked_until': 1234567890, 'rewards_claimed': False},
     '0x...': {'balance': 2000, 'locked_until': 1234654290, 'rewards_claimed': False}
 }
 >>>
->>> contract._storage.user_list
+>>> contract._storage.user_list.get()
 ['0x...', '0x...']
 >>>
 >>> # Get a complete snapshot

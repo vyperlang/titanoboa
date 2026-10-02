@@ -7,6 +7,7 @@ For example, if you have a contract `contracts/Foo.vy`:
 ```vyper
 x: public(uint256)
 
+@deploy
 def __init__(x_initial: uint256):
     self.x = x_initial
 ```
