@@ -44,10 +44,5 @@
     environments created later in the same Python process. Use unique function
     names and signatures in test suites.
 
-!!! warning "Vyper compatibility"
-    Titanoboa 0.2.8's typed decorator works with Vyper 0.4.2. Vyper 0.4.3
-    changed the internal function-type API used by this feature, so decorator
-    registration currently raises `TypeError` with that version.
-
 For fixed-address computation callbacks, use the
 [raw precompile API](pyevm/register_precompile.md).

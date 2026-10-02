@@ -171,7 +171,8 @@ Boa provides various utilities to test vyper contracts and execute them in a for
 
     **Parameters**
 
-    - Positional string (or `reason=`): Match against the execution error / developer reason.
+    - Positional string: Match against the VM reason, compiler reason, or developer reason text.
+    - `reason`: Match a `# reason: <reason>` developer comment.
     - `compiler`: A string to match against the internal compiler revert reason.
     - `vm_error`: A string to match against the revert reason string.
     - Other keyword arguments (for example `dev=`): Match a developer revert comment by

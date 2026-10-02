@@ -59,8 +59,9 @@ class PrecompileBuiltin(BuiltinFunctionT):
 # ex. precompile("def foo() -> uint256")
 def precompile(user_signature: str, force: bool = False) -> Any:
     def decorator(func):
-        vy_ast = parse_to_ast(user_signature + ": view").body[0]
-        func_t = ContractFunctionT.from_FunctionDef(vy_ast, is_interface=True)
+        # give the parsed signature a dummy body so it is a valid FunctionDef
+        vy_ast = parse_to_ast(user_signature + ":\n    pass").body[0]
+        func_t = ContractFunctionT.from_FunctionDef(vy_ast)
 
         args_t = TupleT(tuple(func_t.argument_types))
 

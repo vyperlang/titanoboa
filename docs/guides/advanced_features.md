@@ -2,6 +2,43 @@
 
 This guide covers advanced Titanoboa features that provide powerful capabilities for contract development, testing, and debugging.
 
+## Precompiles
+
+The EVM has a set of built-in "precompile" contracts at well-known addresses (ecrecover, sha256, and so on). Titanoboa lets you register your own precompiles, implemented in Python, so that Vyper contracts can call your code as if it were part of the EVM. This is useful for testing (mocking expensive or non-existent system calls) and for prototyping.
+
+### The `@precompile` Decorator
+
+The high-level interface is the `@precompile` decorator, available directly from the `boa` module. It takes a Vyper function signature and returns a decorator. When a contract calls the function by name, the arguments are ABI-decoded and passed to your Python function, and its return value is ABI-encoded back:
+
+```python
+import boa
+
+@boa.precompile("def double(x: uint256) -> uint256")
+def double_precompile(x: int) -> int:
+    return x * 2
+
+contract = boa.loads("""
+@external
+def call_double(v: uint256) -> uint256:
+    return double(v)
+""")
+
+assert contract.call_double(21) == 42
+```
+
+Notes:
+
+- The signature string must be valid Vyper (a `def` line with a Vyper-style return type). The Python function receives the decoded arguments.
+- If a precompile with the same signature (address) already exists, registration raises a `ValueError` unless you pass `force=True`:
+
+```python
+@boa.precompile("def double(x: uint256) -> uint256", force=True)
+def double_v2(x: int) -> int:
+    return x * 3  # replaces the previous implementation
+```
+
+For lower-level control (e.g., custom addresses or raw computation objects), see [`register_raw_precompile`](../api/pyevm/register_precompile.md).
+
 ## Contract Introspection
 
 ### Storage Variable Access
