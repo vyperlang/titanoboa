@@ -59,6 +59,9 @@ We can run the test by calling `pytest`:
     ============================== 1 passed in 0.01s ===============================
     ```
 
+!!!moccasin
+    If you are using [Moccasin](https://cyfrin.github.io/moccasin/), you can run your tests with `mox test`, which uses pytest under the hood with additional conveniences like automatic contract deployment and network configuration.
+
 <!-- note this is just llm generated, but it's enough for now -->
 
 ## Titanoboa Plugin
