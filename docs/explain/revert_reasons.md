@@ -56,3 +56,62 @@ This is particularly useful when testing contracts with [`boa.reverts`](../api/t
     with boa.reverts(dev="x must be greater than 0"):
         contract.foo(0)
     ```
+
+## Matching Reverts in Tests
+
+`boa.reverts` accepts different keyword arguments, each matching a different kind of revert reason:
+
+| kwarg | matches |
+| --- | --- |
+| (none / positional string) | any revert, or a user-provided reason string |
+| `reason=` | the user revert string (`raise "reason"` or `assert cond, "reason"`) |
+| `vm_error=` | the raw VM error text |
+| `compiler=` | a compiler-generated reason (overflow, `safeadd`, bounds checks, ...) |
+| `dev=` | a `# dev: <reason>` comment |
+| `rekt=` | a `# rekt: <reason>` comment (a dev reason that shadows a compiler reason) |
+
+The positional form is a shorthand for `reason=`:
+
+```python
+with boa.reverts("x is 1"):
+    contract.foo(1)
+
+# ... is the same as ...
+
+with boa.reverts(reason="x is 1"):
+    contract.foo(1)
+```
+
+A wildcard `with boa.reverts():` catches any revert, and fails the test if the call does *not* revert. That makes it a cheap sanity check, but prefer a specific matcher when the revert reason matters, so your test fails loudly if the contract starts reverting for a different reason.
+
+### Precedence
+
+Only one reason "wins" for a given revert, and the matchers are checked against that winner:
+
+- A **compiler reason** takes precedence over a plain `assert` string. If `assert x + 1 == 5` overflows, the reason is the compiler's overflow, not the assert string.
+- A **`# dev:` / `# rekt:` comment** on the line that actually reverted takes precedence over the compiler reason. This is their whole purpose: naming the intended revert reason offchain, with zero gas or bytecode cost.
+- A dev comment on an unrelated line does *not* mask the real reason.
+
+In practice this means: match `compiler=` when you are exercising a language-level failure, and match `dev=`/`rekt=` when the contract author gave the revert a name. If you are unsure which reason a revert produces, let a test fail once and read the error message: titanoboa prints the expected and actual reasons side by side.
+
+### Testing Compiler Reverts
+
+```python
+# uint256 addition overflow is a compiler (safeadd) revert
+with boa.reverts(compiler="safeadd"):
+    contract.bar(2**256 - 1)
+```
+
+### Testing Dev Reverts
+
+```python
+# given:  def bar(x: uint256) -> uint256: return x + 1  # dev: could overflow
+with boa.reverts(dev="could overflow"):
+    contract.bar(2**256 - 1)
+
+# `# rekt: <reason>` is matched with the rekt= kwarg
+with boa.reverts(rekt="overflow!"):
+    contract.baz(2**256 - 1)
+```
+
+All the examples above are exercised in `tests/unitary/test_reverts.py`, which is the most complete reference for the edge cases (multiline asserts, nested calls, constructor reverts).
