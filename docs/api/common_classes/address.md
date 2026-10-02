@@ -21,11 +21,8 @@ addr2 = Address("0x5B38Da6a701c568545dCfcB03FcB875f56beddC4")
 # From bytes
 addr3 = Address(b"\x00" * 20)
 
-# From integer
-addr4 = Address(1)
-
 # Generate new address
-addr5 = boa.env.generate_address()
+addr4 = boa.env.generate_address()
 ```
 
 ---
@@ -63,7 +60,7 @@ Address objects can be compared and used in type checks:
 
 ```python
 addr1 = Address("0x0000000000000000000000000000000000000001")
-addr2 = Address(1)
+addr2 = Address(b"\x00" * 19 + b"\x01")
 addr3 = Address("0x0000000000000000000000000000000000000002")
 
 # Equality
@@ -144,7 +141,6 @@ The Address class validates input on construction:
 # Valid addresses
 Address("0x5B38Da6a701c568545dCfcB03FcB875f56beddC4")  # OK
 Address("0x" + "00" * 20)  # OK
-Address(12345)  # OK - converts integer to address
 
 # Invalid addresses raise ValueError
 try:
@@ -175,8 +171,8 @@ owner_addr = boa.env.generate_address(alias="owner")
 contract.eval(f"self.owner = {owner_addr}")
 
 # Access storage
-print(contract._storage.owner)  # Returns Address object
-print(contract._storage.admins)  # Returns dict with Address keys
+print(contract._storage.owner.get())  # Returns Address object
+print(contract._storage.admins.get())  # Returns dict of locally traced, nonzero entries
 ```
 
 ---

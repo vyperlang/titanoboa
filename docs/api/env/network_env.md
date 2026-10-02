@@ -189,13 +189,14 @@ Normal mutable calls are also simulated locally first, but are then broadcast. D
 
 ## `deploy_code`
 
-!!! function "`deploy_code(sender=None, gas=None, value=0, bytecode=b'', override_address=None, contract=None) -> tuple[Address, bytes]`"
+!!! function "`deploy_code(sender=None, gas=None, value=0, bytecode=b'', contract=None) -> tuple[Address, bytes]`"
 
     **Description**
 
     Deploy contract bytecode to the network. Returns the deployed contract address and constructor return data.
-    This inherits the same keyword arguments as `Env.deploy` / `Env.deploy_code` — pass options by name, not as
-    positional constructor arguments.
+    Pass the supported options below by name, not as positional constructor
+    arguments. Local deployment options such as `override_address` are not
+    supported by `NetworkEnv`; a non-`None` override raises `TypeError`.
 
     ---
 
@@ -205,7 +206,6 @@ Normal mutable calls are also simulated locally first, but are then broadcast. D
     - `value`: ETH value to send with deployment
     - `gas`: Gas limit (auto-estimated if None)
     - `sender`: Sender address (uses `env.eoa` if None)
-    - `override_address`: Optional address to deploy to
     - `contract`: Optional calling Vyper contract (used for coverage tracing)
 
     ---

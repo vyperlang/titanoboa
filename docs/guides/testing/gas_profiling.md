@@ -218,7 +218,7 @@ with boa.env.gas_meter_class(NoGasMeter):
 # metering is back to whatever it was before the with block
 ```
 
-Note that `get_gas_used()` still reports the gas of each computation even when metering is disabled. py-evm computes gas at the message level regardless of the meter class; what `NoGasMeter` skips is the per-opcode metering work inside the computation, which is where the time savings come from. If you need gas numbers in a test, keep the default meter and read `boa.env.get_gas_used()` as usual.
+Gas totals are not meaningful with `NoGasMeter`: computation totals can be zero, and `boa.env.get_gas_used()` does not accumulate calls made while metering is disabled. Keep the default meter or `ProfilingGasMeter` when measuring gas.
 
 ## Best Practices
 

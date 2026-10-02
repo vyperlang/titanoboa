@@ -63,6 +63,12 @@ VyperContract provides powerful introspection capabilities for examining contrac
 
     Storage values are read from the EVM state and decoded according to their Vyper types when you call `.get()` or `.dump()`.
 
+    Mapping decoding uses keys recovered from locally traced storage writes
+    (`SSTORE`); it cannot enumerate all keys already present on a forked chain.
+    An empty mapping dump does not prove the onchain mapping is empty. Entries
+    whose decoded value is zero are omitted. For a known key, use a public
+    mapping getter or `contract.eval(...)` to read it directly.
+
 ---
 
 ## `_immutables`
@@ -167,13 +173,13 @@ When debugging contracts with complex storage layouts, introspection can be inva
 >>> contract.add_user(user2, 2000, 172800)
 >>>
 >>> # Inspect storage
->>> contract._storage.users
+>>> contract._storage.users.get()
 {
     '0x...': {'balance': 1000, 'locked_until': 1234567890, 'rewards_claimed': False},
     '0x...': {'balance': 2000, 'locked_until': 1234654290, 'rewards_claimed': False}
 }
 >>>
->>> contract._storage.user_list
+>>> contract._storage.user_list.get()
 ['0x...', '0x...']
 >>>
 >>> # Get a complete snapshot

@@ -48,8 +48,15 @@
     reported by the explorer, and return an `ABIContract` attached to
     `address`.
 
-    With no one-off `chain_id`, Titanoboa uses the active environment's chain
-    ID. Explicit `uri`, `api_key`, and `chain_id` arguments override the
-    configured defaults for that request.
+    When both `uri` and `api_key` are omitted, Titanoboa uses the configured
+    client. Passing either creates a new client: omitted settings use the
+    `Etherscan` constructor defaults, not the configured client's values.
+    Pass both arguments to retain a custom endpoint and API key; custom retry
+    settings are not carried over.
+
+    When `chain_id` is omitted, Titanoboa uses the active environment's chain
+    ID. The selected client's chain ID is updated before fetching the ABI.
+    When using the configured client, this update persists and also affects
+    subsequent verification through that client.
 
 See [Loading contracts](load_contracts.md#from_etherscan) for more examples.

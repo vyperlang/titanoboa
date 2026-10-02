@@ -58,8 +58,13 @@
     bytes, `string`, arrays, tuples, and Vyper `decimal`. Type-specific keyword
     arguments are passed to the underlying strategy builder. Nested dynamic
     arrays accept a list for `min_length` or `max_length`, one value per dynamic
-    dimension. Dynamic `bytes` defaults to `min_size=1` (empty bytes are not
-    generated unless you override that).
+    dimension. Dynamic `bytes` defaults to `min_size=1`. Currently, passing
+    `min_size=0` still uses `1`; combine the strategy with
+    `hypothesis.strategies.just(b"")` to include empty bytes.
+
+    The `decimal` strategy generates Python `Decimal` values. Directly passing
+    them to decimal contract arguments is currently unsupported by Titanoboa's
+    ABI encoder; see the [decimal limitations](../guides/testing/fuzzing_strategies.md#decimal-strategy).
 
 See the [fuzzing strategies guide](../guides/testing/fuzzing_strategies.md) for
 per-type examples, `@boa.fuzz`, composite and stateful testing, pytest

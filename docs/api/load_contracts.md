@@ -204,8 +204,11 @@ Vyper interface loaders also return an `ABIContractFactory`.
 
     When `chain_id` is omitted, Titanoboa uses the active environment's chain
     ID. The default explorer endpoint is Etherscan API v2. Configure explorer
-    defaults with `boa.set_etherscan(...)`, or pass `uri`, `api_key`, and
-    `chain_id` for a one-off request.
+    defaults with `boa.set_etherscan(...)`. Passing `uri` or `api_key` creates
+    a new explorer client rather than merging configured defaults; pass both
+    to preserve a custom endpoint and key. Fetching also updates the selected
+    client's chain ID. See [Explorer configuration](explorer.md#from_etherscan)
+    for details.
 
     ```python
     import boa
