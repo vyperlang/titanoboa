@@ -20,7 +20,8 @@ def test_env_timestamp():
 
 
 def test_timestamp_correctness():
-    # amount of "timer slack" to allow in the CI since it may take some
-    # time between when boa.env is initialized and when this test is run.
-    timer_slack = 60
-    assert abs(boa.env.timestamp - time.time()) < timer_slack, "bad time"
+    before = int(time.time())
+    env = boa.Env()
+    after = int(time.time())
+    # The first block must be at least one second after genesis.
+    assert before <= env.timestamp <= after + 1, "bad time"

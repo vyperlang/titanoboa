@@ -25,9 +25,7 @@ def test_direct_venom_debug_module_adds_wrapper_function(monkeypatch):
         types.SimpleNamespace(generate_venom_runtime=generate_venom_runtime),
     )
     monkeypatch.setattr(
-        compiler_utils,
-        "generate_assembly_experimental",
-        generate_assembly_experimental,
+        compiler_utils, "generate_assembly_experimental", generate_assembly_experimental
     )
 
     assembly = compiler_utils._compile_assembly_with_direct_venom(

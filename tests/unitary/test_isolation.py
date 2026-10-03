@@ -55,7 +55,6 @@ def test_pytest_isolation(boa_contract, a, b):
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.ignore_isolation
 def setup_ignore_isolation(boa_contract):
     assert boa_contract.a() == A_INIT
     assert boa_contract.b() == B_INIT

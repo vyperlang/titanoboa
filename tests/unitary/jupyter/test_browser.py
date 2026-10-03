@@ -349,9 +349,7 @@ def test_sign_typed_data_eip712_with_components(
 
     # Create expected signature using eth_account
     signable = encode_typed_data(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
     signed = account.sign_message(signable)
 
@@ -360,9 +358,7 @@ def test_sign_typed_data_eip712_with_components(
 
     # Call the method
     result = env.signer.sign_typed_data_eip712(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
 
     # Verify result
@@ -416,22 +412,18 @@ def test_sign_typed_data_eip712_returns_signed_message(
     message_data = {"data": "test"}
 
     signable = encode_typed_data(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
     signed = account.sign_message(signable)
     mock_callback("eth_signTypedData_v4", signed.signature.hex())
 
     result = env.signer.sign_typed_data_eip712(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
 
     # Verify SignedMessage structure
     assert isinstance(result, SignedMessage)
-    assert hasattr(result, "messageHash")
+    assert result.message_hash == signed.message_hash
     assert hasattr(result, "r")
     assert hasattr(result, "s")
     assert hasattr(result, "v")
@@ -450,9 +442,7 @@ def test_sign_typed_data_eip712_v_normalization(
     message_data = {"data": "test"}
 
     signable = encode_typed_data(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
     signed = account.sign_message(signable)
 
@@ -462,17 +452,15 @@ def test_sign_typed_data_eip712_v_normalization(
 
     # Also create the properly normalized version for recovery
     normalized_sig = bytes(signed.signature[:64]) + bytes([27])
-    normalized_hex = "0x" + normalized_sig.hex()
 
     mock_callback("eth_signTypedData_v4", sig_hex)
 
     result = env.signer.sign_typed_data_eip712(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
 
     # Verify v was normalized
+    assert result.signature == normalized_sig
     assert result.v in (27, 28), f"Expected v to be 27 or 28, got {result.v}"
 
 
@@ -485,18 +473,14 @@ def test_sign_typed_data_eip712_signature_recovery(
     message_data = {"data": "test"}
 
     signable = encode_typed_data(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
     signed = account.sign_message(signable)
     mock_callback("eth_signTypedData_v4", signed.signature.hex())
 
     # This should succeed without raising ValueError
     result = env.signer.sign_typed_data_eip712(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
 
     # Verify we can recover the correct address
@@ -515,9 +499,7 @@ def test_sign_typed_data_eip712_invalid_signature(
     # Create a signature from a different account
     different_account = Account.create()
     signable = encode_typed_data(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
     wrong_signed = different_account.sign_message(signable)
 
@@ -554,17 +536,13 @@ def test_sign_typed_data_eip712_bytes_serialization(
     message_data = {"data": nonce_bytes, "value": 100}
 
     signable = encode_typed_data(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
     signed = account.sign_message(signable)
     mock_callback("eth_signTypedData_v4", signed.signature.hex())
 
     result = env.signer.sign_typed_data_eip712(
-        domain_data=domain_data,
-        message_types=message_types,
-        message_data=message_data,
+        domain_data=domain_data, message_types=message_types, message_data=message_data
     )
 
     assert isinstance(result, SignedMessage)

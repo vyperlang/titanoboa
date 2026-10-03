@@ -1,5 +1,3 @@
-import pytest
-
 from boa.vm.fork import CachingRPC, _is_loopback
 
 
@@ -49,12 +47,8 @@ class TestCacheFilepath:
 
     def test_localhost_isolated(self):
         """Different localhost ports should get different cache files."""
-        path1 = CachingRPC._cache_filepath(
-            "/tmp/cache", 31337, "http://localhost:8545"
-        )
-        path2 = CachingRPC._cache_filepath(
-            "/tmp/cache", 31337, "http://localhost:8546"
-        )
+        path1 = CachingRPC._cache_filepath("/tmp/cache", 31337, "http://localhost:8545")
+        path2 = CachingRPC._cache_filepath("/tmp/cache", 31337, "http://localhost:8546")
         assert path1 != path2
         assert "chainid_0x7a69" in str(path1)
         assert "chainid_0x7a69" in str(path2)

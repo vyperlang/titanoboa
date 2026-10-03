@@ -14,12 +14,11 @@ from os.path import dirname, join, realpath
 from typing import Any
 
 import nest_asyncio
-from IPython.display import Javascript, display
-
 from eth_account import Account
 from eth_account.datastructures import SignedMessage
-from eth_account.messages import encode_typed_data, _hash_eip191_message
+from eth_account.messages import _hash_eip191_message, encode_typed_data
 from hexbytes import HexBytes
+from IPython.display import Javascript, display
 
 from boa.integrations.jupyter.constants import (
     ADDRESS_TIMEOUT_MESSAGE,
