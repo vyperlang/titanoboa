@@ -1,4 +1,5 @@
 import contextlib
+import warnings
 from typing import Generator
 
 import hypothesis
@@ -52,6 +53,7 @@ def pytest_collection_modifyitems(config, items):
 
 _task_list = set()
 _stack = {}  # preserve the original order of tasks
+_fixture_map = {}
 _id = 0
 
 
@@ -64,22 +66,35 @@ def pytest_fixture_setup(fixturedef, request):
     _id += 1
 
     ctx = boa.env.anchor()
-    _stack[task_id] = ctx
+    _stack[task_id] = (fixturedef, ctx)
+    _fixture_map.setdefault(fixturedef, []).append(task_id)
 
     ctx.__enter__()
 
-    def finalize():
-        _task_list.add(task_id)
-        _work_task_list()
 
-    fixturedef.addfinalizer(finalize)
+def pytest_fixture_post_finalizer(fixturedef, request):
+    # there are outstanding bugs in pytest where the finalizers get
+    # run out of order, so we need to maintain a task list and defer
+    # execution of out-of-order finalizers until all the finalizers
+    # that should have come before them get run.
+    todo = _fixture_map.get(fixturedef, [])
+    _task_list.update(todo)
+
+    _work_task_list()
 
 
 def _work_task_list():
     while (task_id := next(reversed(_stack.keys()), None)) in _task_list:
-        ctx = _stack.pop(task_id)
-        _task_list.remove(task_id)
+        fixturedef, ctx = _stack.pop(task_id)
         ctx.__exit__(None, None, None)
+
+        tid = _fixture_map[fixturedef].pop()
+        assert tid == task_id  # sanity check
+
+        if len(_fixture_map[fixturedef]) == 0:
+            del _fixture_map[fixturedef]
+
+        _task_list.remove(task_id)
 
 
 @pytest.hookimpl(hookwrapper=True)
