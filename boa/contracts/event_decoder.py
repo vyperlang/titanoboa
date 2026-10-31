@@ -65,7 +65,12 @@ def decode_log(
     for topic_abi, topic_int in zip(topic_abis, log_entry.topics[1:]):
         # convert to bytes for abi decoder
         encoded_topic = topic_int.to_bytes(32, "big")
-        decoded_topics.append(abi_decode(_abi_from_json(topic_abi), encoded_topic))
+        typ = topic_abi["type"]
+        if typ in ("bytes", "string") or typ.startswith("tuple") or typ.endswith("]"):
+            # reference types are logged as the keccak256 of their encoding
+            decoded_topics.append(encoded_topic)
+        else:
+            decoded_topics.append(abi_decode(typ, encoded_topic))
     args_selector = _format_abi_type([_abi_from_json(arg_abi) for arg_abi in arg_abis])
 
     decoded_args = abi_decode(args_selector, log_entry.data)
@@ -80,11 +85,7 @@ def decode_log(
     for item_abi in event_abi["inputs"]:
         is_topic = item_abi["indexed"]
         if is_topic:
-            abi = topic_abis[topics_ix]
-            topic = decoded_topics[topics_ix]
-            # topic abi is currently never complex, but use _parse_complex
-            # as future-proofing mechanism
-            xs.append(_parse_complex(abi, topic))
+            xs.append(decoded_topics[topics_ix])
             topics_ix += 1
         else:
             abi = arg_abis[args_ix]
