@@ -14,7 +14,7 @@ from eth_hash.auto import keccak
 from vyper.ast.nodes import VyperNode
 from vyper.codegen.ir_node import IRnode
 from vyper.compiler.phases import CompilerData
-from vyper.evm.opcodes import OPCODES
+from vyper.evm.opcodes import get_opcodes
 from vyper.utils import unsigned_to_signed
 
 from boa.util.lrudict import lrudict
@@ -371,7 +371,7 @@ class OpcodeInfo:
     @classmethod
     def from_mnemonic(cls, mnemonic):
         mnemonic = mnemonic.upper()
-        return cls.from_opcode_info(mnemonic, OPCODES[mnemonic])
+        return cls.from_opcode_info(mnemonic, get_opcodes()[mnemonic])
 
 
 # an executor for evm opcodes which dispatches into py-evm
@@ -1160,7 +1160,7 @@ def _executor_from_ir(ir_node, compile_ctx) -> Any:
     if instr in _executors:
         return _executors[instr](ir_node, compile_ctx, *args)
 
-    if (mnemonic := instr.upper()) in OPCODES:
+    if (mnemonic := instr.upper()) in get_opcodes():
         opcode_info = OpcodeInfo.from_mnemonic(mnemonic)
         return OpcodeIRExecutor(instr, opcode_info, ir_node, compile_ctx, *args)
 

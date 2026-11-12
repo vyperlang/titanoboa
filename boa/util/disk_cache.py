@@ -1,10 +1,14 @@
 import contextlib
+import copyreg
 import hashlib
+import io
 import os
 import pickle
 import threading
 import time
 from pathlib import Path
+
+from vyper.semantics.analysis.base import ModuleInfo
 
 _ONE_WEEK = 7 * 24 * 3600
 
@@ -18,6 +22,31 @@ def _silence_io_errors():
     # pypy throws FileNotFoundError
     except (OSError, FileNotFoundError):  # noqa: B014
         pass
+
+
+def _new_module_info(module_t):
+    ret = ModuleInfo.__new__(ModuleInfo)
+    ret.module_t = module_t
+    return ret
+
+
+def _reduce_module_info(module_info):
+    return _new_module_info, (module_info.module_t,), module_info.__dict__
+
+
+# `ModuleInfo.__hash__` reads `module_t`. its state can reach a container
+# that holds the same `ModuleInfo` (e.g. through its `decl_node` and the
+# AST), and pickle rebuilds that container before restoring the state,
+# so rebuild `ModuleInfo` with `module_t` already set.
+_DISPATCH_TABLE = {**copyreg.dispatch_table, ModuleInfo: _reduce_module_info}
+
+
+def _dumps(obj) -> bytes:
+    buf = io.BytesIO()
+    pickler = pickle.Pickler(buf)
+    pickler.dispatch_table = _DISPATCH_TABLE
+    pickler.dump(obj)
+    return buf.getvalue()
 
 
 class DiskCache:
@@ -77,7 +106,7 @@ class DiskCache:
         job_id = f"{os.getpid()}.{threading.get_ident()}"
         tmp_p = p.with_suffix(f".{job_id}.unfinished")
         with tmp_p.open("wb") as f:
-            f.write(pickle.dumps(res))
+            f.write(_dumps(res))
         # rename is atomic, don't really need to care about fsync
         # because worst case we will just rebuild the item
         tmp_p.rename(p)
