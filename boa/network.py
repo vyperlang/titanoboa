@@ -534,6 +534,8 @@ class NetworkEnv(Env):
             # can't handle callTracer, use default (i.e. structLogs)
             if e.code == -32602:
                 return {}
+            if e.code == -32000 and "transaction not found" in str(e).lower():
+                return call_tracer
 
             # catchall - just don't have a tracer
             # note on error codes:
