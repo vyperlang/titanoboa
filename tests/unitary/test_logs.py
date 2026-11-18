@@ -1,3 +1,5 @@
+from eth_hash.auto import keccak
+
 import boa
 from boa.util.abi import Address
 
@@ -25,3 +27,19 @@ def __init__(supply: uint256):
     expected += " value=100)"
     log_strs = [str(log) for log in logs]
     assert log_strs == [expected]
+
+
+def test_log_indexed_bytes():
+    contract = boa.loads(
+        """
+event Foo:
+    x: indexed(Bytes[3])
+
+@external
+def foo():
+    log Foo(x=b"bar")
+"""
+    )
+    contract.foo()
+    (log,) = contract.get_logs()
+    assert log.x == keccak(b"bar")
