@@ -6,6 +6,15 @@ from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
 from hypothesis.strategies._internal.deferred import DeferredStrategy
+from vyper.semantics.types import (
+    BytesT,
+    DArrayT,
+    SArrayT,
+    StringT,
+    StructT,
+    TupleT,
+    VyperType,
+)
 
 import boa
 from boa.contracts.vyper.vyper_contract import VyperFunction
@@ -211,7 +220,29 @@ def fuzz(fn: VyperFunction):
     # TODO how to test default values for overloaded functions?
     # or maybe just leave that to the user.
     strategies = {
-        arg.name: strategy(arg.typ.canonical_abi_type) for arg in fn.func_t.arguments
+        arg.name: _vyper_type_strategy(arg.typ) for arg in fn.func_t.arguments
     }
 
     return given(**strategies)
+
+
+def _vyper_type_strategy(typ: VyperType) -> SearchStrategy:
+    # the canonical ABI type drops vyper's length bounds (`String[3]` is
+    # just "string"), so values would fail the callee's bounds check.
+    # keep the default size caps of `strategy()`, but never exceed the bound.
+    if isinstance(typ, StringT):
+        # the bound is in bytes, not characters
+        return st.text(max_size=min(typ.length, 64)).map(
+            lambda s: s.encode()[: typ.length].decode("utf-8", "ignore")
+        )
+    if isinstance(typ, BytesT):
+        return strategy("bytes", max_size=min(typ.length, 64))
+    if isinstance(typ, DArrayT):
+        inner = _vyper_type_strategy(typ.value_type)
+        return st.lists(inner, min_size=1, max_size=min(typ.length, 8))
+    if isinstance(typ, SArrayT):
+        inner = _vyper_type_strategy(typ.value_type)
+        return st.lists(inner, min_size=typ.length, max_size=typ.length)
+    if isinstance(typ, (TupleT, StructT)):
+        return st.tuples(*(_vyper_type_strategy(t) for t in typ.tuple_members()))
+    return strategy(typ.canonical_abi_type)
