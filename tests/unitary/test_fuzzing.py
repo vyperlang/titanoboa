@@ -60,3 +60,37 @@ def test_overloaded(contract):
 
     _test()
     _test_default()
+
+
+bounded_code = """
+struct S:
+    s: String[1]
+    n: uint8
+
+@external
+def f(
+    s: String[3],
+    b: Bytes[2],
+    d: DynArray[uint256, 2],
+    ds: DynArray[String[2], 2],
+    a: uint256[2],
+    st: S,
+) -> uint256:
+    return len(s) + len(b) + len(d) + len(ds) + len(st.s)
+"""
+
+
+def test_bounded_types():
+    contract = boa.loads(bounded_code)
+
+    @boa.fuzz(contract.f)
+    def _test(s, b, d, ds, a, st):
+        assert len(s.encode()) <= 3
+        assert len(b) <= 2
+        assert len(d) <= 2
+        assert len(ds) <= 2 and all(len(x.encode()) <= 2 for x in ds)
+        assert len(a) == 2
+        # must not hit the callee's bounds checks
+        contract.f(s, b, d, ds, a, st)
+
+    _test()
